@@ -174,13 +174,17 @@ public final class CbbgDither {
    *     otherwise false to fall back to vanilla.
    */
   public static boolean blitToScreenWithDither(GpuTextureView input) {
+    CbbgConfig.Mode mode = CbbgClient.getEffectiveMode();
+    if (!mode.isActive()) {
+      return false;
+    }
+    // If the mode flipped to DEMO between the caller's mode check and this call, honor DEMO.
+    if (mode == CbbgConfig.Mode.DEMO) {
+      return blitToScreenWithDemo(input);
+    }
+
     try {
       RenderSystem.assertOnRenderThread();
-
-      // Iris shaderpacks must take full control of the pipeline.
-      if (!CbbgClient.isEnabled()) {
-        return false;
-      }
 
       TextureTarget out = renderDitheredTarget(input);
       if (out == null || out.getColorTextureView() == null) {
@@ -196,11 +200,13 @@ public final class CbbgDither {
   }
 
   public static boolean blitToScreenWithDemo(GpuTextureView input) {
-    if (!CbbgClient.isEnabled()) {
+    CbbgConfig.Mode mode = CbbgClient.getEffectiveMode();
+    if (!mode.isActive()) {
       return false;
     }
-    if (CbbgClient.getEffectiveMode() != CbbgConfig.Mode.DEMO) {
-      return false;
+    // If the mode flipped back to ENABLED between the caller's mode check and this call, honor ENABLED.
+    if (mode != CbbgConfig.Mode.DEMO) {
+      return mode == CbbgConfig.Mode.ENABLED && blitToScreenWithDither(input);
     }
 
     try {
