@@ -16,6 +16,9 @@
 	"entrypoints": {
 		"client": [
 			"com.qb20nh.cbbg.CbbgClient"
+		],
+		"modmenu": [
+			"com.qb20nh.cbbg.compat.modmenu.CbbgModMenuApi"
 		]
 	},
 	"mixins": [

@@ -3,6 +3,7 @@
 	"package": "com.qb20nh.cbbg.mixin",
 	"compatibilityLevel": "JAVA_21",
 	"client": [
+		"DebugScreenEntriesMixin",
 		"GlConstMixin",
 		"GlCommandEncoderMixin",
 		"LightTextureMixin",

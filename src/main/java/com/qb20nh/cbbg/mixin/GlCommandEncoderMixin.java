@@ -6,12 +6,14 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.textures.GpuTexture;
 import com.mojang.blaze3d.textures.GpuTextureView;
 import com.qb20nh.cbbg.CbbgClient;
+import com.qb20nh.cbbg.config.CbbgConfig;
+import com.qb20nh.cbbg.debug.CbbgDebugState;
+import com.qb20nh.cbbg.debug.CbbgGlNames;
 import com.qb20nh.cbbg.render.CbbgDither;
 import com.qb20nh.cbbg.render.CbbgLightTextureHooks;
 import java.util.concurrent.atomic.AtomicBoolean;
 import net.minecraft.client.Minecraft;
 import org.lwjgl.opengl.GL11;
-import org.lwjgl.opengl.GL21;
 import org.lwjgl.opengl.GL30;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -23,7 +25,7 @@ public abstract class GlCommandEncoderMixin {
 
   private static final ThreadLocal<Integer> PRESENT_DEPTH = ThreadLocal.withInitial(() -> 0);
   private static final AtomicBoolean loggedOnce = new AtomicBoolean(false);
-  private static volatile Boolean lastEnabled = null;
+  private static volatile CbbgConfig.Mode lastMode = null;
 
   @Inject(method = "presentTexture", at = @At("HEAD"), cancellable = true)
   private void cbbg$presentTexture(GpuTextureView textureView, CallbackInfo ci) {
@@ -31,9 +33,9 @@ public abstract class GlCommandEncoderMixin {
     if (PRESENT_DEPTH.get() > 0) {
       return;
     }
-    boolean enabledNow = CbbgClient.isEnabled();
-    handleToggle(enabledNow);
-    if (!enabledNow) {
+    CbbgConfig.Mode modeNow = CbbgClient.getEffectiveMode();
+    handleModeTransition(modeNow);
+    if (!modeNow.isActive()) {
       return;
     }
 
@@ -52,7 +54,11 @@ public abstract class GlCommandEncoderMixin {
 
     PRESENT_DEPTH.set(PRESENT_DEPTH.get() + 1);
     try {
-      if (CbbgDither.blitToScreenWithDither(textureView)) {
+      boolean didPresent =
+          modeNow == CbbgConfig.Mode.DEMO
+              ? CbbgDither.blitToScreenWithDemo(textureView)
+              : CbbgDither.blitToScreenWithDither(textureView);
+      if (didPresent) {
         ci.cancel();
       }
     } finally {
@@ -65,23 +71,32 @@ public abstract class GlCommandEncoderMixin {
     }
   }
 
-  private static void handleToggle(boolean enabledNow) {
-    Boolean prev = lastEnabled;
+  private static void handleModeTransition(CbbgConfig.Mode modeNow) {
+    CbbgConfig.Mode prev = lastMode;
     if (prev == null) {
-      lastEnabled = enabledNow;
+      lastMode = modeNow;
       return;
     }
-    if (prev == enabledNow) {
+    if (prev == modeNow) {
       return;
     }
 
-    lastEnabled = enabledNow;
+    lastMode = modeNow;
 
     // Log verification again after a toggle, and reset any “disabled due to error” state.
     loggedOnce.set(false);
     CbbgDither.resetAfterToggle();
+    if (!modeNow.isActive()) {
+      CbbgDebugState.clear();
+    }
 
     // Recreate targets on the next frame boundary so we don’t destroy textures mid-present.
+    boolean activeNow = modeNow.isActive();
+    boolean activePrev = prev.isActive();
+    if (activeNow == activePrev) {
+      return;
+    }
+
     RenderSystem.queueFencedTask(
         () -> {
           Minecraft mc = Minecraft.getInstance();
@@ -96,7 +111,7 @@ public abstract class GlCommandEncoderMixin {
           try {
             Object lightTex = mc.gameRenderer.lightTexture();
             if (lightTex instanceof CbbgLightTextureHooks hooks) {
-              hooks.cbbg$recreateLightTexture(enabledNow);
+              hooks.cbbg$recreateLightTexture(activeNow);
             }
           } catch (Throwable t) {
             CbbgClient.LOGGER.warn("Failed to recreate lightmap texture after cbbg toggle.", t);
@@ -133,11 +148,13 @@ public abstract class GlCommandEncoderMixin {
         GL30.glBindFramebuffer(GL30.GL_FRAMEBUFFER, prevFbo);
       }
 
+      CbbgDebugState.update(mainInternal, lightmapInternal, encoding, fbSrgb);
+
       CbbgClient.LOGGER.info(
           "cbbg verify: MainTarget internalFormat={} Lightmap internalFormat={} DefaultFB encoding={} FRAMEBUFFER_SRGB={}",
-          glInternalName(mainInternal),
-          lightmapInternal == null ? "unknown" : glInternalName(lightmapInternal),
-          glEncodingName(encoding),
+          CbbgGlNames.glInternalName(mainInternal),
+          lightmapInternal == null ? "unknown" : CbbgGlNames.glInternalName(lightmapInternal),
+          CbbgGlNames.glEncodingName(encoding),
           fbSrgb);
     } catch (Throwable t) {
       CbbgClient.LOGGER.warn("cbbg verify failed (continuing without verification).", t);
@@ -156,22 +173,5 @@ public abstract class GlCommandEncoderMixin {
     } finally {
       GL11.glBindTexture(GL11.GL_TEXTURE_2D, prev);
     }
-  }
-
-  private static String glInternalName(int internal) {
-    return switch (internal) {
-      case GL11.GL_RGBA8 -> "GL_RGBA8(0x8058)";
-      case GL30.GL_RGBA16F -> "GL_RGBA16F(0x881A)";
-      default -> String.format("0x%04X", internal);
-    };
-  }
-
-  private static String glEncodingName(int encoding) {
-    // GL_SRGB=0x8C40, GL_LINEAR=0x2601
-    return switch (encoding) {
-      case GL21.GL_SRGB -> "GL_SRGB(0x8C40)";
-      case GL11.GL_LINEAR -> "GL_LINEAR(0x2601)";
-      default -> String.format("0x%04X", encoding);
-    };
   }
 }

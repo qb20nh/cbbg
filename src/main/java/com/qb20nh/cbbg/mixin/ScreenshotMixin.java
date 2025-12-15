@@ -47,8 +47,11 @@ public abstract class ScreenshotMixin {
       return;
     }
 
-    TextureTarget dithered = CbbgDither.renderDitheredTarget(input);
-    if (dithered == null) {
+    TextureTarget output =
+        CbbgClient.isDemoMode()
+            ? CbbgDither.renderDemoTarget(input)
+            : CbbgDither.renderDitheredTarget(input);
+    if (output == null) {
       return;
     }
 
@@ -56,7 +59,7 @@ public abstract class ScreenshotMixin {
     try {
       // Re-enter vanilla screenshot code, but read from the dithered RGBA8 target instead of the
       // HDR main target (which would otherwise get quantized without dithering during readback).
-      Screenshot.takeScreenshot(dithered, downscaleFactor, callback);
+      Screenshot.takeScreenshot(output, downscaleFactor, callback);
       ci.cancel();
     } finally {
       int next = CAPTURE_DEPTH.get() - 1;
