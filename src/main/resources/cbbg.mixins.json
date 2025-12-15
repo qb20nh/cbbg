@@ -1,0 +1,19 @@
+{
+	"required": true,
+	"package": "com.qb20nh.cbbg.mixin",
+	"compatibilityLevel": "JAVA_21",
+	"client": [
+		"GlConstMixin",
+		"GlCommandEncoderMixin",
+		"LightTextureMixin",
+		"MainTargetMixin",
+		"RenderTargetCreateBuffersMixin",
+		"ScreenshotMixin"
+	],
+	"injectors": {
+		"defaultRequire": 1
+	},
+	"overwrites": {
+		"requireAnnotations": true
+	}
+}

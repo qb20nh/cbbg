@@ -1,0 +1,65 @@
+package com.qb20nh.cbbg.mixin;
+
+import com.mojang.blaze3d.GpuOutOfMemoryException;
+import com.mojang.blaze3d.pipeline.MainTarget;
+import com.mojang.blaze3d.systems.GpuDevice;
+import com.mojang.blaze3d.textures.GpuTexture;
+import com.mojang.blaze3d.textures.TextureFormat;
+import com.qb20nh.cbbg.CbbgClient;
+import com.qb20nh.cbbg.render.GlFormatOverride;
+import com.qb20nh.cbbg.render.Rgba16fSupport;
+import java.util.function.Supplier;
+import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Redirect;
+
+@Mixin(MainTarget.class)
+public abstract class MainTargetMixin {
+
+  @Redirect(
+      method = "allocateColorAttachment",
+      at =
+          @At(
+              value = "INVOKE",
+              target =
+                  "Lcom/mojang/blaze3d/systems/GpuDevice;createTexture(Ljava/util/function/Supplier;ILcom/mojang/blaze3d/textures/TextureFormat;IIII)Lcom/mojang/blaze3d/textures/GpuTexture;"))
+  private GpuTexture cbbg$allocateColorAttachment(
+      GpuDevice device,
+      Supplier<String> label,
+      int usage,
+      TextureFormat format,
+      int width,
+      int height,
+      int depthOrLayers,
+      int mipLevels) {
+    if (!CbbgClient.isEnabled() || !Rgba16fSupport.isEnabled()) {
+      return device.createTexture(label, usage, format, width, height, depthOrLayers, mipLevels);
+    }
+
+    GpuTexture texture = null;
+    GpuOutOfMemoryException oom = null;
+    Throwable failure = null;
+
+    GlFormatOverride.pushMainTargetColor();
+    try {
+      texture = device.createTexture(label, usage, format, width, height, depthOrLayers, mipLevels);
+    } catch (GpuOutOfMemoryException e) {
+      oom = e;
+    } catch (Throwable t) {
+      failure = t;
+    } finally {
+      GlFormatOverride.popMainTargetColor();
+    }
+
+    if (oom != null) {
+      throw oom;
+    }
+
+    if (failure != null) {
+      Rgba16fSupport.disable(failure);
+      return device.createTexture(label, usage, format, width, height, depthOrLayers, mipLevels);
+    }
+
+    return texture;
+  }
+}

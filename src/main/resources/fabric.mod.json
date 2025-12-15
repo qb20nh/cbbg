@@ -1,26 +1,25 @@
 {
 	"schemaVersion": 1,
-	"id": "cool_mod",
+	"id": "cbbg",
 	"version": "${version}",
-	"name": "Cool Mod",
-	"description": "This is an example description! Tell everyone what your mod is about!",
+	"name": "cbbg",
+	"description": "Higher render precision (RGBA16F) + STBN dithering to reduce color banding.",
 	"authors": [
-		"Me!"
+		"qb20nh"
 	],
 	"contact": {
-		"homepage": "https://fabricmc.net/",
-		"sources": "https://github.com/FabricMC/fabric-example-mod"
+		"homepage": "https://github.com/qb20nh/cbbg"
 	},
-	"license": "CC0-1.0",
-	"icon": "assets/cool_mod/icon.png",
-	"environment": "*",
+	"license": "MIT",
+	"icon": "assets/cbbg/icon.png",
+	"environment": "client",
 	"entrypoints": {
-		"main": [
-			"com.example.cool_mod.CoolMod"
+		"client": [
+			"com.qb20nh.cbbg.CbbgClient"
 		]
 	},
 	"mixins": [
-		"cool_mod.mixins.json"
+		"cbbg.mixins.json"
 	],
 	"depends": {
 		"fabricloader": ">=0.18.2",
@@ -28,7 +27,5 @@
 		"java": ">=21",
 		"fabric-api": "*"
 	},
-	"suggests": {
-		"another-mod": "*"
-	}
+	"suggests": {}
 }
