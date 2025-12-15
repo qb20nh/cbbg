@@ -6,9 +6,7 @@
 		"DebugScreenEntriesMixin",
 		"GlConstMixin",
 		"GlCommandEncoderMixin",
-		"LightTextureMixin",
 		"MainTargetMixin",
-		"RenderTargetCreateBuffersMixin",
 		"ScreenshotMixin"
 	],
 	"injectors": {

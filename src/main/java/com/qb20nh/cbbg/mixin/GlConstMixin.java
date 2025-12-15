@@ -21,7 +21,7 @@ public abstract class GlConstMixin {
       TextureFormat textureFormat, CallbackInfoReturnable<Integer> cir) {
     if (!CbbgClient.isEnabled()
         || !Rgba16fSupport.isEnabled()
-        || !(GlFormatOverride.isMainTargetColor() || GlFormatOverride.isLightmap())) {
+        || !GlFormatOverride.isMainTargetColor()) {
       return;
     }
 

@@ -10,7 +10,6 @@ import com.qb20nh.cbbg.config.CbbgConfig;
 import com.qb20nh.cbbg.debug.CbbgDebugState;
 import com.qb20nh.cbbg.debug.CbbgGlNames;
 import com.qb20nh.cbbg.render.CbbgDither;
-import com.qb20nh.cbbg.render.CbbgLightTextureHooks;
 import java.util.concurrent.atomic.AtomicBoolean;
 import net.minecraft.client.Minecraft;
 import org.lwjgl.opengl.GL11;
@@ -106,16 +105,6 @@ public abstract class GlCommandEncoderMixin {
 
           // Recreate the main target so it matches the current enabled state.
           mc.getMainRenderTarget().resize(mc.getWindow().getWidth(), mc.getWindow().getHeight());
-
-          // Recreate the lightmap texture so it matches the current enabled state.
-          try {
-            Object lightTex = mc.gameRenderer.lightTexture();
-            if (lightTex instanceof CbbgLightTextureHooks hooks) {
-              hooks.cbbg$recreateLightTexture(activeNow);
-            }
-          } catch (Throwable t) {
-            CbbgClient.LOGGER.warn("Failed to recreate lightmap texture after cbbg toggle.", t);
-          }
         });
   }
 

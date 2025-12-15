@@ -10,7 +10,6 @@ public final class GlFormatOverride {
 
   private static final ThreadLocal<Integer> MAIN_TARGET_COLOR_DEPTH =
       ThreadLocal.withInitial(() -> 0);
-  private static final ThreadLocal<Integer> LIGHTMAP_DEPTH = ThreadLocal.withInitial(() -> 0);
 
   private GlFormatOverride() {}
 
@@ -29,22 +28,5 @@ public final class GlFormatOverride {
 
   public static boolean isMainTargetColor() {
     return MAIN_TARGET_COLOR_DEPTH.get() > 0;
-  }
-
-  public static void pushLightmap() {
-    LIGHTMAP_DEPTH.set(LIGHTMAP_DEPTH.get() + 1);
-  }
-
-  public static void popLightmap() {
-    final int next = LIGHTMAP_DEPTH.get() - 1;
-    if (next <= 0) {
-      LIGHTMAP_DEPTH.remove();
-    } else {
-      LIGHTMAP_DEPTH.set(next);
-    }
-  }
-
-  public static boolean isLightmap() {
-    return LIGHTMAP_DEPTH.get() > 0;
   }
 }
