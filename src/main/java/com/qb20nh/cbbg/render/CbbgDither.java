@@ -175,12 +175,11 @@ public final class CbbgDither {
    */
   public static boolean blitToScreenWithDither(GpuTextureView input) {
     CbbgConfig.Mode mode = CbbgClient.getEffectiveMode();
-    if (!mode.isActive()) {
+    // Strict: do not delegate to other blit methods based on a fresh mode read.
+    // Mode may change concurrently (UI thread) while we are presenting; returning false falls back to
+    // vanilla for this frame and avoids any mutual recursion.
+    if (mode != CbbgConfig.Mode.ENABLED) {
       return false;
-    }
-    // If the mode flipped to DEMO between the caller's mode check and this call, honor DEMO.
-    if (mode == CbbgConfig.Mode.DEMO) {
-      return blitToScreenWithDemo(input);
     }
 
     try {
@@ -201,12 +200,9 @@ public final class CbbgDither {
 
   public static boolean blitToScreenWithDemo(GpuTextureView input) {
     CbbgConfig.Mode mode = CbbgClient.getEffectiveMode();
-    if (!mode.isActive()) {
-      return false;
-    }
-    // If the mode flipped back to ENABLED between the caller's mode check and this call, honor ENABLED.
+    // Strict: see note in blitToScreenWithDither().
     if (mode != CbbgConfig.Mode.DEMO) {
-      return mode == CbbgConfig.Mode.ENABLED && blitToScreenWithDither(input);
+      return false;
     }
 
     try {

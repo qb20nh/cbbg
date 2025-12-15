@@ -22,10 +22,17 @@ void main() {
     vec3 q1 = floor(x1 + 0.5);
 
     float width = float(textureSize(InSampler, 0).x);
-    bool enabledSide = gl_FragCoord.x < width * 0.5;
+    float centerX = floor(width * 0.5);
+    // Left = vanilla (no dither), right = cbbg (dither)
+    bool enabledSide = gl_FragCoord.x >= centerX;
     vec3 q = enabledSide ? q1 : q0;
 
     color.rgb = clamp(q, 0.0, 255.0) / 255.0;
+
+    // 1px vertical separator at the split.
+    if (gl_FragCoord.x >= centerX && gl_FragCoord.x < centerX + 1.0) {
+        color.rgb = vec3(1.0) - color.rgb; // high-contrast line against any background
+    }
     fragColor = vec4(clamp(color.rgb, 0.0, 1.0), color.a);
 }
 

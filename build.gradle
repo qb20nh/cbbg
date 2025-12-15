@@ -1,5 +1,5 @@
 plugins {
-	id 'net.fabricmc.fabric-loom-no-remap' version "${loom_version}"
+	id 'fabric-loom' version "${loom_version}"
 	id 'maven-publish'
 }
 
@@ -21,11 +21,11 @@ repositories {
 dependencies {
 	// To change the versions see the gradle.properties file
 	minecraft "com.mojang:minecraft:${project.minecraft_version}"
-	// mappings loom.officialMojangMappings()
-	implementation "net.fabricmc:fabric-loader:${project.loader_version}"
+	mappings loom.officialMojangMappings()
+	modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
 
 	// Fabric API. This is technically optional, but you probably want it anyway.
-	implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
+	modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
 	
 }
 
@@ -54,6 +54,10 @@ java {
 jar {
 	inputs.property "archivesName", project.base.archivesName
 
+	// Unobfuscated (Mojang-named) jar for the *_unobfuscated runtime.
+	// The default Fabric distribution jar is produced by `remapJar`.
+	archiveClassifier = "unobf"
+
 	from("LICENSE") {
 		rename { "${it}_${inputs.properties.archivesName}"}
 	}
@@ -61,6 +65,11 @@ jar {
 	// The Mod Menu API is provided by Mod Menu itself at runtime. We keep local stubs only for
 	// compilation in the unobfuscated environment.
 	exclude("com/terraformersmc/modmenu/api/**")
+}
+
+// Standard Fabric jar (intermediary/remapped) for normal, obfuscated Minecraft runtime.
+tasks.named("remapJar") {
+	archiveClassifier = ""
 }
 
 // configure the maven publication

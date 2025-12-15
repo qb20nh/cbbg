@@ -74,8 +74,11 @@ public final class CbbgConfigScreen extends Screen {
 
   @Override
   public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-    this.renderBackground(graphics, mouseX, mouseY, partialTick);
-    graphics.drawCenteredString(this.font, this.title, this.width / 2, 15, 0xFFFFFF);
+    // Avoid Screen#renderBackground here: it applies a blur, and some screen transitions can already
+    // blur earlier in the same frame (Fabric Screen API / Mod Menu), which would crash with
+    // "Can only blur once per frame".
+    graphics.fill(0, 0, this.width, this.height, 0xA0000000);
+    graphics.drawCenteredString(this.font, this.title, this.width / 2, 15, 0xFFFFFFFF);
 
     CbbgConfig.Mode user = CbbgClient.getUserMode();
     CbbgConfig.Mode effective = CbbgClient.getEffectiveMode();
@@ -86,7 +89,7 @@ public final class CbbgConfigScreen extends Screen {
         Component.literal("Mode: " + user + "   (effective: " + effective + ")"),
         this.width / 2,
         35,
-        0xA0A0A0);
+        0xFFA0A0A0);
 
     if (irisActive) {
       graphics.drawCenteredString(
@@ -94,14 +97,14 @@ public final class CbbgConfigScreen extends Screen {
           Component.literal("Iris shaderpack active: cbbg forced OFF"),
           this.width / 2,
           46,
-          0xFF5555);
+          0xFFFF5555);
     } else {
       graphics.drawCenteredString(
           this.font,
           Component.literal("Demo = left enabled (dither), right disabled (no dither)"),
           this.width / 2,
           46,
-          0xA0A0A0);
+          0xFFA0A0A0);
     }
 
     super.render(graphics, mouseX, mouseY, partialTick);
