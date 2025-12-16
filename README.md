@@ -6,7 +6,7 @@
 
 color banding be gone - Remove pesky color banding from Minecraft
 
-**cbbg** is a client-side Fabric mod that reduces visible color banding by:
+**cbbg**<sup>/'kabij/</sup> is a client-side Fabric mod that reduces visible color banding by:
 
 - Using a **higher-precision render target** (RGBA16F)
 - Applying **STBN blue-noise dithering** to final image
