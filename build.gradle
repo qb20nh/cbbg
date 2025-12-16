@@ -17,6 +17,10 @@ repositories {
 	// See https://docs.gradle.org/current/userguide/declaring_repositories.html
 	// for more information about repositories.
 	maven { url "https://maven.florianmichael.de/releases" }
+    maven {
+        name = "Terraformers"
+        url = "https://maven.terraformersmc.com/"
+    }
 }
 
 dependencies {
@@ -29,7 +33,10 @@ dependencies {
 	modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
 	modImplementation "de.florianmichael:AsmFabricLoader:2.0.1"
 	include "de.florianmichael:AsmFabricLoader:2.0.1"
-	
+
+    modCompileOnly "com.terraformersmc:modmenu:${project.modmenu_version}"
+    modLocalRuntime "com.terraformersmc:modmenu:${project.modmenu_version}"
+
 }
 
 processResources {
@@ -65,9 +72,7 @@ jar {
 		rename { "${it}_${inputs.properties.archivesName}"}
 	}
 
-	// The Mod Menu API is provided by Mod Menu itself at runtime. We keep local stubs only for
-	// compilation in the unobfuscated environment.
-	exclude("com/terraformersmc/modmenu/api/**")
+
 }
 
 // Standard Fabric jar (intermediary/remapped) for normal, obfuscated Minecraft runtime.

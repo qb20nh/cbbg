@@ -2,13 +2,14 @@
 	"schemaVersion": 1,
 	"id": "cbbg",
 	"version": "${version}",
-	"name": "cbbg",
-	"description": "Higher render precision (RGBA16F) + STBN dithering to reduce color banding.",
+	"name": "🥬 cbbg",
+	"description": "color banding be gone - Remove pesky color banding from Minecraft",
 	"authors": [
 		"qb20nh"
 	],
 	"contact": {
-		"homepage": "https://github.com/qb20nh/cbbg"
+		"homepage": "https://modrinth.com/mod/cbbg",
+		"issues": "https://github.com/qb20nh/cbbg/issues"
 	},
 	"license": "MIT",
 	"icon": "assets/cbbg/icon.png",
@@ -32,6 +33,5 @@
 		"minecraft": "~1.21.11",
 		"java": ">=21",
 		"fabric-api": "*"
-	},
-	"suggests": {}
+	}
 }
