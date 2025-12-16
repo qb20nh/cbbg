@@ -17,6 +17,7 @@ body:
       label: Crash Type
       description: When did the crash happen?
       options:
+        - Select...
         - During Minecraft Launch
         - During Gameplay
     validations:
