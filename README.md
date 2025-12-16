@@ -1,5 +1,8 @@
 # cbbg
 
+[![Funding](https://img.shields.io/badge/funding-github-blue)](https://github.com/sponsors/qb20nh)
+
+
 color banding be gone - Remove pesky color banding from Minecraft
 
 **cbbg** is a client-side Fabric mod that reduces visible color banding by:
