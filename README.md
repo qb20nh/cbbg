@@ -64,3 +64,7 @@ Valid values: `ENABLED`, `DISABLED`, `DEMO`.
 
 - **Iris shaderpacks**: when an Iris shaderpack is active, cbbg is **forced OFF** to avoid pipeline conflicts.
 - **GPU support**: if RGBA16F allocation fails on your device/driver, cbbg will automatically fall back to RGBA8 for the remainder of the session.
+
+## Credits
+
+- [AsmFabricLoader](https://github.com/FlorianMichael/AsmFabricLoader) by FlorianMichael (Apache License 2.0)
