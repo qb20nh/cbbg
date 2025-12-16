@@ -1,5 +1,5 @@
 blank_issues_enabled: false
-# contact_links:
-#   - name: Discord
-#     url: https://discord.gg/example
-#     about: Ask questions and discuss with the community.
+contact_links:
+  - name: General Questions
+    url: https://github.com/qb20nh/cbbg/discussions
+    about: Ask general on-topic questions and discuss with the community about the mod.
