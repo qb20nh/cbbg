@@ -1,69 +1,75 @@
 package com.qb20nh.cbbg.render;
 
-import com.mojang.blaze3d.platform.NativeImage;
 import com.qb20nh.cbbg.math.MiniFFT;
-import java.io.ByteArrayInputStream;
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.*;
-import static java.util.Objects.requireNonNull;
 import java.util.concurrent.CompletableFuture;
-import net.fabricmc.loader.api.FabricLoader;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.CompletionException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class STBNGenerator {
 
-    private STBNGenerator() {
-    }
+    private STBNGenerator() {}
+
+    public static final int STBN_SIZE = 128;
+    public static final int STBN_FRAMES = 64;
 
     private static final Logger LOGGER = LoggerFactory.getLogger("cbbg-gen");
-    private static final Path CACHE_DIR = FabricLoader.getInstance().getGameDir().resolve(".cbbg");
 
-    public static CompletableFuture<NativeImage[]> generateAsync(int width, int height, int frames) {
-        return CompletableFuture.supplyAsync(() -> {
-            long start = System.currentTimeMillis();
-            LOGGER.info("Starting Async STBN Generation ({}x{}x{})...", width, height, frames);
+    // Pure data container
+    public record STBNFields(double[] uField, double[] vField) {
+        @Override
+        public boolean equals(Object o) {
+            if (this == o)
+                return true;
+            if (o == null || getClass() != o.getClass())
+                return false;
+            STBNFields that = (STBNFields) o;
+            return Arrays.equals(uField, that.uField) && Arrays.equals(vField, that.vField);
+        }
 
-            // Try loading from cache first
-            NativeImage[] cached = loadFromCache(width, height, frames);
-            if (cached != null && cached.length > 0) {
-                return cached;
-            }
+        @Override
+        public int hashCode() {
+            int result = Arrays.hashCode(uField);
+            result = 31 * result + Arrays.hashCode(vField);
+            return result;
+        }
 
-            NativeImage[] images = new NativeImage[frames];
+        @Override
+        public String toString() {
+            return "STBNFields{" + "uField=" + Arrays.toString(uField) + ", vField="
+                    + Arrays.toString(vField) + '}';
+        }
+    }
+
+    private static final AtomicReference<CompletableFuture<STBNFields>> pendingFuture =
+            new AtomicReference<>();
+
+    public static void init() {
+        pendingFuture.compareAndSet(null, CompletableFuture.<STBNFields>supplyAsync(() -> {
             try {
+                LOGGER.info("Starting Async STBN Math Generation ({}x{}x{})...", STBN_SIZE,
+                        STBN_SIZE, STBN_FRAMES);
+                long start = System.currentTimeMillis();
+
                 // Generate U and V fields (Spatio-Temporal Blue Noise)
-                double[] uField = generateScalarField(width, height, frames, 1234);
-                double[] vField = generateScalarField(width, height, frames, 5678);
-
-                // Map to Unit Vectors and create images
-
-                for (int z = 0; z < frames; z++) {
-                    images[z] = generateFrame(width, height, z, uField, vField);
-                }
+                double[] uField = generateScalarField(STBN_SIZE, STBN_SIZE, STBN_FRAMES, 1234);
+                double[] vField = generateScalarField(STBN_SIZE, STBN_SIZE, STBN_FRAMES, 5678);
 
                 long dt = System.currentTimeMillis() - start;
-                LOGGER.info("STBN Generation Complete in {} ms", dt);
+                LOGGER.info("STBN Math Complete in {} ms", dt);
 
-                // Save to cache
-                saveToCache(images, width, height, frames);
-
-                return images;
-
+                return new STBNFields(uField, vField);
             } catch (Exception e) {
-                LOGGER.error("STBN Generation Failed", e);
-                // Free any allocated images on failure
-                for (NativeImage img : images) {
-                    if (img != null)
-                        img.close();
-                }
-                return null; // Handle null in caller
+
+                throw new CompletionException(e);
             }
-        });
+        }));
+    }
+
+    public static CompletableFuture<STBNFields> get() {
+        return pendingFuture.get();
     }
 
     private static double[] generateScalarField(int w, int h, int d, long seed) {
@@ -156,20 +162,7 @@ public class STBNGenerator {
         }
     }
 
-    private static NativeImage generateFrame(int width, int height, int z, double[] uField, double[] vField) {
-        NativeImage img = new NativeImage(width, height, false);
-        for (int y = 0; y < height; y++) {
-            for (int x = 0; x < width; x++) {
-                int idx = (z * height + y) * width + x;
-                double u = uField[idx];
-                double v = vField[idx];
-                img.setPixel(x, y, calculatePixelColor(u, v));
-            }
-        }
-        return img;
-    }
-
-    private static int calculatePixelColor(double u, double v) {
+    public static int calculatePixelColor(double u, double v) {
         // Spherical Mapping
         double zz = 2.0 * u - 1.0;
         double theta = 2.0 * Math.PI * v;
@@ -196,122 +189,5 @@ public class STBNGenerator {
 
         // Clean Alpha (255)
         return (0xFF << 24) | (b << 16) | (g << 8) | r;
-    }
-
-    private static NativeImage[] loadFromCache(int w, int h, int d) {
-        try {
-            if (!Files.exists(CACHE_DIR)) {
-                return new NativeImage[0];
-            }
-
-            Path hashFile = CACHE_DIR.resolve(String.format("stbn_%dx%dx%d.sha256", w, h, d));
-            if (!Files.exists(hashFile)) {
-                return new NativeImage[0];
-            }
-
-            Map<String, String> hashes = new HashMap<>();
-            List<String> lines = Files.readAllLines(hashFile);
-            for (String line : lines) {
-                String[] parts = line.trim().split("\\s+");
-                if (parts.length >= 2) {
-                    hashes.put(parts[1], parts[0]);
-                }
-            }
-
-            NativeImage[] images = new NativeImage[d];
-            for (int z = 0; z < d; z++) {
-                String baseName = String.format("stbn_%dx%dx%d_%d.png", w, h, d, z);
-                String expectedHash = hashes.get(baseName);
-
-                if (expectedHash == null) {
-                    cleanupImages(images, z);
-                    return new NativeImage[0];
-                }
-
-                images[z] = loadCachedFrame(w, h, d, z, expectedHash);
-                if (images[z] == null) {
-                    cleanupImages(images, z);
-                    return new NativeImage[0];
-                }
-            }
-            LOGGER.info("STBN Cache Loaded (Integrity Verified)");
-            return images;
-        } catch (Exception e) {
-            LOGGER.warn("Failed to load STBN cache", e);
-            return new NativeImage[0];
-        }
-    }
-
-    private static NativeImage loadCachedFrame(int w, int h, int d, int z, String expectedHash)
-            throws IOException, NoSuchAlgorithmException {
-        String baseName = String.format("stbn_%dx%dx%d_%d", w, h, d, z);
-        Path imageFile = CACHE_DIR.resolve(baseName + ".png");
-
-        if (!Files.exists(imageFile)) {
-            return null;
-        }
-
-        byte[] imageBytes = Files.readAllBytes(imageFile);
-        String actualHash = calculateSHA256(imageBytes);
-
-        if (!actualHash.equalsIgnoreCase(expectedHash)) {
-            LOGGER.warn("STBN cache integrity check failed for frame {}. Expected: {}, Actual: {}", z,
-                    expectedHash, actualHash);
-            return null;
-        }
-
-        return NativeImage.read(new ByteArrayInputStream(imageBytes));
-    }
-
-    private static void cleanupImages(NativeImage[] images, int count) {
-        for (int i = 0; i < count; i++) {
-            if (images[i] != null) {
-                images[i].close();
-            }
-        }
-    }
-
-    private static void saveToCache(NativeImage[] images, int w, int h, int d) {
-        try {
-            Files.createDirectories(CACHE_DIR);
-            StringBuilder hashContent = new StringBuilder();
-
-            for (int z = 0; z < d; z++) {
-                if (images[z] != null) {
-                    String baseName = String.format("stbn_%dx%dx%d_%d", w, h, d, z);
-                    String fileName = baseName + ".png";
-                    Path imageFile = requireNonNull(CACHE_DIR.resolve(fileName));
-
-                    images[z].writeToFile(imageFile);
-
-                    // Compute hash
-                    byte[] imageBytes = Files.readAllBytes(imageFile);
-                    String hash = calculateSHA256(imageBytes);
-
-                    // Append to hash manifest format: hash filename
-                    hashContent.append(hash).append("  ").append(fileName).append(System.lineSeparator());
-                }
-            }
-
-            Path hashFile = requireNonNull(CACHE_DIR.resolve(String.format("stbn_%dx%dx%d.sha256", w, h, d)));
-            Files.writeString(hashFile, hashContent.toString());
-
-            LOGGER.info("STBN Cache Saved to {}", CACHE_DIR);
-        } catch (IOException | NoSuchAlgorithmException e) {
-            LOGGER.warn("Failed to save STBN cache", e);
-        }
-    }
-
-    private static String calculateSHA256(byte[] data) throws NoSuchAlgorithmException {
-        MessageDigest digest = MessageDigest.getInstance("SHA-256");
-        byte[] hash = digest.digest(data);
-        StringBuilder hexString = new StringBuilder();
-        for (byte b : hash) {
-            String hex = Integer.toHexString(0xff & b);
-            if (hex.length() == 1)
-                hexString.append('0');
-            hexString.append(hex);
-        }
-        return hexString.toString();
     }
 }

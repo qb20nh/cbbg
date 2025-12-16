@@ -5,14 +5,13 @@ package com.qb20nh.cbbg.math;
  */
 public class MiniFFT {
 
-    private MiniFFT() {
-    }
+    private MiniFFT() {}
 
     /**
      * Computes 1D FFT in-place.
      *
-     * @param real    Real parts.
-     * @param imag    Imaginary parts.
+     * @param real Real parts.
+     * @param imag Imaginary parts.
      * @param inverse If true, compute Inverse FFT.
      */
     public static void fft1d(double[] real, double[] imag, boolean inverse) {
@@ -30,8 +29,7 @@ public class MiniFFT {
     }
 
     /**
-     * Computes 3D FFT in-place.
-     * Data is flat: [z * height * width + y * width + x]
+     * Computes 3D FFT in-place. Data is flat: [z * height * width + y * width + x]
      */
     public static void fft3d(double[] real, double[] imag, int w, int h, int d, boolean inverse) {
         processXAxis(real, imag, w, h, d, inverse);
@@ -96,7 +94,8 @@ public class MiniFFT {
         }
     }
 
-    private static void processXAxis(double[] real, double[] imag, int w, int h, int d, boolean inverse) {
+    private static void processXAxis(double[] real, double[] imag, int w, int h, int d,
+            boolean inverse) {
         double[] rowR = new double[w];
         double[] rowI = new double[w];
         for (int z = 0; z < d; z++) {
@@ -107,7 +106,8 @@ public class MiniFFT {
         }
     }
 
-    private static void processYAxis(double[] real, double[] imag, int w, int h, int d, boolean inverse) {
+    private static void processYAxis(double[] real, double[] imag, int w, int h, int d,
+            boolean inverse) {
         double[] colR = new double[h];
         double[] colI = new double[h];
         for (int z = 0; z < d; z++) {
@@ -118,7 +118,8 @@ public class MiniFFT {
         }
     }
 
-    private static void processZAxis(double[] real, double[] imag, int w, int h, int d, boolean inverse) {
+    private static void processZAxis(double[] real, double[] imag, int w, int h, int d,
+            boolean inverse) {
         double[] depthR = new double[d];
         double[] depthI = new double[d];
         for (int y = 0; y < h; y++) {
@@ -129,8 +130,8 @@ public class MiniFFT {
         }
     }
 
-    private static void processLine(double[] real, double[] imag, int startIdx, int count, int stride,
-            double[] bufR, double[] bufI, boolean inverse) {
+    private static void processLine(double[] real, double[] imag, int startIdx, int count,
+            int stride, double[] bufR, double[] bufI, boolean inverse) {
         for (int i = 0; i < count; i++) {
             int idx = startIdx + i * stride;
             bufR[i] = real[idx];

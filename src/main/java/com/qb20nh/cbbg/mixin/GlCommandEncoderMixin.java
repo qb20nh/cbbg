@@ -23,148 +23,148 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(GlCommandEncoder.class)
 public abstract class GlCommandEncoderMixin {
 
-  private static final ThreadLocal<Integer> PRESENT_DEPTH = ThreadLocal.withInitial(() -> 0);
-  private static final AtomicBoolean loggedOnce = new AtomicBoolean(false);
-  private static volatile CbbgConfig.Mode lastMode = null;
+    private static final ThreadLocal<Integer> PRESENT_DEPTH = ThreadLocal.withInitial(() -> 0);
+    private static final AtomicBoolean loggedOnce = new AtomicBoolean(false);
+    private static volatile CbbgConfig.Mode lastMode = null;
 
-  @Inject(method = "presentTexture", at = @At("HEAD"), cancellable = true)
-  private void cbbg$presentTexture(GpuTextureView textureView, CallbackInfo ci) {
-    // Prevent recursion when cbbg itself calls presentTexture for its dither
-    // output.
-    if (PRESENT_DEPTH.get() > 0) {
-      return;
-    }
-    CbbgConfig.Mode modeNow = CbbgClient.getEffectiveMode();
-    handleModeTransition(modeNow);
-    if (!modeNow.isActive()) {
-      return;
-    }
+    @Inject(method = "presentTexture", at = @At("HEAD"), cancellable = true)
+    private void cbbg$presentTexture(GpuTextureView textureView, CallbackInfo ci) {
+        // Prevent recursion when cbbg itself calls presentTexture for its dither
+        // output.
+        if (PRESENT_DEPTH.get() > 0) {
+            return;
+        }
+        CbbgConfig.Mode modeNow = CbbgClient.getEffectiveMode();
+        handleModeTransition(modeNow);
+        if (!modeNow.isActive()) {
+            return;
+        }
 
-    Minecraft mc = Minecraft.getInstance();
-    // Only intercept presenting the *main* render target.
-    GpuTextureView main = mc.getMainRenderTarget().getColorTextureView();
-    if (main == null || main != textureView) {
-      return;
-    }
+        Minecraft mc = Minecraft.getInstance();
+        // Only intercept presenting the *main* render target.
+        GpuTextureView main = mc.getMainRenderTarget().getColorTextureView();
+        if (main == null || main != textureView) {
+            return;
+        }
 
-    logVerificationOnce(main);
+        logVerificationOnce(main);
 
-    PRESENT_DEPTH.set(PRESENT_DEPTH.get() + 1);
-    try {
-      boolean didPresent = modeNow == CbbgConfig.Mode.DEMO
-          ? CbbgDither.blitToScreenWithDemo(textureView)
-          : CbbgDither.blitToScreenWithDither(textureView);
-      if (didPresent) {
-        ci.cancel();
-      }
-    } finally {
-      int next = PRESENT_DEPTH.get() - 1;
-      if (next <= 0) {
-        PRESENT_DEPTH.remove();
-      } else {
-        PRESENT_DEPTH.set(next);
-      }
-    }
-  }
-
-  private static void handleModeTransition(CbbgConfig.Mode modeNow) {
-    CbbgConfig.Mode prev = lastMode;
-    if (prev == null) {
-      lastMode = modeNow;
-      return;
-    }
-    if (prev == modeNow) {
-      return;
+        PRESENT_DEPTH.set(PRESENT_DEPTH.get() + 1);
+        try {
+            boolean didPresent =
+                    modeNow == CbbgConfig.Mode.DEMO ? CbbgDither.blitToScreenWithDemo(textureView)
+                            : CbbgDither.blitToScreenWithDither(textureView);
+            if (didPresent) {
+                ci.cancel();
+            }
+        } finally {
+            int next = PRESENT_DEPTH.get() - 1;
+            if (next <= 0) {
+                PRESENT_DEPTH.remove();
+            } else {
+                PRESENT_DEPTH.set(next);
+            }
+        }
     }
 
-    lastMode = modeNow;
+    private static void handleModeTransition(CbbgConfig.Mode modeNow) {
+        CbbgConfig.Mode prev = lastMode;
+        if (prev == null) {
+            lastMode = modeNow;
+            return;
+        }
+        if (prev == modeNow) {
+            return;
+        }
 
-    // Log verification again after a toggle, and reset any “disabled due to error”
-    // state.
-    loggedOnce.set(false);
-    CbbgDither.resetAfterToggle();
-    if (!modeNow.isActive()) {
-      CbbgDebugState.clear();
-    }
+        lastMode = modeNow;
 
-    // Recreate targets on the next frame boundary so we don’t destroy textures
-    // mid-present.
-    boolean activeNow = modeNow.isActive();
-    boolean activePrev = prev.isActive();
-    if (activeNow == activePrev) {
-      return;
-    }
+        // Log verification again after a toggle, and reset any “disabled due to error”
+        // state.
+        loggedOnce.set(false);
+        CbbgDither.resetAfterToggle();
+        if (!modeNow.isActive()) {
+            CbbgDebugState.clear();
+        }
 
-    RenderSystem.queueFencedTask(
-        () -> {
-          Minecraft mc = Minecraft.getInstance();
-          // Recreate the main target so it matches the current enabled state.
-          mc.getMainRenderTarget().resize(mc.getWindow().getWidth(), mc.getWindow().getHeight());
+        // Recreate targets on the next frame boundary so we don’t destroy textures
+        // mid-present.
+        boolean activeNow = modeNow.isActive();
+        boolean activePrev = prev.isActive();
+        if (activeNow == activePrev) {
+            return;
+        }
+
+        RenderSystem.queueFencedTask(() -> {
+            Minecraft mc = Minecraft.getInstance();
+            // Recreate the main target so it matches the current enabled state.
+            mc.getMainRenderTarget().resize(mc.getWindow().getWidth(), mc.getWindow().getHeight());
         });
-  }
-
-  private static void logVerificationOnce(GpuTextureView mainView) {
-    if (!loggedOnce.compareAndSet(false, true)) {
-      return;
     }
 
-    try {
-      int mainInternal = getTextureInternalFormat(mainView.texture());
-      Integer lightmapInternal = null;
-      lightmapInternal = swallowExceptions(
-          () -> {
-            GpuTextureView lightmap = Minecraft.getInstance().gameRenderer.lightTexture().getTextureView();
-            return getTextureInternalFormat(lightmap.texture());
-          });
+    private static void logVerificationOnce(GpuTextureView mainView) {
+        if (!loggedOnce.compareAndSet(false, true)) {
+            return;
+        }
 
-      // Default framebuffer encoding + SRGB conversion state.
-      int prevFbo = GlStateManager._getInteger(GL30.GL_FRAMEBUFFER_BINDING);
-      int encoding;
-      boolean fbSrgb;
-      try {
-        GL30.glBindFramebuffer(GL30.GL_FRAMEBUFFER, 0);
-        encoding = GL30.glGetFramebufferAttachmentParameteri(
-            GL30.GL_FRAMEBUFFER, GL11.GL_BACK_LEFT, GL30.GL_FRAMEBUFFER_ATTACHMENT_COLOR_ENCODING);
-        fbSrgb = GL11.glIsEnabled(GL30.GL_FRAMEBUFFER_SRGB);
-      } finally {
-        GL30.glBindFramebuffer(GL30.GL_FRAMEBUFFER, prevFbo);
-      }
+        try {
+            int mainInternal = getTextureInternalFormat(mainView.texture());
+            Integer lightmapInternal = null;
+            lightmapInternal = swallowExceptions(() -> {
+                GpuTextureView lightmap =
+                        Minecraft.getInstance().gameRenderer.lightTexture().getTextureView();
+                return getTextureInternalFormat(lightmap.texture());
+            });
 
-      CbbgDebugState.update(mainInternal, lightmapInternal, encoding, fbSrgb);
+            // Default framebuffer encoding + SRGB conversion state.
+            int prevFbo = GlStateManager._getInteger(GL30.GL_FRAMEBUFFER_BINDING);
+            int encoding;
+            boolean fbSrgb;
+            try {
+                GL30.glBindFramebuffer(GL30.GL_FRAMEBUFFER, 0);
+                encoding = GL30.glGetFramebufferAttachmentParameteri(GL30.GL_FRAMEBUFFER,
+                        GL11.GL_BACK_LEFT, GL30.GL_FRAMEBUFFER_ATTACHMENT_COLOR_ENCODING);
+                fbSrgb = GL11.glIsEnabled(GL30.GL_FRAMEBUFFER_SRGB);
+            } finally {
+                GL30.glBindFramebuffer(GL30.GL_FRAMEBUFFER, prevFbo);
+            }
 
-      if (CbbgClient.LOGGER.isInfoEnabled()) {
-        CbbgClient.LOGGER.info(
-            "cbbg verify: MainTarget internalFormat={} Lightmap internalFormat={} DefaultFB encoding={} FRAMEBUFFER_SRGB={}",
-            CbbgGlNames.glInternalName(mainInternal),
-            lightmapInternal == null ? "unknown" : CbbgGlNames.glInternalName(lightmapInternal),
-            CbbgGlNames.glEncodingName(encoding),
-            fbSrgb);
-      }
-    } catch (Exception e) {
-      CbbgClient.LOGGER.warn("cbbg verify failed (continuing without verification).", e);
+            CbbgDebugState.update(mainInternal, lightmapInternal, encoding, fbSrgb);
+
+            if (CbbgClient.LOGGER.isInfoEnabled()) {
+                CbbgClient.LOGGER.info(
+                        "cbbg verify: MainTarget internalFormat={} Lightmap internalFormat={} DefaultFB encoding={} FRAMEBUFFER_SRGB={}",
+                        CbbgGlNames.glInternalName(mainInternal),
+                        lightmapInternal == null ? "unknown"
+                                : CbbgGlNames.glInternalName(lightmapInternal),
+                        CbbgGlNames.glEncodingName(encoding), fbSrgb);
+            }
+        } catch (Exception e) {
+            CbbgClient.LOGGER.warn("cbbg verify failed (continuing without verification).", e);
+        }
     }
-  }
 
-  private static int getTextureInternalFormat(GpuTexture texture) {
-    // Read GL internal format from the currently allocated texture storage.
-    // This is the actual verification that our RGBA16F override is taking effect.
-    int prev = GlStateManager._getInteger(GL11.GL_TEXTURE_BINDING_2D);
-    try {
-      // This works for the OpenGL backend (which 1.21.11 uses).
-      int id = ((com.mojang.blaze3d.opengl.GlTexture) texture).glId();
-      GL11.glBindTexture(GL11.GL_TEXTURE_2D, id);
-      return GL11.glGetTexLevelParameteri(GL11.GL_TEXTURE_2D, 0, GL11.GL_TEXTURE_INTERNAL_FORMAT);
-    } finally {
-      GL11.glBindTexture(GL11.GL_TEXTURE_2D, prev);
+    private static int getTextureInternalFormat(GpuTexture texture) {
+        // Read GL internal format from the currently allocated texture storage.
+        // This is the actual verification that our RGBA16F override is taking effect.
+        int prev = GlStateManager._getInteger(GL11.GL_TEXTURE_BINDING_2D);
+        try {
+            // This works for the OpenGL backend (which 1.21.11 uses).
+            int id = ((com.mojang.blaze3d.opengl.GlTexture) texture).glId();
+            GL11.glBindTexture(GL11.GL_TEXTURE_2D, id);
+            return GL11.glGetTexLevelParameteri(GL11.GL_TEXTURE_2D, 0,
+                    GL11.GL_TEXTURE_INTERNAL_FORMAT);
+        } finally {
+            GL11.glBindTexture(GL11.GL_TEXTURE_2D, prev);
+        }
     }
-  }
 
-  @Nullable
-  private static <T> T swallowExceptions(java.util.concurrent.Callable<T> action) {
-    try {
-      return action.call();
-    } catch (Exception ignored) {
-      return null;
+    @Nullable
+    private static <T> T swallowExceptions(java.util.concurrent.Callable<T> action) {
+        try {
+            return action.call();
+        } catch (Exception ignored) {
+            return null;
+        }
     }
-  }
 }

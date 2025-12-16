@@ -16,47 +16,42 @@ import org.spongepowered.asm.mixin.injection.Redirect;
 @Mixin(MainTarget.class)
 public abstract class MainTargetMixin {
 
-  @Redirect(method = "allocateColorAttachment", at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/systems/GpuDevice;createTexture(Ljava/util/function/Supplier;ILcom/mojang/blaze3d/textures/TextureFormat;IIII)Lcom/mojang/blaze3d/textures/GpuTexture;"))
-  private GpuTexture cbbg$allocateColorAttachment(
-      GpuDevice device,
-      Supplier<String> label,
-      int usage,
-      TextureFormat format,
-      int width,
-      int height,
-      int depthOrLayers,
-      int mipLevels) {
-    if (!CbbgClient.isEnabled() || !Rgba16fSupport.isEnabled()) {
-      return device.createTexture(label, usage, java.util.Objects.requireNonNull(format), width, height, depthOrLayers,
-          mipLevels);
+    @Redirect(method = "allocateColorAttachment", at = @At(value = "INVOKE",
+            target = "Lcom/mojang/blaze3d/systems/GpuDevice;createTexture(Ljava/util/function/Supplier;ILcom/mojang/blaze3d/textures/TextureFormat;IIII)Lcom/mojang/blaze3d/textures/GpuTexture;"))
+    private GpuTexture cbbg$allocateColorAttachment(GpuDevice device, Supplier<String> label,
+            int usage, TextureFormat format, int width, int height, int depthOrLayers,
+            int mipLevels) {
+        if (!CbbgClient.isEnabled() || !Rgba16fSupport.isEnabled()) {
+            return device.createTexture(label, usage, java.util.Objects.requireNonNull(format),
+                    width, height, depthOrLayers, mipLevels);
+        }
+
+        GpuTexture texture = null;
+        GpuOutOfMemoryException oom = null;
+        Exception failure = null;
+
+        GlFormatOverride.pushMainTargetColor();
+        try {
+            texture = device.createTexture(label, usage, java.util.Objects.requireNonNull(format),
+                    width, height, depthOrLayers, mipLevels);
+        } catch (GpuOutOfMemoryException e) {
+            oom = e;
+        } catch (Exception e) {
+            failure = e;
+        } finally {
+            GlFormatOverride.popMainTargetColor();
+        }
+
+        if (oom != null) {
+            throw oom;
+        }
+
+        if (failure != null) {
+            Rgba16fSupport.disable(failure);
+            return device.createTexture(label, usage, java.util.Objects.requireNonNull(format),
+                    width, height, depthOrLayers, mipLevels);
+        }
+
+        return texture;
     }
-
-    GpuTexture texture = null;
-    GpuOutOfMemoryException oom = null;
-    Exception failure = null;
-
-    GlFormatOverride.pushMainTargetColor();
-    try {
-      texture = device.createTexture(label, usage, java.util.Objects.requireNonNull(format), width, height,
-          depthOrLayers, mipLevels);
-    } catch (GpuOutOfMemoryException e) {
-      oom = e;
-    } catch (Exception e) {
-      failure = e;
-    } finally {
-      GlFormatOverride.popMainTargetColor();
-    }
-
-    if (oom != null) {
-      throw oom;
-    }
-
-    if (failure != null) {
-      Rgba16fSupport.disable(failure);
-      return device.createTexture(label, usage, java.util.Objects.requireNonNull(format), width, height, depthOrLayers,
-          mipLevels);
-    }
-
-    return texture;
-  }
 }

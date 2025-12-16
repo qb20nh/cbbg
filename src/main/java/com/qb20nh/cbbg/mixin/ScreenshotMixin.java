@@ -19,53 +19,52 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(Screenshot.class)
 public abstract class ScreenshotMixin {
 
-  private ScreenshotMixin() {
-  }
+    private ScreenshotMixin() {}
 
-  private static final ThreadLocal<Integer> CAPTURE_DEPTH = ThreadLocal.withInitial(() -> 0);
+    private static final ThreadLocal<Integer> CAPTURE_DEPTH = ThreadLocal.withInitial(() -> 0);
 
-  @Inject(method = "takeScreenshot(Lcom/mojang/blaze3d/pipeline/RenderTarget;ILjava/util/function/Consumer;)V", at = @At("HEAD"), cancellable = true)
-  private static void cbbg$takeScreenshot(
-      RenderTarget target, int downscaleFactor, Consumer<NativeImage> callback, CallbackInfo ci) {
-    if (CAPTURE_DEPTH.get() > 0) {
-      return;
-    }
-    if (!CbbgClient.isEnabled()) {
-      return;
-    }
+    @Inject(method = "takeScreenshot(Lcom/mojang/blaze3d/pipeline/RenderTarget;ILjava/util/function/Consumer;)V",
+            at = @At("HEAD"), cancellable = true)
+    private static void cbbg$takeScreenshot(RenderTarget target, int downscaleFactor,
+            Consumer<NativeImage> callback, CallbackInfo ci) {
+        if (CAPTURE_DEPTH.get() > 0) {
+            return;
+        }
+        if (!CbbgClient.isEnabled()) {
+            return;
+        }
 
-    if (target != Minecraft.getInstance().getMainRenderTarget()) {
-      return;
-    }
+        if (target != Minecraft.getInstance().getMainRenderTarget()) {
+            return;
+        }
 
-    RenderSystem.assertOnRenderThread();
-    GpuTextureView input = target.getColorTextureView();
-    if (input == null) {
-      return;
-    }
+        RenderSystem.assertOnRenderThread();
+        GpuTextureView input = target.getColorTextureView();
+        if (input == null) {
+            return;
+        }
 
-    TextureTarget output = CbbgClient.isDemoMode()
-        ? CbbgDither.renderDemoTarget(input)
-        : CbbgDither.renderDitheredTarget(input);
-    if (output == null) {
-      return;
-    }
+        TextureTarget output = CbbgClient.isDemoMode() ? CbbgDither.renderDemoTarget(input)
+                : CbbgDither.renderDitheredTarget(input);
+        if (output == null) {
+            return;
+        }
 
-    CAPTURE_DEPTH.set(CAPTURE_DEPTH.get() + 1);
-    try {
-      // Re-enter vanilla screenshot code, but read from the dithered RGBA8 target
-      // instead of the
-      // HDR main target (which would otherwise get quantized without dithering during
-      // readback).
-      Screenshot.takeScreenshot(output, downscaleFactor, requireNonNull(callback));
-      ci.cancel();
-    } finally {
-      int next = CAPTURE_DEPTH.get() - 1;
-      if (next <= 0) {
-        CAPTURE_DEPTH.remove();
-      } else {
-        CAPTURE_DEPTH.set(next);
-      }
+        CAPTURE_DEPTH.set(CAPTURE_DEPTH.get() + 1);
+        try {
+            // Re-enter vanilla screenshot code, but read from the dithered RGBA8 target
+            // instead of the
+            // HDR main target (which would otherwise get quantized without dithering during
+            // readback).
+            Screenshot.takeScreenshot(output, downscaleFactor, requireNonNull(callback));
+            ci.cancel();
+        } finally {
+            int next = CAPTURE_DEPTH.get() - 1;
+            if (next <= 0) {
+                CAPTURE_DEPTH.remove();
+            } else {
+                CAPTURE_DEPTH.set(next);
+            }
+        }
     }
-  }
 }

@@ -14,89 +14,89 @@ import net.fabricmc.loader.api.FabricLoader;
 
 public record CbbgConfig(Mode mode) {
 
-  public enum Mode {
-    ENABLED,
-    DISABLED,
-    /** Split-screen demo: left = enabled (dither), right = disabled (no dither). */
-    DEMO;
+    public enum Mode {
+        ENABLED, DISABLED,
+        /** Split-screen demo: left = enabled (dither), right = disabled (no dither). */
+        DEMO;
 
-    public boolean isActive() {
-      return this != DISABLED;
-    }
-  }
-
-  private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
-  private static final Path PATH = FabricLoader.getInstance().getConfigDir().resolve(CbbgClient.MOD_ID + ".json");
-
-  private static volatile CbbgConfig instance;
-
-  public static CbbgConfig get() {
-    CbbgConfig cfg = instance;
-    if (cfg != null) {
-      return cfg;
-    }
-    synchronized (CbbgConfig.class) {
-      cfg = instance;
-      if (cfg != null) {
-        return cfg;
-      }
-      cfg = load();
-      instance = cfg;
-      return cfg;
-    }
-  }
-
-  public static synchronized void setMode(Mode mode) {
-    if (mode == null) {
-      return;
-    }
-    CbbgConfig next = new CbbgConfig(mode);
-    instance = next;
-    save(next);
-  }
-
-  public CbbgConfig {
-    mode = mode == null ? Mode.ENABLED : mode;
-  }
-
-  private static CbbgConfig load() {
-    if (!Files.isRegularFile(PATH)) {
-      CbbgConfig cfg = new CbbgConfig(Mode.ENABLED);
-      save(cfg);
-      return cfg;
+        public boolean isActive() {
+            return this != DISABLED;
+        }
     }
 
-    try (BufferedReader reader = Files.newBufferedReader(PATH, StandardCharsets.UTF_8)) {
-      DiskModel model = GSON.fromJson(reader, DiskModel.class);
-      if (model == null || model.mode == null) {
-        return new CbbgConfig(Mode.ENABLED);
-      }
-      return new CbbgConfig(model.mode);
-    } catch (JsonParseException e) {
-      CbbgClient.LOGGER.warn("Failed to parse {} (resetting to defaults).", PATH, e);
-      CbbgConfig cfg = new CbbgConfig(Mode.ENABLED);
-      save(cfg);
-      return cfg;
-    } catch (Exception e) {
-      CbbgClient.LOGGER.warn("Failed to read {} (using defaults).", PATH, e);
-      return new CbbgConfig(Mode.ENABLED);
-    }
-  }
+    private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
+    private static final Path PATH =
+            FabricLoader.getInstance().getConfigDir().resolve(CbbgClient.MOD_ID + ".json");
 
-  private static void save(CbbgConfig cfg) {
-    try {
-      Files.createDirectories(PATH.getParent());
-      try (BufferedWriter writer = Files.newBufferedWriter(PATH, StandardCharsets.UTF_8)) {
-        DiskModel model = new DiskModel();
-        model.mode = cfg.mode();
-        GSON.toJson(model, writer);
-      }
-    } catch (Exception e) {
-      CbbgClient.LOGGER.warn("Failed to write {}.", PATH, e);
-    }
-  }
+    private static volatile CbbgConfig instance;
 
-  private static final class DiskModel {
-    Mode mode;
-  }
+    public static CbbgConfig get() {
+        CbbgConfig cfg = instance;
+        if (cfg != null) {
+            return cfg;
+        }
+        synchronized (CbbgConfig.class) {
+            cfg = instance;
+            if (cfg != null) {
+                return cfg;
+            }
+            cfg = load();
+            instance = cfg;
+            return cfg;
+        }
+    }
+
+    public static synchronized void setMode(Mode mode) {
+        if (mode == null) {
+            return;
+        }
+        CbbgConfig next = new CbbgConfig(mode);
+        instance = next;
+        save(next);
+    }
+
+    public CbbgConfig {
+        mode = mode == null ? Mode.ENABLED : mode;
+    }
+
+    private static CbbgConfig load() {
+        if (!Files.isRegularFile(PATH)) {
+            CbbgConfig cfg = new CbbgConfig(Mode.ENABLED);
+            save(cfg);
+            return cfg;
+        }
+
+        try (BufferedReader reader = Files.newBufferedReader(PATH, StandardCharsets.UTF_8)) {
+            DiskModel model = GSON.fromJson(reader, DiskModel.class);
+            if (model != null && model.mode != null) {
+                return new CbbgConfig(model.mode);
+            }
+            return new CbbgConfig(Mode.ENABLED);
+        } catch (JsonParseException e) {
+            CbbgClient.LOGGER.warn("Failed to parse {} (resetting to defaults).", PATH, e);
+            CbbgConfig cfg = new CbbgConfig(Mode.ENABLED);
+            save(cfg);
+            return cfg;
+        } catch (Exception e) {
+            CbbgClient.LOGGER.warn("Failed to read {} (using defaults).", PATH, e);
+            return new CbbgConfig(Mode.ENABLED);
+        }
+    }
+
+    private static void save(CbbgConfig cfg) {
+        try {
+            Files.createDirectories(PATH.getParent());
+            try (BufferedWriter writer = Files.newBufferedWriter(PATH, StandardCharsets.UTF_8)) {
+                DiskModel model = new DiskModel();
+                model.mode = cfg.mode();
+                GSON.toJson(model, writer);
+            }
+        } catch (Exception e) {
+            CbbgClient.LOGGER.warn("Failed to write {}.", PATH, e);
+        }
+    }
+
+    private static final class DiskModel {
+        Mode mode;
+    }
 }

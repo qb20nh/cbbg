@@ -20,26 +20,27 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(DebugScreenEntries.class)
 public abstract class DebugScreenEntriesMixin {
 
-  private DebugScreenEntriesMixin() {
-  }
+    private DebugScreenEntriesMixin() {}
 
-  @Shadow
-  @Final
-  @Mutable
-  private static Map<DebugScreenProfile, Map<Identifier, DebugScreenEntryStatus>> PROFILES;
+    @Shadow
+    @Final
+    @Mutable
+    private static Map<DebugScreenProfile, Map<Identifier, DebugScreenEntryStatus>> PROFILES;
 
-  @Inject(method = "<clinit>", at = @At("TAIL"))
-  private static void cbbg$register(CallbackInfo ci) {
-    Identifier id = Identifier.fromNamespaceAndPath(CbbgClient.MOD_ID, "cbbg");
-    DebugScreenEntries.register(id, new CbbgDebugEntry());
+    @Inject(method = "<clinit>", at = @At("TAIL"))
+    private static void cbbg$register(CallbackInfo ci) {
+        Identifier id = Identifier.fromNamespaceAndPath(CbbgClient.MOD_ID, "cbbg");
+        DebugScreenEntries.register(id, new CbbgDebugEntry());
 
-    Map<DebugScreenProfile, Map<Identifier, DebugScreenEntryStatus>> updated = new EnumMap<>(DebugScreenProfile.class);
-    updated.putAll(PROFILES);
-    for (Map.Entry<DebugScreenProfile, Map<Identifier, DebugScreenEntryStatus>> e : PROFILES.entrySet()) {
-      Map<Identifier, DebugScreenEntryStatus> status = new HashMap<>(e.getValue());
-      status.put(id, DebugScreenEntryStatus.IN_OVERLAY);
-      updated.put(e.getKey(), Map.copyOf(status));
+        Map<DebugScreenProfile, Map<Identifier, DebugScreenEntryStatus>> updated =
+                new EnumMap<>(DebugScreenProfile.class);
+        updated.putAll(PROFILES);
+        for (Map.Entry<DebugScreenProfile, Map<Identifier, DebugScreenEntryStatus>> e : PROFILES
+                .entrySet()) {
+            Map<Identifier, DebugScreenEntryStatus> status = new HashMap<>(e.getValue());
+            status.put(id, DebugScreenEntryStatus.IN_OVERLAY);
+            updated.put(e.getKey(), Map.copyOf(status));
+        }
+        PROFILES = Map.copyOf(updated);
     }
-    PROFILES = Map.copyOf(updated);
-  }
 }

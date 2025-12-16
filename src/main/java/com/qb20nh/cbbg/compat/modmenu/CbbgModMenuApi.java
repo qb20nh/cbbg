@@ -7,8 +7,8 @@ import com.terraformersmc.modmenu.api.ModMenuApi;
 import net.minecraft.client.gui.screens.Screen;
 
 public final class CbbgModMenuApi implements ModMenuApi {
-  @Override
-  public ConfigScreenFactory<Screen> getModConfigScreenFactory() {
-    return CbbgConfigScreen::new;
-  }
+    @Override
+    public ConfigScreenFactory<Screen> getModConfigScreenFactory() {
+        return CbbgConfigScreen::new;
+    }
 }
