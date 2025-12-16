@@ -1,4 +1,4 @@
-package com.qb20nh.cbbg.render;
+package com.qb20nh.cbbg.render.stbn;
 
 import com.mojang.blaze3d.platform.NativeImage;
 import com.qb20nh.cbbg.CbbgClient;
@@ -6,23 +6,23 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.*;
 import static java.util.Objects.requireNonNull;
-import net.fabricmc.loader.api.FabricLoader;
 
 public class STBNLoader {
 
     private STBNLoader() {}
 
-    private static final Path CACHE_DIR = FabricLoader.getInstance().getGameDir().resolve(".cbbg");
+    private static final Path CACHE_DIR = STBNCache.CACHE_DIR;
+    private static final String HASH_FILE_FMT = STBNCache.HASH_FILE_FMT;
+    private static final String IMAGE_BASE_FMT = STBNCache.IMAGE_BASE_FMT;
 
     public static NativeImage[] loadOrGenerate(int width, int height, int frames,
             STBNGenerator.STBNFields fields) {
         // 1. Try Cache
         NativeImage[] cached = loadFromCache(width, height, frames);
-        if (cached != null && cached.length == frames) {
+        if (cached.length == frames) {
             CbbgClient.LOGGER.info("STBN Frames loaded from cache.");
             return cached;
         }
@@ -58,12 +58,12 @@ public class STBNLoader {
     private static NativeImage[] loadFromCache(int w, int h, int d) {
         try {
             if (!Files.exists(CACHE_DIR)) {
-                return null;
+                return new NativeImage[0];
             }
 
-            Path hashFile = CACHE_DIR.resolve(String.format("stbn_%dx%dx%d.sha256", w, h, d));
+            Path hashFile = CACHE_DIR.resolve(String.format(HASH_FILE_FMT, w, h, d));
             if (!Files.exists(hashFile)) {
-                return null;
+                return new NativeImage[0];
             }
 
             Map<String, String> hashes = new HashMap<>();
@@ -82,25 +82,25 @@ public class STBNLoader {
 
                 if (expectedHash == null) {
                     cleanupImages(images, z);
-                    return null;
+                    return new NativeImage[0];
                 }
 
                 images[z] = loadCachedFrame(w, h, d, z, expectedHash);
                 if (images[z] == null) {
                     cleanupImages(images, z);
-                    return null;
+                    return new NativeImage[0];
                 }
             }
             return images;
         } catch (Exception e) {
             CbbgClient.LOGGER.warn("Failed to load STBN cache", e);
-            return null;
+            return new NativeImage[0];
         }
     }
 
     private static NativeImage loadCachedFrame(int w, int h, int d, int z, String expectedHash)
             throws IOException, NoSuchAlgorithmException {
-        String baseName = String.format("stbn_%dx%dx%d_%d", w, h, d, z);
+        String baseName = String.format(IMAGE_BASE_FMT, w, h, d, z);
         Path imageFile = CACHE_DIR.resolve(baseName + ".png");
 
         if (!Files.exists(imageFile)) {
@@ -108,7 +108,7 @@ public class STBNLoader {
         }
 
         byte[] imageBytes = Files.readAllBytes(imageFile);
-        String actualHash = calculateSHA256(imageBytes);
+        String actualHash = STBNCache.calculateSHA256(imageBytes);
 
         if (!actualHash.equalsIgnoreCase(expectedHash)) {
             return null;
@@ -124,7 +124,7 @@ public class STBNLoader {
 
             for (int z = 0; z < d; z++) {
                 if (images[z] != null) {
-                    String baseName = String.format("stbn_%dx%dx%d_%d", w, h, d, z);
+                    String baseName = String.format(IMAGE_BASE_FMT, w, h, d, z);
                     String fileName = baseName + ".png";
                     Path imageFile = requireNonNull(CACHE_DIR.resolve(fileName));
 
@@ -132,7 +132,7 @@ public class STBNLoader {
 
                     // Compute hash
                     byte[] imageBytes = Files.readAllBytes(imageFile);
-                    String hash = calculateSHA256(imageBytes);
+                    String hash = STBNCache.calculateSHA256(imageBytes);
 
                     // Append to hash manifest format: hash filename
                     hashContent.append(hash).append("  ").append(fileName)
@@ -140,8 +140,8 @@ public class STBNLoader {
                 }
             }
 
-            Path hashFile = requireNonNull(
-                    CACHE_DIR.resolve(String.format("stbn_%dx%dx%d.sha256", w, h, d)));
+            Path hashFile =
+                    requireNonNull(CACHE_DIR.resolve(String.format(HASH_FILE_FMT, w, h, d)));
             Files.writeString(hashFile, hashContent.toString());
 
         } catch (IOException | NoSuchAlgorithmException e) {
@@ -157,16 +157,7 @@ public class STBNLoader {
         }
     }
 
-    private static String calculateSHA256(byte[] data) throws NoSuchAlgorithmException {
-        MessageDigest digest = MessageDigest.getInstance("SHA-256");
-        byte[] hash = digest.digest(data);
-        StringBuilder hexString = new StringBuilder();
-        for (byte b : hash) {
-            String hex = Integer.toHexString(0xff & b);
-            if (hex.length() == 1)
-                hexString.append('0');
-            hexString.append(hex);
-        }
-        return hexString.toString();
+    public static boolean isCacheValid(int w, int h, int d) {
+        return STBNCache.isCacheValid(w, h, d);
     }
 }

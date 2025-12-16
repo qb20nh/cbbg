@@ -17,6 +17,8 @@ import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import com.qb20nh.cbbg.CbbgClient;
 import com.qb20nh.cbbg.config.CbbgConfig;
+import com.qb20nh.cbbg.render.stbn.STBNGenerator;
+import com.qb20nh.cbbg.render.stbn.STBNLoader;
 import static java.util.Objects.requireNonNull;
 import java.util.OptionalInt;
 import java.util.concurrent.atomic.AtomicBoolean;

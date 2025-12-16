@@ -1,4 +1,4 @@
-package com.qb20nh.cbbg.render;
+package com.qb20nh.cbbg.render.stbn;
 
 import com.qb20nh.cbbg.math.MiniFFT;
 import java.util.*;
@@ -49,6 +49,11 @@ public class STBNGenerator {
     public static void init() {
         pendingFuture.compareAndSet(null, CompletableFuture.<STBNFields>supplyAsync(() -> {
             try {
+                if (STBNCache.isCacheValid(STBN_SIZE, STBN_SIZE, STBN_FRAMES)) {
+                    LOGGER.info("Valid STBN cache found. Skipping math generation.");
+                    return null;
+                }
+
                 LOGGER.info("Starting Async STBN Math Generation ({}x{}x{})...", STBN_SIZE,
                         STBN_SIZE, STBN_FRAMES);
                 long start = System.currentTimeMillis();
