@@ -37,6 +37,14 @@ body:
       label: Crash Report / Logs
       description: Please paste the full crash report or game logs here. verify that the logs are not truncated.
       render: java
+    value: |
+      <details>
+      <summary>Crash Report</summary>
+      
+      ```
+      <!-- Paste your crash report here -->
+      ```
+      </details>
     validations:
       required: true
 
