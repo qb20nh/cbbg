@@ -46,14 +46,14 @@ body:
       label: Logs
       description: Please paste the full game logs here. verify that the logs are not truncated.
       render: java
-    value: |
-      <details>
-      <summary>Logs</summary>
-      
-      ```
-      <!-- Paste your logs here -->
-      ```
-      </details>
+      value: |
+        <details>
+        <summary>Logs</summary>
+        
+        ```
+        <!-- Paste your logs here -->
+        ```
+        </details>
     validations:
       required: true
 
