@@ -16,13 +16,7 @@ import org.spongepowered.asm.mixin.injection.Redirect;
 @Mixin(MainTarget.class)
 public abstract class MainTargetMixin {
 
-  @Redirect(
-      method = "allocateColorAttachment",
-      at =
-          @At(
-              value = "INVOKE",
-              target =
-                  "Lcom/mojang/blaze3d/systems/GpuDevice;createTexture(Ljava/util/function/Supplier;ILcom/mojang/blaze3d/textures/TextureFormat;IIII)Lcom/mojang/blaze3d/textures/GpuTexture;"))
+  @Redirect(method = "allocateColorAttachment", at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/systems/GpuDevice;createTexture(Ljava/util/function/Supplier;ILcom/mojang/blaze3d/textures/TextureFormat;IIII)Lcom/mojang/blaze3d/textures/GpuTexture;"))
   private GpuTexture cbbg$allocateColorAttachment(
       GpuDevice device,
       Supplier<String> label,
@@ -33,20 +27,22 @@ public abstract class MainTargetMixin {
       int depthOrLayers,
       int mipLevels) {
     if (!CbbgClient.isEnabled() || !Rgba16fSupport.isEnabled()) {
-      return device.createTexture(label, usage, format, width, height, depthOrLayers, mipLevels);
+      return device.createTexture(label, usage, java.util.Objects.requireNonNull(format), width, height, depthOrLayers,
+          mipLevels);
     }
 
     GpuTexture texture = null;
     GpuOutOfMemoryException oom = null;
-    Throwable failure = null;
+    Exception failure = null;
 
     GlFormatOverride.pushMainTargetColor();
     try {
-      texture = device.createTexture(label, usage, format, width, height, depthOrLayers, mipLevels);
+      texture = device.createTexture(label, usage, java.util.Objects.requireNonNull(format), width, height,
+          depthOrLayers, mipLevels);
     } catch (GpuOutOfMemoryException e) {
       oom = e;
-    } catch (Throwable t) {
-      failure = t;
+    } catch (Exception e) {
+      failure = e;
     } finally {
       GlFormatOverride.popMainTargetColor();
     }
@@ -57,7 +53,8 @@ public abstract class MainTargetMixin {
 
     if (failure != null) {
       Rgba16fSupport.disable(failure);
-      return device.createTexture(label, usage, format, width, height, depthOrLayers, mipLevels);
+      return device.createTexture(label, usage, java.util.Objects.requireNonNull(format), width, height, depthOrLayers,
+          mipLevels);
     }
 
     return texture;

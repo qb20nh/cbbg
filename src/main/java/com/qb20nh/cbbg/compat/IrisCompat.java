@@ -9,7 +9,8 @@ public final class IrisCompat {
   private static final boolean IRIS_LOADED = FabricLoader.getInstance().isModLoaded("iris");
   private static volatile boolean loggedReflectionFailure = false;
 
-  private IrisCompat() {}
+  private IrisCompat() {
+  }
 
   /**
    * @return true if Iris is loaded and a shaderpack is currently in use.
@@ -30,9 +31,10 @@ public final class IrisCompat {
           return result;
         }
       }
-    } catch (Throwable t) {
-      logReflectionFailureOnce(t);
-      // If Iris is present but the API contract changed, be conservative and disable cbbg.
+    } catch (Exception e) {
+      logReflectionFailureOnce(e);
+      // If Iris is present but the API contract changed, be conservative and disable
+      // cbbg.
       return true;
     }
 

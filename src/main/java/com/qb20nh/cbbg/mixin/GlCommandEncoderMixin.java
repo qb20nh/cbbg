@@ -12,6 +12,7 @@ import com.qb20nh.cbbg.debug.CbbgGlNames;
 import com.qb20nh.cbbg.render.CbbgDither;
 import java.util.concurrent.atomic.AtomicBoolean;
 import net.minecraft.client.Minecraft;
+import org.jspecify.annotations.Nullable;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL30;
 import org.spongepowered.asm.mixin.Mixin;
@@ -28,7 +29,8 @@ public abstract class GlCommandEncoderMixin {
 
   @Inject(method = "presentTexture", at = @At("HEAD"), cancellable = true)
   private void cbbg$presentTexture(GpuTextureView textureView, CallbackInfo ci) {
-    // Prevent recursion when cbbg itself calls presentTexture for its dither output.
+    // Prevent recursion when cbbg itself calls presentTexture for its dither
+    // output.
     if (PRESENT_DEPTH.get() > 0) {
       return;
     }
@@ -39,10 +41,6 @@ public abstract class GlCommandEncoderMixin {
     }
 
     Minecraft mc = Minecraft.getInstance();
-    if (mc == null) {
-      return;
-    }
-
     // Only intercept presenting the *main* render target.
     GpuTextureView main = mc.getMainRenderTarget().getColorTextureView();
     if (main == null || main != textureView) {
@@ -53,10 +51,9 @@ public abstract class GlCommandEncoderMixin {
 
     PRESENT_DEPTH.set(PRESENT_DEPTH.get() + 1);
     try {
-      boolean didPresent =
-          modeNow == CbbgConfig.Mode.DEMO
-              ? CbbgDither.blitToScreenWithDemo(textureView)
-              : CbbgDither.blitToScreenWithDither(textureView);
+      boolean didPresent = modeNow == CbbgConfig.Mode.DEMO
+          ? CbbgDither.blitToScreenWithDemo(textureView)
+          : CbbgDither.blitToScreenWithDither(textureView);
       if (didPresent) {
         ci.cancel();
       }
@@ -82,14 +79,16 @@ public abstract class GlCommandEncoderMixin {
 
     lastMode = modeNow;
 
-    // Log verification again after a toggle, and reset any “disabled due to error” state.
+    // Log verification again after a toggle, and reset any “disabled due to error”
+    // state.
     loggedOnce.set(false);
     CbbgDither.resetAfterToggle();
     if (!modeNow.isActive()) {
       CbbgDebugState.clear();
     }
 
-    // Recreate targets on the next frame boundary so we don’t destroy textures mid-present.
+    // Recreate targets on the next frame boundary so we don’t destroy textures
+    // mid-present.
     boolean activeNow = modeNow.isActive();
     boolean activePrev = prev.isActive();
     if (activeNow == activePrev) {
@@ -99,10 +98,6 @@ public abstract class GlCommandEncoderMixin {
     RenderSystem.queueFencedTask(
         () -> {
           Minecraft mc = Minecraft.getInstance();
-          if (mc == null) {
-            return;
-          }
-
           // Recreate the main target so it matches the current enabled state.
           mc.getMainRenderTarget().resize(mc.getWindow().getWidth(), mc.getWindow().getHeight());
         });
@@ -116,12 +111,11 @@ public abstract class GlCommandEncoderMixin {
     try {
       int mainInternal = getTextureInternalFormat(mainView.texture());
       Integer lightmapInternal = null;
-      try {
-        GpuTextureView lightmap = Minecraft.getInstance().gameRenderer.lightTexture().getTextureView();
-        lightmapInternal = lightmap != null ? getTextureInternalFormat(lightmap.texture()) : null;
-      } catch (Throwable ignored) {
-        // Best-effort; don’t fail rendering if the path changes.
-      }
+      lightmapInternal = swallowExceptions(
+          () -> {
+            GpuTextureView lightmap = Minecraft.getInstance().gameRenderer.lightTexture().getTextureView();
+            return getTextureInternalFormat(lightmap.texture());
+          });
 
       // Default framebuffer encoding + SRGB conversion state.
       int prevFbo = GlStateManager._getInteger(GL30.GL_FRAMEBUFFER_BINDING);
@@ -129,9 +123,8 @@ public abstract class GlCommandEncoderMixin {
       boolean fbSrgb;
       try {
         GL30.glBindFramebuffer(GL30.GL_FRAMEBUFFER, 0);
-        encoding =
-            GL30.glGetFramebufferAttachmentParameteri(
-                GL30.GL_FRAMEBUFFER, GL30.GL_BACK_LEFT, GL30.GL_FRAMEBUFFER_ATTACHMENT_COLOR_ENCODING);
+        encoding = GL30.glGetFramebufferAttachmentParameteri(
+            GL30.GL_FRAMEBUFFER, GL11.GL_BACK_LEFT, GL30.GL_FRAMEBUFFER_ATTACHMENT_COLOR_ENCODING);
         fbSrgb = GL11.glIsEnabled(GL30.GL_FRAMEBUFFER_SRGB);
       } finally {
         GL30.glBindFramebuffer(GL30.GL_FRAMEBUFFER, prevFbo);
@@ -139,14 +132,16 @@ public abstract class GlCommandEncoderMixin {
 
       CbbgDebugState.update(mainInternal, lightmapInternal, encoding, fbSrgb);
 
-      CbbgClient.LOGGER.info(
-          "cbbg verify: MainTarget internalFormat={} Lightmap internalFormat={} DefaultFB encoding={} FRAMEBUFFER_SRGB={}",
-          CbbgGlNames.glInternalName(mainInternal),
-          lightmapInternal == null ? "unknown" : CbbgGlNames.glInternalName(lightmapInternal),
-          CbbgGlNames.glEncodingName(encoding),
-          fbSrgb);
-    } catch (Throwable t) {
-      CbbgClient.LOGGER.warn("cbbg verify failed (continuing without verification).", t);
+      if (CbbgClient.LOGGER.isInfoEnabled()) {
+        CbbgClient.LOGGER.info(
+            "cbbg verify: MainTarget internalFormat={} Lightmap internalFormat={} DefaultFB encoding={} FRAMEBUFFER_SRGB={}",
+            CbbgGlNames.glInternalName(mainInternal),
+            lightmapInternal == null ? "unknown" : CbbgGlNames.glInternalName(lightmapInternal),
+            CbbgGlNames.glEncodingName(encoding),
+            fbSrgb);
+      }
+    } catch (Exception e) {
+      CbbgClient.LOGGER.warn("cbbg verify failed (continuing without verification).", e);
     }
   }
 
@@ -161,6 +156,15 @@ public abstract class GlCommandEncoderMixin {
       return GL11.glGetTexLevelParameteri(GL11.GL_TEXTURE_2D, 0, GL11.GL_TEXTURE_INTERNAL_FORMAT);
     } finally {
       GL11.glBindTexture(GL11.GL_TEXTURE_2D, prev);
+    }
+  }
+
+  @Nullable
+  private static <T> T swallowExceptions(java.util.concurrent.Callable<T> action) {
+    try {
+      return action.call();
+    } catch (Exception ignored) {
+      return null;
     }
   }
 }

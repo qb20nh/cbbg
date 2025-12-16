@@ -9,9 +9,10 @@ import java.io.BufferedWriter;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+
 import net.fabricmc.loader.api.FabricLoader;
 
-public final class CbbgConfig {
+public record CbbgConfig(Mode mode) {
 
   public enum Mode {
     ENABLED,
@@ -25,12 +26,9 @@ public final class CbbgConfig {
   }
 
   private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
-  private static final Path PATH =
-      FabricLoader.getInstance().getConfigDir().resolve(CbbgClient.MOD_ID + ".json");
+  private static final Path PATH = FabricLoader.getInstance().getConfigDir().resolve(CbbgClient.MOD_ID + ".json");
 
   private static volatile CbbgConfig instance;
-
-  private final Mode mode;
 
   public static CbbgConfig get() {
     CbbgConfig cfg = instance;
@@ -48,7 +46,7 @@ public final class CbbgConfig {
     }
   }
 
-  public static void setMode(Mode mode) {
+  public static synchronized void setMode(Mode mode) {
     if (mode == null) {
       return;
     }
@@ -57,12 +55,8 @@ public final class CbbgConfig {
     save(next);
   }
 
-  public CbbgConfig(Mode mode) {
-    this.mode = mode == null ? Mode.ENABLED : mode;
-  }
-
-  public Mode mode() {
-    return mode;
+  public CbbgConfig {
+    mode = mode == null ? Mode.ENABLED : mode;
   }
 
   private static CbbgConfig load() {
@@ -94,7 +88,7 @@ public final class CbbgConfig {
       Files.createDirectories(PATH.getParent());
       try (BufferedWriter writer = Files.newBufferedWriter(PATH, StandardCharsets.UTF_8)) {
         DiskModel model = new DiskModel();
-        model.mode = cfg.mode;
+        model.mode = cfg.mode();
         GSON.toJson(model, writer);
       }
     } catch (Exception e) {

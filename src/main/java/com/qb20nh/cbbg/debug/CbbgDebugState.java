@@ -9,7 +9,8 @@ public final class CbbgDebugState {
   private static volatile boolean framebufferSrgb = false;
   private static volatile long lastUpdateNanos = 0L;
 
-  private CbbgDebugState() {}
+  private CbbgDebugState() {
+  }
 
   public static void clear() {
     mainInternalFormat = -1;

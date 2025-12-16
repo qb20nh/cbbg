@@ -13,9 +13,9 @@ color banding be gone - Remove pesky color banding from Minecraft
 
 Helps reduce color banding on following:
 
-* Smooth lighting
-* Skybox
-* Vignette
+- Smooth lighting
+- Skybox
+- Vignette
 
 ## What it does
 
@@ -37,7 +37,14 @@ If you have **Mod Menu** installed, open cbbg’s config screen and select:
 
 - **Enabled**
 - **Disabled**
-- **Demo (split)**: left = enabled (dither), right = disabled (no dither)
+- **Demo (split)**: left = disabled (no dither), right = enabled (dither)
+
+### Commands
+
+You can also control the mod using chat commands (useful if Mod Menu is not installed):
+
+- `/cbbg mode`: View the current mode.
+- `/cbbg mode set <mode>`: Set the mode. Valid modes are `ENABLED`, `DISABLED`, `DEMO`.
 
 ### Config file
 
@@ -57,7 +64,3 @@ Valid values: `ENABLED`, `DISABLED`, `DEMO`.
 
 - **Iris shaderpacks**: when an Iris shaderpack is active, cbbg is **forced OFF** to avoid pipeline conflicts.
 - **GPU support**: if RGBA16F allocation fails on your device/driver, cbbg will automatically fall back to RGBA8 for the remainder of the session.
-
-## Credits / Third-party assets
-
-- Includes **STBN** noise textures by NVIDIA. See [`src/main/resources/assets/cbbg/licenses/NVIDIA-RTX-STBN-License.txt`](https://raw.githubusercontent.com/qb20nh/cbbg/refs/heads/main/src/main/resources/assets/cbbg/licenses/NVIDIA-RTX-STBN-License.txt).

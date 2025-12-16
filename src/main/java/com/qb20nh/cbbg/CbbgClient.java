@@ -1,7 +1,9 @@
 package com.qb20nh.cbbg;
 
 import com.qb20nh.cbbg.compat.IrisCompat;
+import com.qb20nh.cbbg.command.CbbgClientCommands;
 import com.qb20nh.cbbg.config.CbbgConfig;
+import com.qb20nh.cbbg.render.CbbgDither;
 import net.fabricmc.api.ClientModInitializer;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -20,7 +22,8 @@ public final class CbbgClient implements ClientModInitializer {
   /**
    * Main runtime gate for all cbbg rendering changes.
    *
-   * <p>Must be {@code false} when an Iris shaderpack is active to avoid conflicts.
+   * <p>
+   * Must be {@code false} when an Iris shaderpack is active to avoid conflicts.
    */
   public static boolean isEnabled() {
     return getEffectiveMode().isActive();
@@ -44,9 +47,6 @@ public final class CbbgClient implements ClientModInitializer {
 
   public static void renderDemoLabels(GuiGraphics graphics) {
     Minecraft mc = Minecraft.getInstance();
-    if (mc == null || mc.font == null) {
-      return;
-    }
 
     int w = graphics.guiWidth();
     int centerX = w / 2;
@@ -67,6 +67,9 @@ public final class CbbgClient implements ClientModInitializer {
     // Ensure config is loaded early.
     CbbgConfig.get();
 
+    // Start Texture Generation
+    CbbgDither.initAsync();
+
     // Fabric HUD API (recommended; HudRenderCallback is deprecated).
     // Render before chat so we don't get clipped by chat scissor.
     HudElementRegistry.attachElementBefore(
@@ -79,6 +82,8 @@ public final class CbbgClient implements ClientModInitializer {
           graphics.nextStratum();
           renderDemoLabels(graphics);
         });
+
+    CbbgClientCommands.register();
 
     LOGGER.info("cbbg loaded");
   }

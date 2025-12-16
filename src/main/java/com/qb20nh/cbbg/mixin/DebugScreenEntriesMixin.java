@@ -1,5 +1,6 @@
 package com.qb20nh.cbbg.mixin;
 
+import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.Map;
 import net.minecraft.client.gui.components.debug.DebugScreenEntries;
@@ -19,14 +20,21 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(DebugScreenEntries.class)
 public abstract class DebugScreenEntriesMixin {
 
-  @Shadow @Final @Mutable private static Map<DebugScreenProfile, Map<Identifier, DebugScreenEntryStatus>> PROFILES;
+  private DebugScreenEntriesMixin() {
+  }
+
+  @Shadow
+  @Final
+  @Mutable
+  private static Map<DebugScreenProfile, Map<Identifier, DebugScreenEntryStatus>> PROFILES;
 
   @Inject(method = "<clinit>", at = @At("TAIL"))
   private static void cbbg$register(CallbackInfo ci) {
     Identifier id = Identifier.fromNamespaceAndPath(CbbgClient.MOD_ID, "cbbg");
     DebugScreenEntries.register(id, new CbbgDebugEntry());
 
-    Map<DebugScreenProfile, Map<Identifier, DebugScreenEntryStatus>> updated = new HashMap<>(PROFILES);
+    Map<DebugScreenProfile, Map<Identifier, DebugScreenEntryStatus>> updated = new EnumMap<>(DebugScreenProfile.class);
+    updated.putAll(PROFILES);
     for (Map.Entry<DebugScreenProfile, Map<Identifier, DebugScreenEntryStatus>> e : PROFILES.entrySet()) {
       Map<Identifier, DebugScreenEntryStatus> status = new HashMap<>(e.getValue());
       status.put(id, DebugScreenEntryStatus.IN_OVERLAY);

@@ -7,6 +7,7 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
+import org.jspecify.annotations.NonNull;
 
 public final class CbbgConfigScreen extends Screen {
   private final Screen parent;
@@ -28,24 +29,21 @@ public final class CbbgConfigScreen extends Screen {
     int h = 20;
     int gap = 8;
 
-    this.enabledButton =
-        this.addRenderableWidget(
-            Button.builder(Component.literal("Enabled"), b -> setMode(CbbgConfig.Mode.ENABLED))
-                .bounds(cx - w - gap / 2, y, w, h)
-                .build());
+    this.enabledButton = this.addRenderableWidget(
+        Button.builder(Component.literal("Enabled"), b -> setMode(CbbgConfig.Mode.ENABLED))
+            .bounds(cx - w - gap / 2, y, w, h)
+            .build());
 
-    this.disabledButton =
-        this.addRenderableWidget(
-            Button.builder(Component.literal("Disabled"), b -> setMode(CbbgConfig.Mode.DISABLED))
-                .bounds(cx + gap / 2, y, w, h)
-                .build());
+    this.disabledButton = this.addRenderableWidget(
+        Button.builder(Component.literal("Disabled"), b -> setMode(CbbgConfig.Mode.DISABLED))
+            .bounds(cx + gap / 2, y, w, h)
+            .build());
 
-    this.demoButton =
-        this.addRenderableWidget(
-            Button.builder(
-                    Component.literal("Demo (split)"), b -> setMode(CbbgConfig.Mode.DEMO))
-                .bounds(cx - w / 2, y + h + gap, w, h)
-                .build());
+    this.demoButton = this.addRenderableWidget(
+        Button.builder(
+            Component.literal("Demo (split)"), b -> setMode(CbbgConfig.Mode.DEMO))
+            .bounds(cx - w / 2, y + h + gap, w, h)
+            .build());
 
     this.addRenderableWidget(
         Button.builder(Component.literal("Done"), b -> this.minecraft.setScreen(this.parent))
@@ -61,9 +59,12 @@ public final class CbbgConfigScreen extends Screen {
 
   private void refreshButtons() {
     CbbgConfig.Mode mode = CbbgConfig.get().mode();
-    if (this.enabledButton != null) this.enabledButton.active = mode != CbbgConfig.Mode.ENABLED;
-    if (this.disabledButton != null) this.disabledButton.active = mode != CbbgConfig.Mode.DISABLED;
-    if (this.demoButton != null) this.demoButton.active = mode != CbbgConfig.Mode.DEMO;
+    if (this.enabledButton != null)
+      this.enabledButton.active = mode != CbbgConfig.Mode.ENABLED;
+    if (this.disabledButton != null)
+      this.disabledButton.active = mode != CbbgConfig.Mode.DISABLED;
+    if (this.demoButton != null)
+      this.demoButton.active = mode != CbbgConfig.Mode.DEMO;
   }
 
   @Override
@@ -73,9 +74,12 @@ public final class CbbgConfigScreen extends Screen {
   }
 
   @Override
-  public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-    // Avoid Screen#renderBackground here: it applies a blur, and some screen transitions can already
-    // blur earlier in the same frame (Fabric Screen API / Mod Menu), which would crash with
+  public void render(@NonNull GuiGraphics graphics, int mouseX, int mouseY,
+      float partialTick) {
+    // Avoid Screen#renderBackground here: it applies a blur, and some screen
+    // transitions can already
+    // blur earlier in the same frame (Fabric Screen API / Mod Menu), which would
+    // crash with
     // "Can only blur once per frame".
     graphics.fill(0, 0, this.width, this.height, 0xA0000000);
     graphics.drawCenteredString(this.font, this.title, this.width / 2, 15, 0xFFFFFFFF);

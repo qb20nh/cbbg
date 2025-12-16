@@ -14,6 +14,9 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 @Mixin(GlConst.class)
 public abstract class GlConstMixin {
 
+  private GlConstMixin() {
+  }
+
   private static final int GL_RGBA16F = GL30.GL_RGBA16F;
 
   @Inject(method = "toGlInternalId", at = @At("HEAD"), cancellable = true)

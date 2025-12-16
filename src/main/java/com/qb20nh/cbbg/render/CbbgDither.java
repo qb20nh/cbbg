@@ -12,55 +12,59 @@ import com.mojang.blaze3d.textures.FilterMode;
 import com.mojang.blaze3d.textures.GpuTexture;
 import com.mojang.blaze3d.textures.GpuTextureView;
 import com.mojang.blaze3d.textures.TextureFormat;
+
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import com.qb20nh.cbbg.CbbgClient;
 import com.qb20nh.cbbg.config.CbbgConfig;
-import java.io.IOException;
-import java.io.InputStream;
+import static java.util.Objects.requireNonNull;
 import java.util.OptionalInt;
 import java.util.concurrent.atomic.AtomicBoolean;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.ShaderManager;
 import net.minecraft.resources.Identifier;
-import net.minecraft.server.packs.resources.ResourceManager;
 
 public final class CbbgDither {
+
+  private static final String S_IN = "InSampler";
+  private static final String S_NOISE = "NoiseSampler";
 
   private static final int STBN_SIZE = 128;
   private static final int STBN_FRAMES = 64;
 
-  private static final Identifier SCREENQUAD_VERTEX = Identifier.withDefaultNamespace("core/screenquad");
-  private static final Identifier DITHER_SHADER =
-      Identifier.fromNamespaceAndPath(CbbgClient.MOD_ID, "core/cbbg_dither");
-  private static final Identifier DEMO_SHADER =
-      Identifier.fromNamespaceAndPath(CbbgClient.MOD_ID, "core/cbbg_demo");
+  private static final Identifier SCREENQUAD_VERTEX = requireNonNull(
+      Identifier.withDefaultNamespace("core/screenquad"));
 
-  private static final RenderPipeline DITHER_PIPELINE =
-      RenderPipeline.builder()
-          .withLocation(Identifier.fromNamespaceAndPath(CbbgClient.MOD_ID, "pipeline/cbbg_dither"))
-          .withVertexShader(SCREENQUAD_VERTEX)
-          .withFragmentShader(DITHER_SHADER)
-          .withSampler("InSampler")
-          .withSampler("NoiseSampler")
-          .withDepthWrite(false)
-          .withDepthTestFunction(DepthTestFunction.NO_DEPTH_TEST)
-          .withoutBlend()
-          .withVertexFormat(DefaultVertexFormat.EMPTY, VertexFormat.Mode.TRIANGLES)
-          .build();
+  private static final Identifier DITHER_SHADER = requireNonNull(Identifier.fromNamespaceAndPath(CbbgClient.MOD_ID,
+      "core/cbbg_dither"));
+  private static final Identifier DEMO_SHADER = requireNonNull(
+      Identifier.fromNamespaceAndPath(CbbgClient.MOD_ID, "core/cbbg_demo"));
 
-  private static final RenderPipeline DEMO_PIPELINE =
-      RenderPipeline.builder()
-          .withLocation(Identifier.fromNamespaceAndPath(CbbgClient.MOD_ID, "pipeline/cbbg_demo"))
-          .withVertexShader(SCREENQUAD_VERTEX)
-          .withFragmentShader(DEMO_SHADER)
-          .withSampler("InSampler")
-          .withSampler("NoiseSampler")
-          .withDepthWrite(false)
-          .withDepthTestFunction(DepthTestFunction.NO_DEPTH_TEST)
-          .withoutBlend()
-          .withVertexFormat(DefaultVertexFormat.EMPTY, VertexFormat.Mode.TRIANGLES)
-          .build();
+  private static final RenderPipeline DITHER_PIPELINE = RenderPipeline.builder()
+      .withLocation(
+          requireNonNull(Identifier.fromNamespaceAndPath(CbbgClient.MOD_ID, "pipeline/cbbg_dither")))
+      .withVertexShader(requireNonNull(SCREENQUAD_VERTEX))
+      .withFragmentShader(requireNonNull(DITHER_SHADER))
+      .withSampler(S_IN)
+      .withSampler(S_NOISE)
+      .withDepthWrite(false)
+      .withDepthTestFunction(DepthTestFunction.NO_DEPTH_TEST)
+      .withoutBlend()
+      .withVertexFormat(DefaultVertexFormat.EMPTY, VertexFormat.Mode.TRIANGLES)
+      .build();
+
+  private static final RenderPipeline DEMO_PIPELINE = RenderPipeline.builder()
+      .withLocation(
+          requireNonNull(Identifier.fromNamespaceAndPath(CbbgClient.MOD_ID, "pipeline/cbbg_demo")))
+      .withVertexShader(requireNonNull(SCREENQUAD_VERTEX))
+      .withFragmentShader(requireNonNull(DEMO_SHADER))
+      .withSampler(S_IN)
+      .withSampler(S_NOISE)
+      .withDepthWrite(false)
+      .withDepthTestFunction(DepthTestFunction.NO_DEPTH_TEST)
+      .withoutBlend()
+      .withVertexFormat(DefaultVertexFormat.EMPTY, VertexFormat.Mode.TRIANGLES)
+      .build();
 
   private static final AtomicBoolean loggedFailure = new AtomicBoolean(false);
   private static volatile boolean disabled = false;
@@ -72,7 +76,8 @@ public final class CbbgDither {
 
   private static TextureTarget ditherTarget;
 
-  private CbbgDither() {}
+  private CbbgDither() {
+  }
 
   public static void resetAfterToggle() {
     disabled = false;
@@ -97,9 +102,12 @@ public final class CbbgDither {
   }
 
   /**
-   * Renders the dithering pass into an RGBA8 {@link TextureTarget} and returns it.
+   * Renders the dithering pass into an RGBA8 {@link TextureTarget} and returns
+   * it.
    *
-   * <p>This is used both for final presentation and for screenshots, so screenshots match the
+   * <p>
+   * This is used both for final presentation and for screenshots, so screenshots
+   * match the
    * dithered on-screen output.
    */
   public static TextureTarget renderDitheredTarget(GpuTextureView input) {
@@ -136,7 +144,8 @@ public final class CbbgDither {
       ensureStbnLoaded();
       ensureGpuTargets(width, height);
 
-      if (ditherTarget == null || ditherTarget.getColorTextureView() == null) {
+      GpuTextureView ditherView = ditherTarget.getColorTextureView();
+      if (ditherView == null) {
         return null;
       }
       if (stbnTextureView == null) {
@@ -146,37 +155,38 @@ public final class CbbgDither {
       CommandEncoder encoder = RenderSystem.getDevice().createCommandEncoder();
       uploadStbnFrame(encoder);
 
-      try (RenderPass pass =
-          encoder.createRenderPass(
-              () -> passLabel, ditherTarget.getColorTextureView(), OptionalInt.empty())) {
-        pass.setPipeline(pipeline);
+      try (RenderPass pass = encoder.createRenderPass(
+          () -> passLabel, ditherView, requireNonNull(OptionalInt.empty()))) {
+        pass.setPipeline(requireNonNull(pipeline));
         RenderSystem.bindDefaultUniforms(pass);
         pass.bindTexture(
-            "InSampler",
+            S_IN,
             input,
             RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST));
         pass.bindTexture(
-            "NoiseSampler",
+            S_NOISE,
             stbnTextureView,
             RenderSystem.getSamplerCache().getRepeat(FilterMode.NEAREST));
         pass.draw(0, 3);
       }
 
       return ditherTarget;
-    } catch (Throwable t) {
-      disableWithLog(t);
+    } catch (Exception e) {
+      disableWithLog(e);
       return null;
     }
   }
 
   /**
-   * @return true if cbbg performed the blit/present itself (caller should cancel vanilla),
-   *     otherwise false to fall back to vanilla.
+   * @return true if cbbg performed the blit/present itself (caller should cancel
+   *         vanilla),
+   *         otherwise false to fall back to vanilla.
    */
   public static boolean blitToScreenWithDither(GpuTextureView input) {
     CbbgConfig.Mode mode = CbbgClient.getEffectiveMode();
     // Strict: do not delegate to other blit methods based on a fresh mode read.
-    // Mode may change concurrently (UI thread) while we are presenting; returning false falls back to
+    // Mode may change concurrently (UI thread) while we are presenting; returning
+    // false falls back to
     // vanilla for this frame and avoids any mutual recursion.
     if (mode != CbbgConfig.Mode.ENABLED) {
       return false;
@@ -190,10 +200,14 @@ public final class CbbgDither {
         return false;
       }
 
-      RenderSystem.getDevice().createCommandEncoder().presentTexture(out.getColorTextureView());
+      GpuTextureView outView = out.getColorTextureView();
+      if (outView == null) {
+        return false;
+      }
+      RenderSystem.getDevice().createCommandEncoder().presentTexture(outView);
       return true;
-    } catch (Throwable t) {
-      disableWithLog(t);
+    } catch (Exception e) {
+      disableWithLog(e);
       return false;
     }
   }
@@ -211,10 +225,14 @@ public final class CbbgDither {
       if (out == null || out.getColorTextureView() == null) {
         return false;
       }
-      RenderSystem.getDevice().createCommandEncoder().presentTexture(out.getColorTextureView());
+      GpuTextureView outView = out.getColorTextureView();
+      if (outView == null) {
+        return false;
+      }
+      RenderSystem.getDevice().createCommandEncoder().presentTexture(outView);
       return true;
-    } catch (Throwable t) {
-      disableWithLog(t);
+    } catch (Exception e) {
+      disableWithLog(e);
       return false;
     }
   }
@@ -229,17 +247,18 @@ public final class CbbgDither {
     }
 
     if (stbnTexture == null || stbnTexture.isClosed() || stbnTextureView == null || stbnTextureView.isClosed()) {
-      stbnTexture =
-          RenderSystem.getDevice()
-              .createTexture(
-                  () -> "cbbg / STBN",
-                  GpuTexture.USAGE_COPY_DST | GpuTexture.USAGE_TEXTURE_BINDING,
-                  TextureFormat.RGBA8,
-                  STBN_SIZE,
-                  STBN_SIZE,
-                  1,
-                  1);
-      stbnTextureView = RenderSystem.getDevice().createTextureView(stbnTexture);
+      if (stbnTexture == null || stbnTexture.isClosed()) {
+        stbnTexture = RenderSystem.getDevice()
+            .createTexture(
+                () -> "cbbg / STBN",
+                GpuTexture.USAGE_COPY_DST | GpuTexture.USAGE_TEXTURE_BINDING,
+                TextureFormat.RGBA8,
+                STBN_SIZE,
+                STBN_SIZE,
+                1,
+                1);
+      }
+      stbnTextureView = RenderSystem.getDevice().createTextureView(requireNonNull(stbnTexture));
     }
   }
 
@@ -254,43 +273,53 @@ public final class CbbgDither {
       return;
     }
 
-    encoder.writeToTexture(stbnTexture, frame);
+    encoder.writeToTexture(requireNonNull(stbnTexture), frame);
   }
 
-  private static void ensureStbnLoaded() throws IOException {
+  private static java.util.concurrent.CompletableFuture<NativeImage[]> pendingGen;
+
+  public static void initAsync() {
+    if (pendingGen == null) {
+      pendingGen = STBNGenerator.generateAsync(STBN_SIZE, STBN_SIZE, STBN_FRAMES);
+    }
+  }
+
+  private static void ensureStbnLoaded() {
     if (stbnFrames != null) {
       return;
     }
 
-    ResourceManager rm = Minecraft.getInstance().getResourceManager();
-    NativeImage[] frames = new NativeImage[STBN_FRAMES];
-    for (int i = 0; i < STBN_FRAMES; i++) {
-      Identifier id =
-          Identifier.fromNamespaceAndPath(
-              CbbgClient.MOD_ID, "textures/stbn/stbn_unitvec3_2dx1d_128x128x64_" + i + ".png");
-      try (InputStream in = rm.open(id)) {
-        frames[i] = NativeImage.read(in);
+    if (pendingGen != null && pendingGen.isDone()) {
+      try {
+        stbnFrames = pendingGen.join(); // Non-blocking because isDone() is true
+        if (stbnFrames != null) {
+          CbbgClient.LOGGER.info("STBN Async Generation Ready. Loaded {} frames.", stbnFrames.length);
+        } else {
+          CbbgClient.LOGGER.error("STBN Generation returned null.");
+        }
+      } catch (Exception e) {
+        CbbgClient.LOGGER.error("Failed to retrieve STBN frames", e);
       }
+      // Clear future to free reference? Or keep for status?
+      pendingGen = null;
     }
-    stbnFrames = frames;
-    CbbgClient.LOGGER.info("Loaded {} STBN frames for dithering", STBN_FRAMES);
+    // If not ready, stbnFrames remains null, rendering is skipped (checked in
+    // renderToTarget)
   }
 
   private static boolean areShadersReadyForMode(boolean demo) {
     Minecraft mc = Minecraft.getInstance();
     ShaderManager shaderManager = mc.getShaderManager();
-    if (shaderManager == null) {
-      return false;
-    }
 
-    // Only query existence; compiling happens later when we actually use the pipeline.
-    if (shaderManager.getShader(SCREENQUAD_VERTEX, ShaderType.VERTEX) == null) {
+    // Only query existence; compiling happens later when we actually use the
+    // pipeline.
+    if (shaderManager.getShader(requireNonNull(SCREENQUAD_VERTEX), ShaderType.VERTEX) == null) {
       return false;
     }
     if (demo) {
-      return shaderManager.getShader(DEMO_SHADER, ShaderType.FRAGMENT) != null;
+      return shaderManager.getShader(requireNonNull(DEMO_SHADER), ShaderType.FRAGMENT) != null;
     }
-    return shaderManager.getShader(DITHER_SHADER, ShaderType.FRAGMENT) != null;
+    return shaderManager.getShader(requireNonNull(DITHER_SHADER), ShaderType.FRAGMENT) != null;
   }
 
   private static void disableWithLog(Throwable t) {
