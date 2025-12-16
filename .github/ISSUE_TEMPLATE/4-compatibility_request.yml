@@ -1,7 +1,6 @@
 name: Compatibility Request
 description: Request compatibility with another mod
-title: "[Compat]: "
-labels: ["compatibility", "enhancement"]
+labels: ["enhancement", "compat req"]
 body:
   - type: input
     id: target-mod

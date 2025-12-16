@@ -1,6 +1,5 @@
 name: Crash Report
 description: Report a crash
-title: "[Crash]: "
 labels: ["crash"]
 body:
   - type: input
@@ -36,7 +35,6 @@ body:
     attributes:
       label: Crash Report / Logs
       description: Please paste the full crash report or game logs here. verify that the logs are not truncated.
-      render: java
       value: |
         <details>
         <summary>Crash Report</summary>
