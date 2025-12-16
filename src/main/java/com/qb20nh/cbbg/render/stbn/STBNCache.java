@@ -41,7 +41,7 @@ public class STBNCache {
 
             for (int z = 0; z < d; z++) {
                 String baseName = String.format(IMAGE_BASE_FMT, w, h, d, z);
-                String expectedHash = hashes.get(baseName);
+                String expectedHash = hashes.get(baseName + ".png");
 
                 if (expectedHash == null) {
                     return false;
