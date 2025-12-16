@@ -1,0 +1,49 @@
+name: Crash Report
+description: Report a crash
+title: "[Crash]: "
+labels: ["crash"]
+body:
+  - type: input
+    id: mod-version
+    attributes:
+      label: Mod Version
+      description: Which version of the mod are you using?
+      placeholder: e.g., 1.0.0
+    validations:
+      required: true
+
+  - type: dropdown
+    id: crash-type
+    attributes:
+      label: Crash Type
+      description: When did the crash happen?
+      options:
+        - During Minecraft Launch
+        - During Gameplay
+    validations:
+      required: true
+
+  - type: textarea
+    id: mod-list
+    attributes:
+      label: List of installed mods
+      description: Please provide a list of all mods installed when the crash occurred.
+    validations:
+      required: true
+
+  - type: textarea
+    id: crash-logs
+    attributes:
+      label: Crash Report / Logs
+      description: Please paste the full crash report or game logs here. verify that the logs are not truncated.
+      render: java
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: compatibility-warning
+    attributes:
+      label: Compatibility
+      options:
+        - label: I acknowledge that if other mods are installed, this issue might be closed as "won't fix" if it is determined to be an incompatibility.
+          required: true

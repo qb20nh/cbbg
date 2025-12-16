@@ -1,0 +1,29 @@
+name: Compatibility Request
+description: Request compatibility with another mod
+title: "[Compat]: "
+labels: ["compatibility", "enhancement"]
+body:
+  - type: input
+    id: target-mod
+    attributes:
+      label: Target Mod
+      description: What is the name of the mod you want compatibility with? Please provide a link if possible.
+    validations:
+      required: true
+
+  - type: input
+    id: mod-version
+    attributes:
+      label: Mod Version
+      description: Which version of this mod are you using?
+      placeholder: e.g., 1.0.0
+    validations:
+      required: true
+
+  - type: textarea
+    id: incompatibility-details
+    attributes:
+      label: Explanation of Incompatibility
+      description: Please describe the issue or what feature is missing when using these mods together. Include logs if relevant.
+    validations:
+      required: true
