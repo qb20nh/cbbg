@@ -2,7 +2,7 @@
 	"schemaVersion": 1,
 	"id": "cbbg",
 	"version": "${version}",
-	"name": "🥬 cbbg",
+	"name": "cbbg 🥬",
 	"description": "color banding be gone - Remove pesky color banding from Minecraft",
 	"authors": [
 		"qb20nh"
