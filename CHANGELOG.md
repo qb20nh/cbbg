@@ -4,6 +4,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [1.2.1] - 2025-12-19
+
+### Added
+- Compatibility with [RenderScale](https://modrinth.com/mod/renderscale).
+
+### Changed
+- Improved `/cbbg` command feedback.
+- Release artifacts now include the Minecraft version in the filename (e.g. `cbbg-1.2.1+mc1.21.11.jar`).
+
+### Fixed
+- Fixed generation completion toast not being shown.
+
 ## [1.2.0] - 2025-12-18
 
 ### Added
