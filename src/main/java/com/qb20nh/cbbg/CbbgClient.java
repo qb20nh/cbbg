@@ -1,7 +1,7 @@
 package com.qb20nh.cbbg;
 
-import com.qb20nh.cbbg.compat.IrisCompat;
 import com.qb20nh.cbbg.command.CbbgClientCommands;
+import com.qb20nh.cbbg.compat.iris.IrisCompat;
 import com.qb20nh.cbbg.config.CbbgConfig;
 import com.qb20nh.cbbg.render.CbbgDither;
 import net.fabricmc.api.ClientModInitializer;

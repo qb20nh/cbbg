@@ -1,7 +1,7 @@
 package com.qb20nh.cbbg.debug;
 
 import com.qb20nh.cbbg.CbbgClient;
-import com.qb20nh.cbbg.compat.IrisCompat;
+import com.qb20nh.cbbg.compat.iris.IrisCompat;
 import com.qb20nh.cbbg.config.CbbgConfig;
 import com.qb20nh.cbbg.render.CbbgDither;
 import net.minecraft.client.gui.components.debug.DebugScreenDisplayer;

@@ -7,6 +7,7 @@ uniform sampler2D NoiseSampler;
 
 layout(std140) uniform CbbgDitherInfo {
     float Strength;
+    vec2 CoordScale;
 };
 
 in vec2 texCoord;
@@ -26,7 +27,7 @@ void main() {
     float strength = enabledSide ? Strength : 0.0;
     
     vec2 stbnSize = vec2(textureSize(NoiseSampler, 0));
-    color.rgb = cbbg_applyDither(c, NoiseSampler, strength, stbnSize);
+    color.rgb = cbbg_applyDither(c, NoiseSampler, strength, stbnSize, CoordScale);
 
     // 1px vertical separator at the split.
     if (gl_FragCoord.x >= centerX && gl_FragCoord.x < centerX + 1.0) {

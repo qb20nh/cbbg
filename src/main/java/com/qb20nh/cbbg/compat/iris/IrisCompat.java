@@ -1,4 +1,4 @@
-package com.qb20nh.cbbg.compat;
+package com.qb20nh.cbbg.compat.iris;
 
 import com.qb20nh.cbbg.CbbgClient;
 import java.lang.reflect.Method;

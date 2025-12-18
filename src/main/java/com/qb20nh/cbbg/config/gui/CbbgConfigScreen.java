@@ -1,6 +1,6 @@
 package com.qb20nh.cbbg.config.gui;
 
-import com.qb20nh.cbbg.compat.IrisCompat;
+import com.qb20nh.cbbg.compat.iris.IrisCompat;
 import com.qb20nh.cbbg.config.CbbgConfig;
 import com.qb20nh.cbbg.render.MainTargetFormatSupport;
 import com.qb20nh.cbbg.render.CbbgDither;

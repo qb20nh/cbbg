@@ -17,6 +17,7 @@ import com.mojang.blaze3d.textures.GpuTextureView;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import com.qb20nh.cbbg.CbbgClient;
+import com.qb20nh.cbbg.compat.renderscale.RenderScaleCompat;
 import com.qb20nh.cbbg.config.CbbgConfig;
 import com.qb20nh.cbbg.render.stbn.STBNGenerator;
 import com.qb20nh.cbbg.render.stbn.STBNLoader;
@@ -383,8 +384,10 @@ public final class CbbgDither {
 
         GpuBuffer buffer = ditherInfoUbo.currentBuffer();
         float strength = CbbgConfig.get().strength();
+        float coordScale = RenderScaleCompat.getDitherCoordScale();
         try (GpuBuffer.MappedView view = encoder.mapBuffer(buffer, false, true)) {
-            Std140Builder.intoBuffer(view.data()).putFloat(strength);
+            Std140Builder.intoBuffer(view.data()).putFloat(strength).putVec2(coordScale,
+                    coordScale);
         }
         return buffer;
     }
