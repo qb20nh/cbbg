@@ -10,8 +10,8 @@ to [Semantic Versioning](https://semver.org/).
 ### Added
 - `rgba32f` main render target option (with automatic fallback to `rgba16f`/`rgba8` if unsupported).
 - Dithering strength control.
-- STBN controls (size, depth, seed) plus regenerate action (UI + command).
-- Chat/toast notifications for STBN generation (configurable).
+- STBN texture regeneration.
+- Chat/toast notifications for STBN generation.
 
 ## [1.1.2] - 2025-12-16
 
