@@ -23,6 +23,17 @@ jobs:
           java-version: "21"
           distribution: "temurin"
 
+      # Cache Fabric Loom's project-local cache (Minecraft jars, mappings, remapped artifacts, etc).
+      # This is separate from Gradle User Home (~/.gradle) caching handled by setup-gradle.
+      - name: Cache Loom artifacts
+        uses: actions/cache@v5.0.1
+        with:
+          path: |
+            .gradle/loom-cache
+          key: ${{ runner.os }}-loom-${{ hashFiles('gradle.properties', 'settings.gradle', 'build.gradle', 'gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-loom-
+
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v5.0.0
         with:
@@ -126,7 +137,7 @@ jobs:
           text = changelog_path.read_text(encoding="utf-8")
           lines = text.splitlines()
 
-          header_re = re.compile(rf"^## \\[{re.escape(tag)}\\]\\s+-\\s+\\d{{4}}-\\d{{2}}-\\d{{2}}\\s*$")
+          header_re = re.compile(rf"^## \[{re.escape(tag)}\]\s+-\s+\d{{4}}-\d{{2}}-\d{{2}}\s*$")
           start = None
           for i, line in enumerate(lines):
             if header_re.match(line):

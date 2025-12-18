@@ -28,24 +28,29 @@ jobs:
         java-version: '21'
         distribution: 'temurin'
 
+    # Cache Fabric Loom's project-local cache (Minecraft jars, remapped artifacts, etc).
+    # This is separate from Gradle User Home (~/.gradle) caching and provides a big speedup
+    # for subsequent CI runs on Minecraft/Fabric projects.
+    - &cache_loom
+      name: Cache Loom artifacts
+      uses: actions/cache@v5.0.1
+      with:
+        path: |
+          .gradle/loom-cache
+        key: ${{ runner.os }}-loom-${{ hashFiles('gradle.properties', 'settings.gradle', 'build.gradle', 'gradle/wrapper/gradle-wrapper.properties') }}
+        restore-keys: |
+          ${{ runner.os }}-loom-
+
     # Configure Gradle for optimal use in GitHub Actions, including caching of downloaded dependencies.
-    # See: https://github.com/gradle/actions/blob/main/setup-gradle/README.md
+    # See: https://raw.githubusercontent.com/gradle/actions/refs/heads/main/docs/setup-gradle.md
     - name: Setup Gradle
-      uses: gradle/actions/setup-gradle@af1da67850ed9a4cedd57bfd976089dd991e2582 # v4.0.0
+      uses: gradle/actions/setup-gradle@v5.0.0
+      with:
+        # Default behavior writes caches only from the default branch; PRs are read-only.
+        cache-cleanup: on-success
 
     - name: Build with Gradle Wrapper
-      run: ./gradlew build --build-cache
-
-    # NOTE: The Gradle Wrapper is the default and recommended way to run Gradle (https://docs.gradle.org/current/userguide/gradle_wrapper.html).
-    # If your project does not have the Gradle Wrapper configured, you can use the following configuration to run Gradle with a specified version.
-    #
-    # - name: Setup Gradle
-    #   uses: gradle/actions/setup-gradle@af1da67850ed9a4cedd57bfd976089dd991e2582 # v4.0.0
-    #   with:
-    #     gradle-version: '8.9'
-    #
-    # - name: Build with Gradle 8.9
-    #   run: gradle build
+      run: ./gradlew build
 
   dependency-submission:
 
@@ -60,6 +65,8 @@ jobs:
       with:
         java-version: '21'
         distribution: 'temurin'
+
+    - *cache_loom
 
     # Generates and submits a dependency graph, enabling Dependabot Alerts for all project dependencies.
     # See: https://github.com/gradle/actions/blob/main/dependency-submission/README.md
