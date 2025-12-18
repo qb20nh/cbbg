@@ -77,8 +77,20 @@ jobs:
             exit 1
           fi
 
+          minecraft_version="$(grep -E '^minecraft_version=' gradle.properties | cut -d= -f2 | tr -d '\r')"
+          if [[ -z "${minecraft_version}" ]]; then
+            echo "minecraft_version is empty in gradle.properties."
+            exit 1
+          fi
+
+          # Release artifacts include Minecraft version as SemVer build metadata:
+          # <mod_version>+mc<minecraft_version>
+          artifact_version="${mod_version}+mc${minecraft_version}"
+
           echo "MOD_VERSION=${mod_version}" >> "${GITHUB_ENV}"
           echo "ARCHIVES_BASE_NAME=${archives_base_name}" >> "${GITHUB_ENV}"
+          echo "MINECRAFT_VERSION=${minecraft_version}" >> "${GITHUB_ENV}"
+          echo "ARTIFACT_VERSION=${artifact_version}" >> "${GITHUB_ENV}"
           echo "IS_PRERELEASE=${is_prerelease}" >> "${GITHUB_ENV}"
 
       - name: Build with Gradle Wrapper
@@ -89,8 +101,8 @@ jobs:
         run: |
           set -euo pipefail
 
-          jar="build/libs/${ARCHIVES_BASE_NAME}-${MOD_VERSION}.jar"
-          sources_jar="build/libs/${ARCHIVES_BASE_NAME}-${MOD_VERSION}-sources.jar"
+          jar="build/libs/${ARCHIVES_BASE_NAME}-${ARTIFACT_VERSION}.jar"
+          sources_jar="build/libs/${ARCHIVES_BASE_NAME}-${ARTIFACT_VERSION}-sources.jar"
 
           if [[ ! -f "${jar}" ]]; then
             echo "Missing artifact: ${jar}"
@@ -109,8 +121,8 @@ jobs:
         run: |
           set -euo pipefail
 
-          jar="build/libs/${ARCHIVES_BASE_NAME}-${MOD_VERSION}.jar"
-          sources_jar="build/libs/${ARCHIVES_BASE_NAME}-${MOD_VERSION}-sources.jar"
+          jar="build/libs/${ARCHIVES_BASE_NAME}-${ARTIFACT_VERSION}.jar"
+          sources_jar="build/libs/${ARCHIVES_BASE_NAME}-${ARTIFACT_VERSION}-sources.jar"
 
           sha256sum "${jar}" "${sources_jar}" > subject.checksums.txt
 
@@ -171,8 +183,8 @@ jobs:
           set -euo pipefail
 
           tag="${MOD_VERSION}"
-          jar="build/libs/${ARCHIVES_BASE_NAME}-${tag}.jar"
-          sources_jar="build/libs/${ARCHIVES_BASE_NAME}-${tag}-sources.jar"
+          jar="build/libs/${ARCHIVES_BASE_NAME}-${ARTIFACT_VERSION}.jar"
+          sources_jar="build/libs/${ARCHIVES_BASE_NAME}-${ARTIFACT_VERSION}-sources.jar"
 
           if [[ "${IS_PRERELEASE}" == "1" ]]; then
             if gh release view "${tag}" >/dev/null 2>&1; then
