@@ -7,6 +7,8 @@ on:
 
 permissions:
   contents: write
+  id-token: write
+  attestations: write
 
 jobs:
   release:
@@ -22,7 +24,15 @@ jobs:
           distribution: "temurin"
 
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@af1da67850ed9a4cedd57bfd976089dd991e2582 # v4.0.0
+        uses: gradle/actions/setup-gradle@v5.0.0
+        with:
+          # Use GitHub Actions cache for Gradle User Home (~/.gradle), including dependency cache
+          # and the local Gradle build cache.
+          #
+          # Release builds are trusted, so allow cache writes.
+          cache-read-only: false
+          # Keep cache size under control.
+          cache-cleanup: on-success
 
       - name: Validate tag matches gradle.properties
         shell: bash
@@ -31,9 +41,17 @@ jobs:
 
           tag="${GITHUB_REF_NAME}"
 
-          if ! [[ "${tag}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "Tag (${tag}) must be plain semver in the form X.Y.Z."
+          # Accept SemVer tags like:
+          # - 1.2.3 (stable)
+          # - 1.2.3-rc.1 (prerelease)
+          # (Build metadata is intentionally disallowed for tags.)
+          if ! [[ "${tag}" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "Tag (${tag}) must be semver in the form X.Y.Z or X.Y.Z-PRERELEASE."
             exit 1
+          fi
+          is_prerelease=0
+          if [[ "${tag}" =~ ^[0-9]+\.[0-9]+\.[0-9]+- ]]; then
+            is_prerelease=1
           fi
 
           mod_version="$(grep -E '^mod_version=' gradle.properties | cut -d= -f2 | tr -d '\r')"
@@ -50,9 +68,10 @@ jobs:
 
           echo "MOD_VERSION=${mod_version}" >> "${GITHUB_ENV}"
           echo "ARCHIVES_BASE_NAME=${archives_base_name}" >> "${GITHUB_ENV}"
+          echo "IS_PRERELEASE=${is_prerelease}" >> "${GITHUB_ENV}"
 
       - name: Build with Gradle Wrapper
-        run: ./gradlew build --build-cache
+        run: ./gradlew build
 
       - name: Validate artifacts exist
         shell: bash
@@ -73,6 +92,21 @@ jobs:
             ls -la build/libs || true
             exit 1
           fi
+
+      - name: Generate artifact checksums (for provenance)
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          jar="build/libs/${ARCHIVES_BASE_NAME}-${MOD_VERSION}.jar"
+          sources_jar="build/libs/${ARCHIVES_BASE_NAME}-${MOD_VERSION}-sources.jar"
+
+          sha256sum "${jar}" "${sources_jar}" > subject.checksums.txt
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v3
+        with:
+          subject-checksums: subject.checksums.txt
 
       - name: Extract release notes from CHANGELOG.md
         shell: bash
@@ -117,7 +151,7 @@ jobs:
           Path("release_notes.md").write_text(body + "\n", encoding="utf-8")
           PY
 
-      - name: Create GitHub Release
+      - name: Create/Update GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
@@ -129,10 +163,36 @@ jobs:
           jar="build/libs/${ARCHIVES_BASE_NAME}-${tag}.jar"
           sources_jar="build/libs/${ARCHIVES_BASE_NAME}-${tag}-sources.jar"
 
-          gh release create "${tag}" \
-            "${jar}" \
-            "${sources_jar}" \
-            --title "cbbg ${tag}" \
-            --notes-file release_notes.md
+          if [[ "${IS_PRERELEASE}" == "1" ]]; then
+            if gh release view "${tag}" >/dev/null 2>&1; then
+              echo "Prerelease ${tag} already exists; updating notes/assets (prereleases are mutable)."
+              gh release edit "${tag}" \
+                --title "cbbg ${tag}" \
+                --notes-file release_notes.md \
+                --prerelease
+              gh release upload "${tag}" \
+                "${jar}" \
+                "${sources_jar}" \
+                --clobber
+            else
+              gh release create "${tag}" \
+                "${jar}" \
+                "${sources_jar}" \
+                --title "cbbg ${tag}" \
+                --notes-file release_notes.md \
+                --prerelease
+            fi
+          else
+            # Stable releases are immutable: fail if the release already exists.
+            if gh release view "${tag}" >/dev/null 2>&1; then
+              echo "Release ${tag} already exists. Stable releases are immutable; refusing to modify it."
+              exit 1
+            fi
+            gh release create "${tag}" \
+              "${jar}" \
+              "${sources_jar}" \
+              --title "cbbg ${tag}" \
+              --notes-file release_notes.md
+          fi
 
 
