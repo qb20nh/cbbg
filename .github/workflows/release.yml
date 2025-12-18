@@ -3,7 +3,7 @@ name: Release
 on:
   push:
     tags:
-      - "*.*.*"
+      - "v*.*.*"
 
 permissions:
   contents: write
@@ -53,21 +53,22 @@ jobs:
           tag="${GITHUB_REF_NAME}"
 
           # Accept SemVer tags like:
-          # - 1.2.3 (stable)
-          # - 1.2.3-rc.1 (prerelease)
+          # - v1.2.3 (stable)
+          # - v1.2.3-rc.1 (prerelease)
           # (Build metadata is intentionally disallowed for tags.)
-          if ! [[ "${tag}" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
-            echo "Tag (${tag}) must be semver in the form X.Y.Z or X.Y.Z-PRERELEASE."
+          if ! [[ "${tag}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "Tag (${tag}) must be semver in the form vX.Y.Z or vX.Y.Z-PRERELEASE."
             exit 1
           fi
+          version="${tag#v}"
           is_prerelease=0
-          if [[ "${tag}" =~ ^[0-9]+\.[0-9]+\.[0-9]+- ]]; then
+          if [[ "${tag}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+- ]]; then
             is_prerelease=1
           fi
 
           mod_version="$(grep -E '^mod_version=' gradle.properties | cut -d= -f2 | tr -d '\r')"
-          if [[ "${tag}" != "${mod_version}" ]]; then
-            echo "Tag (${tag}) does not match gradle.properties mod_version (${mod_version})."
+          if [[ "${version}" != "${mod_version}" ]]; then
+            echo "Tag (${tag}) does not match gradle.properties mod_version (${mod_version}). Expected tag v${mod_version}."
             exit 1
           fi
 
@@ -88,6 +89,7 @@ jobs:
           artifact_version="${mod_version}+mc${minecraft_version}"
 
           echo "MOD_VERSION=${mod_version}" >> "${GITHUB_ENV}"
+          echo "RELEASE_TAG=${tag}" >> "${GITHUB_ENV}"
           echo "ARCHIVES_BASE_NAME=${archives_base_name}" >> "${GITHUB_ENV}"
           echo "MINECRAFT_VERSION=${minecraft_version}" >> "${GITHUB_ENV}"
           echo "ARTIFACT_VERSION=${artifact_version}" >> "${GITHUB_ENV}"
@@ -182,39 +184,40 @@ jobs:
         run: |
           set -euo pipefail
 
-          tag="${MOD_VERSION}"
+          release_tag="${RELEASE_TAG}"
+          mod_version="${MOD_VERSION}"
           jar="build/libs/${ARCHIVES_BASE_NAME}-${ARTIFACT_VERSION}.jar"
           sources_jar="build/libs/${ARCHIVES_BASE_NAME}-${ARTIFACT_VERSION}-sources.jar"
 
           if [[ "${IS_PRERELEASE}" == "1" ]]; then
-            if gh release view "${tag}" >/dev/null 2>&1; then
-              echo "Prerelease ${tag} already exists; updating notes/assets (prereleases are mutable)."
-              gh release edit "${tag}" \
-                --title "cbbg ${tag}" \
+            if gh release view "${release_tag}" >/dev/null 2>&1; then
+              echo "Prerelease ${release_tag} already exists; updating notes/assets (prereleases are mutable)."
+              gh release edit "${release_tag}" \
+                --title "cbbg ${mod_version}" \
                 --notes-file release_notes.md \
                 --prerelease
-              gh release upload "${tag}" \
+              gh release upload "${release_tag}" \
                 "${jar}" \
                 "${sources_jar}" \
                 --clobber
             else
-              gh release create "${tag}" \
+              gh release create "${release_tag}" \
                 "${jar}" \
                 "${sources_jar}" \
-                --title "cbbg ${tag}" \
+                --title "cbbg ${mod_version}" \
                 --notes-file release_notes.md \
                 --prerelease
             fi
           else
             # Stable releases are immutable: fail if the release already exists.
-            if gh release view "${tag}" >/dev/null 2>&1; then
-              echo "Release ${tag} already exists. Stable releases are immutable; refusing to modify it."
+            if gh release view "${release_tag}" >/dev/null 2>&1; then
+              echo "Release ${release_tag} already exists. Stable releases are immutable; refusing to modify it."
               exit 1
             fi
-            gh release create "${tag}" \
+            gh release create "${release_tag}" \
               "${jar}" \
               "${sources_jar}" \
-              --title "cbbg ${tag}" \
+              --title "cbbg ${mod_version}" \
               --notes-file release_notes.md
           fi
 

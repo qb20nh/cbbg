@@ -8,6 +8,9 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    env:
+      DEV_JAR: ""
+      DEV_JAR_NAME: ""
 
     steps:
       - uses: actions/checkout@v6.0.1
@@ -50,11 +53,13 @@ jobs:
           fi
 
           echo "DEV_JAR=${jar}" >> "${GITHUB_ENV}"
+          jar_name="$(basename "${jar}")"
+          echo "DEV_JAR_NAME=${jar_name}" >> "${GITHUB_ENV}"
 
       - name: Upload dev jar artifact
         uses: actions/upload-artifact@v6
         with:
-          name: dev-jar
+          name: ${{ env.DEV_JAR_NAME }}
           path: ${{ env.DEV_JAR }}
           if-no-files-found: error
 
