@@ -8,7 +8,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.NoSuchAlgorithmException;
 import java.util.*;
-import static java.util.Objects.requireNonNull;
+import org.jspecify.annotations.NonNull;
 
 public class STBNLoader {
 
@@ -126,7 +126,8 @@ public class STBNLoader {
                 if (images[z] != null) {
                     String baseName = String.format(IMAGE_BASE_FMT, w, h, d, z);
                     String fileName = baseName + ".png";
-                    Path imageFile = requireNonNull(CACHE_DIR.resolve(fileName));
+                    @NonNull
+                    Path imageFile = Objects.requireNonNull(CACHE_DIR.resolve(fileName));
 
                     images[z].writeToFile(imageFile);
 
@@ -140,8 +141,9 @@ public class STBNLoader {
                 }
             }
 
-            Path hashFile =
-                    requireNonNull(CACHE_DIR.resolve(String.format(HASH_FILE_FMT, w, h, d)));
+            @NonNull
+            Path hashFile = Objects
+                    .requireNonNull(CACHE_DIR.resolve(String.format(HASH_FILE_FMT, w, h, d)));
             Files.writeString(hashFile, hashContent.toString());
 
         } catch (IOException | NoSuchAlgorithmException e) {
@@ -159,5 +161,38 @@ public class STBNLoader {
 
     public static boolean isCacheValid(int w, int h, int d) {
         return STBNCache.isCacheValid(w, h, d);
+    }
+
+    public static void clearCacheExceptDefaults() {
+        try {
+            if (!Files.exists(CACHE_DIR)) {
+                return;
+            }
+            // Defaults: 128x128x64
+            String defaultHashFile = String.format(HASH_FILE_FMT, 128, 128, 64);
+
+
+            try (var stream = Files.walk(CACHE_DIR)) {
+                stream.filter(Files::isRegularFile).forEach(path -> {
+                    String name = path.getFileName().toString();
+                    // Check if it matches default pattern
+                    if (name.equals(defaultHashFile)) {
+                        return; // Keep default hash
+                    }
+                    // Check if it's a default image (stbn_128x128x64_*)
+                    if (name.startsWith("stbn_128x128x64_") && name.endsWith(".png")) {
+                        return; // Keep default images
+                    }
+
+                    try {
+                        Files.delete(path);
+                    } catch (IOException e) {
+                        CbbgClient.LOGGER.warn("Failed to delete cached file: " + path, e);
+                    }
+                });
+            }
+        } catch (IOException e) {
+            CbbgClient.LOGGER.warn("Failed to clear STBN cache", e);
+        }
     }
 }

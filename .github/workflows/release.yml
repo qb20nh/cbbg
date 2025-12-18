@@ -1,0 +1,138 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: "21"
+          distribution: "temurin"
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@af1da67850ed9a4cedd57bfd976089dd991e2582 # v4.0.0
+
+      - name: Validate tag matches gradle.properties
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          tag="${GITHUB_REF_NAME}"
+
+          if ! [[ "${tag}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Tag (${tag}) must be plain semver in the form X.Y.Z."
+            exit 1
+          fi
+
+          mod_version="$(grep -E '^mod_version=' gradle.properties | cut -d= -f2 | tr -d '\r')"
+          if [[ "${tag}" != "${mod_version}" ]]; then
+            echo "Tag (${tag}) does not match gradle.properties mod_version (${mod_version})."
+            exit 1
+          fi
+
+          archives_base_name="$(grep -E '^archives_base_name=' gradle.properties | cut -d= -f2 | tr -d '\r')"
+          if [[ -z "${archives_base_name}" ]]; then
+            echo "archives_base_name is empty in gradle.properties."
+            exit 1
+          fi
+
+          echo "MOD_VERSION=${mod_version}" >> "${GITHUB_ENV}"
+          echo "ARCHIVES_BASE_NAME=${archives_base_name}" >> "${GITHUB_ENV}"
+
+      - name: Build with Gradle Wrapper
+        run: ./gradlew build --build-cache
+
+      - name: Validate artifacts exist
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          jar="build/libs/${ARCHIVES_BASE_NAME}-${MOD_VERSION}.jar"
+          sources_jar="build/libs/${ARCHIVES_BASE_NAME}-${MOD_VERSION}-sources.jar"
+
+          if [[ ! -f "${jar}" ]]; then
+            echo "Missing artifact: ${jar}"
+            ls -la build/libs || true
+            exit 1
+          fi
+
+          if [[ ! -f "${sources_jar}" ]]; then
+            echo "Missing artifact: ${sources_jar}"
+            ls -la build/libs || true
+            exit 1
+          fi
+
+      - name: Extract release notes from CHANGELOG.md
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          python - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          tag = os.environ["MOD_VERSION"]
+          changelog_path = Path("CHANGELOG.md")
+          if not changelog_path.exists():
+            raise SystemExit("CHANGELOG.md not found")
+
+          text = changelog_path.read_text(encoding="utf-8")
+          lines = text.splitlines()
+
+          header_re = re.compile(rf"^## \\[{re.escape(tag)}\\]\\s+-\\s+\\d{{4}}-\\d{{2}}-\\d{{2}}\\s*$")
+          start = None
+          for i, line in enumerate(lines):
+            if header_re.match(line):
+              start = i
+              break
+
+          if start is None:
+            raise SystemExit(f"CHANGELOG.md is missing a section header for version {tag}: '## [{tag}] - YYYY-MM-DD'")
+
+          end = len(lines)
+          for j in range(start + 1, len(lines)):
+            if lines[j].startswith("## ["):
+              end = j
+              break
+
+          # Exclude the header line itself; keep the content under it.
+          body_lines = lines[start + 1 : end]
+          body = "\n".join(body_lines).strip()
+          if not body:
+            raise SystemExit(f"CHANGELOG.md section for {tag} is empty (no content under the version header).")
+
+          Path("release_notes.md").write_text(body + "\n", encoding="utf-8")
+          PY
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          tag="${MOD_VERSION}"
+          jar="build/libs/${ARCHIVES_BASE_NAME}-${tag}.jar"
+          sources_jar="build/libs/${ARCHIVES_BASE_NAME}-${tag}-sources.jar"
+
+          gh release create "${tag}" \
+            "${jar}" \
+            "${sources_jar}" \
+            --title "cbbg ${tag}" \
+            --notes-file release_notes.md
+
+

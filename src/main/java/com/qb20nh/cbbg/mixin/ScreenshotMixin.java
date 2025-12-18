@@ -8,9 +8,9 @@ import com.mojang.blaze3d.textures.GpuTextureView;
 import com.qb20nh.cbbg.CbbgClient;
 import com.qb20nh.cbbg.render.CbbgDither;
 import java.util.function.Consumer;
-import static java.util.Objects.requireNonNull;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Screenshot;
+import org.jspecify.annotations.NonNull;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -26,7 +26,7 @@ public abstract class ScreenshotMixin {
     @Inject(method = "takeScreenshot(Lcom/mojang/blaze3d/pipeline/RenderTarget;ILjava/util/function/Consumer;)V",
             at = @At("HEAD"), cancellable = true)
     private static void cbbg$takeScreenshot(RenderTarget target, int downscaleFactor,
-            Consumer<NativeImage> callback, CallbackInfo ci) {
+            @NonNull Consumer<NativeImage> callback, CallbackInfo ci) {
         if (CAPTURE_DEPTH.get() > 0) {
             return;
         }
@@ -56,7 +56,7 @@ public abstract class ScreenshotMixin {
             // instead of the
             // HDR main target (which would otherwise get quantized without dithering during
             // readback).
-            Screenshot.takeScreenshot(output, downscaleFactor, requireNonNull(callback));
+            Screenshot.takeScreenshot(output, downscaleFactor, callback);
             ci.cancel();
         } finally {
             int next = CAPTURE_DEPTH.get() - 1;

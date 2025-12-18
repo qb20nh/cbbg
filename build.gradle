@@ -3,6 +3,8 @@ plugins {
 	id 'maven-publish'
 }
 
+import java.util.Date
+
 version = project.mod_version
 group = project.maven_group
 
@@ -78,6 +80,78 @@ jar {
 // Standard Fabric jar (intermediary/remapped) for normal, obfuscated Minecraft runtime.
 tasks.named("remapJar") {
 	archiveClassifier = ""
+}
+
+def devTimestamp = new Date().format("yyyy_MM_dd__HH_mm_ss")
+def devBaseName = project.base.archivesName.get()
+def devVersion = project.version
+
+tasks.register("cleanDevJars", Delete) {
+	group = "build"
+	description = "Deletes previously generated dev jars from build/libs."
+
+	// Only clean when build succeeded (keeps old dev artifacts around if build fails).
+	dependsOn tasks.named("build")
+
+	delete fileTree(layout.buildDirectory.dir("libs").get().asFile) {
+		include "${devBaseName}-*-dev-*.jar"
+	}
+}
+
+def devLibsDir = layout.buildDirectory.dir("libs")
+def devJarName = "${devBaseName}-${devVersion}-dev-${devTimestamp}.jar"
+def devSourcesJarName = "${devBaseName}-${devVersion}-dev-${devTimestamp}-sources.jar"
+
+def devJarOut = devLibsDir.map { it.file(devJarName) }
+def devSourcesJarOut = devLibsDir.map { it.file(devSourcesJarName) }
+
+tasks.register("devJar") {
+	group = "build"
+	description = "Writes a timestamped dev jar filename to build/libs."
+
+	// Clean any previously generated dev jars before writing the new timestamped one.
+	dependsOn tasks.named("cleanDevJars")
+
+	def inJar = tasks.named("remapJar").flatMap { it.archiveFile }
+	inputs.file(inJar)
+	outputs.file(devJarOut)
+
+	doLast {
+		project.copy {
+			from(inJar.get().asFile)
+			into(devLibsDir.get().asFile)
+			rename { devJarName }
+		}
+	}
+}
+
+tasks.register("devSourcesJar") {
+	group = "build"
+	description = "Writes a timestamped dev sources jar filename to build/libs."
+
+	// Clean any previously generated dev jars before writing the new timestamped one.
+	dependsOn tasks.named("cleanDevJars")
+
+	def inSourcesJar = tasks.named("remapSourcesJar").flatMap { it.archiveFile }
+	inputs.file(inSourcesJar)
+	outputs.file(devSourcesJarOut)
+
+	doLast {
+		project.copy {
+			from(inSourcesJar.get().asFile)
+			into(devLibsDir.get().asFile)
+			rename { devSourcesJarName }
+		}
+	}
+}
+
+tasks.register("dev") {
+	group = "build"
+	description = "Same as build, but also produces timestamped dev jars in build/libs."
+
+	dependsOn tasks.named("build")
+	dependsOn tasks.named("devJar")
+	dependsOn tasks.named("devSourcesJar")
 }
 
 // configure the maven publication

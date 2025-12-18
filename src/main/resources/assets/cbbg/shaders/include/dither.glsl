@@ -1,11 +1,9 @@
-#version 150
-
 // Includes blue-noise dithering logic
 
-// 128x128 STBN tile. Sample in pixel space for stable spatial alignment.
+// STBN tile. Sample in pixel space for stable spatial alignment.
 // Returns a dithered 8-bit quantized color.
-vec3 cbbg_applyDither(vec3 color, sampler2D noiseSampler, float strength) {
-    vec2 noiseUv = fract(gl_FragCoord.xy / 128.0);
+vec3 cbbg_applyDither(vec3 color, sampler2D noiseSampler, float strength, vec2 noiseSize) {
+    vec2 noiseUv = fract(gl_FragCoord.xy / noiseSize);
     vec3 n = texture(noiseSampler, noiseUv).rgb; // [0,1)
 
     vec3 x = color * 255.0 + (n - 0.5) * strength;

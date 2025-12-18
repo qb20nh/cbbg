@@ -12,9 +12,6 @@ public class STBNGenerator {
 
     private STBNGenerator() {}
 
-    public static final int STBN_SIZE = 128;
-    public static final int STBN_FRAMES = 64;
-
     private static final Logger LOGGER = LoggerFactory.getLogger("cbbg-gen");
 
     // Pure data container
@@ -46,31 +43,58 @@ public class STBNGenerator {
     private static final AtomicReference<CompletableFuture<STBNFields>> pendingFuture =
             new AtomicReference<>();
 
-    public static void init() {
-        pendingFuture.compareAndSet(null, CompletableFuture.<STBNFields>supplyAsync(() -> {
+    public static CompletableFuture<STBNFields> generateAsync(int w, int h, int d, long seed) {
+        // Cancel previous if running?
+        // Actually, we can just replace the reference. The old one will eventually finish or be
+        // GC'd.
+        // But we should try to not waste CPU.
+        CompletableFuture<STBNFields> prev = pendingFuture.get();
+        if (prev != null && !prev.isDone()) {
+            prev.cancel(true);
+        }
+
+        CompletableFuture<STBNFields> future = CompletableFuture.supplyAsync(() -> {
             try {
-                if (STBNCache.isCacheValid(STBN_SIZE, STBN_SIZE, STBN_FRAMES)) {
-                    LOGGER.info("Valid STBN cache found. Skipping math generation.");
+                if (Thread.currentThread().isInterrupted()) {
                     return null;
                 }
 
-                LOGGER.info("Starting Async STBN Math Generation ({}x{}x{})...", STBN_SIZE,
-                        STBN_SIZE, STBN_FRAMES);
+                if (STBNCache.isCacheValid(w, h, d)) {
+                    LOGGER.info("Valid STBN cache found for {}x{}x{}. Skipping math generation.", w,
+                            h, d);
+                    return null;
+                }
+
+                LOGGER.info("Starting Async STBN Math Generation ({}x{}x{})...", w, h, d);
                 long start = System.currentTimeMillis();
 
                 // Generate U and V fields (Spatio-Temporal Blue Noise)
-                double[] uField = generateScalarField(STBN_SIZE, STBN_SIZE, STBN_FRAMES, 1234);
-                double[] vField = generateScalarField(STBN_SIZE, STBN_SIZE, STBN_FRAMES, 5678);
+                // If seed is 0, use existing constants, otherwise mix.
+                long seedU = seed == 0 ? 1234 : seed * 31;
+                long seedV = seed == 0 ? 5678 : seed * 31 + 7;
+
+                double[] uField = generateScalarField(w, h, d, seedU);
+                if (Thread.currentThread().isInterrupted())
+                    return null;
+
+                double[] vField = generateScalarField(w, h, d, seedV);
+                if (Thread.currentThread().isInterrupted())
+                    return null;
 
                 long dt = System.currentTimeMillis() - start;
                 LOGGER.info("STBN Math Complete in {} ms", dt);
 
                 return new STBNFields(uField, vField);
             } catch (Exception e) {
-
+                // If interrupted, just return null silently
+                if (e instanceof InterruptedException)
+                    return null;
                 throw new CompletionException(e);
             }
-        }));
+        });
+
+        pendingFuture.set(future);
+        return future;
     }
 
     public static CompletableFuture<STBNFields> get() {
@@ -96,6 +120,11 @@ public class STBNGenerator {
             applyFilter(real, imag, filter);
             MiniFFT.fft3d(real, imag, w, h, d, true);
             applyHistogramMatching(real, imag, indices);
+
+            // Check interruption periodically
+            if (Thread.currentThread().isInterrupted()) {
+                break;
+            }
         }
 
         return real;

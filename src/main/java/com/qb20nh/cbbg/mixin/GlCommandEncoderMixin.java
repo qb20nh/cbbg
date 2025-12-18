@@ -26,6 +26,7 @@ public abstract class GlCommandEncoderMixin {
     private static final ThreadLocal<Integer> PRESENT_DEPTH = ThreadLocal.withInitial(() -> 0);
     private static final AtomicBoolean loggedOnce = new AtomicBoolean(false);
     private static volatile CbbgConfig.Mode lastMode = null;
+    private static volatile CbbgConfig.PixelFormat lastPixelFormat = null;
 
     @Inject(method = "presentTexture", at = @At("HEAD"), cancellable = true)
     private void cbbg$presentTexture(GpuTextureView textureView, CallbackInfo ci) {
@@ -36,6 +37,7 @@ public abstract class GlCommandEncoderMixin {
         }
         CbbgConfig.Mode modeNow = CbbgClient.getEffectiveMode();
         handleModeTransition(modeNow);
+        handlePixelFormatTransition(modeNow);
         if (!modeNow.isActive()) {
             return;
         }
@@ -98,6 +100,36 @@ public abstract class GlCommandEncoderMixin {
         RenderSystem.queueFencedTask(() -> {
             Minecraft mc = Minecraft.getInstance();
             // Recreate the main target so it matches the current enabled state.
+            mc.getMainRenderTarget().resize(mc.getWindow().getWidth(), mc.getWindow().getHeight());
+        });
+    }
+
+    private static void handlePixelFormatTransition(CbbgConfig.Mode modeNow) {
+        CbbgConfig.PixelFormat fmtNow = CbbgConfig.get().pixelFormat();
+        CbbgConfig.PixelFormat prev = lastPixelFormat;
+        if (prev == null) {
+            lastPixelFormat = fmtNow;
+            return;
+        }
+        if (prev == fmtNow) {
+            return;
+        }
+
+        lastPixelFormat = fmtNow;
+
+        // Re-log verification again after a format change, and reset any “disabled due to error”
+        // state so the user can recover by switching formats.
+        loggedOnce.set(false);
+        CbbgDither.resetAfterToggle();
+
+        // Only matters while cbbg is active; otherwise vanilla RGBA8 is used.
+        if (!modeNow.isActive()) {
+            return;
+        }
+
+        // Recreate targets on the next frame boundary so we don’t destroy textures mid-present.
+        RenderSystem.queueFencedTask(() -> {
+            Minecraft mc = Minecraft.getInstance();
             mc.getMainRenderTarget().resize(mc.getWindow().getWidth(), mc.getWindow().getHeight());
         });
     }

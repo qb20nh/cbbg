@@ -1,9 +1,13 @@
-#version 330
+#version 150
 
 #moj_import <cbbg:dither.glsl>
 
 uniform sampler2D InSampler;
 uniform sampler2D NoiseSampler;
+
+layout(std140) uniform CbbgDitherInfo {
+    float Strength;
+};
 
 in vec2 texCoord;
 
@@ -18,10 +22,11 @@ void main() {
     // Left = vanilla (no dither), right = cbbg (dither)
     bool enabledSide = gl_FragCoord.x >= centerX;
 
-    // "Disabled" side: strength 0.0 (just quantize). "Enabled" side: strength 1.0.
-    float strength = enabledSide ? 1.0 : 0.0;
+    // "Disabled" side: strength 0.0 (no dither). "Enabled" side: user strength.
+    float strength = enabledSide ? Strength : 0.0;
     
-    color.rgb = cbbg_applyDither(c, NoiseSampler, strength);
+    vec2 stbnSize = vec2(textureSize(NoiseSampler, 0));
+    color.rgb = cbbg_applyDither(c, NoiseSampler, strength, stbnSize);
 
     // 1px vertical separator at the split.
     if (gl_FragCoord.x >= centerX && gl_FragCoord.x < centerX + 1.0) {
