@@ -42,8 +42,14 @@ public final class CbbgClientCommands {
     }
 
     private static void registerCommands(CommandDispatcher<FabricClientCommandSource> dispatcher) {
-        dispatcher.register(literal("cbbg").then(modeCommand()).then(formatCommand())
-                .then(stbnCommand()).then(notificationCommand()));
+        dispatcher.register(literal("cbbg").executes(ctx -> {
+            sendRootHelp(ctx.getSource());
+            return 1;
+        }).then(literal("help").executes(ctx -> {
+            sendRootHelp(ctx.getSource());
+            return 1;
+        })).then(modeCommand()).then(formatCommand()).then(stbnCommand())
+                .then(notificationCommand()));
     }
 
     private static LiteralArgumentBuilder<FabricClientCommandSource> modeCommand() {
@@ -51,7 +57,10 @@ public final class CbbgClientCommands {
             var mode = CbbgConfig.get().mode();
             ctx.getSource().sendFeedback(Component.literal("Current mode: " + mode));
             return 1;
-        }).then(literal("set").then(argument(ARG_MODE, STRING_ARG).suggests((ctx, builder) -> {
+        }).then(literal("set").executes(ctx -> {
+            sendModeUsage(ctx.getSource());
+            return 1;
+        }).then(argument(ARG_MODE, STRING_ARG).suggests((ctx, builder) -> {
             for (CbbgConfig.Mode mode : CbbgConfig.Mode.values()) {
                 builder.suggest(mode.getSerializedName());
             }
@@ -75,6 +84,8 @@ public final class CbbgClientCommands {
                 ctx.getSource().sendFeedback(Component.literal("Set mode to: " + mode));
                 return 1;
             } catch (Exception e) {
+                ctx.getSource().sendError(Component.literal("Invalid mode: " + modeName));
+                sendModeUsage(ctx.getSource());
                 return 0;
             }
         })));
@@ -114,37 +125,52 @@ public final class CbbgClientCommands {
                 return 1;
             } catch (Exception e) {
                 ctx.getSource().sendError(Component.literal("Invalid format: " + fmtName));
+                sendFormatUsage(ctx.getSource());
                 return 0;
             }
         })));
     }
 
     private static LiteralArgumentBuilder<FabricClientCommandSource> stbnCommand() {
-        return literal("stbn").then(literal("generate").executes(ctx -> {
+        return literal("stbn").executes(ctx -> {
+            sendStbnUsage(ctx.getSource());
+            return 1;
+        }).then(literal("generate").executes(ctx -> {
             ctx.getSource().sendFeedback(Component.literal("Starting STBN generation..."));
             CbbgDither.reloadStbn(true);
             return 1;
-        })).then(literal("size").then(argument(ARG_VALUE, STBN_SIZE_ARG).executes(ctx -> {
+        })).then(literal("size").executes(ctx -> {
+            sendStbnSizeUsage(ctx.getSource());
+            return 1;
+        }).then(argument(ARG_VALUE, STBN_SIZE_ARG).executes(ctx -> {
             int size = IntegerArgumentType.getInteger(ctx, ARG_VALUE);
             if (Integer.bitCount(size) != 1) { // Check power of two
                 ctx.getSource()
                         .sendError(Component.literal("Size must be power of two (16, 32, 64...)"));
+                sendStbnSizeUsage(ctx.getSource());
                 return 0;
             }
             CbbgConfig.setStbnSize(size);
             ctx.getSource().sendFeedback(Component.literal("Set STBN size to: " + size));
             return 1;
-        }))).then(literal("depth").then(argument(ARG_VALUE, STBN_DEPTH_ARG).executes(ctx -> {
+        }))).then(literal("depth").executes(ctx -> {
+            sendStbnDepthUsage(ctx.getSource());
+            return 1;
+        }).then(argument(ARG_VALUE, STBN_DEPTH_ARG).executes(ctx -> {
             int depth = IntegerArgumentType.getInteger(ctx, ARG_VALUE);
             if (Integer.bitCount(depth) != 1) {
                 ctx.getSource()
                         .sendError(Component.literal("Depth must be power of two (8, 16, 32...)"));
+                sendStbnDepthUsage(ctx.getSource());
                 return 0;
             }
             CbbgConfig.setStbnDepth(depth);
             ctx.getSource().sendFeedback(Component.literal("Set STBN depth to: " + depth));
             return 1;
-        }))).then(literal("seed").then(argument(ARG_VALUE, STBN_SEED_ARG).executes(ctx -> {
+        }))).then(literal("seed").executes(ctx -> {
+            sendStbnSeedUsage(ctx.getSource());
+            return 1;
+        }).then(argument(ARG_VALUE, STBN_SEED_ARG).executes(ctx -> {
             long seed = LongArgumentType.getLong(ctx, ARG_VALUE);
             CbbgConfig.setStbnSeed(seed);
             ctx.getSource().sendFeedback(Component.literal("Set STBN seed to: " + seed));
@@ -160,17 +186,84 @@ public final class CbbgClientCommands {
     }
 
     private static LiteralArgumentBuilder<FabricClientCommandSource> notificationCommand() {
-        return literal("notification")
-                .then(literal("chat").then(argument(ARG_ENABLED, BOOL_ARG).executes(ctx -> {
-                    boolean val = BoolArgumentType.getBool(ctx, ARG_ENABLED);
-                    CbbgConfig.setNotifyChat(val);
-                    ctx.getSource().sendFeedback(Component.literal("Chat notifications: " + val));
-                    return 1;
-                }))).then(literal("toast").then(argument(ARG_ENABLED, BOOL_ARG).executes(ctx -> {
-                    boolean val = BoolArgumentType.getBool(ctx, ARG_ENABLED);
-                    CbbgConfig.setNotifyToast(val);
-                    ctx.getSource().sendFeedback(Component.literal("Toast notifications: " + val));
-                    return 1;
-                })));
+        return literal("notification").executes(ctx -> {
+            sendNotificationUsage(ctx.getSource());
+            return 1;
+        }).then(literal("chat").executes(ctx -> {
+            ctx.getSource().sendFeedback(
+                    Component.literal("Chat notifications: " + CbbgConfig.get().notifyChat()));
+            ctx.getSource().sendFeedback(
+                    Component.literal("Usage: /cbbg notification chat <true | false>"));
+            return 1;
+        }).then(argument(ARG_ENABLED, BOOL_ARG).executes(ctx -> {
+            boolean val = BoolArgumentType.getBool(ctx, ARG_ENABLED);
+            CbbgConfig.setNotifyChat(val);
+            ctx.getSource().sendFeedback(Component.literal("Chat notifications: " + val));
+            return 1;
+        }))).then(literal("toast").executes(ctx -> {
+            ctx.getSource().sendFeedback(
+                    Component.literal("Toast notifications: " + CbbgConfig.get().notifyToast()));
+            ctx.getSource().sendFeedback(
+                    Component.literal("Usage: /cbbg notification toast <true | false>"));
+            return 1;
+        }).then(argument(ARG_ENABLED, BOOL_ARG).executes(ctx -> {
+            boolean val = BoolArgumentType.getBool(ctx, ARG_ENABLED);
+            CbbgConfig.setNotifyToast(val);
+            ctx.getSource().sendFeedback(Component.literal("Toast notifications: " + val));
+            return 1;
+        })));
+    }
+
+    private static void sendRootHelp(FabricClientCommandSource source) {
+        source.sendFeedback(Component.literal("cbbg commands:"));
+        source.sendFeedback(Component.literal(" - /cbbg mode"));
+        source.sendFeedback(Component.literal(" - /cbbg mode set <enabled | disabled | demo>"));
+        source.sendFeedback(Component.literal(" - /cbbg format"));
+        source.sendFeedback(Component.literal(" - /cbbg format set <rgba16f | rgba32f>"));
+        source.sendFeedback(Component.literal(" - /cbbg stbn"));
+        source.sendFeedback(Component.literal(" - /cbbg notification"));
+    }
+
+    private static void sendModeUsage(FabricClientCommandSource source) {
+        source.sendFeedback(Component.literal("Usage: /cbbg mode set <enabled | disabled | demo>"));
+    }
+
+    private static void sendFormatUsage(FabricClientCommandSource source) {
+        source.sendFeedback(Component.literal("Usage: /cbbg format set <rgba16f | rgba32f>"));
+    }
+
+    private static void sendStbnUsage(FabricClientCommandSource source) {
+        CbbgConfig cfg = CbbgConfig.get();
+        source.sendFeedback(Component.literal("STBN: size=" + cfg.stbnSize() + " depth="
+                + cfg.stbnDepth() + " seed=" + cfg.stbnSeed()));
+        source.sendFeedback(Component.literal(" - /cbbg stbn generate"));
+        source.sendFeedback(Component.literal(" - /cbbg stbn size <16-256 power-of-two>"));
+        source.sendFeedback(Component.literal(" - /cbbg stbn depth <8-128 power-of-two>"));
+        source.sendFeedback(Component.literal(" - /cbbg stbn seed <number>"));
+        source.sendFeedback(Component.literal(" - /cbbg stbn reset"));
+    }
+
+    private static void sendStbnSizeUsage(FabricClientCommandSource source) {
+        source.sendFeedback(Component.literal("Current STBN size: " + CbbgConfig.get().stbnSize()));
+        source.sendFeedback(Component.literal("Usage: /cbbg stbn size <16-256 power-of-two>"));
+    }
+
+    private static void sendStbnDepthUsage(FabricClientCommandSource source) {
+        source.sendFeedback(
+                Component.literal("Current STBN depth: " + CbbgConfig.get().stbnDepth()));
+        source.sendFeedback(Component.literal("Usage: /cbbg stbn depth <8-128 power-of-two>"));
+    }
+
+    private static void sendStbnSeedUsage(FabricClientCommandSource source) {
+        source.sendFeedback(Component.literal("Current STBN seed: " + CbbgConfig.get().stbnSeed()));
+        source.sendFeedback(Component.literal("Usage: /cbbg stbn seed <number>"));
+    }
+
+    private static void sendNotificationUsage(FabricClientCommandSource source) {
+        CbbgConfig cfg = CbbgConfig.get();
+        source.sendFeedback(Component.literal(
+                "Notifications: chat=" + cfg.notifyChat() + " toast=" + cfg.notifyToast()));
+        source.sendFeedback(Component.literal(" - /cbbg notification chat <true | false>"));
+        source.sendFeedback(Component.literal(" - /cbbg notification toast <true | false>"));
     }
 }

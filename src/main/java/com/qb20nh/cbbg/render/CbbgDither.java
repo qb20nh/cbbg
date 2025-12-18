@@ -311,7 +311,7 @@ public final class CbbgDither {
                         .addMessage(Component.literal("§e[cbbg] Generating new STBN textures..."));
             }
             if (cfg.notifyToast()) {
-                SystemToast.add(Minecraft.getInstance().getToastManager(),
+                SystemToast.addOrUpdate(Minecraft.getInstance().getToastManager(),
                         SystemToast.SystemToastId.PERIODIC_NOTIFICATION,
                         Component.literal("cbbg Generation"),
                         Component.literal("Generating noise textures..."));
@@ -359,6 +359,12 @@ public final class CbbgDither {
             if (cfg.notifyChat() && Minecraft.getInstance().level != null) {
                 Minecraft.getInstance().gui.getChat()
                         .addMessage(Component.literal("§a[cbbg] STBN Generation Complete!"));
+            }
+            if (cfg.notifyToast()) {
+                SystemToast.addOrUpdate(Minecraft.getInstance().getToastManager(),
+                        SystemToast.SystemToastId.PERIODIC_NOTIFICATION,
+                        Component.literal("cbbg Generation"),
+                        Component.literal("STBN generation complete."));
             }
 
         }
