@@ -1,6 +1,7 @@
 # cbbg 🥬
 
 [![Modloader Fabric](https://qb20nh.github.io/githubstatic/dist/ModLoader-Fabric-DBD0B4.svg)](https://modrinth.com/mod/cbbg)
+[![Available on modrinth](https://img.shields.io/badge/dynamic/json?color=158000&label=downloads&prefix=+%20&query=downloads&url=https://api.modrinth.com/v2/project/UBlXUQbC&logo=modrinth)](https://modrinth.com/mod/cbbg)
 [![Available on curseforge](https://cf.way2muchnoise.eu/full_1408371_downloads.svg)](https://www.curseforge.com/minecraft/mc-mods/cbbg)
 [![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/qb20nh/cbbg/gradle.yml?logo=github)](https://github.com/qb20nh/cbbg/actions/workflows/gradle.yml)
 [![Funding Github](https://qb20nh.github.io/githubstatic/dist/funding-github-hotpink.svg)](https://github.com/sponsors/qb20nh)
