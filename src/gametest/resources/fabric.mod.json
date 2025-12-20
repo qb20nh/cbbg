@@ -6,7 +6,8 @@
   "environment": "client",
   "entrypoints": {
     "fabric-client-gametest": [
-      "com.qb20nh.cbbg.gametest.CbbgClientGameTest"
+      "com.qb20nh.cbbg.gametest.CbbgClientGameTest",
+      "com.qb20nh.cbbg.gametest.CbbgConfigScreenGameTest"
     ]
   }
 }
