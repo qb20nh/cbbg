@@ -132,12 +132,14 @@ public final class CbbgConfigScreen extends Screen {
                             + "Size: " + stbnSize + "\nDepth: " + stbnDepth + "\nSeed: " + stbnSeed
                             + "\n\nThis may take a moment.")) {
                 @Override
+                public void renderBackground(GuiGraphics context, int mouseX, int mouseY,
+                        float partialTick) {
+                    CbbgConfigScreen.this.renderSafeBackground(context, partialTick);
+                }
+
+                @Override
                 public void render(@NonNull GuiGraphics context, int mouseX, int mouseY,
                         float partialTick) {
-                    // Match config screen's perceived background darkness.
-                    // Match config screen's perceived background darkness.
-                    CbbgConfigScreen.this.renderSafeBackground(context, partialTick);
-
                     // Draw the same card styling behind the confirm dialog UI.
                     final int padX = 12;
                     final int padY = 12;
@@ -207,9 +209,6 @@ public final class CbbgConfigScreen extends Screen {
 
     @Override
     public void render(@NonNull GuiGraphics context, int mouseX, int mouseY, float partialTick) {
-        // App background (transparent)
-        this.renderBackground(context, mouseX, mouseY, partialTick);
-
         // Card background
         int cx = this.width / 2;
         int cy = this.height / 2;
