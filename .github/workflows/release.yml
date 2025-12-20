@@ -220,5 +220,3 @@ jobs:
               --title "cbbg ${mod_version}" \
               --notes-file release_notes.md
           fi
-
-
