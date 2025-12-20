@@ -1,13 +1,14 @@
 package com.qb20nh.cbbg.config.gui;
 
-import com.qb20nh.cbbg.compat.iris.IrisCompat;
-import com.qb20nh.cbbg.config.CbbgConfig;
-import com.qb20nh.cbbg.render.MainTargetFormatSupport;
-import com.qb20nh.cbbg.render.CbbgDither;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.function.DoubleConsumer;
 import java.util.function.IntConsumer;
+import org.jspecify.annotations.NonNull;
+import com.qb20nh.cbbg.compat.iris.IrisCompat;
+import com.qb20nh.cbbg.config.CbbgConfig;
+import com.qb20nh.cbbg.render.CbbgDither;
+import com.qb20nh.cbbg.render.MainTargetFormatSupport;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractSliderButton;
 import net.minecraft.client.gui.components.Button;
@@ -17,7 +18,6 @@ import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.ConfirmScreen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
-import org.jspecify.annotations.NonNull;
 
 public final class CbbgConfigScreen extends Screen {
     private final Screen parent;
@@ -135,7 +135,11 @@ public final class CbbgConfigScreen extends Screen {
                 public void render(@NonNull GuiGraphics context, int mouseX, int mouseY,
                         float partialTick) {
                     // Match config screen's perceived background darkness.
-                    this.renderBackground(context, mouseX, mouseY, partialTick);
+                    if (this.minecraft.level != null) {
+                        this.renderTransparentBackground(context);
+                    } else {
+                        this.renderBackground(context, mouseX, mouseY, partialTick);
+                    }
 
                     // Draw the same card styling behind the confirm dialog UI.
                     final int padX = 12;
@@ -188,6 +192,15 @@ public final class CbbgConfigScreen extends Screen {
             case DEMO -> "Split-screen: Left = Vanilla, Right = Dithered.";
         };
         return Tooltip.create(Component.literal(key));
+    }
+
+    @Override
+    public void renderBackground(GuiGraphics context, int mouseX, int mouseY, float partialTick) {
+        if (this.minecraft.level != null) {
+            this.renderTransparentBackground(context);
+        } else {
+            super.renderBackground(context, mouseX, mouseY, partialTick);
+        }
     }
 
     @Override
