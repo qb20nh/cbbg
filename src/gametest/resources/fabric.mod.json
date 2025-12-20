@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "id": "cbbg-gametest",
+  "version": "1.0.0",
+  "name": "cbbg GameTests",
+  "environment": "client",
+  "entrypoints": {
+    "fabric-client-gametest": [
+      "com.qb20nh.cbbg.gametest.CbbgClientGameTest"
+    ]
+  }
+}
+
+

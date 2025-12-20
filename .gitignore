@@ -33,6 +33,11 @@ bin/
 run/
 !run/resourcepacks/
 
+# Fabric Loader JUnit tests may create these when the game dir resolves to repo root.
+# Our Gradle config redirects test runs into build/, but ignore these as a safety net.
+config/
+logs/
+
 # java
 
 hs_err_*.log
