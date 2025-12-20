@@ -1,0 +1,201 @@
+name: Publish Test (Impl)
+
+on:
+  workflow_call:
+    inputs:
+      release_type:
+        description: "Release type for Modrinth/CurseForge"
+        required: false
+        type: string
+        default: "alpha"
+      curseforge_game_versions:
+        description: "Optional override for CurseForge game_versions (comma-separated)."
+        required: false
+        type: string
+        default: ""
+    secrets:
+      MODRINTH_TOKEN:
+        required: true
+      CF_API_TOKEN:
+        required: true
+
+jobs:
+  publish_test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      MOD_VERSION: ""
+      ARCHIVES_BASE_NAME: ""
+      MINECRAFT_VERSION: ""
+      ARTIFACT_VERSION: ""
+      JAR_PATH: ""
+      MODRINTH_PROJECT_ID: ""
+      CURSEFORGE_PROJECT_ID: ""
+      MODRINTH_VERSION_NUMBER: ""
+      MODRINTH_VERSION_TYPE: ""
+      CURSEFORGE_RELEASE_TYPE: ""
+      CURSEFORGE_GAME_VERSIONS: ""
+      RELEASE_NOTES: ""
+
+    steps:
+      - uses: actions/checkout@v6.0.1
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v5.1.0
+        with:
+          java-version: "21"
+          distribution: "temurin"
+
+      # Cache Fabric Loom's project-local cache (Minecraft jars, mappings, remapped artifacts, etc).
+      # This is separate from Gradle User Home (~/.gradle) caching handled by setup-gradle.
+      - name: Cache Loom artifacts
+        uses: actions/cache@v5.0.1
+        with:
+          path: |
+            .gradle/loom-cache
+          key: ${{ runner.os }}-loom-${{ hashFiles('gradle.properties', 'settings.gradle', 'build.gradle', 'gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-loom-
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v5.0.0
+        with:
+          cache-cleanup: on-success
+
+      - name: Read project metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          mod_version="$(grep -E '^mod_version=' gradle.properties | cut -d= -f2 | tr -d '\r')"
+          archives_base_name="$(grep -E '^archives_base_name=' gradle.properties | cut -d= -f2 | tr -d '\r')"
+          minecraft_version="$(grep -E '^minecraft_version=' gradle.properties | cut -d= -f2 | tr -d '\r')"
+          modrinth_project_id="$(grep -E '^modrinth_project_id=' gradle.properties | cut -d= -f2 | tr -d '\r')"
+          curseforge_project_id="$(grep -E '^curseforge_project_id=' gradle.properties | cut -d= -f2 | tr -d '\r')"
+
+          if [[ -z "${mod_version}" || -z "${archives_base_name}" || -z "${minecraft_version}" || -z "${modrinth_project_id}" || -z "${curseforge_project_id}" ]]; then
+            echo "Missing required metadata in gradle.properties (mod_version, archives_base_name, minecraft_version, modrinth_project_id, curseforge_project_id)."
+            exit 1
+          fi
+
+          artifact_version="${mod_version}+mc${minecraft_version}"
+          jar="build/libs/${archives_base_name}-${artifact_version}.jar"
+
+          short_sha="${GITHUB_SHA:0:12}"
+          if [[ "${mod_version}" == *-* ]]; then
+            # Keep a single '-' prerelease separator if mod_version already has one.
+            modrinth_version_number="${mod_version}.dev.${GITHUB_RUN_NUMBER}+mc${minecraft_version}.sha${short_sha}"
+          else
+            modrinth_version_number="${mod_version}-dev.${GITHUB_RUN_NUMBER}+mc${minecraft_version}.sha${short_sha}"
+          fi
+
+          minecraft_series="$(echo "${minecraft_version}" | awk -F. '{print $1 "." $2}')"
+          default_cf_game_versions="Minecraft ${minecraft_series}:${minecraft_version},Java 21,Fabric"
+          if [[ -n "${{ inputs.curseforge_game_versions }}" ]]; then
+            cf_game_versions="${{ inputs.curseforge_game_versions }}"
+          else
+            cf_game_versions="${default_cf_game_versions}"
+          fi
+
+          echo "MOD_VERSION=${mod_version}" >> "${GITHUB_ENV}"
+          echo "ARCHIVES_BASE_NAME=${archives_base_name}" >> "${GITHUB_ENV}"
+          echo "MINECRAFT_VERSION=${minecraft_version}" >> "${GITHUB_ENV}"
+          echo "ARTIFACT_VERSION=${artifact_version}" >> "${GITHUB_ENV}"
+          echo "JAR_PATH=${jar}" >> "${GITHUB_ENV}"
+          echo "MODRINTH_PROJECT_ID=${modrinth_project_id}" >> "${GITHUB_ENV}"
+          echo "CURSEFORGE_PROJECT_ID=${curseforge_project_id}" >> "${GITHUB_ENV}"
+          echo "MODRINTH_VERSION_NUMBER=${modrinth_version_number}" >> "${GITHUB_ENV}"
+          echo "MODRINTH_VERSION_TYPE=${{ inputs.release_type }}" >> "${GITHUB_ENV}"
+          echo "CURSEFORGE_RELEASE_TYPE=${{ inputs.release_type }}" >> "${GITHUB_ENV}"
+          echo "CURSEFORGE_GAME_VERSIONS=${cf_game_versions}" >> "${GITHUB_ENV}"
+
+      - name: Build with Gradle Wrapper
+        run: ./gradlew build
+
+      - name: Validate artifact exists
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ ! -f "${JAR_PATH}" ]]; then
+            echo "Missing artifact: ${JAR_PATH}"
+            ls -la build/libs || true
+            exit 1
+          fi
+
+      - name: Extract release notes from CHANGELOG.md
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          python - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          tag = os.environ["MOD_VERSION"]
+          changelog_path = Path("CHANGELOG.md")
+          if not changelog_path.exists():
+            raise SystemExit("CHANGELOG.md not found")
+
+          text = changelog_path.read_text(encoding="utf-8")
+          lines = text.splitlines()
+
+          header_re = re.compile(rf"^## \[{re.escape(tag)}\]\s+-\s+\d{{4}}-\d{{2}}-\d{{2}}\s*$")
+          start = None
+          for i, line in enumerate(lines):
+            if header_re.match(line):
+              start = i
+              break
+
+          if start is None:
+            raise SystemExit(
+              f"CHANGELOG.md is missing a section header for version {tag}: '## [{tag}] - YYYY-MM-DD'"
+            )
+
+          end = len(lines)
+          for j in range(start + 1, len(lines)):
+            if lines[j].startswith("## ["):
+              end = j
+              break
+
+          # Exclude the header line itself; keep the content under it.
+          body_lines = lines[start + 1 : end]
+          body = "\n".join(body_lines).strip()
+          if not body:
+            raise SystemExit(f"CHANGELOG.md section for {tag} is empty (no content under the version header).")
+
+          Path("release_notes.md").write_text(body + "\n", encoding="utf-8")
+          PY
+
+      - name: Export release notes to env (for CurseForge)
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "RELEASE_NOTES<<EOF" >> "${GITHUB_ENV}"
+          cat release_notes.md >> "${GITHUB_ENV}"
+          echo "EOF" >> "${GITHUB_ENV}"
+
+      - name: Publish to Modrinth
+        env:
+          MODRINTH_TOKEN: ${{ secrets.MODRINTH_TOKEN }}
+          MODRINTH_PROJECT_ID: ${{ env.MODRINTH_PROJECT_ID }}
+          MODRINTH_VERSION_NUMBER: ${{ env.MODRINTH_VERSION_NUMBER }}
+          MODRINTH_VERSION_TYPE: ${{ env.MODRINTH_VERSION_TYPE }}
+        run: ./gradlew modrinth
+
+      - name: Upload to CurseForge
+        uses: itsmeow/curseforge-upload@v3.1.2
+        with:
+          token: ${{ secrets.CF_API_TOKEN }}
+          project_id: ${{ env.CURSEFORGE_PROJECT_ID }}
+          game_endpoint: minecraft
+          relations: "fabric-api:requiredDependency"
+          file_path: ${{ env.JAR_PATH }}
+          game_versions: ${{ env.CURSEFORGE_GAME_VERSIONS }}
+          release_type: ${{ env.CURSEFORGE_RELEASE_TYPE }}
+          display_name: cbbg ${{ env.MODRINTH_VERSION_NUMBER }}
+          changelog: ${{ env.RELEASE_NOTES }}
+          changelog_type: markdown

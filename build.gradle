@@ -1,6 +1,7 @@
 plugins {
 	id 'fabric-loom' version "${loom_version}"
 	id 'maven-publish'
+	id 'com.modrinth.minotaur' version '2.+'
 }
 
 import java.util.Date
@@ -165,6 +166,66 @@ tasks.register("dev") {
 	dependsOn tasks.named("build")
 	dependsOn tasks.named("devJar")
 	dependsOn tasks.named("devSourcesJar")
+}
+
+def optionalTrimmed = { String value ->
+	if (value == null) {
+		return null
+	}
+	def trimmed = value.trim()
+	return trimmed.isEmpty() ? null : trimmed
+}
+
+def envOrProperty = { String envName, String propertyName ->
+	return optionalTrimmed(System.getenv(envName)) ?: optionalTrimmed((String) project.findProperty(propertyName))
+}
+
+def readTextFileIfExists = { String relativePath ->
+	def f = rootProject.file(relativePath)
+	return f.exists() ? f.getText("UTF-8") : null
+}
+
+// Modrinth publishing (Minotaur)
+modrinth {
+	def tokenValue = envOrProperty("MODRINTH_TOKEN", "modrinthToken")
+	if (tokenValue != null) {
+		token = tokenValue
+	}
+
+	def projectIdValue = envOrProperty("MODRINTH_PROJECT_ID", "modrinthProjectId") ?:
+		optionalTrimmed((String) project.findProperty("modrinth_project_id"))
+	if (projectIdValue != null) {
+		projectId = projectIdValue
+	}
+
+	def versionNumberValue = envOrProperty("MODRINTH_VERSION_NUMBER", "modrinthVersionNumber") ?: artifactVersion
+	versionNumber = versionNumberValue
+	versionName = "cbbg ${versionNumberValue}"
+
+	versionType = envOrProperty("MODRINTH_VERSION_TYPE", "modrinthVersionType") ?: "release"
+
+	// With Loom, this must be remapped jar.
+	uploadFile = tasks.named("remapJar")
+	additionalFiles = [
+		tasks.named("remapSourcesJar")
+	]
+
+	// Redundant with Loom auto-detection, but explicit is nice for reproducibility.
+	gameVersions = [
+		project.minecraft_version
+	]
+	loaders = [
+		"fabric"
+	]
+
+	def changelogValue = envOrProperty("MODRINTH_CHANGELOG", "modrinthChangelog") ?: readTextFileIfExists("release_notes.md")
+	if (changelogValue != null) {
+		changelog = changelogValue
+	}
+
+	dependencies {
+		required.project "fabric-api"
+	}
 }
 
 // configure the maven publication

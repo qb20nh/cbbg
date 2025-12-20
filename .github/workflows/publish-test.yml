@@ -1,0 +1,26 @@
+name: Publish Test (Manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_type:
+        description: "Release type for Modrinth/CurseForge"
+        required: true
+        type: choice
+        default: "alpha"
+        options:
+          - alpha
+          - beta
+          - release
+      curseforge_game_versions:
+        description: "Optional override for CurseForge game_versions (comma-separated). Example: `Minecraft 1.21:1.21.11,Java 21,Fabric`. Leave blank to use the current Minecraft version."
+        required: false
+        default: ""
+
+jobs:
+  publish_test:
+    uses: ./.github/workflows/publish-test-impl.yml
+    with:
+      release_type: ${{ inputs.release_type }}
+      curseforge_game_versions: ${{ inputs.curseforge_game_versions }}
+    secrets: inherit
