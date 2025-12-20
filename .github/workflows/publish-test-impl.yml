@@ -195,6 +195,7 @@ jobs:
         run: ./gradlew modrinth
 
       - name: Upload to CurseForge
+        id: curseforge_upload
         uses: itsmeow/curseforge-upload@v3.1.2
         with:
           token: ${{ secrets.CF_API_TOKEN }}
@@ -207,3 +208,17 @@ jobs:
           display_name: cbbg ${{ env.MODRINTH_VERSION_NUMBER }}
           changelog: ${{ env.RELEASE_NOTES }}
           changelog_type: markdown
+
+      - name: Print CurseForge upload result
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          cf_file_id="${{ steps.curseforge_upload.outputs.id }}"
+          if [[ -z "${cf_file_id}" ]]; then
+            echo "CurseForge uploader did not return an output file id."
+            exit 1
+          fi
+
+          echo "CurseForge file id: ${cf_file_id}"
+          echo "CurseForge file URL: https://www.curseforge.com/minecraft/mc-mods/cbbg/files/${cf_file_id}"
