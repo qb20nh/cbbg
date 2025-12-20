@@ -13,15 +13,11 @@ on:
         required: false
         type: string
         default: ""
-    secrets:
-      MODRINTH_TOKEN:
-        required: true
-      CF_API_TOKEN:
-        required: true
 
 jobs:
   publish_test:
     runs-on: ubuntu-latest
+    environment: "build and publish"
     permissions:
       contents: read
     env:
@@ -82,13 +78,8 @@ jobs:
           artifact_version="${mod_version}+mc${minecraft_version}"
           jar="build/libs/${archives_base_name}-${artifact_version}.jar"
 
-          short_sha="${GITHUB_SHA:0:12}"
-          if [[ "${mod_version}" == *-* ]]; then
-            # Keep a single '-' prerelease separator if mod_version already has one.
-            modrinth_version_number="${mod_version}.dev.${GITHUB_RUN_NUMBER}+mc${minecraft_version}.sha${short_sha}"
-          else
-            modrinth_version_number="${mod_version}-dev.${GITHUB_RUN_NUMBER}+mc${minecraft_version}.sha${short_sha}"
-          fi
+          # Modrinth enforces a maximum length for version_number. Keep test version numbers short.
+          modrinth_version_number="${mod_version}-test.${GITHUB_RUN_NUMBER}"
 
           minecraft_series="$(echo "${minecraft_version}" | awk -F. '{print $1 "." $2}')"
           default_cf_game_versions="Minecraft ${minecraft_series}:${minecraft_version},Java 21,Fabric"
@@ -177,6 +168,23 @@ jobs:
           echo "RELEASE_NOTES<<EOF" >> "${GITHUB_ENV}"
           cat release_notes.md >> "${GITHUB_ENV}"
           echo "EOF" >> "${GITHUB_ENV}"
+
+      - name: Validate publishing secrets are available
+        shell: bash
+        env:
+          MODRINTH_TOKEN: ${{ secrets.MODRINTH_TOKEN }}
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${MODRINTH_TOKEN}" ]]; then
+            echo "Missing secret: MODRINTH_TOKEN (you said you configured it as an Environment secret; make sure the environment name matches: 'build and publish')."
+            exit 1
+          fi
+          if [[ -z "${CF_API_TOKEN}" ]]; then
+            echo "Missing secret: CF_API_TOKEN (you said you configured it as an Environment secret; make sure the environment name matches: 'build and publish')."
+            exit 1
+          fi
 
       - name: Publish to Modrinth
         env:
