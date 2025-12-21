@@ -28,6 +28,7 @@ import java.util.OptionalInt;
 import java.util.concurrent.atomic.AtomicBoolean;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.toasts.SystemToast;
+import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.renderer.MappableRingBuffer;
 import net.minecraft.client.renderer.ShaderManager;
 import net.minecraft.network.chat.Component;
@@ -389,13 +390,43 @@ public final class CbbgDither {
         }
 
         GpuBuffer buffer = ditherInfoUbo.currentBuffer();
-        float strength = CbbgConfig.get().strength();
+        float strength = getEffectiveStrength();
         float coordScale = RenderScaleCompat.getDitherCoordScale();
         try (GpuBuffer.MappedView view = encoder.mapBuffer(buffer, false, true)) {
             Std140Builder.intoBuffer(view.data()).putFloat(strength).putVec2(coordScale,
                     coordScale);
         }
         return buffer;
+    }
+
+    private static float getEffectiveStrength() {
+        float base = CbbgConfig.get().strength();
+
+        // The pause/menu background blur produces very smooth gradients, which makes 8-bit output
+        // banding much more obvious. Increasing dither strength only for menu-style screens keeps
+        // gameplay noise unchanged while improving the blurred background.
+        //
+        // --- ImmediatelyFast compat: do not remove ---
+        // This is purely a shader uniform tweak; it does not allocate textures or touch framebuffer
+        // bindings, and should not interfere with ImmediatelyFast's render optimizations.
+        Minecraft mc = Minecraft.getInstance();
+        Screen screen = mc.screen;
+        if (screen == null) {
+            return base;
+        }
+        if (screen.isInGameUi()) {
+            return base;
+        }
+
+        int blur = mc.options.getMenuBackgroundBlurriness();
+        if (blur < 1) {
+            return base;
+        }
+
+        // Scale with the configured blur radius: default blur (5) becomes ~2x strength.
+        float multiplier = 1.0f + (blur / 5.0f);
+        float boosted = base * multiplier;
+        return Math.min(4.0f, Math.max(0.5f, boosted));
     }
 
     private static void disableWithLog(Exception e) {

@@ -4,6 +4,7 @@
 	"compatibilityLevel": "JAVA_21",
 	"client": [
 		"DebugScreenEntriesMixin",
+		"GameRendererMixin",
 		"GlConstMixin",
 		"GlCommandEncoderMixin",
 		"MainTargetMixin",
