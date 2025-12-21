@@ -22,7 +22,7 @@ import net.minecraft.network.chat.Component;
 public final class CbbgConfigScreen extends Screen {
     private final Screen parent;
     private static final int CARD_WIDTH = 260; // Slightly wider for sliders
-    private static final int CARD_HEIGHT = 234; // Taller for more options
+    private static final int CARD_HEIGHT = 258; // Extra room for status lines / locking notice
     private static final int CARD_BG_COLOR = 0xCC000000; // 80% opacity black
     private static final int CARD_BORDER_COLOR = 0xFF444444; // Dark grey border
 
@@ -48,6 +48,10 @@ public final class CbbgConfigScreen extends Screen {
         this.parent = parent;
     }
 
+    private static boolean isIrisActive() {
+        return IrisCompat.isShaderPackActive();
+    }
+
     @Override
     protected void init() {
         EditBox seedEdit;
@@ -55,14 +59,25 @@ public final class CbbgConfigScreen extends Screen {
         int cy = this.height / 2;
         int yStart = cy - CARD_HEIGHT / 2 + 30;
 
+        final boolean lockedByError = CbbgDither.isDisabled();
+        final boolean lockedByUser = CbbgConfig.get().mode() == CbbgConfig.Mode.DISABLED;
+
         // 1. Rendering Mode
-        this.addRenderableWidget(CycleButton.builder(this::getModeName, CbbgConfig.get().mode())
+        CycleButton<CbbgConfig.Mode> modeButton =
+                this.addRenderableWidget(CycleButton
+                        .builder(this::getModeName, CbbgConfig.get().mode())
                 .withTooltip(this::getModeTooltip).withValues(CbbgConfig.Mode.values())
                 .create(cx - 100, yStart, 200, 20, Component.literal("Mode"),
-                        (button, value) -> CbbgConfig.setMode(value)));
+                        (button, value) -> {
+                            // When cbbg disabled itself due to a render error, keep config read-only.
+                            if (lockedByError) {
+                                return;
+                            }
+                            CbbgConfig.setMode(value);
+                        }));
 
         // 1.5 Pixel Format
-        this.addRenderableWidget(
+        CycleButton<CbbgConfig.PixelFormat> formatButton = this.addRenderableWidget(
                 CycleButton
                         .builder(
                                 (CbbgConfig.PixelFormat f) -> Component
@@ -70,14 +85,24 @@ public final class CbbgConfigScreen extends Screen {
                                 CbbgConfig.get().pixelFormat())
                         .withValues(CbbgConfig.PixelFormat.RGBA16F, CbbgConfig.PixelFormat.RGBA32F)
                         .create(cx - 100, yStart + 24, 200, 20, Component.literal("Format"),
-                                (button, value) -> CbbgConfig.setPixelFormat(value)));
+                                (button, value) -> {
+                                    if (lockedByError || lockedByUser) {
+                                        return;
+                                    }
+                                    CbbgConfig.setPixelFormat(value);
+                                }));
 
         int y = yStart + 48;
 
         // 2. Strength Slider (0.5-4.0)
         FloatSlider strengthSlider =
                 new FloatSlider(cx - 100, y, 200, 20, Component.literal("Strength: "), 0.5f, 4.0f,
-                        CbbgConfig.get().strength(), v -> CbbgConfig.setStrength((float) v));
+                        CbbgConfig.get().strength(), v -> {
+                            if (lockedByError || lockedByUser) {
+                                return;
+                            }
+                            CbbgConfig.setStrength((float) v);
+                        });
         strengthSlider.setTooltip(TOOLTIP_STRENGTH);
         this.addRenderableWidget(strengthSlider);
 
@@ -86,14 +111,24 @@ public final class CbbgConfigScreen extends Screen {
         // 3. STBN Size Slider (16-256)
         PowerOfTwoSlider sizeSlider =
                 new PowerOfTwoSlider(cx - 100, y, 98, 20, Component.literal("Size: "), 16, 256,
-                        CbbgConfig.get().stbnSize(), CbbgConfig::setStbnSize);
+                        CbbgConfig.get().stbnSize(), v -> {
+                            if (lockedByError || lockedByUser) {
+                                return;
+                            }
+                            CbbgConfig.setStbnSize(v);
+                        });
         sizeSlider.setTooltip(TOOLTIP_STBN_SIZE);
         this.addRenderableWidget(sizeSlider);
 
         // 4. STBN Depth Slider (8-128)
         PowerOfTwoSlider depthSlider =
                 new PowerOfTwoSlider(cx + 2, y, 98, 20, Component.literal("Depth: "), 8, 128,
-                        CbbgConfig.get().stbnDepth(), CbbgConfig::setStbnDepth);
+                        CbbgConfig.get().stbnDepth(), v -> {
+                            if (lockedByError || lockedByUser) {
+                                return;
+                            }
+                            CbbgConfig.setStbnDepth(v);
+                        });
         depthSlider.setTooltip(TOOLTIP_STBN_DEPTH);
         this.addRenderableWidget(depthSlider);
 
@@ -104,6 +139,9 @@ public final class CbbgConfigScreen extends Screen {
         seedEdit.setValue(Objects.requireNonNull(Long.toString(CbbgConfig.get().stbnSeed())));
         seedEdit.setFilter(s -> s.matches("-?\\d*")); // Only integers
         seedEdit.setResponder(s -> {
+            if (lockedByError || lockedByUser) {
+                return;
+            }
             try {
                 long seed = (s == null || s.isEmpty()) ? 0 : Long.parseLong(s);
                 CbbgConfig.setStbnSeed(seed);
@@ -117,7 +155,12 @@ public final class CbbgConfigScreen extends Screen {
         y += 24;
 
         // 6. Generate Button
-        this.addRenderableWidget(Button.builder(Component.literal("Generate STBN Textures"), b -> {
+        Button generateButton =
+                this.addRenderableWidget(Button.builder(Component.literal("Generate STBN Textures"),
+                        b -> {
+                            if (lockedByError || lockedByUser) {
+                                return;
+                            }
             int stbnSize = CbbgConfig.get().stbnSize();
             int stbnDepth = CbbgConfig.get().stbnDepth();
             long stbnSeed = CbbgConfig.get().stbnSeed();
@@ -132,7 +175,7 @@ public final class CbbgConfigScreen extends Screen {
                             + "Size: " + stbnSize + "\nDepth: " + stbnDepth + "\nSeed: " + stbnSeed
                             + "\n\nThis may take a moment.")) {
                 @Override
-                public void renderBackground(GuiGraphics context, int mouseX, int mouseY,
+                public void renderBackground(@NonNull GuiGraphics context, int mouseX, int mouseY,
                         float partialTick) {
                     CbbgConfigScreen.this.renderSafeBackground(context, partialTick);
                 }
@@ -155,18 +198,28 @@ public final class CbbgConfigScreen extends Screen {
                 }
             };
             this.minecraft.setScreen(confirm);
-        }).bounds(cx - 100, y, 200, 20).tooltip(TOOLTIP_GENERATE_STBN).build());
+                        }).bounds(cx - 100, y, 200, 20).tooltip(TOOLTIP_GENERATE_STBN).build());
 
         y += 28;
 
         // 7. Notifications
-        this.addRenderableWidget(CycleButton.onOffBuilder(CbbgConfig.get().notifyChat()).create(
-                cx - 100, y, 98, 20, Component.literal("Chat Notify"),
-                (b, val) -> CbbgConfig.setNotifyChat(val)));
+        CycleButton<Boolean> chatNotifyButton =
+                this.addRenderableWidget(CycleButton.onOffBuilder(CbbgConfig.get().notifyChat())
+                        .create(cx - 100, y, 98, 20, Component.literal("Chat Notify"), (b, val) -> {
+                            if (lockedByError || lockedByUser) {
+                                return;
+                            }
+                            CbbgConfig.setNotifyChat(val);
+                        }));
 
-        this.addRenderableWidget(CycleButton.onOffBuilder(CbbgConfig.get().notifyToast()).create(
-                cx + 2, y, 98, 20, Component.literal("Toast Notify"),
-                (b, val) -> CbbgConfig.setNotifyToast(val)));
+        CycleButton<Boolean> toastNotifyButton =
+                this.addRenderableWidget(CycleButton.onOffBuilder(CbbgConfig.get().notifyToast())
+                        .create(cx + 2, y, 98, 20, Component.literal("Toast Notify"), (b, val) -> {
+                            if (lockedByError || lockedByUser) {
+                                return;
+                            }
+                            CbbgConfig.setNotifyToast(val);
+                        }));
 
         y += 24;
 
@@ -174,6 +227,33 @@ public final class CbbgConfigScreen extends Screen {
         this.addRenderableWidget(Button
                 .builder(Component.literal("Done"), b -> this.minecraft.setScreen(this.parent))
                 .bounds(cx - 100, y, 200, 20).build());
+
+        // UI lock:
+        // - If cbbg disabled itself due to a render error: freeze everything (read-only).
+        // - If user Mode is DISABLED: allow changing Mode (to re-enable), but lock everything else.
+        // - If Iris is active: still editable (warning only).
+        if (lockedByError) {
+            modeButton.active = false;
+            formatButton.active = false;
+            strengthSlider.active = false;
+            sizeSlider.active = false;
+            depthSlider.active = false;
+            seedEdit.active = false;
+            seedEdit.setEditable(false);
+            generateButton.active = false;
+            chatNotifyButton.active = false;
+            toastNotifyButton.active = false;
+        } else if (lockedByUser) {
+            formatButton.active = false;
+            strengthSlider.active = false;
+            sizeSlider.active = false;
+            depthSlider.active = false;
+            seedEdit.active = false;
+            seedEdit.setEditable(false);
+            generateButton.active = false;
+            chatNotifyButton.active = false;
+            toastNotifyButton.active = false;
+        }
     }
 
     private Component getModeName(CbbgConfig.Mode mode) {
@@ -194,11 +274,12 @@ public final class CbbgConfigScreen extends Screen {
     }
 
     @Override
-    public void renderBackground(GuiGraphics context, int mouseX, int mouseY, float partialTick) {
+    public void renderBackground(@NonNull GuiGraphics context, int mouseX, int mouseY,
+            float partialTick) {
         this.renderSafeBackground(context, partialTick);
     }
 
-    private void renderSafeBackground(GuiGraphics context, float partialTick) {
+    private void renderSafeBackground(@NonNull GuiGraphics context, float partialTick) {
         if (this.minecraft.level != null) {
             this.renderTransparentBackground(context);
         } else {
@@ -228,14 +309,27 @@ public final class CbbgConfigScreen extends Screen {
         context.drawString(this.font, "Seed:", cx - 100, ySeed, 0xFFAAAAAA, false);
 
         // Status / warning
+        int statusY = y2 - 36;
+        final boolean irisActive = isIrisActive();
+        if (CbbgDither.isDisabled()) {
+            context.drawCenteredString(this.font,
+                    Component.literal("⚠ cbbg disabled due to render error (see log)"), cx, statusY,
+                    0xFFFF5555);
+            statusY += 12;
+        }
         if (MainTargetFormatSupport.hasDetectedNoFloatFormats()) {
             context.drawCenteredString(this.font,
-                    Component.literal("⚠ No RGBA16F/32F support: stuck on RGBA8"), cx, y2 - 27,
+                    Component.literal("⚠ No RGBA16F/32F support: stuck on RGBA8"), cx, statusY,
                     0xFFFFAA00);
+            statusY += 12;
         }
-        if (IrisCompat.isShaderPackActive()) {
+        if (irisActive) {
             context.drawCenteredString(this.font,
-                    Component.literal("⚠ Iris active: cbbg forced OFF"), cx, y2 - 15, 0xFFFF5555);
+                    Component.literal("⚠ Iris active: cbbg forced OFF"), cx, statusY, 0xFFFFAA00);
+        } else if (CbbgConfig.get().mode() == CbbgConfig.Mode.DISABLED) {
+            context.drawCenteredString(this.font,
+                    Component.literal("cbbg is disabled (enable Mode to edit settings)"), cx,
+                    statusY, 0xFFAAAAAA);
         }
 
         super.render(context, mouseX, mouseY, partialTick);
