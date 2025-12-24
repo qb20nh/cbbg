@@ -48,6 +48,15 @@ public final class CbbgConfigScreen extends Screen {
         this.parent = parent;
     }
 
+    @Override
+    public void onClose() {
+        if (this.parent != null) {
+            this.minecraft.setScreen(this.parent);
+        } else {
+            super.onClose();
+        }
+    }
+
     private static boolean isIrisActive() {
         return IrisCompat.isShaderPackActive();
     }
@@ -218,8 +227,7 @@ public final class CbbgConfigScreen extends Screen {
         y += 24;
 
         // 8. Done Button
-        this.addRenderableWidget(Button
-                .builder(Component.literal("Done"), b -> this.minecraft.setScreen(this.parent))
+        this.addRenderableWidget(Button.builder(Component.literal("Done"), b -> this.onClose())
                 .bounds(cx - 100, y, 200, 20).build());
 
         // UI lock:
