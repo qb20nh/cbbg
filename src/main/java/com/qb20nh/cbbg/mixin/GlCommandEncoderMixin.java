@@ -5,6 +5,7 @@ import com.mojang.blaze3d.opengl.GlStateManager;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.textures.GpuTexture;
 import com.mojang.blaze3d.textures.GpuTextureView;
+import com.qb20nh.cbbg.Cbbg;
 import com.qb20nh.cbbg.CbbgClient;
 import com.qb20nh.cbbg.config.CbbgConfig;
 import com.qb20nh.cbbg.debug.CbbgDebugState;
@@ -163,8 +164,8 @@ public abstract class GlCommandEncoderMixin {
 
             CbbgDebugState.update(mainInternal, lightmapInternal, encoding, fbSrgb);
 
-            if (CbbgClient.LOGGER.isInfoEnabled()) {
-                CbbgClient.LOGGER.info(
+            if (Cbbg.LOGGER.isInfoEnabled()) {
+                Cbbg.LOGGER.info(
                         "cbbg verify: MainTarget internalFormat={} Lightmap internalFormat={} DefaultFB encoding={} FRAMEBUFFER_SRGB={}",
                         CbbgGlNames.glInternalName(mainInternal),
                         lightmapInternal == null ? "unknown"
@@ -172,7 +173,7 @@ public abstract class GlCommandEncoderMixin {
                         CbbgGlNames.glEncodingName(encoding), fbSrgb);
             }
         } catch (Exception e) {
-            CbbgClient.LOGGER.warn("cbbg verify failed (continuing without verification).", e);
+            Cbbg.LOGGER.warn("cbbg verify failed (continuing without verification).", e);
         }
     }
 

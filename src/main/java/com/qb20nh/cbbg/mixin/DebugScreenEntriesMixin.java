@@ -7,7 +7,7 @@ import net.minecraft.client.gui.components.debug.DebugScreenEntries;
 import net.minecraft.client.gui.components.debug.DebugScreenEntryStatus;
 import net.minecraft.client.gui.components.debug.DebugScreenProfile;
 import net.minecraft.resources.Identifier;
-import com.qb20nh.cbbg.CbbgClient;
+import com.qb20nh.cbbg.Cbbg;
 import com.qb20nh.cbbg.debug.CbbgDebugEntry;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
@@ -29,7 +29,7 @@ public abstract class DebugScreenEntriesMixin {
 
     @Inject(method = "<clinit>", at = @At("TAIL"))
     private static void cbbg$register(CallbackInfo ci) {
-        Identifier id = Identifier.fromNamespaceAndPath(CbbgClient.MOD_ID, "cbbg");
+        Identifier id = Identifier.fromNamespaceAndPath(Cbbg.MOD_ID, "cbbg");
         DebugScreenEntries.register(id, new CbbgDebugEntry());
 
         Map<DebugScreenProfile, Map<Identifier, DebugScreenEntryStatus>> updated =

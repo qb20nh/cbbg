@@ -1,7 +1,7 @@
 package com.qb20nh.cbbg.render.stbn;
 
 import com.mojang.blaze3d.platform.NativeImage;
-import com.qb20nh.cbbg.CbbgClient;
+import com.qb20nh.cbbg.Cbbg;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -23,14 +23,14 @@ public class STBNLoader {
         // 1. Try Cache
         NativeImage[] cached = loadFromCache(width, height, frames);
         if (cached.length == frames) {
-            CbbgClient.LOGGER.info("STBN Frames loaded from cache.");
+            Cbbg.LOGGER.info("STBN Frames loaded from cache.");
             return cached;
         }
 
         // 2. Generate from fields
         if (fields != null) {
             NativeImage[] generated = generateFramesFromFields(fields, width, height, frames);
-            CbbgClient.LOGGER.info("STBN Images generated from math fields.");
+            Cbbg.LOGGER.info("STBN Images generated from math fields.");
             saveToCache(generated, width, height, frames);
             return generated;
         }
@@ -93,7 +93,7 @@ public class STBNLoader {
             }
             return images;
         } catch (Exception e) {
-            CbbgClient.LOGGER.warn("Failed to load STBN cache", e);
+            Cbbg.LOGGER.warn("Failed to load STBN cache", e);
             return new NativeImage[0];
         }
     }
@@ -147,7 +147,7 @@ public class STBNLoader {
             Files.writeString(hashFile, hashContent.toString());
 
         } catch (IOException | NoSuchAlgorithmException e) {
-            CbbgClient.LOGGER.warn("Failed to save STBN cache", e);
+            Cbbg.LOGGER.warn("Failed to save STBN cache", e);
         }
     }
 
@@ -187,12 +187,12 @@ public class STBNLoader {
                     try {
                         Files.delete(path);
                     } catch (IOException e) {
-                        CbbgClient.LOGGER.warn("Failed to delete cached file: " + path, e);
+                        Cbbg.LOGGER.warn("Failed to delete cached file: " + path, e);
                     }
                 });
             }
         } catch (IOException e) {
-            CbbgClient.LOGGER.warn("Failed to clear STBN cache", e);
+            Cbbg.LOGGER.warn("Failed to clear STBN cache", e);
         }
     }
 }

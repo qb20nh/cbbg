@@ -16,6 +16,7 @@ import com.mojang.blaze3d.textures.GpuTexture;
 import com.mojang.blaze3d.textures.GpuTextureView;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.VertexFormat;
+import com.qb20nh.cbbg.Cbbg;
 import com.qb20nh.cbbg.CbbgClient;
 import com.qb20nh.cbbg.compat.renderscale.RenderScaleCompat;
 import com.qb20nh.cbbg.config.CbbgConfig;
@@ -46,15 +47,15 @@ public final class CbbgDither {
             (@NonNull Identifier) Identifier.withDefaultNamespace("core/screenquad");
 
     private static final @NonNull Identifier DITHER_SHADER = (@NonNull Identifier) Identifier
-            .fromNamespaceAndPath(CbbgClient.MOD_ID, "core/cbbg_dither");
+            .fromNamespaceAndPath(Cbbg.MOD_ID, "core/cbbg_dither");
     private static final @NonNull Identifier DEMO_SHADER = (@NonNull Identifier) Identifier
-            .fromNamespaceAndPath(CbbgClient.MOD_ID, "core/cbbg_demo");
+            .fromNamespaceAndPath(Cbbg.MOD_ID, "core/cbbg_demo");
 
     private static final @NonNull Identifier DITHER_PIPELINE_LOCATION =
-            (@NonNull Identifier) Identifier.fromNamespaceAndPath(CbbgClient.MOD_ID,
+            (@NonNull Identifier) Identifier.fromNamespaceAndPath(Cbbg.MOD_ID,
                     "pipeline/cbbg_dither");
     private static final @NonNull Identifier DEMO_PIPELINE_LOCATION =
-            (@NonNull Identifier) Identifier.fromNamespaceAndPath(CbbgClient.MOD_ID,
+            (@NonNull Identifier) Identifier.fromNamespaceAndPath(Cbbg.MOD_ID,
                     "pipeline/cbbg_demo");
 
     private static final @NonNull RenderPipeline DITHER_PIPELINE =
@@ -336,7 +337,7 @@ public final class CbbgDither {
                 STBNGenerator.STBNFields fields = pendingGen.join(); // Should be immediate
                 onStbnGenerationComplete(fields);
             } catch (Exception e) {
-                CbbgClient.LOGGER.error("Failed to retrieve STBN fields", e);
+                Cbbg.LOGGER.error("Failed to retrieve STBN fields", e);
             }
         } else if (stbnFrames == null && (pendingGen == null || pendingGen.isCancelled())) {
             initAsync();
@@ -431,7 +432,7 @@ public final class CbbgDither {
 
     private static void disableWithLog(Exception e) {
         if (loggedFailure.compareAndSet(false, true)) {
-            CbbgClient.LOGGER.error("Disabling cbbg due to rendering error", e);
+            Cbbg.LOGGER.error("Disabling cbbg due to rendering error", e);
             disabled = true;
         }
     }

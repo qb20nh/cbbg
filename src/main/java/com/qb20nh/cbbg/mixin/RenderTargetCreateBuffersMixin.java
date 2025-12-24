@@ -8,6 +8,7 @@ import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.systems.GpuDevice;
 import com.mojang.blaze3d.textures.GpuTexture;
 import com.mojang.blaze3d.textures.TextureFormat;
+import com.qb20nh.cbbg.Cbbg;
 import com.qb20nh.cbbg.CbbgClient;
 import com.qb20nh.cbbg.compat.renderscale.RenderScaleCompat;
 import com.qb20nh.cbbg.config.CbbgConfig;
@@ -108,7 +109,7 @@ public abstract class RenderTargetCreateBuffersMixin {
                 // This helps distinguish "blur re-quantizes to RGBA8" from "dither strength needs
                 // adjustment for blurred gradients".
                 int internal = getTextureInternalFormat(texture);
-                CbbgClient.LOGGER.info(
+                Cbbg.LOGGER.info(
                         "cbbg menu blur alloc: label=\"{}\" requested={} effective={} glInternal={}",
                         label.get(), requested.getSerializedName(), effective.getSerializedName(),
                         CbbgGlNames.glInternalName(internal));
@@ -120,13 +121,13 @@ public abstract class RenderTargetCreateBuffersMixin {
             MainTargetFormatSupport.disable(effective, oom != null ? oom : failure);
         } else if (isRenderScaleColor) {
             if (loggedRenderScaleFormatFailure.compareAndSet(false, true)) {
-                CbbgClient.LOGGER.warn(
+                Cbbg.LOGGER.warn(
                         "RenderScale detected: failed to allocate float intermediate target; falling back to RGBA8 for RenderScale targets.",
                         oom != null ? oom : failure);
             }
         } else if (isMenuBlurPostChainInternal) {
             if (loggedMenuBlurFormatFailure.compareAndSet(false, true)) {
-                CbbgClient.LOGGER.warn(
+                Cbbg.LOGGER.warn(
                         "Menu blur: failed to allocate float intermediate target; falling back to RGBA8 for blur targets.",
                         oom != null ? oom : failure);
             }

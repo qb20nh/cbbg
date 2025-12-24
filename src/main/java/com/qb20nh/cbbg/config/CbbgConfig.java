@@ -3,14 +3,13 @@ package com.qb20nh.cbbg.config;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonParseException;
-import com.qb20nh.cbbg.CbbgClient;
+import com.qb20nh.cbbg.Cbbg;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
-import net.minecraft.util.StringRepresentable;
 import net.fabricmc.loader.api.FabricLoader;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
@@ -19,13 +18,10 @@ public record CbbgConfig(Mode mode, PixelFormat pixelFormat, int stbnSize, int s
         long stbnSeed, float strength, boolean notifyChat, boolean notifyToast) {
 
 
-    public enum Mode implements StringRepresentable {
+    public enum Mode {
         ENABLED("enabled"), DISABLED("disabled"),
         /** Split-screen demo: left = enabled (dither), right = disabled (no dither). */
         DEMO("demo");
-
-        public static final StringRepresentable.EnumCodec<Mode> CODEC =
-                StringRepresentable.fromEnum(Mode::values);
 
         private final @NonNull String name;
 
@@ -37,17 +33,13 @@ public record CbbgConfig(Mode mode, PixelFormat pixelFormat, int stbnSize, int s
             return this != DISABLED;
         }
 
-        @Override
         public @NonNull String getSerializedName() {
             return this.name;
         }
     }
 
-    public enum PixelFormat implements StringRepresentable {
+    public enum PixelFormat {
         RGBA8("rgba8"), RGBA16F("rgba16f"), RGBA32F("rgba32f");
-
-        public static final StringRepresentable.EnumCodec<PixelFormat> CODEC =
-                StringRepresentable.fromEnum(PixelFormat::values);
 
         private final @NonNull String name;
 
@@ -55,7 +47,6 @@ public record CbbgConfig(Mode mode, PixelFormat pixelFormat, int stbnSize, int s
             this.name = name;
         }
 
-        @Override
         public @NonNull String getSerializedName() {
             return this.name;
         }
@@ -63,7 +54,7 @@ public record CbbgConfig(Mode mode, PixelFormat pixelFormat, int stbnSize, int s
 
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static final Path PATH =
-            FabricLoader.getInstance().getConfigDir().resolve(CbbgClient.MOD_ID + ".json");
+            FabricLoader.getInstance().getConfigDir().resolve(Cbbg.MOD_ID + ".json");
 
     private static volatile CbbgConfig instance;
 
@@ -189,12 +180,12 @@ public record CbbgConfig(Mode mode, PixelFormat pixelFormat, int stbnSize, int s
             return new CbbgConfig(model.mode, model.pixelFormat, model.stbnSize, model.stbnDepth,
                     model.stbnSeed, strength, model.notifyChat, model.notifyToast);
         } catch (JsonParseException e) {
-            CbbgClient.LOGGER.warn("Failed to parse {} (resetting to defaults).", PATH, e);
+            Cbbg.LOGGER.warn("Failed to parse {} (resetting to defaults).", PATH, e);
             CbbgConfig cfg = new CbbgConfig(Mode.ENABLED);
             save(cfg);
             return cfg;
         } catch (Exception e) {
-            CbbgClient.LOGGER.warn("Failed to read {} (using defaults).", PATH, e);
+            Cbbg.LOGGER.warn("Failed to read {} (using defaults).", PATH, e);
             return new CbbgConfig(Mode.ENABLED);
         }
     }
@@ -215,7 +206,7 @@ public record CbbgConfig(Mode mode, PixelFormat pixelFormat, int stbnSize, int s
                 GSON.toJson(model, writer);
             }
         } catch (Exception e) {
-            CbbgClient.LOGGER.warn("Failed to write {}.", PATH, e);
+            Cbbg.LOGGER.warn("Failed to write {}.", PATH, e);
         }
     }
 

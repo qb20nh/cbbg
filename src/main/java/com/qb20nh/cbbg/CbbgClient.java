@@ -13,13 +13,8 @@ import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 public final class CbbgClient implements ClientModInitializer {
-
-    public static final String MOD_ID = "cbbg";
-    public static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
 
     /**
      * Main runtime gate for all cbbg rendering changes.
@@ -70,7 +65,7 @@ public final class CbbgClient implements ClientModInitializer {
         CbbgConfig.get();
 
         // Register HUD element
-        HudElementRegistry.addLast(Identifier.fromNamespaceAndPath(MOD_ID, "hud_overlay"),
+        HudElementRegistry.addLast(Identifier.fromNamespaceAndPath(Cbbg.MOD_ID, "hud_overlay"),
                 (context, deltaTracker) -> {
                     if (!isDemoMode()) {
                         return;
@@ -91,6 +86,6 @@ public final class CbbgClient implements ClientModInitializer {
             }
         });
 
-        LOGGER.info("cbbg loaded");
+        Cbbg.LOGGER.info("cbbg loaded");
     }
 }

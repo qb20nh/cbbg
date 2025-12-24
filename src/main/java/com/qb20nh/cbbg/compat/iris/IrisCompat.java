@@ -1,6 +1,6 @@
 package com.qb20nh.cbbg.compat.iris;
 
-import com.qb20nh.cbbg.CbbgClient;
+import com.qb20nh.cbbg.Cbbg;
 import java.lang.reflect.Method;
 import net.fabricmc.loader.api.FabricLoader;
 
@@ -69,12 +69,12 @@ public final class IrisCompat {
         loggedReflectionFailure = true;
 
         if (t == null) {
-            CbbgClient.LOGGER.warn(
+            Cbbg.LOGGER.warn(
                     "Iris detected but shaderpack state could not be determined (unknown API). Disabling cbbg for safety.");
             return;
         }
 
-        CbbgClient.LOGGER.warn(
+        Cbbg.LOGGER.warn(
                 "Failed to query Iris shaderpack state via reflection; disabling cbbg for safety.",
                 t);
     }

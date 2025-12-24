@@ -2,7 +2,7 @@ package com.qb20nh.cbbg.render;
 
 import com.mojang.blaze3d.opengl.GlStateManager;
 import com.mojang.blaze3d.systems.RenderSystem;
-import com.qb20nh.cbbg.CbbgClient;
+import com.qb20nh.cbbg.Cbbg;
 import com.qb20nh.cbbg.config.CbbgConfig;
 import java.nio.ByteBuffer;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -120,10 +120,10 @@ public final class MainTargetFormatSupport {
             return;
         }
         if (cause == null) {
-            CbbgClient.LOGGER.warn(
+            Cbbg.LOGGER.warn(
                     "RGBA16F main render target disabled (unsupported on this device/driver); falling back.");
         } else {
-            CbbgClient.LOGGER.warn(
+            Cbbg.LOGGER.warn(
                     "RGBA16F main render target failed; disabling for this session and falling back.",
                     cause);
         }
@@ -136,10 +136,10 @@ public final class MainTargetFormatSupport {
             return;
         }
         if (cause == null) {
-            CbbgClient.LOGGER.warn(
+            Cbbg.LOGGER.warn(
                     "RGBA32F main render target disabled (unsupported on this device/driver); falling back.");
         } else {
-            CbbgClient.LOGGER.warn(
+            Cbbg.LOGGER.warn(
                     "RGBA32F main render target failed; disabling for this session and falling back.",
                     cause);
         }
@@ -153,7 +153,7 @@ public final class MainTargetFormatSupport {
         if (!loggedNoFloatFormats.compareAndSet(false, true)) {
             return;
         }
-        CbbgClient.LOGGER.warn(
+        Cbbg.LOGGER.warn(
                 "No supported float main render target formats detected (RGBA16F/RGBA32F). The main target will remain RGBA8.");
     }
 
@@ -182,7 +182,7 @@ public final class MainTargetFormatSupport {
             int status = GL30.glCheckFramebufferStatus(GL30.GL_FRAMEBUFFER);
             return status == GL30.GL_FRAMEBUFFER_COMPLETE;
         } catch (Exception e) {
-            CbbgClient.LOGGER.debug("Format probe threw (treating as unsupported).", e);
+            Cbbg.LOGGER.debug("Format probe threw (treating as unsupported).", e);
             return false;
         } finally {
             GL30.glBindFramebuffer(GL30.GL_FRAMEBUFFER, prevFbo);
