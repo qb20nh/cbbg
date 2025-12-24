@@ -30,7 +30,8 @@ public abstract class GameRendererMixin {
             // --- ImmediatelyFast compat: do not remove ---
             // Rationale: Minecraft caches post-chain internal targets (including menu blur targets)
             // in this CrossFrameResourcePool. cbbg upgrades only the blur chain's internal targets
-            // to float formats. Clearing here ensures cached RGBA8 (or float) targets are not reused
+            // to float formats. Clearing here ensures cached RGBA8 (or float) targets are not
+            // reused
             // across cbbg toggles / pixel-format changes.
             this.resourcePool.clear();
         }
@@ -63,5 +64,3 @@ public abstract class GameRendererMixin {
         return MainTargetFormatSupport.getEffective(CbbgConfig.get().pixelFormat());
     }
 }
-
-

@@ -21,6 +21,3 @@ public class CbbgClientCommandsTest {
                 "Expected /cbbg root command to be registered");
     }
 }
-
-
-

@@ -53,6 +53,3 @@ public class GlFormatOverrideTest {
         Assertions.assertNull(GlFormatOverride.getFormat());
     }
 }
-
-
-

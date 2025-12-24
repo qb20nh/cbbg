@@ -255,5 +255,3 @@ public class CbbgConfigScreenGameTest implements FabricClientGameTest {
         return w.getX() + 1;
     }
 }
-
-

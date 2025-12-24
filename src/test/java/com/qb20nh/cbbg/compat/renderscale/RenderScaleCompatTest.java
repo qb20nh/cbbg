@@ -13,6 +13,3 @@ public class RenderScaleCompatTest {
         Assertions.assertEquals(1.0F, RenderScaleCompat.getDitherCoordScale(), 0.0F);
     }
 }
-
-
-

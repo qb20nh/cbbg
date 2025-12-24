@@ -14,5 +14,3 @@ public class CbbgModMenuApiTest {
         Assertions.assertNotNull(factory);
     }
 }
-
-

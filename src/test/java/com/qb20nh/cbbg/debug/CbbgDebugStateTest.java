@@ -32,6 +32,3 @@ public class CbbgDebugStateTest {
         Assertions.assertTrue(CbbgDebugState.getLastUpdateNanos() >= before);
     }
 }
-
-
-

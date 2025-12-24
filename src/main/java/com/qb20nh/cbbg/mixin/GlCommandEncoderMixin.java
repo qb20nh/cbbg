@@ -81,7 +81,7 @@ public abstract class GlCommandEncoderMixin {
 
         lastMode = modeNow;
 
-        // Log verification again after a toggle, and reset any “disabled due to error”
+        // Log verification again after a toggle, and reset any "disabled due to error"
         // state.
         loggedOnce.set(false);
         CbbgDither.resetAfterToggle();
@@ -89,7 +89,7 @@ public abstract class GlCommandEncoderMixin {
             CbbgDebugState.clear();
         }
 
-        // Recreate targets on the next frame boundary so we don’t destroy textures
+        // Recreate targets on the next frame boundary so we don't destroy textures
         // mid-present.
         boolean activeNow = modeNow.isActive();
         boolean activePrev = prev.isActive();
@@ -117,7 +117,7 @@ public abstract class GlCommandEncoderMixin {
 
         lastPixelFormat = fmtNow;
 
-        // Re-log verification again after a format change, and reset any “disabled due to error”
+        // Re-log verification again after a format change, and reset any "disabled due to error"
         // state so the user can recover by switching formats.
         loggedOnce.set(false);
         CbbgDither.resetAfterToggle();
@@ -127,7 +127,7 @@ public abstract class GlCommandEncoderMixin {
             return;
         }
 
-        // Recreate targets on the next frame boundary so we don’t destroy textures mid-present.
+        // Recreate targets on the next frame boundary so we don't destroy textures mid-present.
         RenderSystem.queueFencedTask(() -> {
             Minecraft mc = Minecraft.getInstance();
             mc.getMainRenderTarget().resize(mc.getWindow().getWidth(), mc.getWindow().getHeight());

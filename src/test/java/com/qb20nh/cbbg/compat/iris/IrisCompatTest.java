@@ -11,6 +11,3 @@ public class IrisCompatTest {
         Assertions.assertFalse(IrisCompat.isShaderPackActive());
     }
 }
-
-
-

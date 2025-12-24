@@ -196,5 +196,3 @@ public final class MainTargetFormatSupport {
         }
     }
 }
-
-

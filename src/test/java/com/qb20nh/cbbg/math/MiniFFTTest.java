@@ -28,6 +28,3 @@ public class MiniFFTTest {
                 () -> MiniFFT.fft1d(real, imag, false));
     }
 }
-
-
-

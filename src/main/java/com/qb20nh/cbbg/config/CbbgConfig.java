@@ -240,4 +240,3 @@ public record CbbgConfig(Mode mode, PixelFormat pixelFormat, int stbnSize, int s
         boolean notifyToast = true;
     }
 }
-

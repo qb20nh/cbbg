@@ -27,11 +27,11 @@ public final class CbbgConfigScreen extends Screen {
     private static final int CARD_BORDER_COLOR = 0xFF444444; // Dark grey border
 
     private static final Tooltip TOOLTIP_STRENGTH = Tooltip.create(Component.literal(
-            "Controls dithering intensity.\n\n1.00 is the default. Higher values increase dithering strength.\nRange: 0.50–4.00"));
+            "Controls dithering intensity.\n\n1.00 is the default. Higher values increase dithering strength.\nRange: 0.50-4.00"));
     private static final Tooltip TOOLTIP_STBN_SIZE = Tooltip.create(Component.literal(
-            "Noise texture size (width/height).\nMust be a power of two.\n\nLarger values reduce visible repetition but use more memory and may take longer to generate.\nRange: 16–256"));
+            "Noise texture size (width/height).\nMust be a power of two.\n\nLarger values reduce visible repetition but use more memory and may take longer to generate.\nRange: 16-256"));
     private static final Tooltip TOOLTIP_STBN_DEPTH = Tooltip.create(Component.literal(
-            "Noise texture depth (number of frames).\nMust be a power of two.\n\nHigher values reduce temporal repetition but use more memory and may take longer to generate.\nRange: 8–128"));
+            "Noise texture depth (number of frames).\nMust be a power of two.\n\nHigher values reduce temporal repetition but use more memory and may take longer to generate.\nRange: 8-128"));
     private static final Tooltip TOOLTIP_STBN_SEED = Tooltip.create(Component.literal(
             "Seed used for noise generation.\n\nChanging this will produce a different dithering pattern.\nOnly integers are accepted."));
 
@@ -63,22 +63,20 @@ public final class CbbgConfigScreen extends Screen {
         final boolean lockedByUser = CbbgConfig.get().mode() == CbbgConfig.Mode.DISABLED;
 
         // 1. Rendering Mode
-        CycleButton<CbbgConfig.Mode> modeButton =
-                this.addRenderableWidget(CycleButton
-                        .builder(this::getModeName, CbbgConfig.get().mode())
+        CycleButton<CbbgConfig.Mode> modeButton = this.addRenderableWidget(CycleButton
+                .builder(this::getModeName, CbbgConfig.get().mode())
                 .withTooltip(this::getModeTooltip).withValues(CbbgConfig.Mode.values())
-                .create(cx - 100, yStart, 200, 20, Component.literal("Mode"),
-                        (button, value) -> {
-                            // When cbbg disabled itself due to a render error, keep config read-only.
-                            if (lockedByError) {
-                                return;
-                            }
-                            CbbgConfig.setMode(value);
-                        }));
+                .create(cx - 100, yStart, 200, 20, Component.literal("Mode"), (button, value) -> {
+                    // When cbbg disabled itself due to a render error, keep config read-only.
+                    if (lockedByError) {
+                        return;
+                    }
+                    CbbgConfig.setMode(value);
+                }));
 
         // 1.5 Pixel Format
-        CycleButton<CbbgConfig.PixelFormat> formatButton = this.addRenderableWidget(
-                CycleButton
+        CycleButton<CbbgConfig.PixelFormat> formatButton =
+                this.addRenderableWidget(CycleButton
                         .builder(
                                 (CbbgConfig.PixelFormat f) -> Component
                                         .literal(f.getSerializedName()),
@@ -95,40 +93,37 @@ public final class CbbgConfigScreen extends Screen {
         int y = yStart + 48;
 
         // 2. Strength Slider (0.5-4.0)
-        FloatSlider strengthSlider =
-                new FloatSlider(cx - 100, y, 200, 20, Component.literal("Strength: "), 0.5f, 4.0f,
-                        CbbgConfig.get().strength(), v -> {
-                            if (lockedByError || lockedByUser) {
-                                return;
-                            }
-                            CbbgConfig.setStrength((float) v);
-                        });
+        FloatSlider strengthSlider = new FloatSlider(cx - 100, y, 200, 20,
+                Component.literal("Strength: "), 0.5f, 4.0f, CbbgConfig.get().strength(), v -> {
+                    if (lockedByError || lockedByUser) {
+                        return;
+                    }
+                    CbbgConfig.setStrength((float) v);
+                });
         strengthSlider.setTooltip(TOOLTIP_STRENGTH);
         this.addRenderableWidget(strengthSlider);
 
         y += 24;
 
         // 3. STBN Size Slider (16-256)
-        PowerOfTwoSlider sizeSlider =
-                new PowerOfTwoSlider(cx - 100, y, 98, 20, Component.literal("Size: "), 16, 256,
-                        CbbgConfig.get().stbnSize(), v -> {
-                            if (lockedByError || lockedByUser) {
-                                return;
-                            }
-                            CbbgConfig.setStbnSize(v);
-                        });
+        PowerOfTwoSlider sizeSlider = new PowerOfTwoSlider(cx - 100, y, 98, 20,
+                Component.literal("Size: "), 16, 256, CbbgConfig.get().stbnSize(), v -> {
+                    if (lockedByError || lockedByUser) {
+                        return;
+                    }
+                    CbbgConfig.setStbnSize(v);
+                });
         sizeSlider.setTooltip(TOOLTIP_STBN_SIZE);
         this.addRenderableWidget(sizeSlider);
 
         // 4. STBN Depth Slider (8-128)
-        PowerOfTwoSlider depthSlider =
-                new PowerOfTwoSlider(cx + 2, y, 98, 20, Component.literal("Depth: "), 8, 128,
-                        CbbgConfig.get().stbnDepth(), v -> {
-                            if (lockedByError || lockedByUser) {
-                                return;
-                            }
-                            CbbgConfig.setStbnDepth(v);
-                        });
+        PowerOfTwoSlider depthSlider = new PowerOfTwoSlider(cx + 2, y, 98, 20,
+                Component.literal("Depth: "), 8, 128, CbbgConfig.get().stbnDepth(), v -> {
+                    if (lockedByError || lockedByUser) {
+                        return;
+                    }
+                    CbbgConfig.setStbnDepth(v);
+                });
         depthSlider.setTooltip(TOOLTIP_STBN_DEPTH);
         this.addRenderableWidget(depthSlider);
 
@@ -155,50 +150,49 @@ public final class CbbgConfigScreen extends Screen {
         y += 24;
 
         // 6. Generate Button
-        Button generateButton =
-                this.addRenderableWidget(Button.builder(Component.literal("Generate STBN Textures"),
-                        b -> {
-                            if (lockedByError || lockedByUser) {
-                                return;
-                            }
-            int stbnSize = CbbgConfig.get().stbnSize();
-            int stbnDepth = CbbgConfig.get().stbnDepth();
-            long stbnSeed = CbbgConfig.get().stbnSeed();
+        Button generateButton = this.addRenderableWidget(
+                Button.builder(Component.literal("Generate STBN Textures"), b -> {
+                    if (lockedByError || lockedByUser) {
+                        return;
+                    }
+                    int stbnSize = CbbgConfig.get().stbnSize();
+                    int stbnDepth = CbbgConfig.get().stbnDepth();
+                    long stbnSeed = CbbgConfig.get().stbnSeed();
 
-            ConfirmScreen confirm = new ConfirmScreen(confirmed -> {
-                if (confirmed) {
-                    CbbgDither.reloadStbn(true); // Force regeneration
-                }
-                this.minecraft.setScreen(this);
-            }, Component.literal("Regenerate STBN textures?"),
-                    Component.literal("This will regenerate the STBN noise textures with:\n\n"
-                            + "Size: " + stbnSize + "\nDepth: " + stbnDepth + "\nSeed: " + stbnSeed
-                            + "\n\nThis may take a moment.")) {
-                @Override
-                public void renderBackground(@NonNull GuiGraphics context, int mouseX, int mouseY,
-                        float partialTick) {
-                    CbbgConfigScreen.this.renderSafeBackground(context, partialTick);
-                }
+                    ConfirmScreen confirm = new ConfirmScreen(confirmed -> {
+                        if (confirmed) {
+                            CbbgDither.reloadStbn(true); // Force regeneration
+                        }
+                        this.minecraft.setScreen(this);
+                    }, Component.literal("Regenerate STBN textures?"), Component
+                            .literal("This will regenerate the STBN noise textures with:\n\n"
+                                    + "Size: " + stbnSize + "\nDepth: " + stbnDepth + "\nSeed: "
+                                    + stbnSeed + "\n\nThis may take a moment.")) {
+                        @Override
+                        public void renderBackground(@NonNull GuiGraphics context, int mouseX,
+                                int mouseY, float partialTick) {
+                            CbbgConfigScreen.this.renderSafeBackground(context, partialTick);
+                        }
 
-                @Override
-                public void render(@NonNull GuiGraphics context, int mouseX, int mouseY,
-                        float partialTick) {
-                    // Draw the same card styling behind the confirm dialog UI.
-                    final int padX = 12;
-                    final int padY = 12;
-                    int x1 = Math.max(0, this.layout.getX() - padX);
-                    int y1 = Math.max(0, this.layout.getY() - padY);
-                    int x2 = Math.min(this.width,
-                            this.layout.getX() + this.layout.getWidth() + padX);
-                    int y2 = Math.min(this.height,
-                            this.layout.getY() + this.layout.getHeight() + padY);
-                    renderCard(context, x1, y1, x2, y2);
+                        @Override
+                        public void render(@NonNull GuiGraphics context, int mouseX, int mouseY,
+                                float partialTick) {
+                            // Draw the same card styling behind the confirm dialog UI.
+                            final int padX = 12;
+                            final int padY = 12;
+                            int x1 = Math.max(0, this.layout.getX() - padX);
+                            int y1 = Math.max(0, this.layout.getY() - padY);
+                            int x2 = Math.min(this.width,
+                                    this.layout.getX() + this.layout.getWidth() + padX);
+                            int y2 = Math.min(this.height,
+                                    this.layout.getY() + this.layout.getHeight() + padY);
+                            renderCard(context, x1, y1, x2, y2);
 
-                    super.render(context, mouseX, mouseY, partialTick);
-                }
-            };
-            this.minecraft.setScreen(confirm);
-                        }).bounds(cx - 100, y, 200, 20).tooltip(TOOLTIP_GENERATE_STBN).build());
+                            super.render(context, mouseX, mouseY, partialTick);
+                        }
+                    };
+                    this.minecraft.setScreen(confirm);
+                }).bounds(cx - 100, y, 200, 20).tooltip(TOOLTIP_GENERATE_STBN).build());
 
         y += 28;
 

@@ -22,5 +22,3 @@ public class STBNCacheTest {
         Assertions.assertFalse(STBNCache.isCacheValid(17, 19, 23));
     }
 }
-
-

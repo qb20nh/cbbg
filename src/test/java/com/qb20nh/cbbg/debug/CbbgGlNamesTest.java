@@ -33,6 +33,3 @@ public class CbbgGlNamesTest {
         Assertions.assertEquals("0x0000", CbbgGlNames.glEncodingShort(0));
     }
 }
-
-
-

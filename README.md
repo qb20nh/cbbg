@@ -18,6 +18,7 @@ Helps reduce color banding on following:
 - Smooth lighting
 - Skybox
 - Vignette
+- GUI background blurring
 
 ## What it does
 
@@ -35,7 +36,7 @@ This mod is **client-only**. It does not need to be installed on servers.
 
 ### In-game (recommended)
 
-If you have **Mod Menu** installed, open cbbg’s config screen and select:
+If you have **Mod Menu** installed, open cbbg's config screen and select:
 
 - **Enabled**
 - **Disabled**

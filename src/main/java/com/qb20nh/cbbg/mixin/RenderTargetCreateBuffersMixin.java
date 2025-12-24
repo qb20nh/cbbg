@@ -105,8 +105,8 @@ public abstract class RenderTargetCreateBuffersMixin {
         if (oom == null && failure == null) {
             if (isMenuBlurPostChainInternal && loggedMenuBlurAllocInfo.compareAndSet(false, true)) {
                 // Diagnostic only: confirm the blur post-chain internal target is actually float.
-                // This helps distinguish “blur re-quantizes to RGBA8” from “dither strength needs
-                // adjustment for blurred gradients”.
+                // This helps distinguish "blur re-quantizes to RGBA8" from "dither strength needs
+                // adjustment for blurred gradients".
                 int internal = getTextureInternalFormat(texture);
                 CbbgClient.LOGGER.info(
                         "cbbg menu blur alloc: label=\"{}\" requested={} effective={} glInternal={}",

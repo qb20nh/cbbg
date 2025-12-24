@@ -8,8 +8,8 @@ import org.jspecify.annotations.Nullable;
  *
  * <p>
  * Vanilla runs the blur as a post-processing chain during GUI rendering (see
- * {@code GameRenderer#processBlurEffect}). The post chain allocates intermediate {@code RenderTarget}s
- * via {@code TextureTarget(null, ...)} which default to RGBA8.
+ * {@code GameRenderer#processBlurEffect}). The post chain allocates intermediate
+ * {@code RenderTarget}s via {@code TextureTarget(null, ...)} which default to RGBA8.
  *
  * <p>
  * cbbg uses this guard to selectively upgrade those intermediate targets to float formats while the
@@ -20,7 +20,8 @@ public final class MenuBlurGuard {
     private static final ThreadLocal<Integer> DEPTH = ThreadLocal.withInitial(() -> 0);
     private static final ThreadLocal<PixelFormat> ACTIVE_FORMAT = new ThreadLocal<>();
 
-    // Tracks the last format used for blur targets (used to decide when to clear the post-processing
+    // Tracks the last format used for blur targets (used to decide when to clear the
+    // post-processing
     // resource pool so cached targets are recreated with the correct format).
     private static volatile PixelFormat lastBlurFormat = null;
 
@@ -67,5 +68,3 @@ public final class MenuBlurGuard {
         return true;
     }
 }
-
-

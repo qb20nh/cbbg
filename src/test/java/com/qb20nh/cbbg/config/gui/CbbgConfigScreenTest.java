@@ -76,5 +76,3 @@ public class CbbgConfigScreenTest {
                 m.invoke(instance);
         }
 }
-
-

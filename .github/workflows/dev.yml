@@ -62,4 +62,3 @@ jobs:
           name: ${{ env.DEV_JAR_NAME }}
           path: ${{ env.DEV_JAR }}
           if-no-files-found: error
-
