@@ -27,6 +27,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.Objects;
 import java.util.OptionalInt;
 import java.util.concurrent.atomic.AtomicBoolean;
+import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.toasts.SystemToast;
 import net.minecraft.client.gui.screens.Screen;
@@ -46,10 +47,10 @@ public final class CbbgDither {
     private static final @NonNull Identifier SCREENQUAD_VERTEX =
             (@NonNull Identifier) Identifier.withDefaultNamespace("core/screenquad");
 
-    private static final @NonNull Identifier DITHER_SHADER = (@NonNull Identifier) Identifier
-            .fromNamespaceAndPath(Cbbg.MOD_ID, "core/cbbg_dither");
-    private static final @NonNull Identifier DEMO_SHADER = (@NonNull Identifier) Identifier
-            .fromNamespaceAndPath(Cbbg.MOD_ID, "core/cbbg_demo");
+    private static final @NonNull Identifier DITHER_SHADER =
+            (@NonNull Identifier) Identifier.fromNamespaceAndPath(Cbbg.MOD_ID, "core/cbbg_dither");
+    private static final @NonNull Identifier DEMO_SHADER =
+            (@NonNull Identifier) Identifier.fromNamespaceAndPath(Cbbg.MOD_ID, "core/cbbg_demo");
 
     private static final @NonNull Identifier DITHER_PIPELINE_LOCATION =
             (@NonNull Identifier) Identifier.fromNamespaceAndPath(Cbbg.MOD_ID,
@@ -310,13 +311,14 @@ public final class CbbgDither {
             // Notify
             if (cfg.notifyChat() && Minecraft.getInstance().level != null) {
                 Minecraft.getInstance().gui.getChat()
-                        .addMessage(Component.literal("§e[cbbg] Generating new STBN textures..."));
+                        .addMessage(Component.translatable("cbbg.chat.stbn.generating")
+                                .withStyle(ChatFormatting.YELLOW));
             }
             if (cfg.notifyToast()) {
                 SystemToast.addOrUpdate(Minecraft.getInstance().getToastManager(),
                         SystemToast.SystemToastId.PERIODIC_NOTIFICATION,
-                        Component.literal("cbbg Generation"),
-                        Component.literal("Generating noise textures..."));
+                        Component.translatable("cbbg.toast.stbn.title"),
+                        Component.translatable("cbbg.toast.stbn.generating"));
             }
 
         } else {
@@ -359,14 +361,14 @@ public final class CbbgDither {
             isGenerating = false;
             // Only notify chat if IN-GAME
             if (cfg.notifyChat() && Minecraft.getInstance().level != null) {
-                Minecraft.getInstance().gui.getChat()
-                        .addMessage(Component.literal("§a[cbbg] STBN Generation Complete!"));
+                Minecraft.getInstance().gui.getChat().addMessage(Component
+                        .translatable("cbbg.chat.stbn.complete").withStyle(ChatFormatting.GREEN));
             }
             if (cfg.notifyToast()) {
                 SystemToast.addOrUpdate(Minecraft.getInstance().getToastManager(),
                         SystemToast.SystemToastId.PERIODIC_NOTIFICATION,
-                        Component.literal("cbbg Generation"),
-                        Component.literal("STBN generation complete."));
+                        Component.translatable("cbbg.toast.stbn.title"),
+                        Component.translatable("cbbg.toast.stbn.complete"));
             }
 
         }

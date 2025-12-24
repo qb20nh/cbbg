@@ -1,15 +1,16 @@
 package com.qb20nh.cbbg.config.gui;
 
-import com.qb20nh.cbbg.config.CbbgConfig;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.util.Arrays;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.DoubleConsumer;
 import java.util.function.IntConsumer;
 import net.minecraft.client.gui.components.AbstractSliderButton;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.contents.TranslatableContents;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -57,7 +58,10 @@ public class CbbgConfigScreenTest {
                 // Message should include two decimals.
                 Method getMessage = sliderClass.getMethod("getMessage");
                 Component msg = (Component) getMessage.invoke(slider);
-                Assertions.assertTrue(msg.getString().contains("4.00"));
+                Assertions.assertInstanceOf(TranslatableContents.class, msg.getContents());
+                TranslatableContents contents = (TranslatableContents) msg.getContents();
+                Assertions.assertEquals("cbbg.config.labeled_value", contents.getKey());
+                Assertions.assertTrue(Arrays.asList(contents.getArgs()).contains("4.00"));
         }
 
         private static void setSliderValue(Object slider, double value) throws Exception {

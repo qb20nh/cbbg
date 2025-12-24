@@ -11,6 +11,7 @@ import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 
+import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 
@@ -50,8 +51,8 @@ public final class CbbgClient implements ClientModInitializer {
         int y = 6;
         int pad = 6;
 
-        Component left = Component.literal("vanilla");
-        Component right = Component.literal("cbbg");
+        Component left = Component.translatable("cbbg.hud.demo.left");
+        Component right = Component.translatable("cbbg.hud.demo.right");
 
         int leftW = mc.font.width(left);
         int white = 0xFFFFFFFF; // ARGB: required in 1.21.x (0xRRGGBB is fully transparent)
@@ -81,8 +82,8 @@ public final class CbbgClient implements ClientModInitializer {
         // Notify if generation is still ongoing when joining a world
         ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> {
             if (CbbgDither.isGenerating()) {
-                client.gui.getChat()
-                        .addMessage(Component.literal("§e[cbbg] Generating new STBN textures..."));
+                client.gui.getChat().addMessage(Component.translatable("cbbg.chat.stbn.generating")
+                        .withStyle(ChatFormatting.YELLOW));
             }
         });
 

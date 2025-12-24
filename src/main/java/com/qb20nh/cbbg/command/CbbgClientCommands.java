@@ -55,7 +55,8 @@ public final class CbbgClientCommands {
     private static LiteralArgumentBuilder<FabricClientCommandSource> modeCommand() {
         return literal(ARG_MODE).executes(ctx -> {
             var mode = CbbgConfig.get().mode();
-            ctx.getSource().sendFeedback(Component.literal("Current mode: " + mode));
+            ctx.getSource()
+                    .sendFeedback(Component.translatable("cbbg.command.mode.current", modeName(mode)));
             return 1;
         }).then(literal("set").executes(ctx -> {
             sendModeUsage(ctx.getSource());
@@ -81,10 +82,12 @@ public final class CbbgClientCommands {
 
                 CbbgConfig.setMode(mode);
                 CbbgDither.resetAfterToggle();
-                ctx.getSource().sendFeedback(Component.literal("Set mode to: " + mode));
+                ctx.getSource()
+                        .sendFeedback(Component.translatable("cbbg.command.mode.set", modeName(mode)));
                 return 1;
             } catch (Exception e) {
-                ctx.getSource().sendError(Component.literal("Invalid mode: " + modeName));
+                ctx.getSource().sendError(
+                        Component.translatable("cbbg.command.mode.invalid", modeName));
                 sendModeUsage(ctx.getSource());
                 return 0;
             }
@@ -94,7 +97,8 @@ public final class CbbgClientCommands {
     private static LiteralArgumentBuilder<FabricClientCommandSource> formatCommand() {
         return literal(ARG_FORMAT).executes(ctx -> {
             var format = CbbgConfig.get().pixelFormat();
-            ctx.getSource().sendFeedback(Component.literal("Current pixel format: " + format));
+            ctx.getSource().sendFeedback(Component.translatable("cbbg.command.format.current",
+                    pixelFormatName(format)));
             return 1;
         }).then(literal("set").then(argument(ARG_FORMAT, STRING_ARG).suggests((ctx, builder) -> {
             builder.suggest(CbbgConfig.PixelFormat.RGBA16F.getSerializedName());
@@ -114,17 +118,19 @@ public final class CbbgClientCommands {
                     fmt = CbbgConfig.PixelFormat.valueOf(fmtName.toUpperCase());
                 }
                 if (fmt == CbbgConfig.PixelFormat.RGBA8) {
-                    ctx.getSource().sendError(Component.literal(
-                            "rgba8 is no longer selectable; use rgba16f or rgba32f (RGBA8 is used only as an automatic fallback)."));
+                    ctx.getSource().sendError(
+                            Component.translatable("cbbg.command.format.rgba8_not_selectable"));
                     return 0;
                 }
 
                 CbbgConfig.setPixelFormat(fmt);
                 CbbgDither.resetAfterToggle(); // Re-init texture with new format
-                ctx.getSource().sendFeedback(Component.literal("Set format to: " + fmt));
+                ctx.getSource().sendFeedback(
+                        Component.translatable("cbbg.command.format.set", pixelFormatName(fmt)));
                 return 1;
             } catch (Exception e) {
-                ctx.getSource().sendError(Component.literal("Invalid format: " + fmtName));
+                ctx.getSource().sendError(
+                        Component.translatable("cbbg.command.format.invalid", fmtName));
                 sendFormatUsage(ctx.getSource());
                 return 0;
             }
@@ -136,7 +142,7 @@ public final class CbbgClientCommands {
             sendStbnUsage(ctx.getSource());
             return 1;
         }).then(literal("generate").executes(ctx -> {
-            ctx.getSource().sendFeedback(Component.literal("Starting STBN generation..."));
+            ctx.getSource().sendFeedback(Component.translatable("cbbg.command.stbn.generating"));
             CbbgDither.reloadStbn(true);
             return 1;
         })).then(literal("size").executes(ctx -> {
@@ -146,12 +152,13 @@ public final class CbbgClientCommands {
             int size = IntegerArgumentType.getInteger(ctx, ARG_VALUE);
             if (Integer.bitCount(size) != 1) { // Check power of two
                 ctx.getSource()
-                        .sendError(Component.literal("Size must be power of two (16, 32, 64...)"));
+                        .sendError(Component.translatable("cbbg.command.stbn.size.invalid_pow2"));
                 sendStbnSizeUsage(ctx.getSource());
                 return 0;
             }
             CbbgConfig.setStbnSize(size);
-            ctx.getSource().sendFeedback(Component.literal("Set STBN size to: " + size));
+            ctx.getSource()
+                    .sendFeedback(Component.translatable("cbbg.command.stbn.size.set", size));
             return 1;
         }))).then(literal("depth").executes(ctx -> {
             sendStbnDepthUsage(ctx.getSource());
@@ -160,12 +167,13 @@ public final class CbbgClientCommands {
             int depth = IntegerArgumentType.getInteger(ctx, ARG_VALUE);
             if (Integer.bitCount(depth) != 1) {
                 ctx.getSource()
-                        .sendError(Component.literal("Depth must be power of two (8, 16, 32...)"));
+                        .sendError(Component.translatable("cbbg.command.stbn.depth.invalid_pow2"));
                 sendStbnDepthUsage(ctx.getSource());
                 return 0;
             }
             CbbgConfig.setStbnDepth(depth);
-            ctx.getSource().sendFeedback(Component.literal("Set STBN depth to: " + depth));
+            ctx.getSource()
+                    .sendFeedback(Component.translatable("cbbg.command.stbn.depth.set", depth));
             return 1;
         }))).then(literal("seed").executes(ctx -> {
             sendStbnSeedUsage(ctx.getSource());
@@ -173,14 +181,15 @@ public final class CbbgClientCommands {
         }).then(argument(ARG_VALUE, STBN_SEED_ARG).executes(ctx -> {
             long seed = LongArgumentType.getLong(ctx, ARG_VALUE);
             CbbgConfig.setStbnSeed(seed);
-            ctx.getSource().sendFeedback(Component.literal("Set STBN seed to: " + seed));
+            ctx.getSource()
+                    .sendFeedback(Component.translatable("cbbg.command.stbn.seed.set", seed));
             return 1;
         }))).then(literal("reset").executes(ctx -> {
             CbbgConfig.setStbnSize(128);
             CbbgConfig.setStbnDepth(64);
             CbbgConfig.setStbnSeed(0);
             CbbgDither.reloadStbn(false);
-            ctx.getSource().sendFeedback(Component.literal("Reset STBN parameters to default"));
+            ctx.getSource().sendFeedback(Component.translatable("cbbg.command.stbn.reset"));
             return 1;
         }));
     }
@@ -191,79 +200,97 @@ public final class CbbgClientCommands {
             return 1;
         }).then(literal("chat").executes(ctx -> {
             ctx.getSource().sendFeedback(
-                    Component.literal("Chat notifications: " + CbbgConfig.get().notifyChat()));
+                    Component.translatable("cbbg.command.notification.chat.current",
+                            CbbgConfig.get().notifyChat()));
             ctx.getSource().sendFeedback(
-                    Component.literal("Usage: /cbbg notification chat <true | false>"));
+                    Component.translatable("cbbg.command.notification.chat.usage"));
             return 1;
         }).then(argument(ARG_ENABLED, BOOL_ARG).executes(ctx -> {
             boolean val = BoolArgumentType.getBool(ctx, ARG_ENABLED);
             CbbgConfig.setNotifyChat(val);
-            ctx.getSource().sendFeedback(Component.literal("Chat notifications: " + val));
+            ctx.getSource().sendFeedback(
+                    Component.translatable("cbbg.command.notification.chat.current", val));
             return 1;
         }))).then(literal("toast").executes(ctx -> {
             ctx.getSource().sendFeedback(
-                    Component.literal("Toast notifications: " + CbbgConfig.get().notifyToast()));
+                    Component.translatable("cbbg.command.notification.toast.current",
+                            CbbgConfig.get().notifyToast()));
             ctx.getSource().sendFeedback(
-                    Component.literal("Usage: /cbbg notification toast <true | false>"));
+                    Component.translatable("cbbg.command.notification.toast.usage"));
             return 1;
         }).then(argument(ARG_ENABLED, BOOL_ARG).executes(ctx -> {
             boolean val = BoolArgumentType.getBool(ctx, ARG_ENABLED);
             CbbgConfig.setNotifyToast(val);
-            ctx.getSource().sendFeedback(Component.literal("Toast notifications: " + val));
+            ctx.getSource().sendFeedback(
+                    Component.translatable("cbbg.command.notification.toast.current", val));
             return 1;
         })));
     }
 
     private static void sendRootHelp(FabricClientCommandSource source) {
-        source.sendFeedback(Component.literal("cbbg commands:"));
-        source.sendFeedback(Component.literal(" - /cbbg mode"));
-        source.sendFeedback(Component.literal(" - /cbbg mode set <enabled | disabled | demo>"));
-        source.sendFeedback(Component.literal(" - /cbbg format"));
-        source.sendFeedback(Component.literal(" - /cbbg format set <rgba16f | rgba32f>"));
-        source.sendFeedback(Component.literal(" - /cbbg stbn"));
-        source.sendFeedback(Component.literal(" - /cbbg notification"));
+        source.sendFeedback(Component.translatable("cbbg.command.root.help.header"));
+        source.sendFeedback(Component.translatable("cbbg.command.root.help.mode"));
+        source.sendFeedback(Component.translatable("cbbg.command.root.help.mode_set"));
+        source.sendFeedback(Component.translatable("cbbg.command.root.help.format"));
+        source.sendFeedback(Component.translatable("cbbg.command.root.help.format_set"));
+        source.sendFeedback(Component.translatable("cbbg.command.root.help.stbn"));
+        source.sendFeedback(Component.translatable("cbbg.command.root.help.notification"));
     }
 
     private static void sendModeUsage(FabricClientCommandSource source) {
-        source.sendFeedback(Component.literal("Usage: /cbbg mode set <enabled | disabled | demo>"));
+        source.sendFeedback(Component.translatable("cbbg.command.mode.usage"));
     }
 
     private static void sendFormatUsage(FabricClientCommandSource source) {
-        source.sendFeedback(Component.literal("Usage: /cbbg format set <rgba16f | rgba32f>"));
+        source.sendFeedback(Component.translatable("cbbg.command.format.usage"));
     }
 
     private static void sendStbnUsage(FabricClientCommandSource source) {
         CbbgConfig cfg = CbbgConfig.get();
-        source.sendFeedback(Component.literal("STBN: size=" + cfg.stbnSize() + " depth="
-                + cfg.stbnDepth() + " seed=" + cfg.stbnSeed()));
-        source.sendFeedback(Component.literal(" - /cbbg stbn generate"));
-        source.sendFeedback(Component.literal(" - /cbbg stbn size <16-256 power-of-two>"));
-        source.sendFeedback(Component.literal(" - /cbbg stbn depth <8-128 power-of-two>"));
-        source.sendFeedback(Component.literal(" - /cbbg stbn seed <number>"));
-        source.sendFeedback(Component.literal(" - /cbbg stbn reset"));
+        source.sendFeedback(Component.translatable("cbbg.command.stbn.usage.header", cfg.stbnSize(),
+                cfg.stbnDepth(), cfg.stbnSeed()));
+        source.sendFeedback(Component.translatable("cbbg.command.stbn.usage.generate"));
+        source.sendFeedback(Component.translatable("cbbg.command.stbn.usage.size"));
+        source.sendFeedback(Component.translatable("cbbg.command.stbn.usage.depth"));
+        source.sendFeedback(Component.translatable("cbbg.command.stbn.usage.seed"));
+        source.sendFeedback(Component.translatable("cbbg.command.stbn.usage.reset"));
     }
 
     private static void sendStbnSizeUsage(FabricClientCommandSource source) {
-        source.sendFeedback(Component.literal("Current STBN size: " + CbbgConfig.get().stbnSize()));
-        source.sendFeedback(Component.literal("Usage: /cbbg stbn size <16-256 power-of-two>"));
+        source.sendFeedback(Component.translatable("cbbg.command.stbn.size.current",
+                CbbgConfig.get().stbnSize()));
+        source.sendFeedback(Component.translatable("cbbg.command.stbn.size.usage"));
     }
 
     private static void sendStbnDepthUsage(FabricClientCommandSource source) {
-        source.sendFeedback(
-                Component.literal("Current STBN depth: " + CbbgConfig.get().stbnDepth()));
-        source.sendFeedback(Component.literal("Usage: /cbbg stbn depth <8-128 power-of-two>"));
+        source.sendFeedback(Component.translatable("cbbg.command.stbn.depth.current",
+                CbbgConfig.get().stbnDepth()));
+        source.sendFeedback(Component.translatable("cbbg.command.stbn.depth.usage"));
     }
 
     private static void sendStbnSeedUsage(FabricClientCommandSource source) {
-        source.sendFeedback(Component.literal("Current STBN seed: " + CbbgConfig.get().stbnSeed()));
-        source.sendFeedback(Component.literal("Usage: /cbbg stbn seed <number>"));
+        source.sendFeedback(Component.translatable("cbbg.command.stbn.seed.current",
+                CbbgConfig.get().stbnSeed()));
+        source.sendFeedback(Component.translatable("cbbg.command.stbn.seed.usage"));
     }
 
     private static void sendNotificationUsage(FabricClientCommandSource source) {
         CbbgConfig cfg = CbbgConfig.get();
-        source.sendFeedback(Component.literal(
-                "Notifications: chat=" + cfg.notifyChat() + " toast=" + cfg.notifyToast()));
-        source.sendFeedback(Component.literal(" - /cbbg notification chat <true | false>"));
-        source.sendFeedback(Component.literal(" - /cbbg notification toast <true | false>"));
+        source.sendFeedback(Component.translatable("cbbg.command.notification.usage.header",
+                cfg.notifyChat(), cfg.notifyToast()));
+        source.sendFeedback(Component.translatable("cbbg.command.notification.usage.chat"));
+        source.sendFeedback(Component.translatable("cbbg.command.notification.usage.toast"));
+    }
+
+    private static Component modeName(CbbgConfig.Mode mode) {
+        return switch (mode) {
+            case ENABLED -> Component.translatable("cbbg.mode.enabled");
+            case DISABLED -> Component.translatable("cbbg.mode.disabled");
+            case DEMO -> Component.translatable("cbbg.mode.demo");
+        };
+    }
+
+    private static Component pixelFormatName(CbbgConfig.PixelFormat format) {
+        return Component.translatable("cbbg.pixel_format." + format.getSerializedName());
     }
 }
