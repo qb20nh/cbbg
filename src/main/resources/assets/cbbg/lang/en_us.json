@@ -47,7 +47,7 @@
 
   "cbbg.config.button.done": "Done",
   "cbbg.config.button.generate_stbn": "Generate STBN Textures",
-  "cbbg.config.confirm.regenerate_stbn.message": "This will regenerate the STBN noise textures with:\\n\\nSize: %1$s\\nDepth: %2$s\\nSeed: %3$s\\n\\nThis may take a moment.",
+  "cbbg.config.confirm.regenerate_stbn.message": "This will regenerate the STBN noise textures with:\n\nSize: %1$s\nDepth: %2$s\nSeed: %3$s\n\nThis may take a moment.",
   "cbbg.config.confirm.regenerate_stbn.title": "Regenerate STBN textures?",
   "cbbg.config.depth.label": "Depth",
   "cbbg.config.format": "Format",
@@ -85,5 +85,7 @@
 
   "cbbg.toast.stbn.complete": "STBN generation complete.",
   "cbbg.toast.stbn.generating": "Generating noise textures...",
-  "cbbg.toast.stbn.title": "cbbg Generation"
+  "cbbg.toast.stbn.title": "cbbg Generation",
+
+  "modmenu.descriptionTranslation.cbbg": "color banding be gone - Remove pesky color banding from Minecraft"
 }
