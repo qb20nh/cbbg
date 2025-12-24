@@ -4,6 +4,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [1.3.0] - 2025-12-25
+
+### Added
+
+- Config screen status message.
+- Support multiple languages.
+
+### Fixed
+
+- Color banding in GUI background blurring.
+- Pressing esc key in config menu exiting all menus.
+- Crash when running alongside the Chat Patches mod.
+
 ## [1.2.2] - 2025-12-20
 
 ### Fixed
