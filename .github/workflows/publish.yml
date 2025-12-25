@@ -112,9 +112,21 @@ jobs:
 
           echo "RELEASE_TAG_INPUT=${tag}" >> "${GITHUB_ENV}"
 
-          release_json="$(gh release view "${tag}" --repo "${GH_REPO}" --json body,prerelease)"
+          release_json="$(gh release view "${tag}" --repo "${GH_REPO}" --json body,isPrerelease,isDraft,isImmutable)"
 
-          prerelease="$(echo "${release_json}" | jq -r '.prerelease')"
+          is_draft="$(echo "${release_json}" | jq -r '.isDraft')"
+          if [[ "${is_draft}" == "true" ]]; then
+            echo "GitHub release (${tag}) is a draft; refusing to publish."
+            exit 1
+          fi
+
+          is_immutable="$(echo "${release_json}" | jq -r '.isImmutable')"
+          if [[ "${is_immutable}" != "true" ]]; then
+            echo "GitHub release (${tag}) is not immutable; refusing to publish."
+            exit 1
+          fi
+
+          prerelease="$(echo "${release_json}" | jq -r '.isPrerelease')"
           echo "IS_GH_PRERELEASE=${prerelease}" >> "${GITHUB_ENV}"
 
           delimiter="CBBG_RELEASE_BODY_$(date +%s%N)"
