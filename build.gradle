@@ -244,10 +244,32 @@ modrinth {
 	versionType = envOrProperty("MODRINTH_VERSION_TYPE", "modrinthVersionType") ?: "release"
 
 	// With Loom, this must be remapped jar.
-	uploadFile = tasks.named("remapJar")
-	additionalFiles = [
-		tasks.named("remapSourcesJar")
-	]
+	// In CI publish, we want to upload the exact, already-built (and attested) release assets
+	// rather than rebuilding. Allow overriding the upload files via env/Gradle property.
+	def uploadFilePath = envOrProperty("MODRINTH_UPLOAD_FILE", "modrinthUploadFile")
+	def uploadSourcesFilePath = envOrProperty("MODRINTH_SOURCES_UPLOAD_FILE", "modrinthSourcesUploadFile")
+	if (uploadFilePath != null) {
+		def uploadF = rootProject.file(uploadFilePath)
+		if (!uploadF.exists()) {
+			throw new GradleException("Modrinth upload file does not exist: ${uploadF}")
+		}
+		uploadFile = uploadF
+
+		def additional = []
+		if (uploadSourcesFilePath != null) {
+			def sourcesF = rootProject.file(uploadSourcesFilePath)
+			if (!sourcesF.exists()) {
+				throw new GradleException("Modrinth sources upload file does not exist: ${sourcesF}")
+			}
+			additional.add(sourcesF)
+		}
+		additionalFiles = additional
+	} else {
+		uploadFile = tasks.named("remapJar")
+		additionalFiles = [
+			tasks.named("remapSourcesJar")
+		]
+	}
 
 	// Redundant with Loom auto-detection, but explicit is nice for reproducibility.
 	gameVersions = [

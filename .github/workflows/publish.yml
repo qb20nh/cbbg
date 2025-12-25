@@ -28,6 +28,8 @@ jobs:
       CURSEFORGE_GAME_VERSIONS: ""
       IS_GH_PRERELEASE: ""
       RELEASE_BODY: ""
+      PUBLISH_JAR: ""
+      PUBLISH_SOURCES_JAR: ""
 
     steps:
       - name: Resolve latest stable release tag (manual)
@@ -252,20 +254,43 @@ jobs:
             exit 1
           fi
 
-      - name: Build with Gradle Wrapper
-        run: ./gradlew build
-
-      - name: Validate artifact exists
+      - name: Download release artifacts
         shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
 
-          jar="build/libs/${ARCHIVES_BASE_NAME}-${ARTIFACT_VERSION}.jar"
+          mkdir -p release-assets
+
+          jar_name="${ARCHIVES_BASE_NAME}-${ARTIFACT_VERSION}.jar"
+          sources_jar_name="${ARCHIVES_BASE_NAME}-${ARTIFACT_VERSION}-sources.jar"
+
+          # Download the exact release assets produced (and attested) by the Release workflow.
+          gh release download "${RELEASE_TAG}" \
+            --repo "${GH_REPO}" \
+            --dir release-assets \
+            --pattern "${jar_name}" \
+            --pattern "${sources_jar_name}" \
+            --clobber
+
+          jar="release-assets/${jar_name}"
+          sources_jar="release-assets/${sources_jar_name}"
+
           if [[ ! -f "${jar}" ]]; then
-            echo "Missing artifact: ${jar}"
-            ls -la build/libs || true
+            echo "Missing downloaded release artifact: ${jar}"
+            ls -la release-assets || true
             exit 1
           fi
+          if [[ ! -f "${sources_jar}" ]]; then
+            echo "Missing downloaded release artifact: ${sources_jar}"
+            ls -la release-assets || true
+            exit 1
+          fi
+
+          echo "PUBLISH_JAR=${jar}" >> "${GITHUB_ENV}"
+          echo "PUBLISH_SOURCES_JAR=${sources_jar}" >> "${GITHUB_ENV}"
 
       - name: Publish to Modrinth
         env:
@@ -274,6 +299,8 @@ jobs:
           MODRINTH_VERSION_NUMBER: ${{ env.ARTIFACT_VERSION }}
           MODRINTH_VERSION_TYPE: ${{ env.MODRINTH_VERSION_TYPE }}
           MODRINTH_CHANGELOG: ${{ env.RELEASE_BODY }}
+          MODRINTH_UPLOAD_FILE: ${{ env.PUBLISH_JAR }}
+          MODRINTH_SOURCES_UPLOAD_FILE: ${{ env.PUBLISH_SOURCES_JAR }}
         run: ./gradlew modrinth
 
       - name: Upload to CurseForge
@@ -284,7 +311,7 @@ jobs:
           project_id: ${{ env.CURSEFORGE_PROJECT_ID }}
           game_endpoint: minecraft
           relations: "fabric-api:requiredDependency"
-          file_path: build/libs/${{ env.ARCHIVES_BASE_NAME }}-${{ env.ARTIFACT_VERSION }}.jar
+          file_path: ${{ env.PUBLISH_JAR }}
           game_versions: ${{ env.CURSEFORGE_GAME_VERSIONS }}
           release_type: ${{ env.CURSEFORGE_RELEASE_TYPE }}
           display_name: cbbg ${{ env.ARTIFACT_VERSION }}
