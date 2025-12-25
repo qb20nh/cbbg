@@ -30,10 +30,40 @@ jobs:
       RELEASE_BODY: ""
 
     steps:
+      - name: Resolve latest stable release tag (manual)
+        id: latest_stable
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          # Latest stable (non-prerelease, non-draft) release.
+          tag="$(gh api "repos/${GH_REPO}/releases/latest" --jq '.tag_name')"
+
+          if [[ -z "${tag}" ]]; then
+            echo "Unable to determine latest stable release tag via GitHub API."
+            exit 1
+          fi
+
+          # Accept SemVer tags like:
+          # - v1.2.3 (stable)
+          # - v1.2.3-rc.1 (prerelease)
+          # (Build metadata is intentionally disallowed for tags.)
+          if ! [[ "${tag}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "Latest stable release tag (${tag}) must be semver in the form vX.Y.Z or vX.Y.Z-PRERELEASE."
+            exit 1
+          fi
+
+          echo "tag=${tag}" >> "${GITHUB_OUTPUT}"
+
       - name: Checkout (manual)
         if: ${{ github.event_name == 'workflow_dispatch' }}
         uses: actions/checkout@v6.0.1
         with:
+          ref: ${{ steps.latest_stable.outputs.tag }}
           fetch-depth: 0
           fetch-tags: true
 
@@ -51,18 +81,22 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
           EVENT_NAME: ${{ github.event_name }}
+          LATEST_STABLE_TAG: ${{ steps.latest_stable.outputs.tag }}
         run: |
           set -euo pipefail
 
-          if [[ "${EVENT_NAME}" == "workflow_dispatch" || "${EVENT_NAME}" == "workflow_run" ]]; then
+          if [[ "${EVENT_NAME}" == "workflow_dispatch" ]]; then
+            tag="${LATEST_STABLE_TAG}"
+            if [[ -z "${tag}" ]]; then
+              echo "Latest stable tag is empty; cannot proceed."
+              exit 1
+            fi
+          elif [[ "${EVENT_NAME}" == "workflow_run" ]]; then
             mapfile -t tags < <(git tag --points-at HEAD | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$' || true)
             if (( ${#tags[@]} == 0 )); then
               echo "No SemVer tag found pointing at HEAD ($(git rev-parse --short=12 HEAD))."
               echo "Tags pointing at HEAD:"
               git tag --points-at HEAD || true
-              if [[ "${EVENT_NAME}" == "workflow_dispatch" ]]; then
-                echo "Tip: run this workflow from the release tag ref (Actions UI: 'Use workflow from' -> vX.Y.Z)."
-              fi
               exit 1
             fi
             if (( ${#tags[@]} > 1 )); then
