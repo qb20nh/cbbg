@@ -1,83 +1,84 @@
 package com.qb20nh.cbbg.mixin;
 
-import com.mojang.blaze3d.GpuOutOfMemoryException;
 import com.mojang.blaze3d.pipeline.MainTarget;
-import com.mojang.blaze3d.systems.GpuDevice;
-import com.mojang.blaze3d.textures.GpuTexture;
-import com.mojang.blaze3d.textures.TextureFormat;
 import com.qb20nh.cbbg.CbbgClient;
 import com.qb20nh.cbbg.config.CbbgConfig;
-import com.qb20nh.cbbg.render.GlFormatOverride;
 import com.qb20nh.cbbg.render.MainTargetFormatSupport;
-import java.util.function.Supplier;
-import org.jspecify.annotations.NonNull;
+import com.mojang.blaze3d.platform.GlStateManager;
+import com.mojang.blaze3d.systems.RenderSystem;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.injection.Coerce;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Redirect;
+import org.lwjgl.opengl.GL11;
+import org.lwjgl.opengl.GL30;
 
 @Mixin(MainTarget.class)
 public abstract class MainTargetMixin {
 
-    @Redirect(method = "allocateColorAttachment", at = @At(value = "INVOKE",
-            target = "Lcom/mojang/blaze3d/systems/GpuDevice;createTexture(Ljava/util/function/Supplier;ILcom/mojang/blaze3d/textures/TextureFormat;IIII)Lcom/mojang/blaze3d/textures/GpuTexture;"))
-    private GpuTexture cbbg$allocateColorAttachment(GpuDevice device, Supplier<String> label,
-            int usage, @NonNull TextureFormat format, int width, int height, int depthOrLayers,
-            int mipLevels) {
+    @Inject(method = "allocateColorAttachment", at = @At("HEAD"), cancellable = true)
+    private void cbbg$allocateColorAttachment(@Coerce Object dimension,
+            CallbackInfoReturnable<Boolean> cir) {
+        MainTargetDimensionAccessor dim = (MainTargetDimensionAccessor) dimension;
+        int width = dim.cbbg$getWidth();
+        int height = dim.cbbg$getHeight();
+
+        // Vanilla behavior when cbbg is not active.
         if (!CbbgClient.isEnabled()) {
-            return device.createTexture(label, usage, format, width, height, depthOrLayers,
-                    mipLevels);
+            return;
         }
 
+        // Decide the effective float format for this session.
         CbbgConfig.PixelFormat requested = CbbgConfig.get().pixelFormat();
         CbbgConfig.PixelFormat effective = MainTargetFormatSupport.getEffective(requested);
         if (effective == CbbgConfig.PixelFormat.RGBA8) {
-            return device.createTexture(label, usage, format, width, height, depthOrLayers,
-                    mipLevels);
+            return;
         }
 
-        GpuTexture texture = null;
-        GpuOutOfMemoryException oom = null;
-        Exception failure = null;
+        RenderSystem.assertOnRenderThreadOrInit();
 
-        GlFormatOverride.pushMainTargetColor();
-        try {
-            texture = device.createTexture(label, usage, format, width, height, depthOrLayers,
-                    mipLevels);
-        } catch (GpuOutOfMemoryException e) {
-            oom = e;
-        } catch (Exception e) {
-            failure = e;
-        } finally {
-            GlFormatOverride.popMainTargetColor();
+        // Try to allocate float at full resolution; if it fails, fall back to RGBA8 at the same
+        // resolution (so we don't trigger vanilla's smaller-dimension fallback unless absolutely
+        // necessary).
+        if (tryAllocateColor(width, height, effective)) {
+            cir.setReturnValue(true);
+            return;
         }
 
-        if (oom == null && failure == null) {
-            return texture;
-        }
+        MainTargetFormatSupport.disable(effective, null);
 
-        MainTargetFormatSupport.disable(effective, oom != null ? oom : failure);
-
-        // Retry once with the next-best effective format (e.g. 32F -> 16F), otherwise fall back to
-        // vanilla RGBA8.
+        // Retry once with next-best float (32F -> 16F), otherwise fall back to RGBA8.
         CbbgConfig.PixelFormat fallback = MainTargetFormatSupport.getEffective(requested);
-        if (fallback == CbbgConfig.PixelFormat.RGBA8) {
-            return device.createTexture(label, usage, format, width, height, depthOrLayers,
-                    mipLevels);
+        if (fallback != CbbgConfig.PixelFormat.RGBA8 && tryAllocateColor(width, height, fallback)) {
+            cir.setReturnValue(true);
+            return;
+        }
+        if (fallback != CbbgConfig.PixelFormat.RGBA8) {
+            MainTargetFormatSupport.disable(fallback, null);
         }
 
-        GlFormatOverride.pushMainTargetColor();
-        try {
-            return device.createTexture(label, usage, format, width, height, depthOrLayers,
-                    mipLevels);
-        } catch (GpuOutOfMemoryException e) {
-            MainTargetFormatSupport.disable(fallback, e);
-            throw e;
-        } catch (Exception e) {
-            MainTargetFormatSupport.disable(fallback, e);
-            return device.createTexture(label, usage, format, width, height, depthOrLayers,
-                    mipLevels);
-        } finally {
-            GlFormatOverride.popMainTargetColor();
-        }
+        cir.setReturnValue(tryAllocateRgba8(width, height));
+    }
+
+    private boolean tryAllocateColor(int width, int height, CbbgConfig.PixelFormat format) {
+        int internal = switch (format) {
+            case RGBA16F -> GL30.GL_RGBA16F;
+            case RGBA32F -> GL30.GL_RGBA32F;
+            case RGBA8 -> GL11.GL_RGBA8;
+        };
+        return tryAllocate(width, height, internal, GL11.GL_FLOAT);
+    }
+
+    private boolean tryAllocateRgba8(int width, int height) {
+        return tryAllocate(width, height, GL11.GL_RGBA8, GL11.GL_UNSIGNED_BYTE);
+    }
+
+    private boolean tryAllocate(int width, int height, int internalFormat, int type) {
+        GlStateManager._getError();
+        GlStateManager._bindTexture(((MainTarget) (Object) this).getColorTextureId());
+        GlStateManager._texImage2D(GL11.GL_TEXTURE_2D, 0, internalFormat, width, height, 0,
+                GL11.GL_RGBA, type, null);
+        return GlStateManager._getError() == GL11.GL_NO_ERROR;
     }
 }

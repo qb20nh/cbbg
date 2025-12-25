@@ -1,7 +1,6 @@
 package com.qb20nh.cbbg.render;
 
 import com.qb20nh.cbbg.config.CbbgConfig.PixelFormat;
-import org.jspecify.annotations.Nullable;
 
 /**
  * Thread-local guard for Minecraft's menu blur post chain ({@code minecraft:blur}).
@@ -48,7 +47,7 @@ public final class MenuBlurGuard {
         return DEPTH.get() > 0;
     }
 
-    public static @Nullable PixelFormat getActiveFormat() {
+    public static PixelFormat getActiveFormat() {
         return ACTIVE_FORMAT.get();
     }
 

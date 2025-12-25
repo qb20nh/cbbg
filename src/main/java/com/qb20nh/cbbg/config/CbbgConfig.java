@@ -11,8 +11,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 import net.fabricmc.loader.api.FabricLoader;
-import org.jspecify.annotations.NonNull;
-import org.jspecify.annotations.Nullable;
 
 public record CbbgConfig(Mode mode, PixelFormat pixelFormat, int stbnSize, int stbnDepth,
         long stbnSeed, float strength, boolean notifyChat, boolean notifyToast) {
@@ -23,9 +21,9 @@ public record CbbgConfig(Mode mode, PixelFormat pixelFormat, int stbnSize, int s
         /** Split-screen demo: left = enabled (dither), right = disabled (no dither). */
         DEMO("demo");
 
-        private final @NonNull String name;
+        private final String name;
 
-        Mode(@NonNull String name) {
+        Mode(String name) {
             this.name = name;
         }
 
@@ -33,7 +31,7 @@ public record CbbgConfig(Mode mode, PixelFormat pixelFormat, int stbnSize, int s
             return this != DISABLED;
         }
 
-        public @NonNull String getSerializedName() {
+        public String getSerializedName() {
             return this.name;
         }
     }
@@ -41,13 +39,13 @@ public record CbbgConfig(Mode mode, PixelFormat pixelFormat, int stbnSize, int s
     public enum PixelFormat {
         RGBA8("rgba8"), RGBA16F("rgba16f"), RGBA32F("rgba32f");
 
-        private final @NonNull String name;
+        private final String name;
 
-        PixelFormat(@NonNull String name) {
+        PixelFormat(String name) {
             this.name = name;
         }
 
-        public @NonNull String getSerializedName() {
+        public String getSerializedName() {
             return this.name;
         }
     }
@@ -218,14 +216,11 @@ public record CbbgConfig(Mode mode, PixelFormat pixelFormat, int stbnSize, int s
     }
 
     private static final class DiskModel {
-        @Nullable
         Mode mode;
-        @Nullable
         PixelFormat pixelFormat;
         int stbnSize = 128;
         int stbnDepth = 64;
         long stbnSeed = 0;
-        @Nullable
         Float strength;
         boolean notifyChat = true;
         boolean notifyToast = true;

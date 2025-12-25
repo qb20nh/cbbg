@@ -1,19 +1,12 @@
 package com.qb20nh.cbbg.render;
 
-import com.mojang.blaze3d.buffers.GpuBuffer;
-import com.mojang.blaze3d.buffers.Std140Builder;
-import com.mojang.blaze3d.pipeline.RenderPipeline;
+import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.pipeline.TextureTarget;
-import com.mojang.blaze3d.platform.DepthTestFunction;
+import com.mojang.blaze3d.platform.GlStateManager;
 import com.mojang.blaze3d.platform.NativeImage;
-import com.mojang.blaze3d.shaders.ShaderType;
-import com.mojang.blaze3d.shaders.UniformType;
-import com.mojang.blaze3d.systems.CommandEncoder;
-import com.mojang.blaze3d.systems.RenderPass;
 import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.textures.FilterMode;
-import com.mojang.blaze3d.textures.GpuTexture;
-import com.mojang.blaze3d.textures.GpuTextureView;
+import com.mojang.blaze3d.vertex.BufferBuilder;
+import com.mojang.blaze3d.vertex.BufferUploader;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import com.qb20nh.cbbg.Cbbg;
@@ -24,58 +17,20 @@ import com.qb20nh.cbbg.render.stbn.STBNGenerator;
 import com.qb20nh.cbbg.render.stbn.STBNLoader;
 import com.qb20nh.cbbg.render.stbn.StbnTextureManager;
 import java.util.concurrent.CompletableFuture;
-import java.util.Objects;
-import java.util.OptionalInt;
 import java.util.concurrent.atomic.AtomicBoolean;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.toasts.SystemToast;
 import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.client.renderer.MappableRingBuffer;
-import net.minecraft.client.renderer.ShaderManager;
+import net.minecraft.client.renderer.ShaderInstance;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.Identifier;
-import org.jspecify.annotations.NonNull;
 
 public final class CbbgDither {
 
     private static final String S_IN = "InSampler";
     private static final String S_NOISE = "NoiseSampler";
-    private static final String U_DITHER_INFO = "CbbgDitherInfo";
-    private static final int DITHER_INFO_UBO_SIZE = 16;
-
-    private static final @NonNull Identifier SCREENQUAD_VERTEX =
-            (@NonNull Identifier) Identifier.withDefaultNamespace("core/screenquad");
-
-    private static final @NonNull Identifier DITHER_SHADER =
-            (@NonNull Identifier) Identifier.fromNamespaceAndPath(Cbbg.MOD_ID, "core/cbbg_dither");
-    private static final @NonNull Identifier DEMO_SHADER =
-            (@NonNull Identifier) Identifier.fromNamespaceAndPath(Cbbg.MOD_ID, "core/cbbg_demo");
-
-    private static final @NonNull Identifier DITHER_PIPELINE_LOCATION =
-            (@NonNull Identifier) Identifier.fromNamespaceAndPath(Cbbg.MOD_ID,
-                    "pipeline/cbbg_dither");
-    private static final @NonNull Identifier DEMO_PIPELINE_LOCATION =
-            (@NonNull Identifier) Identifier.fromNamespaceAndPath(Cbbg.MOD_ID,
-                    "pipeline/cbbg_demo");
-
-    private static final @NonNull RenderPipeline DITHER_PIPELINE =
-            (@NonNull RenderPipeline) RenderPipeline.builder()
-                    .withLocation(DITHER_PIPELINE_LOCATION).withVertexShader(SCREENQUAD_VERTEX)
-                    .withFragmentShader(DITHER_SHADER).withSampler(S_IN).withSampler(S_NOISE)
-                    .withUniform(U_DITHER_INFO, UniformType.UNIFORM_BUFFER).withDepthWrite(false)
-                    .withDepthTestFunction(DepthTestFunction.NO_DEPTH_TEST).withoutBlend()
-                    .withVertexFormat(DefaultVertexFormat.EMPTY, VertexFormat.Mode.TRIANGLES)
-                    .build();
-
-    private static final @NonNull RenderPipeline DEMO_PIPELINE =
-            (@NonNull RenderPipeline) RenderPipeline.builder().withLocation(DEMO_PIPELINE_LOCATION)
-                    .withVertexShader(SCREENQUAD_VERTEX).withFragmentShader(DEMO_SHADER)
-                    .withSampler(S_IN).withSampler(S_NOISE)
-                    .withUniform(U_DITHER_INFO, UniformType.UNIFORM_BUFFER).withDepthWrite(false)
-                    .withDepthTestFunction(DepthTestFunction.NO_DEPTH_TEST).withoutBlend()
-                    .withVertexFormat(DefaultVertexFormat.EMPTY, VertexFormat.Mode.TRIANGLES)
-                    .build();
+    private static final String U_STRENGTH = "Strength";
+    private static final String U_COORD_SCALE = "CoordScale";
 
     private static final AtomicBoolean loggedFailure = new AtomicBoolean(false);
     private static volatile boolean disabled = false;
@@ -84,13 +39,13 @@ public final class CbbgDither {
     private static final StbnTextureManager stbnManager = new StbnTextureManager();
     private static int stbnFrameIndex = 0;
     private static volatile CompletableFuture<STBNGenerator.STBNFields> processedGeneration;
-    private static MappableRingBuffer ditherInfoUbo;
 
     // Configurable state tracking
     private static boolean isGenerating = false;
     private static int currentWidth = 128;
     private static int currentHeight = 128;
 
+    // RGBA8 output target (used for both on-screen present and screenshots)
     private static TextureTarget ditherTarget;
 
     private CbbgDither() {}
@@ -99,7 +54,6 @@ public final class CbbgDither {
         CbbgDither.initAsync();
         disabled = false;
         loggedFailure.set(false);
-        // Texture recreation happens lazily in ensureGpuTargets via manager
     }
 
     public static boolean isDisabled() {
@@ -120,8 +74,9 @@ public final class CbbgDither {
             return 0;
         }
         int depth = getStbnFrames();
-        if (depth <= 0)
+        if (depth <= 0) {
             return 0;
+        }
         return Math.floorMod(idx - 1, depth);
     }
 
@@ -132,21 +87,19 @@ public final class CbbgDither {
      * This is used both for final presentation and for screenshots, so screenshots match the
      * dithered on-screen output.
      */
-    public static TextureTarget renderDitheredTarget(GpuTextureView input) {
-        return renderToTarget(input, DITHER_PIPELINE, DITHER_SHADER, "cbbg dither");
+    public static TextureTarget renderDitheredTarget(RenderTarget input) {
+        return renderToTarget(input, CbbgShaders.getDither(), "cbbg dither");
     }
 
-    public static TextureTarget renderDemoTarget(GpuTextureView input) {
-        return renderToTarget(input, DEMO_PIPELINE, DEMO_SHADER, "cbbg demo");
+    public static TextureTarget renderDemoTarget(RenderTarget input) {
+        return renderToTarget(input, CbbgShaders.getDemo(), "cbbg demo");
     }
 
-    private static TextureTarget renderToTarget(GpuTextureView input,
-            @NonNull RenderPipeline pipeline, @NonNull Identifier fragmentShader,
+    private static TextureTarget renderToTarget(RenderTarget input, ShaderInstance shader,
             String passLabel) {
         if (disabled) {
             return null;
         }
-
         try {
             RenderSystem.assertOnRenderThread();
 
@@ -154,46 +107,73 @@ public final class CbbgDither {
                 return null;
             }
 
-            if (!areShadersReady(fragmentShader)) {
+            if (shader == null) {
                 return null;
             }
 
-            final int width = input.getWidth(0);
-            final int height = input.getHeight(0);
+            if (input == null) {
+                return null;
+            }
+
+            if (stbnFrames == null || stbnFrames.length == 0) {
+                return null;
+            }
+
+            int width = input.width;
+            int height = input.height;
             if (width <= 0 || height <= 0) {
                 return null;
             }
 
-            ensureGpuTargets(width, height);
-
-            GpuTextureView ditherView = ditherTarget.getColorTextureView();
-            if (ditherView == null) {
+            ensureTargets(width, height);
+            if (ditherTarget == null) {
                 return null;
             }
+
             if (!stbnManager.isReady()) {
                 return null;
             }
 
-            CommandEncoder encoder = RenderSystem.getDevice().createCommandEncoder();
-            @NonNull
-            GpuBuffer ditherInfo = ensureDitherInfoUbo(encoder);
-            uploadStbnFrame(encoder);
+            uploadStbnFrame();
 
-            try (RenderPass pass = encoder.createRenderPass(() -> passLabel, ditherView,
-                    Objects.requireNonNull(OptionalInt.empty()))) {
-                pass.setPipeline(pipeline);
-                RenderSystem.bindDefaultUniforms(pass);
-                pass.setUniform(U_DITHER_INFO, ditherInfo);
+            int noiseTex = stbnManager.getTextureId();
+            if (noiseTex <= 0) {
+                return null;
+            }
 
-                pass.bindTexture(S_IN, input,
-                        RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST));
-                pass.bindTexture(S_NOISE, stbnManager.getView(),
-                        RenderSystem.getSamplerCache().getRepeat(FilterMode.NEAREST));
-                pass.draw(0, 3);
-            }
-            if (ditherInfoUbo != null) {
-                ditherInfoUbo.rotate();
-            }
+            // Bind samplers and update uniforms.
+            shader.setSampler(S_IN, input);
+            shader.setSampler(S_NOISE, noiseTex);
+
+            float strength = getEffectiveStrength();
+            float coordScale = RenderScaleCompat.getDitherCoordScale();
+            shader.safeGetUniform(U_STRENGTH).set(strength);
+            shader.safeGetUniform(U_COORD_SCALE).set(coordScale, coordScale);
+
+            // Render into RGBA8 output target.
+            input.unbindWrite();
+            shader.apply();
+
+            ditherTarget.clear(Minecraft.ON_OSX);
+            ditherTarget.bindWrite(false);
+
+            RenderSystem.viewport(0, 0, width, height);
+            GlStateManager._disableDepthTest();
+            GlStateManager._depthMask(false);
+            GlStateManager._disableBlend();
+
+            BufferBuilder bufferBuilder = RenderSystem.renderThreadTesselator()
+                    .begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.BLIT_SCREEN);
+            bufferBuilder.addVertex(0.0F, 0.0F, 0.0F);
+            bufferBuilder.addVertex(1.0F, 0.0F, 0.0F);
+            bufferBuilder.addVertex(1.0F, 1.0F, 0.0F);
+            bufferBuilder.addVertex(0.0F, 1.0F, 0.0F);
+            BufferUploader.draw(bufferBuilder.buildOrThrow());
+
+            shader.clear();
+
+            GlStateManager._depthMask(true);
+            ditherTarget.unbindWrite();
 
             return ditherTarget;
         } catch (Exception e) {
@@ -206,12 +186,11 @@ public final class CbbgDither {
      * @return true if cbbg performed the blit/present itself (caller should cancel vanilla),
      *         otherwise false to fall back to vanilla.
      */
-    public static boolean blitToScreenWithDither(GpuTextureView input) {
+    public static boolean blitToScreenWithDither(RenderTarget input) {
         CbbgConfig.Mode mode = CbbgClient.getEffectiveMode();
         // Strict: do not delegate to other blit methods based on a fresh mode read.
-        // Mode may change concurrently (UI thread) while we are presenting; returning
-        // false falls back to
-        // vanilla for this frame and avoids any mutual recursion.
+        // Mode may change concurrently (UI thread) while we are presenting; returning false falls
+        // back to vanilla for this frame and avoids any mutual recursion.
         if (mode != CbbgConfig.Mode.ENABLED) {
             return false;
         }
@@ -220,15 +199,12 @@ public final class CbbgDither {
             RenderSystem.assertOnRenderThread();
 
             TextureTarget out = renderDitheredTarget(input);
-            if (out == null || out.getColorTextureView() == null) {
+            if (out == null) {
                 return false;
             }
 
-            GpuTextureView outView = out.getColorTextureView();
-            if (outView == null) {
-                return false;
-            }
-            RenderSystem.getDevice().createCommandEncoder().presentTexture(outView);
+            Minecraft mc = Minecraft.getInstance();
+            out.blitToScreen(mc.getWindow().getWidth(), mc.getWindow().getHeight());
             return true;
         } catch (Exception e) {
             disableWithLog(e);
@@ -236,7 +212,7 @@ public final class CbbgDither {
         }
     }
 
-    public static boolean blitToScreenWithDemo(GpuTextureView input) {
+    public static boolean blitToScreenWithDemo(RenderTarget input) {
         CbbgConfig.Mode mode = CbbgClient.getEffectiveMode();
         // Strict: see note in blitToScreenWithDither().
         if (mode != CbbgConfig.Mode.DEMO) {
@@ -245,15 +221,14 @@ public final class CbbgDither {
 
         try {
             RenderSystem.assertOnRenderThread();
+
             TextureTarget out = renderDemoTarget(input);
-            if (out == null || out.getColorTextureView() == null) {
+            if (out == null) {
                 return false;
             }
-            GpuTextureView outView = out.getColorTextureView();
-            if (outView == null) {
-                return false;
-            }
-            RenderSystem.getDevice().createCommandEncoder().presentTexture(outView);
+
+            Minecraft mc = Minecraft.getInstance();
+            out.blitToScreen(mc.getWindow().getWidth(), mc.getWindow().getHeight());
             return true;
         } catch (Exception e) {
             disableWithLog(e);
@@ -261,31 +236,28 @@ public final class CbbgDither {
         }
     }
 
-    private static void ensureGpuTargets(int width, int height) {
+    private static void ensureTargets(int width, int height) {
         if (ditherTarget == null || ditherTarget.width != width || ditherTarget.height != height) {
             if (ditherTarget == null) {
-                ditherTarget = new TextureTarget("cbbg / Dither Output", width, height, false);
+                ditherTarget = new TextureTarget(width, height, false, Minecraft.ON_OSX);
             } else {
-                ditherTarget.resize(width, height);
+                ditherTarget.resize(width, height, Minecraft.ON_OSX);
             }
         }
 
         stbnManager.ensureTexture(currentWidth, currentHeight);
     }
 
-    private static void uploadStbnFrame(CommandEncoder encoder) {
+    private static void uploadStbnFrame() {
         if (stbnFrames == null || stbnFrames.length == 0) {
             return;
         }
-
         int idx = stbnFrameIndex++ % stbnFrames.length;
         NativeImage frame = stbnFrames[idx];
-        GpuTexture texture = stbnManager.getTexture();
-        if (frame == null || texture == null) {
+        if (frame == null) {
             return;
         }
-
-        encoder.writeToTexture(texture, frame);
+        stbnManager.uploadFrame(frame);
     }
 
     public static void initAsync() {
@@ -295,8 +267,9 @@ public final class CbbgDither {
     }
 
     public static void reloadStbn(boolean force) {
-        if (isGenerating && !force)
+        if (isGenerating && !force) {
             return;
+        }
 
         CbbgConfig cfg = CbbgConfig.get();
         if (force) {
@@ -315,12 +288,11 @@ public final class CbbgDither {
                                 .withStyle(ChatFormatting.YELLOW));
             }
             if (cfg.notifyToast()) {
-                SystemToast.addOrUpdate(Minecraft.getInstance().getToastManager(),
+                SystemToast.addOrUpdate(Minecraft.getInstance().getToasts(),
                         SystemToast.SystemToastId.PERIODIC_NOTIFICATION,
                         Component.translatable("cbbg.toast.stbn.title"),
                         Component.translatable("cbbg.toast.stbn.generating"));
             }
-
         } else {
             initAsync();
         }
@@ -348,6 +320,25 @@ public final class CbbgDither {
 
     private static void onStbnGenerationComplete(STBNGenerator.STBNFields fields) {
         CbbgConfig cfg = CbbgConfig.get();
+
+        // If the config changed while a generation was running, discard the result rather than
+        // attempting to interpret arrays with mismatched dimensions (can crash).
+        if (fields != null) {
+            int expectedW = cfg.stbnSize();
+            int expectedH = cfg.stbnSize();
+            int expectedD = cfg.stbnDepth();
+            long expectedSeed = cfg.stbnSeed();
+            if (fields.width() != expectedW || fields.height() != expectedH
+                    || fields.depth() != expectedD || fields.seed() != expectedSeed) {
+                Cbbg.LOGGER.info(
+                        "STBN generation finished for {}x{}x{} seed={}, but config is {}x{}x{} seed={}; restarting generation.",
+                        fields.width(), fields.height(), fields.depth(), fields.seed(), expectedW,
+                        expectedH, expectedD, expectedSeed);
+                initAsync();
+                return;
+            }
+        }
+
         stbnFrames =
                 STBNLoader.loadOrGenerate(cfg.stbnSize(), cfg.stbnSize(), cfg.stbnDepth(), fields);
 
@@ -359,47 +350,19 @@ public final class CbbgDither {
 
         if (isGenerating) {
             isGenerating = false;
+
             // Only notify chat if IN-GAME
             if (cfg.notifyChat() && Minecraft.getInstance().level != null) {
                 Minecraft.getInstance().gui.getChat().addMessage(Component
                         .translatable("cbbg.chat.stbn.complete").withStyle(ChatFormatting.GREEN));
             }
             if (cfg.notifyToast()) {
-                SystemToast.addOrUpdate(Minecraft.getInstance().getToastManager(),
+                SystemToast.addOrUpdate(Minecraft.getInstance().getToasts(),
                         SystemToast.SystemToastId.PERIODIC_NOTIFICATION,
                         Component.translatable("cbbg.toast.stbn.title"),
                         Component.translatable("cbbg.toast.stbn.complete"));
             }
-
         }
-    }
-
-    private static boolean areShadersReady(@NonNull Identifier fragmentShader) {
-        Minecraft mc = Minecraft.getInstance();
-        ShaderManager shaderManager = mc.getShaderManager();
-
-        // Only query existence; compiling happens later when we actually use the
-        // pipeline.
-        if (shaderManager.getShader(SCREENQUAD_VERTEX, ShaderType.VERTEX) == null) {
-            return false;
-        }
-        return shaderManager.getShader(fragmentShader, ShaderType.FRAGMENT) != null;
-    }
-
-    private static @NonNull GpuBuffer ensureDitherInfoUbo(CommandEncoder encoder) {
-        if (ditherInfoUbo == null) {
-            ditherInfoUbo = new MappableRingBuffer(() -> "cbbg / DitherInfo",
-                    GpuBuffer.USAGE_UNIFORM | GpuBuffer.USAGE_MAP_WRITE, DITHER_INFO_UBO_SIZE);
-        }
-
-        GpuBuffer buffer = ditherInfoUbo.currentBuffer();
-        float strength = getEffectiveStrength();
-        float coordScale = RenderScaleCompat.getDitherCoordScale();
-        try (GpuBuffer.MappedView view = encoder.mapBuffer(buffer, false, true)) {
-            Std140Builder.intoBuffer(view.data()).putFloat(strength).putVec2(coordScale,
-                    coordScale);
-        }
-        return buffer;
     }
 
     private static float getEffectiveStrength() {
@@ -417,7 +380,7 @@ public final class CbbgDither {
         if (screen == null) {
             return base;
         }
-        if (screen.isInGameUi()) {
+        if (!screen.isPauseScreen()) {
             return base;
         }
 

@@ -12,7 +12,6 @@ import java.util.Objects;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
 import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource;
 import net.minecraft.network.chat.Component;
-import org.jspecify.annotations.NonNull;
 import static net.fabricmc.fabric.api.client.command.v2.ClientCommandManager.argument;
 import static net.fabricmc.fabric.api.client.command.v2.ClientCommandManager.literal;
 
@@ -23,15 +22,15 @@ public final class CbbgClientCommands {
     private static final String ARG_MODE = "mode";
     private static final String ARG_FORMAT = "format";
 
-    private static final @NonNull StringArgumentType STRING_ARG =
+    private static final StringArgumentType STRING_ARG =
             Objects.requireNonNull(StringArgumentType.string());
-    private static final @NonNull IntegerArgumentType STBN_SIZE_ARG =
+    private static final IntegerArgumentType STBN_SIZE_ARG =
             Objects.requireNonNull(IntegerArgumentType.integer(16, 256));
-    private static final @NonNull IntegerArgumentType STBN_DEPTH_ARG =
+    private static final IntegerArgumentType STBN_DEPTH_ARG =
             Objects.requireNonNull(IntegerArgumentType.integer(8, 128));
-    private static final @NonNull LongArgumentType STBN_SEED_ARG =
+    private static final LongArgumentType STBN_SEED_ARG =
             Objects.requireNonNull(LongArgumentType.longArg());
-    private static final @NonNull BoolArgumentType BOOL_ARG =
+    private static final BoolArgumentType BOOL_ARG =
             Objects.requireNonNull(BoolArgumentType.bool());
 
     private CbbgClientCommands() {}
@@ -55,8 +54,8 @@ public final class CbbgClientCommands {
     private static LiteralArgumentBuilder<FabricClientCommandSource> modeCommand() {
         return literal(ARG_MODE).executes(ctx -> {
             var mode = CbbgConfig.get().mode();
-            ctx.getSource()
-                    .sendFeedback(Component.translatable("cbbg.command.mode.current", modeName(mode)));
+            ctx.getSource().sendFeedback(
+                    Component.translatable("cbbg.command.mode.current", modeName(mode)));
             return 1;
         }).then(literal("set").executes(ctx -> {
             sendModeUsage(ctx.getSource());
@@ -82,12 +81,12 @@ public final class CbbgClientCommands {
 
                 CbbgConfig.setMode(mode);
                 CbbgDither.resetAfterToggle();
-                ctx.getSource()
-                        .sendFeedback(Component.translatable("cbbg.command.mode.set", modeName(mode)));
+                ctx.getSource().sendFeedback(
+                        Component.translatable("cbbg.command.mode.set", modeName(mode)));
                 return 1;
             } catch (Exception e) {
-                ctx.getSource().sendError(
-                        Component.translatable("cbbg.command.mode.invalid", modeName));
+                ctx.getSource()
+                        .sendError(Component.translatable("cbbg.command.mode.invalid", modeName));
                 sendModeUsage(ctx.getSource());
                 return 0;
             }
@@ -97,8 +96,8 @@ public final class CbbgClientCommands {
     private static LiteralArgumentBuilder<FabricClientCommandSource> formatCommand() {
         return literal(ARG_FORMAT).executes(ctx -> {
             var format = CbbgConfig.get().pixelFormat();
-            ctx.getSource().sendFeedback(Component.translatable("cbbg.command.format.current",
-                    pixelFormatName(format)));
+            ctx.getSource().sendFeedback(
+                    Component.translatable("cbbg.command.format.current", pixelFormatName(format)));
             return 1;
         }).then(literal("set").then(argument(ARG_FORMAT, STRING_ARG).suggests((ctx, builder) -> {
             builder.suggest(CbbgConfig.PixelFormat.RGBA16F.getSerializedName());
@@ -129,8 +128,8 @@ public final class CbbgClientCommands {
                         Component.translatable("cbbg.command.format.set", pixelFormatName(fmt)));
                 return 1;
             } catch (Exception e) {
-                ctx.getSource().sendError(
-                        Component.translatable("cbbg.command.format.invalid", fmtName));
+                ctx.getSource()
+                        .sendError(Component.translatable("cbbg.command.format.invalid", fmtName));
                 sendFormatUsage(ctx.getSource());
                 return 0;
             }
@@ -199,11 +198,10 @@ public final class CbbgClientCommands {
             sendNotificationUsage(ctx.getSource());
             return 1;
         }).then(literal("chat").executes(ctx -> {
-            ctx.getSource().sendFeedback(
-                    Component.translatable("cbbg.command.notification.chat.current",
-                            CbbgConfig.get().notifyChat()));
-            ctx.getSource().sendFeedback(
-                    Component.translatable("cbbg.command.notification.chat.usage"));
+            ctx.getSource().sendFeedback(Component.translatable(
+                    "cbbg.command.notification.chat.current", CbbgConfig.get().notifyChat()));
+            ctx.getSource()
+                    .sendFeedback(Component.translatable("cbbg.command.notification.chat.usage"));
             return 1;
         }).then(argument(ARG_ENABLED, BOOL_ARG).executes(ctx -> {
             boolean val = BoolArgumentType.getBool(ctx, ARG_ENABLED);
@@ -212,11 +210,10 @@ public final class CbbgClientCommands {
                     Component.translatable("cbbg.command.notification.chat.current", val));
             return 1;
         }))).then(literal("toast").executes(ctx -> {
-            ctx.getSource().sendFeedback(
-                    Component.translatable("cbbg.command.notification.toast.current",
-                            CbbgConfig.get().notifyToast()));
-            ctx.getSource().sendFeedback(
-                    Component.translatable("cbbg.command.notification.toast.usage"));
+            ctx.getSource().sendFeedback(Component.translatable(
+                    "cbbg.command.notification.toast.current", CbbgConfig.get().notifyToast()));
+            ctx.getSource()
+                    .sendFeedback(Component.translatable("cbbg.command.notification.toast.usage"));
             return 1;
         }).then(argument(ARG_ENABLED, BOOL_ARG).executes(ctx -> {
             boolean val = BoolArgumentType.getBool(ctx, ARG_ENABLED);

@@ -4,7 +4,6 @@ import java.util.Locale;
 import java.util.Objects;
 import java.util.function.DoubleConsumer;
 import java.util.function.IntConsumer;
-import org.jspecify.annotations.NonNull;
 import com.qb20nh.cbbg.compat.iris.IrisCompat;
 import com.qb20nh.cbbg.config.CbbgConfig;
 import com.qb20nh.cbbg.render.CbbgDither;
@@ -72,10 +71,10 @@ public final class CbbgConfigScreen extends Screen {
         final boolean lockedByUser = CbbgConfig.get().mode() == CbbgConfig.Mode.DISABLED;
 
         // 1. Rendering Mode
-        CycleButton<CbbgConfig.Mode> modeButton = this
-                .addRenderableWidget(CycleButton.builder(this::getModeName, CbbgConfig.get().mode())
+        CycleButton<CbbgConfig.Mode> modeButton =
+                this.addRenderableWidget(CycleButton.builder(this::getModeName)
                         .withTooltip(this::getModeTooltip).withValues(CbbgConfig.Mode.values())
-                        .create(cx - 100, yStart, 200, 20,
+                        .withInitialValue(CbbgConfig.get().mode()).create(cx - 100, yStart, 200, 20,
                                 Component.translatable("cbbg.config.mode"), (button, value) -> {
                                     // When cbbg disabled itself due to a render error, keep config
                                     // read-only.
@@ -87,10 +86,10 @@ public final class CbbgConfigScreen extends Screen {
 
         // 1.5 Pixel Format
         CycleButton<CbbgConfig.PixelFormat> formatButton = this.addRenderableWidget(CycleButton
-                .builder(CbbgConfigScreen::getPixelFormatName, CbbgConfig.get().pixelFormat())
+                .builder(CbbgConfigScreen::getPixelFormatName)
                 .withValues(CbbgConfig.PixelFormat.RGBA16F, CbbgConfig.PixelFormat.RGBA32F)
-                .create(cx - 100, yStart + 24, 200, 20,
-                        Component.translatable("cbbg.config.format"), (button, value) -> {
+                .withInitialValue(CbbgConfig.get().pixelFormat()).create(cx - 100, yStart + 24, 200,
+                        20, Component.translatable("cbbg.config.format"), (button, value) -> {
                             if (lockedByError || lockedByUser) {
                                 return;
                             }
@@ -179,23 +178,25 @@ public final class CbbgConfigScreen extends Screen {
                             Component.translatable("cbbg.config.confirm.regenerate_stbn.message",
                                     stbnSize, stbnDepth, stbnSeed)) {
                         @Override
-                        public void renderBackground(@NonNull GuiGraphics context, int mouseX,
-                                int mouseY, float partialTick) {
+                        public void renderBackground(GuiGraphics context, int mouseX, int mouseY,
+                                float partialTick) {
                             CbbgConfigScreen.this.renderSafeBackground(context, partialTick);
                         }
 
                         @Override
-                        public void render(@NonNull GuiGraphics context, int mouseX, int mouseY,
+                        public void render(GuiGraphics context, int mouseX, int mouseY,
                                 float partialTick) {
                             // Draw the same card styling behind the confirm dialog UI.
+                            // 1.21.1 ConfirmScreen doesn't expose the layout positions; approximate
+                            // a tight card around the centered dialog contents.
                             final int padX = 12;
                             final int padY = 12;
-                            int x1 = Math.max(0, this.layout.getX() - padX);
-                            int y1 = Math.max(0, this.layout.getY() - padY);
-                            int x2 = Math.min(this.width,
-                                    this.layout.getX() + this.layout.getWidth() + padX);
-                            int y2 = Math.min(this.height,
-                                    this.layout.getY() + this.layout.getHeight() + padY);
+                            final int contentW = 320;
+                            final int contentH = 140;
+                            int x1 = Math.max(0, this.width / 2 - contentW / 2 - padX);
+                            int y1 = Math.max(0, this.height / 2 - contentH / 2 - padY);
+                            int x2 = Math.min(this.width, this.width / 2 + contentW / 2 + padX);
+                            int y2 = Math.min(this.height, this.height / 2 + contentH / 2 + padY);
                             renderCard(context, x1, y1, x2, y2);
 
                             super.render(context, mouseX, mouseY, partialTick);
@@ -278,12 +279,11 @@ public final class CbbgConfigScreen extends Screen {
     }
 
     @Override
-    public void renderBackground(@NonNull GuiGraphics context, int mouseX, int mouseY,
-            float partialTick) {
+    public void renderBackground(GuiGraphics context, int mouseX, int mouseY, float partialTick) {
         this.renderSafeBackground(context, partialTick);
     }
 
-    private void renderSafeBackground(@NonNull GuiGraphics context, float partialTick) {
+    private void renderSafeBackground(GuiGraphics context, float partialTick) {
         if (this.minecraft.level != null) {
             this.renderTransparentBackground(context);
         } else {
@@ -293,7 +293,7 @@ public final class CbbgConfigScreen extends Screen {
     }
 
     @Override
-    public void render(@NonNull GuiGraphics context, int mouseX, int mouseY, float partialTick) {
+    public void render(GuiGraphics context, int mouseX, int mouseY, float partialTick) {
         // Card background
         int cx = this.width / 2;
         int cy = this.height / 2;

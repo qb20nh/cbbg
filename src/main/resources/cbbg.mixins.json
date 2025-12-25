@@ -3,11 +3,14 @@
 	"package": "com.qb20nh.cbbg.mixin",
 	"compatibilityLevel": "JAVA_21",
 	"client": [
-		"DebugScreenEntriesMixin",
+		"DebugScreenOverlayMixin",
 		"GameRendererMixin",
-		"GlConstMixin",
-		"GlCommandEncoderMixin",
+		"GameRendererReloadShadersMixin",
+		"GuiMixin",
+		"LightTextureAccessor",
 		"MainTargetMixin",
+		"MainTargetDimensionAccessor",
+		"RenderTargetBlitToScreenMixin",
 		"RenderTargetCreateBuffersMixin",
 		"ScreenshotMixin"
 	],

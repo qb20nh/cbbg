@@ -7,13 +7,11 @@ import com.qb20nh.cbbg.render.CbbgDither;
 import net.fabricmc.api.ClientModInitializer;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
-import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.Identifier;
 
 public final class CbbgClient implements ClientModInitializer {
 
@@ -64,15 +62,6 @@ public final class CbbgClient implements ClientModInitializer {
     public void onInitializeClient() {
         // Ensure config is loaded early.
         CbbgConfig.get();
-
-        // Register HUD element
-        HudElementRegistry.addLast(Identifier.fromNamespaceAndPath(Cbbg.MOD_ID, "hud_overlay"),
-                (context, deltaTracker) -> {
-                    if (!isDemoMode()) {
-                        return;
-                    }
-                    renderDemoLabels(context);
-                });
 
         CbbgClientCommands.register();
 

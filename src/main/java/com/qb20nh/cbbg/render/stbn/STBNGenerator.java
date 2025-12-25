@@ -15,7 +15,8 @@ public class STBNGenerator {
     private static final Logger LOGGER = LoggerFactory.getLogger("cbbg-gen");
 
     // Pure data container
-    public record STBNFields(double[] uField, double[] vField) {
+    public record STBNFields(int width, int height, int depth, long seed, double[] uField,
+            double[] vField) {
         @Override
         public boolean equals(Object o) {
             if (this == o)
@@ -23,20 +24,24 @@ public class STBNGenerator {
             if (o == null || getClass() != o.getClass())
                 return false;
             STBNFields that = (STBNFields) o;
-            return Arrays.equals(uField, that.uField) && Arrays.equals(vField, that.vField);
+            return width == that.width && height == that.height && depth == that.depth
+                    && seed == that.seed && Arrays.equals(uField, that.uField)
+                    && Arrays.equals(vField, that.vField);
         }
 
         @Override
         public int hashCode() {
-            int result = Arrays.hashCode(uField);
+            int result = Objects.hash(width, height, depth, seed);
+            result = 31 * result + Arrays.hashCode(uField);
             result = 31 * result + Arrays.hashCode(vField);
             return result;
         }
 
         @Override
         public String toString() {
-            return "STBNFields{" + "uField=" + Arrays.toString(uField) + ", vField="
-                    + Arrays.toString(vField) + '}';
+            return "STBNFields{" + width + "x" + height + "x" + depth + " seed=" + seed + " uLen="
+                    + (uField == null ? -1 : uField.length) + " vLen="
+                    + (vField == null ? -1 : vField.length) + '}';
         }
     }
 
@@ -84,7 +89,7 @@ public class STBNGenerator {
                 long dt = System.currentTimeMillis() - start;
                 LOGGER.info("STBN Math Complete in {} ms", dt);
 
-                return new STBNFields(uField, vField);
+                return new STBNFields(w, h, d, seed, uField, vField);
             } catch (Exception e) {
                 // If interrupted, just return null silently
                 if (e instanceof InterruptedException)

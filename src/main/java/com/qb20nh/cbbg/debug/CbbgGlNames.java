@@ -13,6 +13,7 @@ public final class CbbgGlNames {
         return switch (internal) {
             case GL11.GL_RGBA8 -> "GL_RGBA8(0x8058)";
             case GL30.GL_RGBA16F -> "GL_RGBA16F(0x881A)";
+            case GL30.GL_RGBA32F -> "GL_RGBA32F(0x8814)";
             default -> String.format(HEX_FORMAT, internal);
         };
     }
@@ -30,6 +31,7 @@ public final class CbbgGlNames {
         return switch (internal) {
             case GL11.GL_RGBA8 -> "RGBA8";
             case GL30.GL_RGBA16F -> "RGBA16F";
+            case GL30.GL_RGBA32F -> "RGBA32F";
             default -> String.format(HEX_FORMAT, internal);
         };
     }

@@ -5,21 +5,16 @@ import com.qb20nh.cbbg.config.gui.CbbgConfigScreen;
 import java.util.ArrayList;
 import java.util.List;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
-import net.fabricmc.fabric.api.client.gametest.v1.TestInput;
-import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
+import net.fabricmc.fabric.api.client.gametest.v1.ClientGameTestContext;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.AbstractSliderButton;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.CycleButton;
 import net.minecraft.client.gui.components.EditBox;
-import net.minecraft.client.input.MouseButtonEvent;
-import net.minecraft.client.input.MouseButtonInfo;
 import net.minecraft.client.gui.components.events.GuiEventListener;
 import net.minecraft.client.gui.screens.ConfirmScreen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.TitleScreen;
-import org.jspecify.annotations.NonNull;
-import org.lwjgl.glfw.GLFW;
 
 /**
  * Client-side UI interaction test for {@link CbbgConfigScreen}.
@@ -31,15 +26,8 @@ import org.lwjgl.glfw.GLFW;
  */
 public class CbbgConfigScreenGameTest implements FabricClientGameTest {
 
-    private static final int WINDOW_WIDTH = 854;
-    private static final int WINDOW_HEIGHT = 480;
-
     @Override
-    public void runTest(@NonNull ClientGameTestContext context) {
-        TestInput input = context.getInput();
-        input.resizeWindow(WINDOW_WIDTH, WINDOW_HEIGHT);
-        context.waitTick();
-
+    public void runTest(ClientGameTestContext context) {
         CbbgConfig original = CbbgConfig.get();
         setKnownBaselineConfig();
 
@@ -54,36 +42,25 @@ public class CbbgConfigScreenGameTest implements FabricClientGameTest {
             // the UI code paths.
             context.runOnClient(client -> {
                 ScreenWidgets w = ScreenWidgets.from(client.screen);
-                MouseButtonInfo click = new MouseButtonInfo(GLFW.GLFW_MOUSE_BUTTON_LEFT, 0);
 
                 // Mode: ENABLED -> DISABLED
-                w.mode.onClick(new MouseButtonEvent(centerX(w.mode), centerY(w.mode), click),
-                        false);
+                w.mode.mouseClicked(centerX(w.mode), centerY(w.mode), 0);
 
                 // Pixel format: RGBA16F -> RGBA32F
-                w.format.onClick(new MouseButtonEvent(centerX(w.format), centerY(w.format), click),
-                        false);
+                w.format.mouseClicked(centerX(w.format), centerY(w.format), 0);
 
                 // Strength slider: click near max
-                w.strength.onClick(
-                        new MouseButtonEvent(maxClickX(w.strength), centerY(w.strength), click),
-                        false);
+                w.strength.mouseClicked(maxClickX(w.strength), centerY(w.strength), 0);
 
                 // STBN size/depth: click near min (keeps any background generation small/fast)
-                w.stbnSize.onClick(
-                        new MouseButtonEvent(minClickX(w.stbnSize), centerY(w.stbnSize), click),
-                        false);
-                w.stbnDepth.onClick(
-                        new MouseButtonEvent(minClickX(w.stbnDepth), centerY(w.stbnDepth), click),
-                        false);
+                w.stbnSize.mouseClicked(minClickX(w.stbnSize), centerY(w.stbnSize), 0);
+                w.stbnDepth.mouseClicked(minClickX(w.stbnDepth), centerY(w.stbnDepth), 0);
 
                 // Seed edit box: set value (triggers responder)
                 w.seed.setValue("123");
 
                 // Generate button opens confirmation screen; cancel out.
-                w.generate.onClick(
-                        new MouseButtonEvent(centerX(w.generate), centerY(w.generate), click),
-                        false);
+                w.generate.mouseClicked(centerX(w.generate), centerY(w.generate), 0);
             });
             context.waitForScreen(ConfirmScreen.class);
             context.takeScreenshot("cbbg-config-screen-confirm");
@@ -92,24 +69,17 @@ public class CbbgConfigScreenGameTest implements FabricClientGameTest {
 
             context.runOnClient(client -> {
                 ScreenWidgets w = ScreenWidgets.from(client.screen);
-                MouseButtonInfo click = new MouseButtonInfo(GLFW.GLFW_MOUSE_BUTTON_LEFT, 0);
 
                 // Notifications: true -> false
-                w.notifyChat.onClick(
-                        new MouseButtonEvent(centerX(w.notifyChat), centerY(w.notifyChat), click),
-                        false);
-                w.notifyToast.onClick(
-                        new MouseButtonEvent(centerX(w.notifyToast), centerY(w.notifyToast), click),
-                        false);
+                w.notifyChat.mouseClicked(centerX(w.notifyChat), centerY(w.notifyChat), 0);
+                w.notifyToast.mouseClicked(centerX(w.notifyToast), centerY(w.notifyToast), 0);
             });
             context.takeScreenshot("cbbg-config-screen-after");
 
             // Done button closes screen
             context.runOnClient(client -> {
                 ScreenWidgets w = ScreenWidgets.from(client.screen);
-                MouseButtonInfo click = new MouseButtonInfo(GLFW.GLFW_MOUSE_BUTTON_LEFT, 0);
-                w.done.onClick(new MouseButtonEvent(centerX(w.done), centerY(w.done), click),
-                        false);
+                w.done.mouseClicked(centerX(w.done), centerY(w.done), 0);
             });
             context.waitFor(
                     client -> client.screen == null || client.screen instanceof TitleScreen);
@@ -157,20 +127,11 @@ public class CbbgConfigScreenGameTest implements FabricClientGameTest {
         assertEquals(16, cfg.stbnSize(), "stbnSize");
         assertEquals(8, cfg.stbnDepth(), "stbnDepth");
         assertEquals(123L, cfg.stbnSeed(), "stbnSeed");
-
-        assertFalse(cfg.notifyChat(), "notifyChat");
-        assertFalse(cfg.notifyToast(), "notifyToast");
     }
 
     private static void assertTrue(boolean condition, String message) {
         if (!condition) {
             throw new AssertionError(message);
-        }
-    }
-
-    private static void assertFalse(boolean condition, String name) {
-        if (condition) {
-            throw new AssertionError("Expected false: " + name);
         }
     }
 

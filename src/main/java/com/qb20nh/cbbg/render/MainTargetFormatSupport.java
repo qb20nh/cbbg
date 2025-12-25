@@ -1,12 +1,11 @@
 package com.qb20nh.cbbg.render;
 
-import com.mojang.blaze3d.opengl.GlStateManager;
+import com.mojang.blaze3d.platform.GlStateManager;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.qb20nh.cbbg.Cbbg;
 import com.qb20nh.cbbg.config.CbbgConfig;
 import java.nio.ByteBuffer;
 import java.util.concurrent.atomic.AtomicBoolean;
-import org.jspecify.annotations.Nullable;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL30;
 
@@ -66,7 +65,7 @@ public final class MainTargetFormatSupport {
         };
     }
 
-    public static void disable(CbbgConfig.PixelFormat format, @Nullable Throwable cause) {
+    public static void disable(CbbgConfig.PixelFormat format, Throwable cause) {
         if (format == null) {
             return;
         }
@@ -114,7 +113,7 @@ public final class MainTargetFormatSupport {
         return state == SupportState.SUPPORTED;
     }
 
-    private static void disableRgba16f(@Nullable Throwable cause) {
+    private static void disableRgba16f(Throwable cause) {
         rgba16f = SupportState.UNSUPPORTED;
         if (!loggedDisable16f.compareAndSet(false, true)) {
             return;
@@ -130,7 +129,7 @@ public final class MainTargetFormatSupport {
         logNoFloatFormatsIfApplicable();
     }
 
-    private static void disableRgba32f(@Nullable Throwable cause) {
+    private static void disableRgba32f(Throwable cause) {
         rgba32f = SupportState.UNSUPPORTED;
         if (!loggedDisable32f.compareAndSet(false, true)) {
             return;

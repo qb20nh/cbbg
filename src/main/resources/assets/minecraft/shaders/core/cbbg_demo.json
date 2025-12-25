@@ -1,0 +1,12 @@
+{
+    "vertex": "blit_screen",
+    "fragment": "cbbg_demo",
+    "samplers": [
+        { "name": "InSampler" },
+        { "name": "NoiseSampler" }
+    ],
+    "uniforms": [
+        { "name": "Strength", "type": "float", "count": 1, "values": [ 1.0 ] },
+        { "name": "CoordScale", "type": "float", "count": 2, "values": [ 1.0, 1.0 ] }
+    ]
+}

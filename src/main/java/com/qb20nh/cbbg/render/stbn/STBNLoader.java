@@ -8,7 +8,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.NoSuchAlgorithmException;
 import java.util.*;
-import org.jspecify.annotations.NonNull;
 
 public class STBNLoader {
 
@@ -29,7 +28,14 @@ public class STBNLoader {
 
         // 2. Generate from fields
         if (fields != null) {
-            NativeImage[] generated = generateFramesFromFields(fields, width, height, frames);
+            if (fields.width() != width || fields.height() != height || fields.depth() != frames) {
+                Cbbg.LOGGER.warn(
+                        "STBN fields do not match requested dimensions (fields={}x{}x{} request={}x{}x{}); skipping generation.",
+                        fields.width(), fields.height(), fields.depth(), width, height, frames);
+                return null;
+            }
+
+            NativeImage[] generated = generateFramesFromFields(fields);
             Cbbg.LOGGER.info("STBN Images generated from math fields.");
             saveToCache(generated, width, height, frames);
             return generated;
@@ -38,17 +44,34 @@ public class STBNLoader {
         return null;
     }
 
-    private static NativeImage[] generateFramesFromFields(STBNGenerator.STBNFields fields,
-            int width, int height, int frames) {
+    private static NativeImage[] generateFramesFromFields(STBNGenerator.STBNFields fields) {
+        int width = fields.width();
+        int height = fields.height();
+        int frames = fields.depth();
+
+        double[] uField = fields.uField();
+        double[] vField = fields.vField();
+        if (uField == null || vField == null) {
+            return new NativeImage[0];
+        }
+
+        int expectedLen = width * height * frames;
+        if (uField.length != expectedLen || vField.length != expectedLen) {
+            Cbbg.LOGGER.warn(
+                    "STBN fields array length mismatch (expected {} got uLen={} vLen={}); skipping generation.",
+                    expectedLen, uField.length, vField.length);
+            return new NativeImage[0];
+        }
+
         NativeImage[] images = new NativeImage[frames];
         for (int z = 0; z < frames; z++) {
             images[z] = new NativeImage(width, height, false);
             for (int y = 0; y < height; y++) {
                 for (int x = 0; x < width; x++) {
                     int idx = (z * height + y) * width + x;
-                    double u = fields.uField()[idx];
-                    double v = fields.vField()[idx];
-                    images[z].setPixel(x, y, STBNGenerator.calculatePixelColor(u, v));
+                    double u = uField[idx];
+                    double v = vField[idx];
+                    images[z].setPixelRGBA(x, y, STBNGenerator.calculatePixelColor(u, v));
                 }
             }
         }
@@ -126,7 +149,6 @@ public class STBNLoader {
                 if (images[z] != null) {
                     String baseName = String.format(IMAGE_BASE_FMT, w, h, d, z);
                     String fileName = baseName + ".png";
-                    @NonNull
                     Path imageFile = Objects.requireNonNull(CACHE_DIR.resolve(fileName));
 
                     images[z].writeToFile(imageFile);
@@ -141,7 +163,6 @@ public class STBNLoader {
                 }
             }
 
-            @NonNull
             Path hashFile = Objects
                     .requireNonNull(CACHE_DIR.resolve(String.format(HASH_FILE_FMT, w, h, d)));
             Files.writeString(hashFile, hashContent.toString());
