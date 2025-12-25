@@ -224,6 +224,9 @@ def readTextFileIfExists = { String relativePath ->
 	return f.exists() ? f.getText("UTF-8") : null
 }
 
+def modrinthUploadFilePath = envOrProperty("MODRINTH_UPLOAD_FILE", "modrinthUploadFile")
+def modrinthSourcesUploadFilePath = envOrProperty("MODRINTH_SOURCES_UPLOAD_FILE", "modrinthSourcesUploadFile")
+
 // Modrinth publishing (Minotaur)
 modrinth {
 	def tokenValue = envOrProperty("MODRINTH_TOKEN", "modrinthToken")
@@ -246,18 +249,16 @@ modrinth {
 	// With Loom, this must be remapped jar.
 	// In CI publish, we want to upload the exact, already-built (and attested) release assets
 	// rather than rebuilding. Allow overriding the upload files via env/Gradle property.
-	def uploadFilePath = envOrProperty("MODRINTH_UPLOAD_FILE", "modrinthUploadFile")
-	def uploadSourcesFilePath = envOrProperty("MODRINTH_SOURCES_UPLOAD_FILE", "modrinthSourcesUploadFile")
-	if (uploadFilePath != null) {
-		def uploadF = rootProject.file(uploadFilePath)
+	if (modrinthUploadFilePath != null) {
+		def uploadF = rootProject.file(modrinthUploadFilePath)
 		if (!uploadF.exists()) {
 			throw new GradleException("Modrinth upload file does not exist: ${uploadF}")
 		}
 		uploadFile = uploadF
 
 		def additional = []
-		if (uploadSourcesFilePath != null) {
-			def sourcesF = rootProject.file(uploadSourcesFilePath)
+		if (modrinthSourcesUploadFilePath != null) {
+			def sourcesF = rootProject.file(modrinthSourcesUploadFilePath)
 			if (!sourcesF.exists()) {
 				throw new GradleException("Modrinth sources upload file does not exist: ${sourcesF}")
 			}
@@ -286,6 +287,13 @@ modrinth {
 
 	dependencies {
 		required.project "fabric-api"
+	}
+}
+
+// When uploading a prebuilt jar (e.g. CI publish), ensure we don't rebuild artifacts just to upload them.
+if (modrinthUploadFilePath != null) {
+	tasks.named("modrinth") {
+		dependsOn.clear()
 	}
 }
 
