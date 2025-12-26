@@ -3,7 +3,8 @@ name: Release
 on:
   push:
     tags:
-      - "v*.*.*"
+      # This is a glob (not a regex). Exact SemVer validation is enforced in the "Validate tag" step below.
+      - "v*.*.*+mc*"
 
 permissions:
   contents: write
@@ -16,6 +17,11 @@ jobs:
 
     steps:
       - uses: actions/checkout@v6.0.1
+        with:
+          # Branch gating needs ancestry checks against remote branches.
+          # Full history keeps the checks reliable.
+          fetch-depth: 0
+          fetch-tags: true
 
       - name: Set up JDK 21
         uses: actions/setup-java@v5.1.0
@@ -52,23 +58,31 @@ jobs:
 
           tag="${GITHUB_REF_NAME}"
 
-          # Accept SemVer tags like:
-          # - v1.2.3 (stable)
-          # - v1.2.3-rc.1 (prerelease)
-          # (Build metadata is intentionally disallowed for tags.)
-          if ! [[ "${tag}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
-            echo "Tag (${tag}) must be semver in the form vX.Y.Z or vX.Y.Z-PRERELEASE."
+          # Tag format (all branches):
+          # - Stable:     vX.Y.Z+mc<MINECRAFT_VERSION>
+          # - Prerelease: vX.Y.Z-rc.1+mc<MINECRAFT_VERSION>
+          #
+          # The mc suffix prevents collisions across maintenance lines.
+          #
+          # Note: The workflow trigger above is only a glob; the regex here is the real gate.
+          #
+          # minecraft_version is validated as SemVer build-metadata identifiers:
+          #   [0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*
+          if ! [[ "${tag}" =~ ^v([0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?)\\+mc([0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)$ ]]; then
+            echo "Tag (${tag}) must be in the form vX.Y.Z(-PRERELEASE)?+mc<MINECRAFT_VERSION>."
             exit 1
           fi
-          version="${tag#v}"
+          version="${BASH_REMATCH[1]}"
+          tag_minecraft_version="${BASH_REMATCH[3]}"
+
           is_prerelease=0
-          if [[ "${tag}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+- ]]; then
+          if [[ "${version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+- ]]; then
             is_prerelease=1
           fi
 
           mod_version="$(grep -E '^mod_version=' gradle.properties | cut -d= -f2 | tr -d '\r')"
           if [[ "${version}" != "${mod_version}" ]]; then
-            echo "Tag (${tag}) does not match gradle.properties mod_version (${mod_version}). Expected tag v${mod_version}."
+            echo "Tag (${tag}) does not match gradle.properties mod_version (${mod_version}). Expected tag v${mod_version}+mc${tag_minecraft_version}."
             exit 1
           fi
 
@@ -81,6 +95,39 @@ jobs:
           minecraft_version="$(grep -E '^minecraft_version=' gradle.properties | cut -d= -f2 | tr -d '\r')"
           if [[ -z "${minecraft_version}" ]]; then
             echo "minecraft_version is empty in gradle.properties."
+            exit 1
+          fi
+          if [[ "${tag_minecraft_version}" != "${minecraft_version}" ]]; then
+            echo "Tag (${tag}) minecraft version (${tag_minecraft_version}) does not match gradle.properties minecraft_version (${minecraft_version})."
+            exit 1
+          fi
+
+          # Branch gating
+          # Prevent accidental releases from random branches by requiring the tagged commit to be
+          # contained in either:
+          # - origin/main (canonical line), or
+          # - origin/mc<minecraft_version> (maintenance line for this Minecraft version)
+          expected_branch="mc${minecraft_version}"
+
+          git fetch --prune --tags origin "+refs/heads/*:refs/remotes/origin/*"
+
+          sha="$(git rev-parse HEAD)"
+          allowed=0
+
+          if git show-ref --verify --quiet "refs/remotes/origin/main" \
+            && git merge-base --is-ancestor "${sha}" "refs/remotes/origin/main"; then
+            allowed=1
+          fi
+
+          if git show-ref --verify --quiet "refs/remotes/origin/${expected_branch}" \
+            && git merge-base --is-ancestor "${sha}" "refs/remotes/origin/${expected_branch}"; then
+            allowed=1
+          fi
+
+          if [[ "${allowed}" -ne 1 ]]; then
+            echo "Tag (${tag}) points to commit ${sha}, which is not contained in origin/main or origin/${expected_branch}."
+            echo "Remote branches containing this commit:"
+            git branch -r --contains "${sha}" || true
             exit 1
           fi
 
@@ -193,7 +240,7 @@ jobs:
             if gh release view "${release_tag}" >/dev/null 2>&1; then
               echo "Prerelease ${release_tag} already exists; updating notes/assets (prereleases are mutable)."
               gh release edit "${release_tag}" \
-                --title "cbbg ${mod_version}" \
+                --title "cbbg ${ARTIFACT_VERSION}" \
                 --notes-file release_notes.md \
                 --prerelease
               gh release upload "${release_tag}" \
@@ -204,7 +251,7 @@ jobs:
               gh release create "${release_tag}" \
                 "${jar}" \
                 "${sources_jar}" \
-                --title "cbbg ${mod_version}" \
+                --title "cbbg ${ARTIFACT_VERSION}" \
                 --notes-file release_notes.md \
                 --prerelease
             fi
@@ -217,6 +264,6 @@ jobs:
             gh release create "${release_tag}" \
               "${jar}" \
               "${sources_jar}" \
-              --title "cbbg ${mod_version}" \
+              --title "cbbg ${ARTIFACT_VERSION}" \
               --notes-file release_notes.md
           fi

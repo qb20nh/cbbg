@@ -50,12 +50,11 @@ jobs:
             exit 1
           fi
 
-          # Accept SemVer tags like:
-          # - v1.2.3 (stable)
-          # - v1.2.3-rc.1 (prerelease)
-          # (Build metadata is intentionally disallowed for tags.)
-          if ! [[ "${tag}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
-            echo "Latest stable release tag (${tag}) must be semver in the form vX.Y.Z or vX.Y.Z-PRERELEASE."
+          # Tag format (all branches):
+          # - Stable:     vX.Y.Z+mc<MINECRAFT_VERSION>
+          # - Prerelease: vX.Y.Z-rc.1+mc<MINECRAFT_VERSION>
+          if ! [[ "${tag}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?\\+mc[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*$ ]]; then
+            echo "Latest stable release tag (${tag}) must be in the form vX.Y.Z(-PRERELEASE)?+mc<MINECRAFT_VERSION>."
             exit 1
           fi
 
@@ -94,15 +93,15 @@ jobs:
               exit 1
             fi
           elif [[ "${EVENT_NAME}" == "workflow_run" ]]; then
-            mapfile -t tags < <(git tag --points-at HEAD | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$' || true)
+            mapfile -t tags < <(git tag --points-at HEAD | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?\+mc[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*$' || true)
             if (( ${#tags[@]} == 0 )); then
-              echo "No SemVer tag found pointing at HEAD ($(git rev-parse --short=12 HEAD))."
+              echo "No release tag found pointing at HEAD ($(git rev-parse --short=12 HEAD))."
               echo "Tags pointing at HEAD:"
               git tag --points-at HEAD || true
               exit 1
             fi
             if (( ${#tags[@]} > 1 )); then
-              echo "Multiple SemVer tags point at HEAD ($(git rev-parse --short=12 HEAD)); unable to pick one:"
+              echo "Multiple release tags point at HEAD ($(git rev-parse --short=12 HEAD)); unable to pick one:"
               printf '%s\n' "${tags[@]}"
               exit 1
             fi
@@ -169,15 +168,15 @@ jobs:
 
           tag="${RELEASE_TAG_INPUT}"
 
-          # Accept SemVer tags like:
-          # - v1.2.3 (stable)
-          # - v1.2.3-rc.1 (prerelease)
-          # (Build metadata is intentionally disallowed for tags.)
-          if ! [[ "${tag}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
-            echo "Tag (${tag}) must be semver in the form vX.Y.Z or vX.Y.Z-PRERELEASE."
+          # Tag format (all branches):
+          # - Stable:     vX.Y.Z+mc<MINECRAFT_VERSION>
+          # - Prerelease: vX.Y.Z-rc.1+mc<MINECRAFT_VERSION>
+          if ! [[ "${tag}" =~ ^v([0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?)\\+mc([0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)$ ]]; then
+            echo "Tag (${tag}) must be in the form vX.Y.Z(-PRERELEASE)?+mc<MINECRAFT_VERSION>."
             exit 1
           fi
-          version="${tag#v}"
+          version="${BASH_REMATCH[1]}"
+          tag_minecraft_version="${BASH_REMATCH[3]}"
 
           mod_version="$(grep -E '^mod_version=' gradle.properties | cut -d= -f2 | tr -d '\r')"
           if [[ -z "${mod_version}" ]]; then
@@ -185,7 +184,7 @@ jobs:
             exit 1
           fi
           if [[ "${version}" != "${mod_version}" ]]; then
-            echo "Release tag (${tag}) does not match gradle.properties mod_version (${mod_version}). Expected tag v${mod_version}."
+            echo "Release tag (${tag}) does not match gradle.properties mod_version (${mod_version}). Expected tag v${mod_version}+mc${tag_minecraft_version}."
             exit 1
           fi
 
@@ -198,6 +197,10 @@ jobs:
           minecraft_version="$(grep -E '^minecraft_version=' gradle.properties | cut -d= -f2 | tr -d '\r')"
           if [[ -z "${minecraft_version}" ]]; then
             echo "minecraft_version is empty in gradle.properties."
+            exit 1
+          fi
+          if [[ "${tag_minecraft_version}" != "${minecraft_version}" ]]; then
+            echo "Release tag (${tag}) minecraft version (${tag_minecraft_version}) does not match gradle.properties minecraft_version (${minecraft_version})."
             exit 1
           fi
 
@@ -215,7 +218,7 @@ jobs:
 
           artifact_version="${mod_version}+mc${minecraft_version}"
 
-          minecraft_series="$(echo "${minecraft_version}" | awk -F. '{print $1 "." $2}')"
+          minecraft_series="$(echo "${minecraft_version}" | awk -F. '{ if (NF >= 2) { print $1 "." $2 } else { print $1 } }')"
           curseforge_game_versions="Minecraft ${minecraft_series}:${minecraft_version},Java 21,Fabric,Environment:Client"
 
           if [[ "${IS_GH_PRERELEASE}" == "true" ]]; then
