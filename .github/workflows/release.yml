@@ -233,6 +233,7 @@ jobs:
 
           release_tag="${RELEASE_TAG}"
           mod_version="${MOD_VERSION}"
+          minecraft_version="${MINECRAFT_VERSION}"
           jar="build/libs/${ARCHIVES_BASE_NAME}-${ARTIFACT_VERSION}.jar"
           sources_jar="build/libs/${ARCHIVES_BASE_NAME}-${ARTIFACT_VERSION}-sources.jar"
 
@@ -240,7 +241,7 @@ jobs:
             if gh release view "${release_tag}" >/dev/null 2>&1; then
               echo "Prerelease ${release_tag} already exists; updating notes/assets (prereleases are mutable)."
               gh release edit "${release_tag}" \
-                --title "cbbg ${ARTIFACT_VERSION}" \
+                --title "cbbg ${mod_version} for Minecraft ${minecraft_version}" \
                 --notes-file release_notes.md \
                 --prerelease
               gh release upload "${release_tag}" \
@@ -251,7 +252,7 @@ jobs:
               gh release create "${release_tag}" \
                 "${jar}" \
                 "${sources_jar}" \
-                --title "cbbg ${ARTIFACT_VERSION}" \
+                --title "cbbg ${mod_version} for Minecraft ${minecraft_version}" \
                 --notes-file release_notes.md \
                 --prerelease
             fi
@@ -264,6 +265,6 @@ jobs:
             gh release create "${release_tag}" \
               "${jar}" \
               "${sources_jar}" \
-              --title "cbbg ${ARTIFACT_VERSION}" \
+              --title "cbbg ${mod_version} for Minecraft ${minecraft_version}" \
               --notes-file release_notes.md
           fi
