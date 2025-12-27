@@ -4,7 +4,7 @@ on:
   push:
     tags:
       # This is a glob (not a regex). Exact SemVer validation is enforced in the "Validate tag" step below.
-      - "v*.*.*+mc*"
+      - "v*.*.*"
 
 permissions:
   contents: write
