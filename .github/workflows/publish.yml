@@ -53,7 +53,7 @@ jobs:
           # Tag format (all branches):
           # - Stable:     vX.Y.Z+mc<MINECRAFT_VERSION>
           # - Prerelease: vX.Y.Z-rc.1+mc<MINECRAFT_VERSION>
-          if ! [[ "${tag}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?\\+mc[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*$ ]]; then
+          if ! [[ "${tag}" =~ ^v[0-9]+[.][0-9]+[.][0-9]+(-[0-9A-Za-z.-]+)?[+]mc[0-9A-Za-z-]+([.][0-9A-Za-z-]+)*$ ]]; then
             echo "Latest stable release tag (${tag}) must be in the form vX.Y.Z(-PRERELEASE)?+mc<MINECRAFT_VERSION>."
             exit 1
           fi
@@ -171,7 +171,7 @@ jobs:
           # Tag format (all branches):
           # - Stable:     vX.Y.Z+mc<MINECRAFT_VERSION>
           # - Prerelease: vX.Y.Z-rc.1+mc<MINECRAFT_VERSION>
-          if ! [[ "${tag}" =~ ^v([0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?)\\+mc([0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)$ ]]; then
+          if ! [[ "${tag}" =~ ^v([0-9]+[.][0-9]+[.][0-9]+(-[0-9A-Za-z.-]+)?)[+]mc([0-9A-Za-z-]+([.][0-9A-Za-z-]+)*)$ ]]; then
             echo "Tag (${tag}) must be in the form vX.Y.Z(-PRERELEASE)?+mc<MINECRAFT_VERSION>."
             exit 1
           fi
