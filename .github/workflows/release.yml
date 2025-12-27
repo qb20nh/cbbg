@@ -109,7 +109,10 @@ jobs:
           # - origin/mc<minecraft_version> (maintenance line for this Minecraft version)
           expected_branch="mc${minecraft_version}"
 
-          git fetch --prune --tags origin "+refs/heads/*:refs/remotes/origin/*"
+          # For branch gating we only need remote branch tips, not tags.
+          # Fetching tags here can fail when a release tag is recreated/moved while a run is in-flight
+          # (git will refuse to clobber an existing local tag).
+          git fetch --prune --no-tags origin "+refs/heads/*:refs/remotes/origin/*"
 
           sha="$(git rev-parse HEAD)"
           allowed=0
