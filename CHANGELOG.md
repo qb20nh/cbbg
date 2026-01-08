@@ -4,6 +4,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-01-08
+
+### Fixed
+
+- Fixed OpenGL errors when Satin (or other mods utilizing initFbo) is present.
+
 ## [1.3.0] - 2025-12-25
 
 ### Added
