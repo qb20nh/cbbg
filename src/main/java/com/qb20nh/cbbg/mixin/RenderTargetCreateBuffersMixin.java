@@ -63,7 +63,7 @@ public abstract class RenderTargetCreateBuffersMixin {
         throw new AssertionError("mixin");
     }
 
-    @Inject(method = "createBuffers", at = @At("HEAD"), cancellable = true)
+    @Inject(method = "createBuffers", at = @At("RETURN"))
     private void cbbg$createBuffers(int width, int height, boolean clearError, CallbackInfo ci) {
         if (!CbbgClient.isEnabled()) {
             return;
@@ -78,14 +78,11 @@ public abstract class RenderTargetCreateBuffersMixin {
         }
 
         CbbgConfig.PixelFormat requested = CbbgConfig.get().pixelFormat();
-        CbbgConfig.PixelFormat effective =
-                isMenuBlurPostChainTarget ? MenuBlurGuard.getActiveFormat()
-                        : MainTargetFormatSupport.getEffective(requested);
+        CbbgConfig.PixelFormat effective = isMenuBlurPostChainTarget ? MenuBlurGuard.getActiveFormat()
+                : MainTargetFormatSupport.getEffective(requested);
         if (effective == null || effective == CbbgConfig.PixelFormat.RGBA8) {
             return;
         }
-
-        ci.cancel();
 
         RenderSystem.assertOnRenderThreadOrInit();
         int max = RenderSystem.maxSupportedTextureSize();
@@ -94,8 +91,23 @@ public abstract class RenderTargetCreateBuffersMixin {
                     + " size out of bounds (max. size: " + max + ")");
         }
 
-        // Mirror vanilla RenderTarget#createBuffers, but allocate the color texture with a float
-        // internal format when possible, falling back to RGBA8.
+        // Manual cleanup of vanilla buffers to prevent VRAM leaks without triggering
+        // Satin's delete hook (which would destroy the stillDepthTexture we just
+        // allowed to init).
+        if (this.colorTextureId > -1) {
+            TextureUtil.releaseTextureId(this.colorTextureId);
+            this.colorTextureId = -1;
+        }
+        if (this.depthBufferId > -1) {
+            TextureUtil.releaseTextureId(this.depthBufferId);
+            this.depthBufferId = -1;
+        }
+        if (this.frameBufferId > -1) {
+            GlStateManager._glDeleteFramebuffers(this.frameBufferId);
+            this.frameBufferId = -1;
+        }
+
+        // Re-allocate with float internal format where possible.
         this.viewWidth = width;
         this.viewHeight = height;
         this.width = width;
@@ -128,11 +140,11 @@ public abstract class RenderTargetCreateBuffersMixin {
         GlStateManager._texParameter(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_WRAP_T,
                 GL12.GL_CLAMP_TO_EDGE);
 
-        CbbgConfig.PixelFormat usedFormat =
-                isMenuBlurPostChainTarget ? allocateMenuBlurColorStorageWithFallback(effective)
-                        : isRenderScaleColorTarget
-                                ? allocateRenderScaleColorStorageWithFallback(effective)
-                                : allocateMainColorStorageWithFallback(requested, effective, null);
+        CbbgConfig.PixelFormat usedFormat = isMenuBlurPostChainTarget
+                ? allocateMenuBlurColorStorageWithFallback(effective)
+                : isRenderScaleColorTarget
+                        ? allocateRenderScaleColorStorageWithFallback(effective)
+                        : allocateMainColorStorageWithFallback(requested, effective, null);
 
         GlStateManager._glBindFramebuffer(GL30.GL_FRAMEBUFFER, this.frameBufferId);
         GlStateManager._glFramebufferTexture2D(GL30.GL_FRAMEBUFFER, GL30.GL_COLOR_ATTACHMENT0,
@@ -173,7 +185,8 @@ public abstract class RenderTargetCreateBuffersMixin {
         ((RenderTarget) (Object) this).clear(clearError);
         ((RenderTarget) (Object) this).unbindRead();
 
-        // Debug/verification hooks: record the actual allocated internal format for special
+        // Debug/verification hooks: record the actual allocated internal format for
+        // special
         // targets we manage (blur intermediates, RenderScale intermediates).
         if (isMenuBlurPostChainTarget) {
             CbbgDebugState.updateBlurInternalFormat(
@@ -205,7 +218,8 @@ public abstract class RenderTargetCreateBuffersMixin {
 
         MainTargetFormatSupport.disable(attempt, cause);
 
-        // Retry once with the next-best effective float format (32F -> 16F), otherwise fall back to
+        // Retry once with the next-best effective float format (32F -> 16F), otherwise
+        // fall back to
         // vanilla RGBA8.
         CbbgConfig.PixelFormat fallback = MainTargetFormatSupport.getEffective(requested);
         if (fallback != null && fallback != CbbgConfig.PixelFormat.RGBA8
