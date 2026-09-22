@@ -90,7 +90,7 @@ The tagged commit must be contained in either:
 
 This prevents accidental releases from random branches.
 
-### Release procedure
+### Release procedure (maintainers only)
 
 1. Ensure you’re on the branch you intend to release from (`main` or `mc<minecraft_version>`).
 2. Update `CHANGELOG.md`:
@@ -134,7 +134,7 @@ git push origin "vX.Y.Z+mc<MINECRAFT_VERSION>"
   - Client GameTests run with and without RenderScale before a new GitHub Release is created. Sodium checks remain deferred.
   - Stable releases and prereleases must be immutable. Publish a new prerelease tag instead of replacing an existing prerelease's assets.
 
-## Adding a new Minecraft maintenance line (future)
+## ~~Adding a new Minecraft maintenance line (future)~~
 
 When adding support for a new Minecraft version while keeping older lines maintained:
 
@@ -145,6 +145,9 @@ When adding support for a new Minecraft version while keeping older lines mainta
 3. Ensure the release workflows exist on the branch:
    - cherry-pick the relevant workflow commits from `main` into the new branch
 4. Release using the canonical tag format `v<mod_version>+mc<minecraft_version>`.
+
+> [!IMPORTANT]
+> We’re restructuring the repository to support multiple Minecraft versions and mod loaders on a single branch. Please discuss your plans with the maintainers before starting a backport or a port to a newer version.
 
 ## Troubleshooting releases
 
