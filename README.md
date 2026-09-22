@@ -27,6 +27,7 @@ Helps reduce color banding on following:
 
 ## Installation
 
+- Minecraft 26.2 requires Java 25. If your launcher manages Java automatically, use its runtime for 26.2; otherwise select Java 25 for this instance.
 - Install **Fabric Loader** and **Fabric API** for your Minecraft version.
 - Put the `cbbg-x.x.x.jar` into your `.minecraft/mods` folder.
 

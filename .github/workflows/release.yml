@@ -148,6 +148,19 @@ jobs:
       - name: Build with Gradle Wrapper
         run: ./gradlew build
 
+      - name: Test release validation
+        run: python3 -m unittest discover -s .github/tests -v
+
+      - name: Test client integrations before release
+        env:
+          LIBGL_ALWAYS_SOFTWARE: 'true'
+          ALSOFT_DRIVERS: 'null'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb libgl1-mesa-dri libglx-mesa0
+          xvfb-run -a ./gradlew runClientGameTest
+          xvfb-run -a ./gradlew runClientGameTest -PtestRenderScale
+
       - name: Validate artifacts exist
         shell: bash
         run: |
@@ -185,48 +198,9 @@ jobs:
 
       - name: Extract release notes from CHANGELOG.md
         shell: bash
-        run: |
-          set -euo pipefail
+        run: python3 .github/scripts/release.py notes
 
-          python - <<'PY'
-          import os
-          import re
-          from pathlib import Path
-
-          tag = os.environ["MOD_VERSION"]
-          changelog_path = Path("CHANGELOG.md")
-          if not changelog_path.exists():
-            raise SystemExit("CHANGELOG.md not found")
-
-          text = changelog_path.read_text(encoding="utf-8")
-          lines = text.splitlines()
-
-          header_re = re.compile(rf"^## \[{re.escape(tag)}\]\s+-\s+\d{{4}}-\d{{2}}-\d{{2}}\s*$")
-          start = None
-          for i, line in enumerate(lines):
-            if header_re.match(line):
-              start = i
-              break
-
-          if start is None:
-            raise SystemExit(f"CHANGELOG.md is missing a section header for version {tag}: '## [{tag}] - YYYY-MM-DD'")
-
-          end = len(lines)
-          for j in range(start + 1, len(lines)):
-            if lines[j].startswith("## ["):
-              end = j
-              break
-
-          # Exclude the header line itself; keep the content under it.
-          body_lines = lines[start + 1 : end]
-          body = "\n".join(body_lines).strip()
-          if not body:
-            raise SystemExit(f"CHANGELOG.md section for {tag} is empty (no content under the version header).")
-
-          Path("release_notes.md").write_text(body + "\n", encoding="utf-8")
-          PY
-
-      - name: Create/Update GitHub Release
+      - name: Create immutable GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
@@ -240,34 +214,18 @@ jobs:
           jar="build/libs/${ARCHIVES_BASE_NAME}-${ARTIFACT_VERSION}.jar"
           sources_jar="build/libs/${ARCHIVES_BASE_NAME}-${ARTIFACT_VERSION}-sources.jar"
 
-          if [[ "${IS_PRERELEASE}" == "1" ]]; then
-            if gh release view "${release_tag}" >/dev/null 2>&1; then
-              echo "Prerelease ${release_tag} already exists; updating notes/assets (prereleases are mutable)."
-              gh release edit "${release_tag}" \
-                --title "cbbg ${mod_version} for Minecraft ${minecraft_version}" \
-                --notes-file release_notes.md \
-                --prerelease
-              gh release upload "${release_tag}" \
-                "${jar}" \
-                "${sources_jar}" \
-                --clobber
-            else
-              gh release create "${release_tag}" \
-                "${jar}" \
-                "${sources_jar}" \
-                --title "cbbg ${mod_version} for Minecraft ${minecraft_version}" \
-                --notes-file release_notes.md \
-                --prerelease
-            fi
-          else
-            # Stable releases are immutable: fail if the release already exists.
-            if gh release view "${release_tag}" >/dev/null 2>&1; then
-              echo "Release ${release_tag} already exists. Stable releases are immutable; refusing to modify it."
-              exit 1
-            fi
-            gh release create "${release_tag}" \
-              "${jar}" \
-              "${sources_jar}" \
-              --title "cbbg ${mod_version} for Minecraft ${minecraft_version}" \
-              --notes-file release_notes.md
+          if gh release view "${release_tag}" >/dev/null 2>&1; then
+            echo "Release ${release_tag} already exists; use a new version/tag instead of replacing assets."
+            exit 1
           fi
+          flags=()
+          if [[ "${IS_PRERELEASE}" == "1" ]]; then
+            flags+=(--prerelease)
+          fi
+          gh release create "${release_tag}" \
+            "${jar}" \
+            "${sources_jar}" \
+            --verify-tag \
+            --title "cbbg ${mod_version} for Minecraft ${minecraft_version}" \
+            --notes-file release_notes.md \
+            "${flags[@]}"

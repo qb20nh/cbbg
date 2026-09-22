@@ -1,0 +1,6 @@
+// Loaded only for validation runs, including tags predating this script.
+gradle.projectsEvaluated {
+    def modrinth = gradle.rootProject.extensions.getByName('modrinth')
+    modrinth.debugMode.set(true)
+    modrinth.debugMode.finalizeValue()
+}
