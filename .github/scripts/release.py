@@ -75,6 +75,11 @@ def validate_destinations():
         if sep:
             type_ids = {t["id"] for t in types if type_name in (t.get("name"), t.get("slug"))}
             matches = [v for v in matches if v["gameVersionTypeID"] in type_ids]
+        elif name == mc:
+            # Mod loader version groups can reuse Minecraft version names.
+            type_ids = {t["id"] for t in types
+                        if re.match(r"^Minecraft(?:\s|$)", t.get("name", ""))}
+            matches = [v for v in matches if v["gameVersionTypeID"] in type_ids]
         if len(matches) != 1:
             raise SystemExit(f"CurseForge label {label!r} resolved to {len(matches)} entries; refusing partial metadata")
         ids.append(str(matches[0]["id"]))

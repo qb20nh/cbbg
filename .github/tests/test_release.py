@@ -143,6 +143,7 @@ class ReleaseValidationTest(unittest.TestCase):
                         CURSEFORGE_GAME_VERSIONS="26.2,Java 25,Fabric,Environment:Client")
         versions = [
             {"id": 1, "name": "26.2", "gameVersionTypeID": 10},
+            {"id": 99, "name": "26.2", "gameVersionTypeID": 99},
             {"id": 2, "name": "Java 25", "gameVersionTypeID": 11},
             {"id": 3, "name": "Fabric", "gameVersionTypeID": 12},
             {"id": 4, "name": "Client", "gameVersionTypeID": 13},
