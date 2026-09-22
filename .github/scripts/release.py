@@ -81,9 +81,15 @@ def validate_destinations():
         elif name == mc:
             # Mod loader version groups can reuse Minecraft version names.
             type_ids = {t["id"] for t in types
-                        if re.match(r"^Minecraft(?:\s|$)", t.get("name", ""))}
+                        if t.get("slug", "").startswith("minecraft-")
+                        or re.match(r"^Minecraft(?:\s|$)", t.get("name", ""))}
             matches = [v for v in matches if v["gameVersionTypeID"] in type_ids]
         if len(matches) != 1:
+            candidates = [v for v in versions if name in (v.get("name"), v.get("slug"))]
+            candidate_types = {v.get("gameVersionTypeID") for v in candidates}
+            print("Matching version entries: " + json.dumps(candidates))
+            print("Matching version types: " + json.dumps(
+                [t for t in types if t.get("id") in candidate_types]))
             raise SystemExit(f"CurseForge label {label!r} resolved to {len(matches)} entries; refusing partial metadata")
         ids.append(str(matches[0]["id"]))
     with open(os.environ["GITHUB_ENV"], "a") as out:
