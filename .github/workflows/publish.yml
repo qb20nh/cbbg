@@ -2,6 +2,16 @@ name: Publish (GitHub Release)
 
 on:
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing immutable release tag (for example v1.3.0+mc26.2)"
+        required: true
+        type: string
+      dry_run:
+        description: "Validate release files and destination labels without uploading"
+        required: true
+        default: true
+        type: boolean
   workflow_run:
     workflows: ["Release"]
     types: [completed]
@@ -32,21 +42,21 @@ jobs:
       PUBLISH_SOURCES_JAR: ""
 
     steps:
-      - name: Resolve latest stable release tag (manual)
+      - name: Validate selected release tag (manual)
         id: latest_stable
         if: ${{ github.event_name == 'workflow_dispatch' }}
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
+          REQUESTED_TAG: ${{ inputs.tag }}
         run: |
           set -euo pipefail
 
-          # Latest stable (non-prerelease, non-draft) release.
-          tag="$(gh api "repos/${GH_REPO}/releases/latest" --jq '.tag_name')"
+          tag="${REQUESTED_TAG}"
 
           if [[ -z "${tag}" ]]; then
-            echo "Unable to determine latest stable release tag via GitHub API."
+            echo "An explicit release tag is required."
             exit 1
           fi
 
@@ -54,7 +64,7 @@ jobs:
           # - Stable:     vX.Y.Z+mc<MINECRAFT_VERSION>
           # - Prerelease: vX.Y.Z-rc.1+mc<MINECRAFT_VERSION>
           if ! [[ "${tag}" =~ ^v[0-9]+[.][0-9]+[.][0-9]+(-[0-9A-Za-z.-]+)?[+]mc[0-9A-Za-z-]+([.][0-9A-Za-z-]+)*$ ]]; then
-            echo "Latest stable release tag (${tag}) must be in the form vX.Y.Z(-PRERELEASE)?+mc<MINECRAFT_VERSION>."
+            echo "Release tag (${tag}) must be in the form vX.Y.Z(-PRERELEASE)?+mc<MINECRAFT_VERSION>."
             exit 1
           fi
 
@@ -137,10 +147,24 @@ jobs:
             echo "${delimiter}"
           } >> "${GITHUB_ENV}"
 
-      - name: Set up JDK 25
+      # Old release tags do not contain the current publishing scripts.
+      - name: Checkout publishing tools from this workflow revision
+        uses: actions/checkout@v6.0.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .release-tools
+          sparse-checkout: .github/scripts
+          persist-credentials: false
+
+      - name: Read release Java requirement
+        id: java
+        shell: bash
+        run: python3 .release-tools/.github/scripts/release.py java
+
+      - name: Set up release JDK
         uses: actions/setup-java@v5.1.0
         with:
-          java-version: "25"
+          java-version: ${{ steps.java.outputs.version }}
           distribution: "temurin"
 
       # Cache Fabric Loom's project-local cache (Minecraft jars, mappings, remapped artifacts, etc).
@@ -177,6 +201,13 @@ jobs:
           fi
           version="${BASH_REMATCH[1]}"
           tag_minecraft_version="${BASH_REMATCH[3]}"
+
+          tag_prerelease=false
+          if [[ "${version}" == *-* ]]; then tag_prerelease=true; fi
+          if [[ "${tag_prerelease}" != "${IS_GH_PRERELEASE}" ]]; then
+            echo "GitHub prerelease status does not match the release tag."
+            exit 1
+          fi
 
           mod_version="$(grep -E '^mod_version=' gradle.properties | cut -d= -f2 | tr -d '\r')"
           if [[ -z "${mod_version}" ]]; then
@@ -218,8 +249,7 @@ jobs:
 
           artifact_version="${mod_version}+mc${minecraft_version}"
 
-          minecraft_series="$(echo "${minecraft_version}" | awk -F. '{ if (NF >= 2) { print $1 "." $2 } else { print $1 } }')"
-          curseforge_game_versions="Minecraft ${minecraft_series}:${minecraft_version},Java 25,Fabric,Environment:Client"
+          curseforge_game_versions="${minecraft_version},Java ${JAVA_VERSION},Fabric,Environment:Client"
 
           if [[ "${IS_GH_PRERELEASE}" == "true" ]]; then
             modrinth_version_type="beta"
@@ -295,8 +325,19 @@ jobs:
           echo "PUBLISH_JAR=${jar}" >> "${GITHUB_ENV}"
           echo "PUBLISH_SOURCES_JAR=${sources_jar}" >> "${GITHUB_ENV}"
 
-      - name: Publish to Modrinth
+      - name: Validate packaged release metadata
+        shell: bash
+        run: python3 .release-tools/.github/scripts/release.py artifacts
+
+      - name: Check CurseForge API authentication and destination labels
         env:
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+        shell: bash
+        run: python3 .release-tools/.github/scripts/release.py destinations
+
+      - name: Validate or publish to Modrinth
+        env:
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
           MODRINTH_TOKEN: ${{ secrets.MODRINTH_TOKEN }}
           MODRINTH_PROJECT_ID: ${{ env.MODRINTH_PROJECT_ID }}
           MODRINTH_VERSION_NUMBER: ${{ env.ARTIFACT_VERSION }}
@@ -304,9 +345,15 @@ jobs:
           MODRINTH_CHANGELOG: ${{ env.RELEASE_BODY }}
           MODRINTH_UPLOAD_FILE: ${{ env.PUBLISH_JAR }}
           MODRINTH_SOURCES_UPLOAD_FILE: ${{ env.PUBLISH_SOURCES_JAR }}
-        run: ./gradlew modrinth
+        run: |
+          args=()
+          if [[ "${DRY_RUN}" == "true" ]]; then
+            args+=(--init-script .release-tools/.github/scripts/modrinth-dry-run.init.gradle)
+          fi
+          ./gradlew modrinth "${args[@]}"
 
       - name: Upload to CurseForge
+        if: github.event_name != 'workflow_dispatch' || !inputs.dry_run
         id: curseforge_upload
         uses: itsmeow/curseforge-upload@v3.1.2
         with:
@@ -322,6 +369,7 @@ jobs:
           changelog_type: markdown
 
       - name: Print CurseForge upload result
+        if: github.event_name != 'workflow_dispatch' || !inputs.dry_run
         shell: bash
         run: |
           set -euo pipefail
