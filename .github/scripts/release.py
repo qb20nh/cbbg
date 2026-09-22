@@ -24,6 +24,9 @@ def read_java():
 def validate_artifacts():
     source = json.loads(Path("src/main/resources/fabric.mod.json").read_text())
     with zipfile.ZipFile(os.environ["PUBLISH_JAR"]) as jar:
+        corrupt_entry = jar.testzip()
+        if corrupt_entry is not None:
+            raise SystemExit(f"Corrupt release JAR entry: {corrupt_entry}")
         metadata = json.loads(jar.read("fabric.mod.json"))
         expected = {
             "id": source["id"],

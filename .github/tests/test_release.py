@@ -97,6 +97,20 @@ class ReleaseValidationTest(unittest.TestCase):
                 self.write_jar(metadata)
                 self.run_step("Validate packaged release metadata", False)
 
+    def test_reject_corrupt_release_resource(self):
+        self.fixture()
+        path = Path(self.env["PUBLISH_JAR"])
+        resource = "assets/cbbg/test.txt"
+        payload = b"release-resource-integrity-test"
+        with zipfile.ZipFile(path, "a") as jar:
+            jar.writestr(resource, payload, compress_type=zipfile.ZIP_STORED)
+        self.run_step("Validate packaged release metadata")
+        data = path.read_bytes()
+        self.assertEqual(data.count(payload), 1)
+        path.write_bytes(data.replace(payload, b"X" + payload[1:], 1))
+        result = self.run_step("Validate packaged release metadata", False)
+        self.assertIn(f"Corrupt release JAR entry: {resource}", result.stderr)
+
     def test_reject_wrong_requirements(self):
         original = self.fixture()
         for key, value in [("minecraft", "~1.21.1"), ("java", ">=21"),
