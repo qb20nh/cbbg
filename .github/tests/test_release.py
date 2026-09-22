@@ -162,7 +162,8 @@ class ReleaseValidationTest(unittest.TestCase):
             {"id": 3, "name": "Fabric", "gameVersionTypeID": 12},
             {"id": 4, "name": "Client", "gameVersionTypeID": 13},
         ]
-        types = [{"id": 10, "name": "Minecraft 26.2"}, {"id": 13, "name": "Environment"}]
+        types = [{"id": 10, "name": "26.2", "slug": "minecraft-26-2"},
+                 {"id": 13, "name": "Environment"}]
         for complete in (True, False):
             with self.subTest(complete=complete):
                 def response(request, timeout):
@@ -195,6 +196,32 @@ class ReleaseValidationTest(unittest.TestCase):
             with self.assertRaises(urllib.error.HTTPError):
                 release.validate_destinations()
         self.assertFalse(Path(self.env["GITHUB_ENV"]).exists())
+
+    def test_minecraft_version_groups_across_release_lines(self):
+        for mc in ("1.7.10", "1.12.2", "1.20.1", "1.21.1", "26.2"):
+            for group in ({"id": 10, "name": "Minecraft " + mc},
+                          {"id": 10, "name": mc, "slug": "minecraft-" + mc.replace(".", "-")}):
+                with self.subTest(mc=mc, group=group):
+                    self.env.update(MINECRAFT_VERSION=mc, CF_API_TOKEN="test-only",
+                                    CURSEFORGE_GAME_VERSIONS=mc)
+                    versions = [{"id": 100, "name": mc, "gameVersionTypeID": 10},
+                                {"id": 101, "name": mc, "gameVersionTypeID": 1},
+                                {"id": 102, "name": mc, "gameVersionTypeID": 20}]
+                    types = [group, {"id": 20, "name": "Forge", "slug": "forge"}]
+                    for ambiguous in (False, True):
+                        candidates = versions + ([{"id": 103, "name": mc, "gameVersionTypeID": 10}]
+                                                 if ambiguous else [])
+                        Path(self.env["GITHUB_ENV"]).unlink(missing_ok=True)
+                        with patch.dict(os.environ, self.env), patch.object(
+                                release, "get_json", side_effect=[[{"version": mc}], candidates, types]):
+                            if ambiguous:
+                                with self.assertRaises(SystemExit):
+                                    release.validate_destinations()
+                                self.assertFalse(Path(self.env["GITHUB_ENV"]).exists())
+                            else:
+                                release.validate_destinations()
+                                self.assertEqual(Path(self.env["GITHUB_ENV"]).read_text(),
+                                                 "CURSEFORGE_GAME_VERSIONS=100\n")
 
     def test_minotaur_debug_init_is_used_only_for_dry_run(self):
         wrapper = self.root / "gradlew"
