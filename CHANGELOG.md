@@ -13,16 +13,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [1.4.0] - 2026-09-22
 
-### Minecraft 26.2 port
+### Changed
 
 - Ported to Minecraft 26.2 by [Evoloxi](https://github.com/Evoloxi). Requires Java 25.
 - Updated release packaging and Java metadata for the 26.2 build.
-
-### Compatibility
-
-- Verified Mod Menu and RenderScale integration with automated client tests.
-- Mod compatibility and feature parity verified in game by the maintainer.
-- Satin has no official Minecraft 26.2 release and is not included in this version's compatibility testing.
 
 ## [1.3.0] - 2025-12-25
 
