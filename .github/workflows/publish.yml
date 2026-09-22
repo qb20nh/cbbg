@@ -137,10 +137,10 @@ jobs:
             echo "${delimiter}"
           } >> "${GITHUB_ENV}"
 
-      - name: Set up JDK 21
+      - name: Set up JDK 25
         uses: actions/setup-java@v5.1.0
         with:
-          java-version: "21"
+          java-version: "25"
           distribution: "temurin"
 
       # Cache Fabric Loom's project-local cache (Minecraft jars, mappings, remapped artifacts, etc).
@@ -219,7 +219,7 @@ jobs:
           artifact_version="${mod_version}+mc${minecraft_version}"
 
           minecraft_series="$(echo "${minecraft_version}" | awk -F. '{ if (NF >= 2) { print $1 "." $2 } else { print $1 } }')"
-          curseforge_game_versions="Minecraft ${minecraft_series}:${minecraft_version},Java 21,Fabric,Environment:Client"
+          curseforge_game_versions="Minecraft ${minecraft_series}:${minecraft_version},Java 25,Fabric,Environment:Client"
 
           if [[ "${IS_GH_PRERELEASE}" == "true" ]]; then
             modrinth_version_type="beta"

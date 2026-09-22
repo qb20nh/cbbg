@@ -17,6 +17,25 @@ import org.junit.jupiter.api.Test;
 public class CbbgConfigScreenTest {
 
         @Test
+        void seedInput_acceptsSignedLongsAndEmptyDefault() {
+                Assertions.assertEquals(0L, CbbgConfigScreen.parseSeed(""));
+                Assertions.assertEquals(-123L, CbbgConfigScreen.parseSeed("-123"));
+                Assertions.assertEquals(Long.MIN_VALUE,
+                                CbbgConfigScreen.parseSeed("-9223372036854775808"));
+                Assertions.assertEquals(Long.MAX_VALUE,
+                                CbbgConfigScreen.parseSeed("9223372036854775807"));
+        }
+
+        @Test
+        void seedInput_rejectsMalformedAndOverflowingValues() {
+                for (String text : new String[] {"abc", "1-2", "--1", "-", "+1", " 1",
+                                "1.5", "9223372036854775808", "-9223372036854775809"}) {
+                        Assertions.assertThrows(NumberFormatException.class,
+                                        () -> CbbgConfigScreen.parseSeed(text), text);
+                }
+        }
+
+        @Test
         void powerOfTwoSlider_mapsToPowersOfTwo() throws Exception {
                 Class<?> sliderClass = Class.forName(
                                 "com.qb20nh.cbbg.config.gui.CbbgConfigScreen$PowerOfTwoSlider");
