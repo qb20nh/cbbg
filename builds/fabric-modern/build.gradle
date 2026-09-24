@@ -137,6 +137,7 @@ loom.runs.named('clientGameTest') {
 sourceSets.gametest {
     java.setSrcDirs(sourceGroups.collect { new File(repositoryRoot, "${it}/src/gametest/java") })
     java.srcDirs(sourceGroups.collect { new File(repositoryRoot, "${it}/src/parity/java") })
+    java.srcDir(new File(repositoryRoot, 'core/src/testSupport/java'))
     resources.setSrcDirs(sourceGroups.collect { new File(repositoryRoot, "${it}/src/gametest/resources") })
 }
 

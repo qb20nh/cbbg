@@ -25,6 +25,8 @@ dependencies {
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
+sourceSets.test.java.srcDir 'src/testSupport/java'
+
 test {
     useJUnitPlatform()
     // Compile with a modern JDK, but exercise exactly the requested runtime.

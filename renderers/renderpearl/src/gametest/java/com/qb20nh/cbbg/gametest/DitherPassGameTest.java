@@ -7,6 +7,7 @@ import com.mojang.renderpearl.api.GpuFormat;
 import com.mojang.renderpearl.api.textures.GpuTexture;
 import com.mojang.renderpearl.api.textures.GpuTextureView;
 import com.qb20nh.cbbg.render.DitherPass;
+import com.qb20nh.cbbg.reference.DitherReference;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.concurrent.CompletableFuture;
@@ -88,15 +89,11 @@ public final class DitherPassGameTest implements FabricClientGameTest {
                     for (int y = 0; y < HEIGHT; y++) {
                         for (int x = 0; x < WIDTH; x++) {
                             int gpuY = HEIGHT - 1 - y;
-                            int noiseX = (int) Math.floor(x * scale);
-                            int noiseY = (int) Math.floor(gpuY * scale);
-                            double noise = ((noiseX + noiseY) & 1) == 0 ? 0 : 1;
-                            double amount = demo && x < WIDTH / 2 ? 0 : strength;
-                            int channel = (int) Math.floor(127.25 + (noise - 0.5) * amount + 0.5);
-                            channel = Math.clamp(channel, 0, 255);
-                            if (demo && x == WIDTH / 2) {
-                                channel = 255 - channel;
-                            }
+                            int noiseX = DitherReference.noiseCoordinate(x, scale, 2);
+                            int noiseY = DitherReference.noiseCoordinate(gpuY, scale, 2);
+                            int noise = ((noiseX + noiseY) & 1) == 0 ? 0 : 255;
+                            int channel = DitherReference.channel(127.25 / 255, noise,
+                                    strength, x, WIDTH, demo);
                             int expected = 0xff000000 | channel * 0x010101;
                             if (image.getPixel(x, y) != expected) {
                                 throw new AssertionError("Dither mismatch at " + x + "," + y
