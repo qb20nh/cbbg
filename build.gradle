@@ -71,6 +71,12 @@ fabricApi {
 	}
 }
 
+sourceSets {
+	main.java.setSrcDirs(['adapters/fabric/26.2/src/main/java'])
+	test.java.setSrcDirs(['adapters/fabric/26.2/src/test/java'])
+	gametest.java.setSrcDirs(['adapters/fabric/26.2/src/gametest/java'])
+}
+
 // Opt-in integration dependencies, excluded from the published mod.
 if (providers.gradleProperty("testRenderScale").isPresent()) {
 	dependencies {
