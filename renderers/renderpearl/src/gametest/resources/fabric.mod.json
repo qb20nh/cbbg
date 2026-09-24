@@ -25,6 +25,7 @@
       "com.qb20nh.cbbg.gametest.IrisGameTest",
       "com.qb20nh.cbbg.gametest.MainTargetsGameTest",
       "com.qb20nh.cbbg.gametest.RenderScaleGameTest",
+      "com.qb20nh.cbbg.gametest.ImmediatelyFastGameTest",
       "com.qb20nh.cbbg.gametest.OptionalModsGameTest"
     ]
   },
