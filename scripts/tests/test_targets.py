@@ -63,6 +63,7 @@ class TargetCatalogTest(unittest.TestCase):
     def test_pending_targets_cannot_be_silently_omitted(self):
         with self.assertRaisesRegex(ValueError, "not implemented"):
             select_targets(self.catalog, require_implemented=True)
+        next(t for t in self.catalog["targets"] if t["id"] == "1.21.11-fabric")["implemented"] = True
         selected = select_targets(self.catalog, "1.21.11-fabric", require_implemented=True)
         self.assertEqual(["1.21.11-fabric"], [t["id"] for t in selected])
 
