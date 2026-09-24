@@ -1,0 +1,93 @@
+package com.qb20nh.cbbg.gametest;
+
+import com.mojang.blaze3d.systems.RenderSystem;
+import com.qb20nh.cbbg.config.CbbgConfig;
+import com.qb20nh.cbbg.render.DitherController;
+import java.lang.reflect.Proxy;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.util.ArrayList;
+import java.util.List;
+import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
+import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
+import net.minecraft.client.gui.components.debug.DebugScreenDisplayer;
+import net.minecraft.client.gui.components.debug.DebugScreenEntries;
+import net.minecraft.client.gui.components.debug.DebugScreenEntryStatus;
+import net.minecraft.resources.Identifier;
+
+public final class DebugOverlayGameTest implements FabricClientGameTest {
+    private static final Identifier ID = Identifier.fromNamespaceAndPath("cbbg", "cbbg");
+
+    @Override
+    public void runTest(ClientGameTestContext context) {
+        CbbgConfig original = CbbgConfig.get();
+        boolean overlayVisible = context.computeOnClient(client -> client.debugEntries.isOverlayVisible());
+        var originalStatus = context.computeOnClient(client -> client.debugEntries.getStatus(ID));
+        context.runOnClient(client -> {
+            if (DebugScreenEntries.getEntry(ID) == null) {
+                throw new AssertionError("CBBG debug entry is missing");
+            }
+            for (var profile : DebugScreenEntries.PROFILES.values()) {
+                if (profile.get(ID) != DebugScreenEntryStatus.IN_OVERLAY) {
+                    throw new AssertionError("CBBG is absent from a default debug profile");
+                }
+            }
+        });
+        try (var world = context.worldBuilder().create()) {
+            world.getConnection().waitForChunksRender();
+            for (var mode : CbbgConfig.Mode.values()) {
+                context.runOnClient(client -> CbbgConfig.setMode(mode));
+                context.waitFor(client -> DitherController.isReady() == mode.isActive(), 600);
+                context.runOnClient(client -> {
+                    List<String> lines = new ArrayList<>();
+                    DebugScreenDisplayer displayer = (DebugScreenDisplayer) Proxy.newProxyInstance(
+                            DebugScreenDisplayer.class.getClassLoader(), new Class<?>[] {DebugScreenDisplayer.class},
+                            (proxy, method, args) -> {
+                                if (!method.getName().equals("addLine")) {
+                                    throw new AssertionError("Unexpected debug display method " + method);
+                                }
+                                lines.add((String) args[0]);
+                                return null;
+                            });
+                    DebugScreenEntries.getEntry(ID).display(displayer, client.level, null, null);
+                    String text = String.join("\n", lines);
+                    String main = client.gameRenderer.mainRenderTarget().getColorTexture().getFormat().name();
+                    String lightmap = client.gameRenderer.levelLightmap().texture().getFormat().name();
+                    String backend = RenderSystem.getDevice().getDeviceInfo().backendName();
+                    if (lines.size() != 2 || !text.contains("mode=" + mode + " (user=" + mode + ")")
+                            || !text.contains("main=" + main) || !text.contains("backend=" + backend)
+                            || !text.contains("lm=" + lightmap)
+                            || !text.contains("dis=0") || !text.contains("iris=0")
+                            || !text.contains("stbn=" + DitherController.getCurrentStbnFrameIndex()
+                                    + "/" + (mode.isActive() ? 8 : 0))) {
+                        throw new AssertionError("Incorrect CBBG debug state: " + text);
+                    }
+                    try {
+                        Path evidence = Path.of(System.getProperty("cbbg.test.evidence"), "debug");
+                        Files.createDirectories(evidence);
+                        Files.writeString(evidence.resolve(mode.name() + ".txt"), text + "\n");
+                        client.debugEntries.setStatus(ID, DebugScreenEntryStatus.IN_OVERLAY);
+                        client.debugEntries.setOverlayVisible(true);
+                    } catch (java.io.IOException failure) {
+                        throw new AssertionError("Could not retain debug output", failure);
+                    }
+                });
+                context.waitTicks(5);
+                try {
+                    Path capture = context.takeScreenshot("cbbg-debug-" + mode.name());
+                    Files.copy(capture, Path.of(System.getProperty("cbbg.test.evidence"),
+                            "debug", mode.name() + ".png"), StandardCopyOption.REPLACE_EXISTING);
+                } catch (java.io.IOException failure) {
+                    throw new AssertionError("Could not retain visible debug overlay", failure);
+                }
+            }
+        } finally {
+            context.runOnClient(client -> {
+                CbbgConfig.setMode(original.mode());
+                client.debugEntries.setStatus(ID, originalStatus);
+                client.debugEntries.setOverlayVisible(overlayVisible);
+            });
+        }
+    }
+}

@@ -222,6 +222,7 @@ if (target.renderer == 'renderpearl') {
      maximumNoiseCache: ['Rgba8ReadbackGameTest', 'MaximumNoiseCacheGameTest'],
      worldPixels: ['Rgba8ReadbackGameTest', 'WorldPixelsGameTest'],
      worldControl: ['Rgba8ReadbackGameTest', 'WorldControlGameTest'],
+     debugOverlay: ['Rgba8ReadbackGameTest', 'DebugOverlayGameTest'],
      dsaBenchmark: ['Rgba8ReadbackGameTest', 'DitherPassGameTest', 'PresentationGameTest',
                     'DsaBenchmarkGameTest']].each { fixture, entrypoints ->
         def fixtureMetadata = tasks.register("${fixture}Metadata") {
@@ -248,6 +249,7 @@ if (target.renderer == 'renderpearl') {
                                  maximumNoiseCache: 'maximum-noise-cache-driver',
                                  worldPixels: 'world-pixels-driver',
                                  worldControl: 'world-control-driver',
+                                 debugOverlay: 'debug-overlay-driver',
                                  dsaBenchmark: 'dsa-benchmark-driver'][fixture]
             from(sourceSets.gametest.output) { exclude 'fabric.mod.json' }
             from(fixtureMetadata)

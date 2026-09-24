@@ -157,6 +157,10 @@ public final class DitherController {
         return shownFrame;
     }
 
+    public static int getStbnFrames() {
+        return frames == null ? 0 : frames.length;
+    }
+
     public static boolean isReady() {
         return frames != null && noiseView != null && !failed;
     }
