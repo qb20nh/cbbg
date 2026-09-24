@@ -16,6 +16,8 @@ import net.minecraft.client.gui.components.debug.DebugScreenEntries;
 import net.minecraft.client.gui.components.debug.DebugScreenEntryStatus;
 import net.minecraft.resources.Identifier;
 import net.minecraft.client.Minecraft;
+import org.lwjgl.opengl.GL11;
+import org.lwjgl.opengl.GL30;
 
 public final class DebugOverlayGameTest implements FabricClientGameTest {
     private static final Identifier ID = Identifier.fromNamespaceAndPath("cbbg", "cbbg");
@@ -45,6 +47,7 @@ public final class DebugOverlayGameTest implements FabricClientGameTest {
                     String main = client.gameRenderer.mainRenderTarget().getColorTexture().getFormat().name();
                     String lightmap = client.gameRenderer.levelLightmap().texture().getFormat().name();
                     String backend = RenderSystem.getDevice().getDeviceInfo().backendName();
+                    checkFramebufferState(client, backend, text);
                     if (!text.contains("mode=" + mode + " (user=" + mode + ")")
                             || !text.contains("main=" + main) || !text.contains("backend=" + backend)
                             || !text.contains("lm=" + lightmap)
@@ -97,5 +100,44 @@ public final class DebugOverlayGameTest implements FabricClientGameTest {
         entry.display(displayer, client.level, null, null);
         if (lines.size() != 2) throw new AssertionError("Incomplete CBBG debug output: " + lines);
         return String.join("\n", lines);
+    }
+
+    private static void checkFramebufferState(Minecraft client, String backend, String output) {
+        if (!backend.equalsIgnoreCase("opengl")) {
+            if (!output.contains("fb=n/a srgb=n/a")) {
+                throw new AssertionError("Non-GL debug entry claimed GL framebuffer state");
+            }
+            return;
+        }
+        if (!output.contains("fb=SRGB") && !output.contains("fb=LIN")) {
+            throw new AssertionError("Default framebuffer encoding was not identified");
+        }
+        int draw = GL11.glGetInteger(GL30.GL_DRAW_FRAMEBUFFER_BINDING);
+        int read = GL11.glGetInteger(GL30.GL_READ_FRAMEBUFFER_BINDING);
+        boolean srgb = GL11.glIsEnabled(GL30.GL_FRAMEBUFFER_SRGB);
+        int testDraw = GL30.glGenFramebuffers();
+        int testRead = GL30.glGenFramebuffers();
+        try {
+            GL30.glBindFramebuffer(GL30.GL_DRAW_FRAMEBUFFER, testDraw);
+            GL30.glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, testRead);
+            for (boolean enabled : new boolean[] {false, true}) {
+                if (enabled) GL11.glEnable(GL30.GL_FRAMEBUFFER_SRGB);
+                else GL11.glDisable(GL30.GL_FRAMEBUFFER_SRGB);
+                String actual = readOutput(client);
+                if (!actual.contains("srgb=" + (enabled ? 1 : 0))
+                        || GL11.glGetInteger(GL30.GL_DRAW_FRAMEBUFFER_BINDING) != testDraw
+                        || GL11.glGetInteger(GL30.GL_READ_FRAMEBUFFER_BINDING) != testRead
+                        || GL11.glIsEnabled(GL30.GL_FRAMEBUFFER_SRGB) != enabled) {
+                    throw new AssertionError("Debug query changed bindings/conversion state or reported stale state");
+                }
+            }
+        } finally {
+            GL30.glBindFramebuffer(GL30.GL_DRAW_FRAMEBUFFER, draw);
+            GL30.glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, read);
+            if (srgb) GL11.glEnable(GL30.GL_FRAMEBUFFER_SRGB);
+            else GL11.glDisable(GL30.GL_FRAMEBUFFER_SRGB);
+            GL30.glDeleteFramebuffers(testDraw);
+            GL30.glDeleteFramebuffers(testRead);
+        }
     }
 }
