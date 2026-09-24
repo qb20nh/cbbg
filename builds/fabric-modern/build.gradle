@@ -223,6 +223,7 @@ if (target.renderer == 'renderpearl') {
      worldPixels: ['Rgba8ReadbackGameTest', 'WorldPixelsGameTest'],
      worldControl: ['Rgba8ReadbackGameTest', 'WorldControlGameTest'],
      debugOverlay: ['Rgba8ReadbackGameTest', 'DebugOverlayGameTest'],
+     shaderFailure: ['Rgba8ReadbackGameTest', 'ShaderFailureGameTest', 'PresentationGameTest'],
      dsaBenchmark: ['Rgba8ReadbackGameTest', 'DitherPassGameTest', 'PresentationGameTest',
                     'DsaBenchmarkGameTest']].each { fixture, entrypoints ->
         def fixtureMetadata = tasks.register("${fixture}Metadata") {
@@ -250,6 +251,7 @@ if (target.renderer == 'renderpearl') {
                                  worldPixels: 'world-pixels-driver',
                                  worldControl: 'world-control-driver',
                                  debugOverlay: 'debug-overlay-driver',
+                                 shaderFailure: 'shader-failure-driver',
                                  dsaBenchmark: 'dsa-benchmark-driver'][fixture]
             from(sourceSets.gametest.output) { exclude 'fabric.mod.json' }
             from(fixtureMetadata)
