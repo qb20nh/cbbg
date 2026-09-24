@@ -24,6 +24,11 @@ class FabricScenarioEvidenceTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.verify(log=self.log + "VUID-vkCmdBlitImage-dstOffset-00248")
 
+    def test_zero_exit_cannot_hide_logged_minecraft_crash(self):
+        for error in ("Minecraft has crashed!", "Client gametests failed with an exception"):
+            with self.subTest(error=error), self.assertRaises(ValueError):
+                self.verify(log=self.log + error)
+
     def test_zero_exit_cannot_hide_opengl_errors(self):
         for error in ("GL_INVALID_ENUM", "GL_INVALID_VALUE", "GL_INVALID_OPERATION",
                       "GL_INVALID_FRAMEBUFFER_OPERATION", "GL_OUT_OF_MEMORY"):

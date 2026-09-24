@@ -19,6 +19,7 @@ def validate_scenarios(expected, trace, log, exit_code, backend):
     if not observed or any(value.lower() != backend for value in observed):
         raise ValueError("Missing or mismatched actual graphics backend")
     if re.search(r"VUID-|Validation Error|VK_ERROR_DEVICE_LOST|AssertionError|Game crashed!"
+                 r"|Minecraft has crashed!|Client gametests failed with an exception"
                  r"|GL_INVALID_(?:ENUM|VALUE|OPERATION|FRAMEBUFFER_OPERATION)|GL_OUT_OF_MEMORY", log):
         raise ValueError("Graphics validation or runtime failure in client log")
     return {"completedEntrypoints": len(expected), "backend": backend,
