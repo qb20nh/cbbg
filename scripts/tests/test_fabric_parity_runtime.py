@@ -152,6 +152,82 @@ class LauncherFailureTests(unittest.TestCase):
             launcher.main()
         self.assertNotIn('scenarios', self.receipt())
 
+    def prepare_restart(self):
+        entry = 'com.qb20nh.cbbg.gametest.IrisRestartGameTest'
+        with zipfile.ZipFile(self.driver, 'w') as jar:
+            jar.writestr('fabric.mod.json', json.dumps({
+                'id': 'cbbg-renderer-test',
+                'entrypoints': {'fabric-client-gametest': [entry]}}))
+
+        def client(command, **kwargs):
+            phase = sys.argv[-1]
+            evidence = self.game / ('evidence-' + phase)
+            evidence.mkdir()
+            (evidence / 'scenarios.tsv').write_text(
+                'started\t' + entry + '\npassed\t' + entry + '\n')
+            (evidence / 'graphics-context.json').write_text('{"backend":"opengl"}')
+            kwargs['stdout'].write('Readback backend=OpenGL GPU=Fixture driver=3.3\n')
+            if phase == 'prepare':
+                (self.game / 'config').mkdir()
+                (self.game / 'config/cbbg.json').write_text('{"mode":"ENABLED"}')
+                (self.game / 'config/iris.properties').write_text('enableShaders=true')
+                pack = self.game / 'shaderpacks/cbbg-parity/shaders'
+                pack.mkdir(parents=True)
+                (pack / 'final.fsh').write_text('fixture shader')
+            return subprocess.CompletedProcess(command, 0)
+        self.run.side_effect = client
+        self.enterContext(patch.object(launcher.subprocess, 'check_output',
+            side_effect=lambda *a, **kw: 'a' * 40 if kw.get('text') else b''))
+        with patch.object(sys, 'argv', sys.argv + ['--restart-phase', 'prepare']), patch('builtins.print'):
+            launcher.main()
+
+    def test_restart_preserves_prepare_evidence_and_binds_state(self):
+        self.prepare_restart()
+        prepare = self.game / 'prepare-probe.json'
+        before = prepare.read_bytes()
+        with patch.object(sys, 'argv', sys.argv + ['--restart-phase', 'verify']), patch('builtins.print'):
+            launcher.main()
+        self.assertEqual(prepare.read_bytes(), before)
+        verified = json.loads((self.game / 'verify-probe.json').read_text())
+        self.assertEqual(verified['prepareReceiptSha256'], launcher.digest(prepare))
+        self.assertEqual(verified['inputState'], json.loads(before)['persistedState'])
+        self.assertEqual(self.run.call_count, 2)
+
+    def test_restart_rejects_changed_settings_without_launch(self):
+        self.prepare_restart()
+        (self.game / 'config/cbbg.json').write_text('{"mode":"DISABLED"}')
+        with patch.object(sys, 'argv', sys.argv + ['--restart-phase', 'verify']):
+            with self.assertRaisesRegex(ValueError, 'persisted state changed'):
+                launcher.main()
+        self.assertEqual(self.run.call_count, 1)
+        self.assertFalse((self.game / 'verify-probe.json').exists())
+
+    def test_restart_rejects_changed_installed_jar(self):
+        self.prepare_restart()
+        (self.game / 'mods/candidate.jar').write_bytes(b'changed')
+        with patch.object(sys, 'argv', sys.argv + ['--restart-phase', 'verify']):
+            with self.assertRaisesRegex(ValueError, 'installed artifact changed'):
+                launcher.main()
+        self.assertEqual(self.run.call_count, 1)
+
+    def test_restart_rejects_changed_prepare_evidence(self):
+        self.prepare_restart()
+        (self.game / 'evidence-prepare/scenarios.tsv').write_text('altered')
+        with patch.object(sys, 'argv', sys.argv + ['--restart-phase', 'verify']):
+            with self.assertRaisesRegex(ValueError, 'prepare evidence changed'):
+                launcher.main()
+        self.assertEqual(self.run.call_count, 1)
+
+    def test_restart_verify_cannot_overwrite_previous_attempt(self):
+        self.prepare_restart()
+        with patch.object(sys, 'argv', sys.argv + ['--restart-phase', 'verify']), patch('builtins.print'):
+            launcher.main()
+            before = (self.game / 'verify-probe.json').read_bytes()
+            with self.assertRaises(FileExistsError):
+                launcher.main()
+        self.assertEqual(self.run.call_count, 2)
+        self.assertEqual((self.game / 'verify-probe.json').read_bytes(), before)
+
 
 if __name__ == '__main__':
     unittest.main()

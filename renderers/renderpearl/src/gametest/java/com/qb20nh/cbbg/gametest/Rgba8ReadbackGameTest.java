@@ -29,6 +29,17 @@ import org.lwjgl.opengl.GL32C;
 public final class Rgba8ReadbackGameTest implements FabricClientGameTest {
     @Override
     public void runTest(ClientGameTestContext context) {
+        recordGraphicsContext(context);
+        for (GpuFormat format : new GpuFormat[] {GpuFormat.RGBA16_FLOAT, GpuFormat.RGBA32_FLOAT}) {
+            checkReadback(context, format, 1);
+            checkReadback(context, format, 2);
+        }
+        checkShaderReload(context);
+        checkReadback(context, GpuFormat.RGBA16_FLOAT, 1);
+        checkReadback(context, GpuFormat.RGBA32_FLOAT, 1);
+    }
+
+    static void recordGraphicsContext(ClientGameTestContext context) {
         context.runOnClient(client -> {
             var info = RenderSystem.getDevice().getDeviceInfo();
             LoggerFactory.getLogger("cbbg-test").info("Readback backend={} GPU={} driver={}",
@@ -67,13 +78,6 @@ public final class Rgba8ReadbackGameTest implements FabricClientGameTest {
                 throw new AssertionError("Could not record the actual graphics context", failure);
             }
         });
-        for (GpuFormat format : new GpuFormat[] {GpuFormat.RGBA16_FLOAT, GpuFormat.RGBA32_FLOAT}) {
-            checkReadback(context, format, 1);
-            checkReadback(context, format, 2);
-        }
-        checkShaderReload(context);
-        checkReadback(context, GpuFormat.RGBA16_FLOAT, 1);
-        checkReadback(context, GpuFormat.RGBA32_FLOAT, 1);
     }
 
     private static void checkShaderReload(ClientGameTestContext context) {

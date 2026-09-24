@@ -28,6 +28,7 @@ public final class IrisRestartGameTest implements FabricClientGameTest {
         if (!FabricLoader.getInstance().isModLoaded("iris")) {
             throw new AssertionError("Restart fixture requires Iris");
         }
+        Rgba8ReadbackGameTest.recordGraphicsContext(context);
         context.runOnClient(client -> {
             var info = RenderSystem.getDevice().getDeviceInfo();
             LoggerFactory.getLogger("cbbg-test").info("Readback backend={} GPU={} driver={}",

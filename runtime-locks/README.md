@@ -30,3 +30,14 @@ to verify the downloaded bytes. `verify_dependencies` checks catalog pins,
 selected jars and required transitive dependencies (Iris/Sodium and
 RenderScale/Cloth Config). Candidate, driver and gametest API hashes still need
 separate receipt binding. A mod dependency lock does not establish compatibility.
+
+For the dedicated `irisRestartDriverJar`, use `fabric_parity_runtime.py` with
+`--backend opengl --restart-phase prepare`, then repeat the same launch arguments
+and game directory with `--restart-phase verify`. The first invocation requires a
+new directory. The second preserves its settings and installed jars, verifies the
+successful prepare receipt and its evidence, and rejects changed runtime/source
+identities, artifacts, CBBG/Iris settings or fixture shader-pack files. Each JVM
+writes separate phase-prefixed logs, evidence and receipts; a verification attempt
+cannot overwrite an earlier attempt. `--restart-phase control` creates a separate
+fresh disabled-effect control. These options require the dedicated restart driver.
+Graphics-context recording does not reload shaders or alter startup preferences.
