@@ -10,8 +10,10 @@ import java.nio.ByteOrder;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
+import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.Screenshot;
 
 /** Real world pixels versus a CPU oracle and a checked-in, version-specific scene baseline. */
@@ -49,8 +51,17 @@ public final class WorldPixelsGameTest implements FabricClientGameTest {
             if (disabledControl) {
                 captureDisabled(context);
             } else {
-                capture(context, false);
-                capture(context, true);
+                CompletionException firstFailure = null;
+                for (boolean demo : new boolean[] {false, true}) {
+                    try {
+                        capture(context, demo);
+                    } catch (CompletionException failure) {
+                        // Retain both modes for diagnosis, without turning a failed capture into a pass.
+                        if (firstFailure == null) firstFailure = failure;
+                        else firstFailure.addSuppressed(failure);
+                    }
+                }
+                if (firstFailure != null) throw firstFailure;
             }
         } finally {
             context.runOnClient(client -> {
@@ -156,7 +167,9 @@ public final class WorldPixelsGameTest implements FabricClientGameTest {
         int mismatches = 0;
         int goldenMismatches = 0;
         String first = null;
-        String goldenPath = "/cbbg-world-goldens/26.3/" + (demo ? "demo" : "enabled") + ".png";
+        String renderer = FabricLoader.getInstance().isModLoaded("sodium") ? "sodium/" : "";
+        String goldenPath = "/cbbg-world-goldens/26.3/" + renderer
+                + (demo ? "demo" : "enabled") + ".png";
         var goldenStream = WorldPixelsGameTest.class.getResourceAsStream(goldenPath);
         if (goldenStream == null) throw new AssertionError("Missing world golden: " + goldenPath);
         try (goldenStream;
