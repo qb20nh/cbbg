@@ -1,0 +1,55 @@
+import unittest
+
+from fabric_scenario_evidence import validate_scenarios
+
+
+class FabricScenarioEvidenceTests(unittest.TestCase):
+    def setUp(self):
+        self.expected = ["example.First", "example.Second"]
+        self.trace = "started\texample.First\npassed\texample.First\nstarted\texample.Second\npassed\texample.Second\n"
+        self.log = "Readback backend=Vulkan GPU=fixture\n"
+
+    def verify(self, **changes):
+        args = dict(expected=self.expected, trace=self.trace, log=self.log,
+                    exit_code=0, backend="vulkan")
+        args.update(changes)
+        return validate_scenarios(**args)
+
+    def test_complete_entrypoints_are_not_release_acceptance(self):
+        result = self.verify()
+        self.assertEqual(result["completedEntrypoints"], 2)
+        self.assertFalse(result["releaseAcceptance"])
+
+    def test_zero_exit_cannot_hide_vulkan_validation_error(self):
+        with self.assertRaises(ValueError):
+            self.verify(log=self.log + "VUID-vkCmdBlitImage-dstOffset-00248")
+
+    def test_zero_exit_cannot_hide_opengl_errors(self):
+        for error in ("GL_INVALID_ENUM", "GL_INVALID_VALUE", "GL_INVALID_OPERATION",
+                      "GL_INVALID_FRAMEBUFFER_OPERATION", "GL_OUT_OF_MEMORY"):
+            with self.subTest(error=error), self.assertRaises(ValueError):
+                self.verify(backend="opengl", log="Readback backend=OpenGL\n" + error)
+
+    def test_missing_reordered_duplicate_or_diagnostic_trace_fails(self):
+        for trace in ("", self.trace.rsplit("passed", 1)[0],
+                      self.trace + "passed\texample.Second\n",
+                      "\n".join(reversed(self.trace.splitlines())),
+                      self.trace + "diagnostic-options-reset-skipped\texample.Second\n"):
+            with self.subTest(trace=trace), self.assertRaises(ValueError):
+                self.verify(trace=trace)
+
+    def test_backend_fallback_or_missing_identity_fails(self):
+        for log in ("", "Readback backend=OpenGL GPU=fixture", self.log + "Readback backend=OpenGL"):
+            with self.subTest(log=log), self.assertRaises(ValueError):
+                self.verify(log=log)
+
+    def test_invalid_contract_and_nonzero_exit_fail(self):
+        for changes in ({"expected": []}, {"expected": ["same", "same"]},
+                        {"expected": [None]}, {"exit_code": 255}, {"exit_code": False},
+                        {"backend": "unknown"}):
+            with self.subTest(changes=changes), self.assertRaises(ValueError):
+                self.verify(**changes)
+
+
+if __name__ == "__main__":
+    unittest.main()
