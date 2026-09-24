@@ -215,6 +215,31 @@ def parityDriverJar = tasks.register('parityDriverJar', Jar) {
     from sourceSets.gametest.output
 }
 
+// Restart tests need their own entrypoint so startup state is inspected before
+// ordinary scenarios change configuration. Production artifacts are unaffected.
+if (target.renderer == 'renderpearl') {
+    def restartMetadata = tasks.register('irisRestartMetadata') {
+        dependsOn tasks.named('processGametestResources')
+        def source = layout.buildDirectory.file('resources/gametest/fabric.mod.json')
+        def destination = layout.buildDirectory.file('iris-restart/fabric.mod.json')
+        inputs.file(source)
+        outputs.file(destination)
+        doLast {
+            def metadata = new JsonSlurper().parse(source.get().asFile)
+            metadata.entrypoints['fabric-client-gametest'] =
+                    ['com.qb20nh.cbbg.gametest.IrisRestartGameTest']
+            destination.get().asFile.parentFile.mkdirs()
+            destination.get().asFile.text = groovy.json.JsonOutput.prettyPrint(
+                    groovy.json.JsonOutput.toJson(metadata))
+        }
+    }
+    tasks.register('irisRestartDriverJar', Jar) {
+        archiveClassifier = 'iris-restart-driver'
+        from(sourceSets.gametest.output) { exclude 'fabric.mod.json' }
+        from(restartMetadata)
+    }
+}
+
 tasks.register('verifyCandidatePackaging', Exec) {
     group = 'verification'
     description = 'Check production bytecode and embedded core without launching Minecraft.'

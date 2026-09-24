@@ -41,6 +41,16 @@ OpenGL-only. Packaged testing uses separate candidate and test-driver jars from
 `prepareParityRuntime`, with exact dependency hashes and fresh game directories.
 Run graphics tests locally, never in CI.
 
+For the real Iris restart fixture, build `irisRestartDriverJar` and use its
+`*-iris-restart-driver.jar` in place of the ordinary parity driver. Launch with
+Iris and Sodium and `-Dcbbg.test.restart=prepare`, wait for successful process
+exit, then launch a new JVM in the same isolated game directory with
+`-Dcbbg.test.restart=verify`. Use separate evidence directories for the phases.
+Keep artifacts, dependencies and saved settings unchanged between launches.
+The fixture verifies persisted shader selection, actual shader pixels, CBBG
+suspension and recovery after disabling shaders. `control` is a separate fresh
+directory run with CBBG disabled; it is diagnostic evidence, not a restart pass.
+
 Scenarios cover window resizing, allocation/fallback, format transitions,
 pixel readback, live presentation, screenshots, commands, settings, notifications
 and optional integrations. A passing scenario trace is partial evidence, not
