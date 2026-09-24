@@ -8,6 +8,7 @@ import json
 from pathlib import Path
 
 from targets import load_catalog, select_targets
+from fabric_runtime_lock import capture_runtime, fabric_command
 
 
 def validate_profile(profile, target):
@@ -78,7 +79,11 @@ def main():
         expected = target["dependencies"].get("loaderSha256")
         if expected is not None and digest != expected:
             raise ValueError("Fabric loader checksum mismatch")
-        receipt.update(installed=True, loaderSha256=digest)
+        lock = capture_runtime(runtime, identity, fabric_command(runtime, identity))
+        lock_bytes = (json.dumps(lock, indent=2) + '\n').encode('utf-8')
+        (runtime / 'cbbg-runtime-lock.json').write_bytes(lock_bytes)
+        receipt.update(installed=True, loaderSha256=digest,
+                       runtimeLockSha256=hashlib.sha256(lock_bytes).hexdigest())
     finally:
         receipt_path.write_text(json.dumps(receipt, indent=2) + "\n", encoding="utf-8")
 
