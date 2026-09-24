@@ -14,7 +14,7 @@ import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.minecraft.client.Screenshot;
 
-/** Real world pixels versus a CPU oracle; retained captures are not approved world goldens. */
+/** Real world pixels versus a CPU oracle and a checked-in, version-specific scene baseline. */
 public final class WorldPixelsGameTest implements FabricClientGameTest {
     @Override
     public void runTest(ClientGameTestContext context) {
@@ -125,8 +125,17 @@ public final class WorldPixelsGameTest implements FabricClientGameTest {
         int changed = 0;
         int boundaries = 0;
         int mismatches = 0;
+        int goldenMismatches = 0;
         String first = null;
-        try (NativeImage expectedImage = new NativeImage(width, height, false)) {
+        String goldenPath = "/cbbg-world-goldens/26.3/" + (demo ? "demo" : "enabled") + ".png";
+        var goldenStream = WorldPixelsGameTest.class.getResourceAsStream(goldenPath);
+        if (goldenStream == null) throw new AssertionError("Missing world golden: " + goldenPath);
+        try (goldenStream;
+                NativeImage golden = NativeImage.read(goldenStream);
+                NativeImage expectedImage = new NativeImage(width, height, false)) {
+            if (golden.getWidth() != width || golden.getHeight() != height) {
+                throw new AssertionError("World viewport differs from the golden");
+            }
             for (int y = 0; y < height; y++) {
                 int gpuY = height - 1 - y;
                 for (int x = 0; x < width; x++) {
@@ -159,6 +168,7 @@ public final class WorldPixelsGameTest implements FabricClientGameTest {
                         throw new AssertionError("World screenshot alpha was not opaque");
                     }
                     expectedImage.setPixel(x, y, expected);
+                    if (golden.getPixel(x, y) != expected) goldenMismatches++;
                 }
             }
             expectedImage.writeToFile(directory.resolve("expected.png"));
@@ -166,10 +176,14 @@ public final class WorldPixelsGameTest implements FabricClientGameTest {
                     + ",\"height\":" + height + ",\"noiseFrame\":0,\"strength\":2"
                     + ",\"sourceByteOrder\":\"" + ByteOrder.nativeOrder() + "\""
                     + ",\"changedChannels\":" + changed + ",\"boundaryChannels\":" + boundaries
-                    + ",\"mismatchedChannels\":" + mismatches + ",\"approvedGolden\":false}\n");
+                    + ",\"mismatchedChannels\":" + mismatches
+                    + ",\"goldenMismatchedPixels\":" + goldenMismatches
+                    + ",\"goldenResource\":\"" + goldenPath + "\",\"approvedGolden\":true}\n");
             if (changed == 0) throw new AssertionError("World fixture cannot detect a missing effect");
             if (mismatches != 0) throw new AssertionError("World CPU pixel mismatch: " + first
                     + " (" + mismatches + " channels)");
+            if (goldenMismatches != 0) throw new AssertionError("World scene differs from golden: "
+                    + goldenMismatches + " pixels");
         } catch (java.io.IOException failure) {
             throw new AssertionError("Could not retain world pixel evidence", failure);
         }
