@@ -13,4 +13,8 @@ pluginManagement {
 	}
 }
 
-include 'core'
+if (providers.gradleProperty('target').isPresent() || providers.gradleProperty('targets').isPresent()) {
+	rootProject.buildFileName = 'dispatch.gradle'
+} else {
+	include 'core'
+}

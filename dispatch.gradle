@@ -1,0 +1,31 @@
+// Explicit selections load no loader plugin in the outer Gradle process.
+def single = providers.gradleProperty('target')
+def multiple = providers.gradleProperty('targets')
+if (single.isPresent() && multiple.isPresent()) {
+    throw new GradleException('Use either -Ptarget or -Ptargets, not both')
+}
+def selection = single.orElse(multiple).get()
+def supported = ['build', 'check', 'runClient', 'genSources']
+gradle.startParameter.taskNames.each { requested ->
+    if (!supported.contains(requested)) {
+        throw new GradleException("Unsupported selected-target task: ${requested}")
+    }
+}
+supported.each { requested ->
+    tasks.register(requested, Exec) {
+        group = requested == 'check' ? 'verification' : 'build'
+        description = "Run ${requested} in the selected catalog build processes."
+        workingDir rootDir
+        def arguments = ['python3', 'scripts/build_targets.py', requested, '--targets', selection]
+        if (gradle.startParameter.offline) {
+            arguments.add('--offline')
+        }
+        ['compat', 'backend', 'testJava'].each { key ->
+            def value = providers.gradleProperty(key)
+            if (value.isPresent()) {
+                arguments.addAll(['--property', "${key}=${value.get()}".toString()])
+            }
+        }
+        commandLine arguments
+    }
+}
