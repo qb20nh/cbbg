@@ -19,6 +19,7 @@
       "com.qb20nh.cbbg.gametest.PersistentBlurGameTest",
       "com.qb20nh.cbbg.gametest.CommandsGameTest",
       "com.qb20nh.cbbg.gametest.NotificationsGameTest",
+      "com.qb20nh.cbbg.gametest.NoiseCacheGameTest",
       "com.qb20nh.cbbg.gametest.MenuStrengthGameTest",
       "com.qb20nh.cbbg.gametest.CbbgConfigScreenGameTest",
       "com.qb20nh.cbbg.gametest.ModMenuGameTest",
