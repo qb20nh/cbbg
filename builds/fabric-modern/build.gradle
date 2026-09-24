@@ -218,7 +218,9 @@ def parityDriverJar = tasks.register('parityDriverJar', Jar) {
 // Startup-state and slow maximum-size fixtures run independently of the ordinary suite.
 if (target.renderer == 'renderpearl') {
     [irisRestart: ['IrisRestartGameTest'],
-     maximumNoiseCache: ['Rgba8ReadbackGameTest', 'MaximumNoiseCacheGameTest']].each { fixture, entrypoints ->
+     maximumNoiseCache: ['Rgba8ReadbackGameTest', 'MaximumNoiseCacheGameTest'],
+     dsaBenchmark: ['Rgba8ReadbackGameTest', 'DitherPassGameTest', 'PresentationGameTest',
+                    'DsaBenchmarkGameTest']].each { fixture, entrypoints ->
         def fixtureMetadata = tasks.register("${fixture}Metadata") {
             dependsOn tasks.named('processGametestResources')
             def source = layout.buildDirectory.file('resources/gametest/fabric.mod.json')
@@ -230,13 +232,18 @@ if (target.renderer == 'renderpearl') {
                 def metadata = new JsonSlurper().parse(source.get().asFile)
                 metadata.entrypoints['fabric-client-gametest'] =
                         entrypoints.collect { "com.qb20nh.cbbg.gametest.${it}".toString() }
+                if (fixture == 'dsaBenchmark') {
+                    metadata.entrypoints.client = ['com.qb20nh.cbbg.gametest.DsaBenchmarkSettings']
+                }
                 destination.get().asFile.parentFile.mkdirs()
                 destination.get().asFile.text = groovy.json.JsonOutput.prettyPrint(
                         groovy.json.JsonOutput.toJson(metadata))
             }
         }
         tasks.register("${fixture}DriverJar", Jar) {
-            archiveClassifier = fixture == 'irisRestart' ? 'iris-restart-driver' : 'maximum-noise-cache-driver'
+            archiveClassifier = [irisRestart: 'iris-restart-driver',
+                                 maximumNoiseCache: 'maximum-noise-cache-driver',
+                                 dsaBenchmark: 'dsa-benchmark-driver'][fixture]
             from(sourceSets.gametest.output) { exclude 'fabric.mod.json' }
             from(fixtureMetadata)
         }

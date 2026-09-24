@@ -96,6 +96,19 @@ This checks maximum-size upload/cycling; pixel readback uses the separate small
 synthetic fixtures rather than checking every maximum-size GPU texel.
 Run it after other clients exit; do not run two graphical clients concurrently.
 
+`dsaBenchmarkDriverJar` is a separate OpenGL-only microbenchmark driver. Pass it
+to the packaged launcher with `--dsa-mode auto` or `--dsa-mode emulated`. Its
+test-only initializer selects the engine path before device creation, and the
+benchmark verifies the selected extension state. It runs readback, synthetic
+dithering and live presentation checks before timing 30 batches of 32 CBBG
+presentations at 960x540 and 1920x1080, after 128 warmup passes per size.
+`dsa-benchmark.json` records host submission wall time, GPU timestamp intervals,
+fixed noise settings, target texture-byte estimates and heap-pool peak totals.
+These are batched pass timings, not world FPS; heap-pool peak sums are not RSS
+or instantaneous heap use. Compare repeated fresh JVMs in interleaved order.
+The selector is unavailable with the ordinary test driver or Vulkan and never
+ships in the production jar.
+
 Scenarios cover window resizing, allocation/fallback, format transitions,
 pixel readback, live presentation, screenshots, commands, settings, notifications
 and optional integrations. A passing scenario trace is partial evidence, not

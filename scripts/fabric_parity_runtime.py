@@ -46,6 +46,7 @@ def main():
     parser.add_argument('--backend', choices=['opengl', 'vulkan'], required=True)
     parser.add_argument('--compat', default='none')
     parser.add_argument('--timeout', type=int, default=240)
+    parser.add_argument('--dsa-mode', choices=['auto', 'emulated'])
     display = parser.add_mutually_exclusive_group(required=True)
     display.add_argument('--wayland-display')
     display.add_argument('--x-display')
@@ -73,6 +74,9 @@ def main():
         expected = metadata['entrypoints']['fabric-client-gametest']
         if metadata['id'] != 'cbbg-renderer-test' or not expected:
             raise ValueError('Unexpected packaged test driver')
+    if args.dsa_mode and (args.backend != 'opengl'
+                         or 'com.qb20nh.cbbg.gametest.DsaBenchmarkGameTest' not in expected):
+        parser.error('DSA selection requires the OpenGL benchmark driver')
 
     runtime = args.runtime.resolve()
     game = args.game_dir.resolve()
@@ -81,6 +85,7 @@ def main():
         'username': 'CbbgParity', 'uuid': '00000000000000000000000000000001', 'token': '0',
         'executablePath': str(args.java.resolve()), 'gameDirectory': str(game),
         'jvmArguments': ['-Xmx2G', '-Dfabric.client.gametest',
+                        '-Dcbbg.test.dsa=' + (args.dsa_mode or 'auto'),
                         '-Dfabric.client.gametest.modid=cbbg-renderer-test',
                         '-Dcbbg.test.backend=' + args.backend,
                         '-Dcbbg.test.compat=' + args.compat,
@@ -115,6 +120,7 @@ def main():
                'catalogSha256': digest(ROOT / 'targets.json'),
                'scenarioSha256': hashlib.sha256(json.dumps(expected, separators=(',', ':')).encode()).hexdigest(),
                'renderer': target['renderer'], 'loaderProfile': identity,
+               'requestedDsaMode': args.dsa_mode,
                'runtimeLockSha256': hashlib.sha256(runtime_bytes).hexdigest(),
                'dependencyLockSha256': hashlib.sha256(dependency_bytes).hexdigest(),
                'sourceHead': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT,
@@ -147,7 +153,8 @@ def main():
         raise
     finally:
         receipt['evidence'] = {name: digest(game / name) for name in
-                               ('launch.log', 'evidence/scenarios.tsv', 'evidence/graphics-context.json')
+                               ('launch.log', 'evidence/scenarios.tsv', 'evidence/graphics-context.json',
+                                'evidence/dsa-benchmark.json')
                                if (game / name).is_file()}
         (game / 'probe.json').write_text(json.dumps(receipt, indent=2) + '\n', encoding='utf-8')
     print(json.dumps({'receipt': str(game / 'probe.json'), 'scenarios': receipt['scenarios']}))

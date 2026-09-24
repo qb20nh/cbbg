@@ -1,4 +1,6 @@
 from contextlib import ExitStack
+from contextlib import redirect_stderr
+import io
 import json
 from pathlib import Path
 import subprocess
@@ -118,6 +120,14 @@ class LauncherFailureTests(unittest.TestCase):
         self.runtime_check.side_effect = ValueError('Runtime inputs differ')
         with self.assertRaisesRegex(ValueError, 'Runtime inputs differ'):
             launcher.main()
+        self.run.assert_not_called()
+        self.assertFalse(self.game.exists())
+
+    def test_dsa_selector_rejects_an_ordinary_driver(self):
+        with patch.object(sys, 'argv', sys.argv + ['--dsa-mode', 'emulated']):
+            with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as failure:
+                launcher.main()
+        self.assertEqual(failure.exception.code, 2)
         self.run.assert_not_called()
         self.assertFalse(self.game.exists())
 
