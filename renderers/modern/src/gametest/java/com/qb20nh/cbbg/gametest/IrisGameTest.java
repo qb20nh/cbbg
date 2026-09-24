@@ -61,6 +61,7 @@ public final class IrisGameTest implements FabricClientGameTest {
                 if ((Boolean) iris("isFallback")) {
                     throw new AssertionError("Iris fell back instead of rendering the fixture shaderpack");
                 }
+                checkDebug(client, CbbgConfig.Mode.ENABLED, true);
                 if (RenderScaleCompat.isLoaded()) {
                     RenderScaleTestAccess.assertShaderTargetFormat(
                             client.gameRenderer.mainRenderTarget(), "RGBA8_UNORM");
@@ -93,6 +94,7 @@ public final class IrisGameTest implements FabricClientGameTest {
                 if (CbbgClient.getEffectiveMode() != CbbgConfig.Mode.DISABLED) {
                     throw new AssertionError("Demo mode bypassed the Iris gate");
                 }
+                checkDebug(client, CbbgConfig.Mode.DEMO, true);
             });
             context.waitFor(client -> capture.isDone(), 200);
             capture.join();
@@ -112,6 +114,7 @@ public final class IrisGameTest implements FabricClientGameTest {
                     RenderScaleTestAccess.assertShaderTargetFormat(
                             client.gameRenderer.mainRenderTarget(), "RGBA16_FLOAT");
                 }
+                checkDebug(client, CbbgConfig.Mode.DEMO, false);
             });
         } finally {
             context.runOnClient(client -> {
@@ -123,6 +126,27 @@ public final class IrisGameTest implements FabricClientGameTest {
                     RenderScaleTestAccess.setShaderTestScale(originalScale);
                 }
             });
+        }
+    }
+
+    private static void checkDebug(net.minecraft.client.Minecraft client,
+            CbbgConfig.Mode user, boolean active) {
+        String output = DebugOverlayGameTest.readOutput(client);
+        var effective = active ? CbbgConfig.Mode.DISABLED : user;
+        String format = active ? "RGBA8_UNORM" : "RGBA16_FLOAT";
+        String frame = active ? "0/0" : DitherController.getCurrentStbnFrameIndex() + "/8";
+        if (!output.contains("mode=" + effective + " (user=" + user + ")")
+                || !output.contains("iris=" + (active ? 1 : 0))
+                || !output.contains("dis=0") || !output.contains("main=" + format)
+                || !output.contains("stbn=" + frame)) {
+            throw new AssertionError("Iris debug state differs from the render state: " + output);
+        }
+        try {
+            Path evidence = Path.of(System.getProperty("cbbg.test.evidence"), "debug");
+            Files.createDirectories(evidence);
+            Files.writeString(evidence.resolve("iris-" + active + "-" + user + ".txt"), output + "\n");
+        } catch (java.io.IOException failure) {
+            throw new AssertionError("Could not retain Iris debug output", failure);
         }
     }
 

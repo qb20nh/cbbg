@@ -15,6 +15,7 @@ import net.minecraft.client.gui.components.debug.DebugScreenDisplayer;
 import net.minecraft.client.gui.components.debug.DebugScreenEntries;
 import net.minecraft.client.gui.components.debug.DebugScreenEntryStatus;
 import net.minecraft.resources.Identifier;
+import net.minecraft.client.Minecraft;
 
 public final class DebugOverlayGameTest implements FabricClientGameTest {
     private static final Identifier ID = Identifier.fromNamespaceAndPath("cbbg", "cbbg");
@@ -40,22 +41,11 @@ public final class DebugOverlayGameTest implements FabricClientGameTest {
                 context.runOnClient(client -> CbbgConfig.setMode(mode));
                 context.waitFor(client -> DitherController.isReady() == mode.isActive(), 600);
                 context.runOnClient(client -> {
-                    List<String> lines = new ArrayList<>();
-                    DebugScreenDisplayer displayer = (DebugScreenDisplayer) Proxy.newProxyInstance(
-                            DebugScreenDisplayer.class.getClassLoader(), new Class<?>[] {DebugScreenDisplayer.class},
-                            (proxy, method, args) -> {
-                                if (!method.getName().equals("addLine")) {
-                                    throw new AssertionError("Unexpected debug display method " + method);
-                                }
-                                lines.add((String) args[0]);
-                                return null;
-                            });
-                    DebugScreenEntries.getEntry(ID).display(displayer, client.level, null, null);
-                    String text = String.join("\n", lines);
+                    String text = readOutput(client);
                     String main = client.gameRenderer.mainRenderTarget().getColorTexture().getFormat().name();
                     String lightmap = client.gameRenderer.levelLightmap().texture().getFormat().name();
                     String backend = RenderSystem.getDevice().getDeviceInfo().backendName();
-                    if (lines.size() != 2 || !text.contains("mode=" + mode + " (user=" + mode + ")")
+                    if (!text.contains("mode=" + mode + " (user=" + mode + ")")
                             || !text.contains("main=" + main) || !text.contains("backend=" + backend)
                             || !text.contains("lm=" + lightmap)
                             || !text.contains("dis=0") || !text.contains("iris=0")
@@ -89,5 +79,23 @@ public final class DebugOverlayGameTest implements FabricClientGameTest {
                 client.debugEntries.setOverlayVisible(overlayVisible);
             });
         }
+    }
+
+    static String readOutput(Minecraft client) {
+        List<String> lines = new ArrayList<>();
+        var displayer = (DebugScreenDisplayer) Proxy.newProxyInstance(
+                DebugScreenDisplayer.class.getClassLoader(), new Class<?>[] {DebugScreenDisplayer.class},
+                (proxy, method, args) -> {
+                    if (!method.getName().equals("addLine")) {
+                        throw new AssertionError("Unexpected debug display method " + method);
+                    }
+                    lines.add((String) args[0]);
+                    return null;
+                });
+        var entry = DebugScreenEntries.getEntry(ID);
+        if (entry == null) throw new AssertionError("CBBG debug entry is missing");
+        entry.display(displayer, client.level, null, null);
+        if (lines.size() != 2) throw new AssertionError("Incomplete CBBG debug output: " + lines);
+        return String.join("\n", lines);
     }
 }
