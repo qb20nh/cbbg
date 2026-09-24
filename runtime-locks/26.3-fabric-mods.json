@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "target": "26.3-fabric",
+  "verifiedDate": "2026-09-25",
+  "verification": "Local bytes matched the primary file SHA-512 in each referenced Modrinth version; SHA-256 recorded below.",
+  "dependencies": {
+    "fabricApi": {
+      "pin": "0.161.0+26.3",
+      "sha256": "86f16178a3cecc887a85a4cfe9a79d92fa7341d8f39b5951a4d6ad800ab657a6",
+      "source": "https://api.modrinth.com/v2/version/bNnaTiuM"
+    },
+    "modMenu": {
+      "pin": "21.0.0-beta.1",
+      "sha256": "d08bbecdf9bc79fb2a84b46f726259cb40a8f33f080ee77ff9c08a329770a8fe",
+      "source": "https://api.modrinth.com/v2/version/lcxkZSq6"
+    },
+    "iris": {
+      "pin": "bAdKrpw8",
+      "sha256": "0fcd6f8858db94ed1f28210005fcff9b9364beaa6eb2a8eccf9449a6f709f14d",
+      "source": "https://api.modrinth.com/v2/version/bAdKrpw8"
+    },
+    "sodium": {
+      "pin": "bAZQdGpg",
+      "sha256": "87a5bb39f7e6e41106e77f122f82fc93f9d3bc0b6ebcb746b314172a446a287a",
+      "source": "https://api.modrinth.com/v2/version/bAZQdGpg"
+    },
+    "renderScale": {
+      "pin": "Qr4y3YLK",
+      "sha256": "9e2384d924c098cdf4a5445ab11ea8078067cfce1b4cf991670a0eadc3578b7e",
+      "source": "https://api.modrinth.com/v2/version/Qr4y3YLK"
+    },
+    "clothConfig": {
+      "pin": "eZ3xIIuk",
+      "sha256": "65fecbafb2868b2b2a3120947d018e550e0876741c0376b9035bb7668fcb9dcc",
+      "source": "https://api.modrinth.com/v2/version/eZ3xIIuk"
+    },
+    "immediatelyFast": {
+      "pin": "3MP9UR23",
+      "sha256": "4b346661cd0811d98a6df8c9faeb8fafd9326ab88248430e8bec845ef1ff6dca",
+      "source": "https://api.modrinth.com/v2/version/3MP9UR23"
+    }
+  }
+}

@@ -23,3 +23,10 @@ Review a dependency change before replacing a checked-in baseline.
 The initial 26.3 Linux lock was captured after the existing compatibility runs.
 It establishes a baseline for subsequent launches, not proof of the historical
 runtime bytes used by those earlier runs. A matching lock is not a test pass.
+
+`26.3-fabric-mods.json` separately locks Fabric API and the optional mods selected
+by the target catalog. Its entries cite the publisher's version metadata used
+to verify the downloaded bytes. `verify_dependencies` checks catalog pins,
+selected jars and required transitive dependencies (Iris/Sodium and
+RenderScale/Cloth Config). Candidate, driver and gametest API hashes still need
+separate receipt binding. A mod dependency lock does not establish compatibility.
