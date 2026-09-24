@@ -136,13 +136,19 @@ def main():
             (game / 'evidence/scenarios.tsv').read_text(), log_text,
             result.returncode, args.backend)
         receipt['graphics'] = graphics_identity(log_text, args.backend)
+        context = json.loads((game / 'evidence/graphics-context.json').read_text())
+        if context.get('backend') != args.backend:
+            raise ValueError('Recorded context backend mismatch')
+        receipt['graphics']['context'] = context
+        receipt['graphics']['contextProfile'] = context.get('profile')
         receipt['scenarios'] = scenarios
     except Exception as failure:
         receipt['failure'] = {'type': type(failure).__name__, 'message': str(failure)}
         raise
     finally:
         receipt['evidence'] = {name: digest(game / name) for name in
-                               ('launch.log', 'evidence/scenarios.tsv') if (game / name).is_file()}
+                               ('launch.log', 'evidence/scenarios.tsv', 'evidence/graphics-context.json')
+                               if (game / name).is_file()}
         (game / 'probe.json').write_text(json.dumps(receipt, indent=2) + '\n', encoding='utf-8')
     print(json.dumps({'receipt': str(game / 'probe.json'), 'scenarios': receipt['scenarios']}))
 

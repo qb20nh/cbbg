@@ -67,7 +67,10 @@ The receipt binds artifact and lock hashes, source head, requested/observed back
 and the ordered scenario result. Receipts also include catalog/scenario digests,
 Java version and executable/module/VM hashes, host architecture, observed GPU and
 driver, reported device extensions, and log/trace digests. The current Java
-fingerprint layout is Linux-specific. Unreported GL context profiles remain null.
+fingerprint layout is Linux-specific. The current driver writes
+`graphics-context.json` with actual GL version/profile/flags and selected
+extension capabilities, which the launcher binds into the receipt. Vulkan does
+not have a GL context; older drivers without this evidence must be rebuilt.
 Failures and timeouts leave a failure receipt;
 none of these receipts claim full release acceptance. Vulkan validation-layer
 paths can be supplied through `VK_LAYER_PATH` and `LD_LIBRARY_PATH` when needed.

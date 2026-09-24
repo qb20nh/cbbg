@@ -9,6 +9,7 @@ import com.mojang.renderpearl.api.pipeline.CompiledRenderPipeline;
 import com.mojang.renderpearl.api.textures.FilterMode;
 import com.qb20nh.cbbg.render.Rgba8Readback;
 import com.qb20nh.cbbg.render.FloatPipelines;
+import com.google.gson.JsonObject;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.file.Files;
@@ -20,6 +21,10 @@ import net.minecraft.client.renderer.RenderPipelines;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import org.slf4j.LoggerFactory;
+import org.lwjgl.opengl.GL;
+import org.lwjgl.opengl.GL11C;
+import org.lwjgl.opengl.GL30C;
+import org.lwjgl.opengl.GL32C;
 
 public final class Rgba8ReadbackGameTest implements FabricClientGameTest {
     @Override
@@ -31,6 +36,35 @@ public final class Rgba8ReadbackGameTest implements FabricClientGameTest {
             String expected = System.getProperty("cbbg.test.backend");
             if (expected == null || !expected.equalsIgnoreCase(info.backendName())) {
                 throw new AssertionError("Requested backend " + expected + ", got " + info.backendName());
+            }
+            JsonObject observed = new JsonObject();
+            observed.addProperty("backend", info.backendName().toLowerCase(java.util.Locale.ROOT));
+            if (info.backendName().equalsIgnoreCase("opengl")) {
+                var caps = GL.getCapabilities();
+                observed.addProperty("version", GL11C.glGetString(GL11C.GL_VERSION));
+                if (caps.OpenGL30) {
+                    observed.addProperty("major", GL11C.glGetInteger(GL30C.GL_MAJOR_VERSION));
+                    observed.addProperty("minor", GL11C.glGetInteger(GL30C.GL_MINOR_VERSION));
+                    observed.addProperty("flags", GL11C.glGetInteger(GL30C.GL_CONTEXT_FLAGS));
+                }
+                if (caps.OpenGL32) {
+                    int mask = GL11C.glGetInteger(GL32C.GL_CONTEXT_PROFILE_MASK);
+                    observed.addProperty("profileMask", mask);
+                    observed.addProperty("profile", (mask & GL32C.GL_CONTEXT_CORE_PROFILE_BIT) != 0
+                            ? "core" : (mask & GL32C.GL_CONTEXT_COMPATIBILITY_PROFILE_BIT) != 0
+                            ? "compatibility" : "unknown");
+                }
+                observed.addProperty("directStateAccess", caps.OpenGL45 || caps.GL_ARB_direct_state_access);
+                observed.addProperty("bufferStorage", caps.OpenGL44 || caps.GL_ARB_buffer_storage);
+                observed.addProperty("textureStorage", caps.OpenGL42 || caps.GL_ARB_texture_storage);
+                observed.addProperty("computeShader", caps.OpenGL43 || caps.GL_ARB_compute_shader);
+            }
+            try {
+                Path directory = Path.of(System.getProperty("cbbg.test.evidence"));
+                Files.createDirectories(directory);
+                Files.writeString(directory.resolve("graphics-context.json"), observed.toString() + "\n");
+            } catch (java.io.IOException failure) {
+                throw new AssertionError("Could not record the actual graphics context", failure);
             }
         });
         for (GpuFormat format : new GpuFormat[] {GpuFormat.RGBA16_FLOAT, GpuFormat.RGBA32_FLOAT}) {

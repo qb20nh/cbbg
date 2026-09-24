@@ -96,6 +96,8 @@ class LauncherFailureTests(unittest.TestCase):
             (evidence / 'scenarios.tsv').write_text(
                 'started\texample.Scenario\npassed\texample.Scenario\n')
             kwargs['stdout'].write('Readback backend=OpenGL GPU=Fixture driver=3.3\n')
+            (evidence / 'graphics-context.json').write_text(
+                json.dumps({'backend': 'opengl', 'profile': 'core', 'major': 3, 'minor': 3}))
             return subprocess.CompletedProcess(command, 0)
         self.run.side_effect = successful_client
         with patch('builtins.print'):
@@ -108,7 +110,9 @@ class LauncherFailureTests(unittest.TestCase):
         self.assertEqual(receipt['java'], {'fixture': True})
         for name, digest in receipt['evidence'].items():
             self.assertEqual(digest, launcher.digest(self.game / name))
-        self.assertEqual(set(receipt['evidence']), {'launch.log', 'evidence/scenarios.tsv'})
+        self.assertEqual(receipt['graphics']['contextProfile'], 'core')
+        self.assertEqual(set(receipt['evidence']),
+                         {'launch.log', 'evidence/scenarios.tsv', 'evidence/graphics-context.json'})
 
     def test_lock_failure_prevents_directory_creation_and_launch(self):
         self.runtime_check.side_effect = ValueError('Runtime inputs differ')
@@ -116,6 +120,20 @@ class LauncherFailureTests(unittest.TestCase):
             launcher.main()
         self.run.assert_not_called()
         self.assertFalse(self.game.exists())
+
+    def test_context_backend_mismatch_cannot_record_success(self):
+        def wrong_context(command, **kwargs):
+            evidence = self.game / 'evidence'
+            evidence.mkdir()
+            (evidence / 'scenarios.tsv').write_text(
+                'started\texample.Scenario\npassed\texample.Scenario\n')
+            (evidence / 'graphics-context.json').write_text('{"backend":"vulkan"}')
+            kwargs['stdout'].write('Readback backend=OpenGL GPU=Fixture driver=3.3\n')
+            return subprocess.CompletedProcess(command, 0)
+        self.run.side_effect = wrong_context
+        with self.assertRaisesRegex(ValueError, 'context backend mismatch'):
+            launcher.main()
+        self.assertNotIn('scenarios', self.receipt())
 
 
 if __name__ == '__main__':
