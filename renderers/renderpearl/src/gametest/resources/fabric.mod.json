@@ -22,6 +22,7 @@
       "com.qb20nh.cbbg.gametest.NoiseCacheGameTest",
       "com.qb20nh.cbbg.gametest.MenuStrengthGameTest",
       "com.qb20nh.cbbg.gametest.CbbgConfigScreenGameTest",
+      "com.qb20nh.cbbg.gametest.LocalesGameTest",
       "com.qb20nh.cbbg.gametest.ModMenuGameTest",
       "com.qb20nh.cbbg.gametest.IrisGameTest",
       "com.qb20nh.cbbg.gametest.MainTargetsGameTest",
