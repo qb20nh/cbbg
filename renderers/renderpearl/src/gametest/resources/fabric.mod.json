@@ -10,6 +10,7 @@
     "fabric-client-gametest": [
       "com.qb20nh.cbbg.gametest.WindowResizeGameTest",
       "com.qb20nh.cbbg.gametest.Rgba8ReadbackGameTest",
+      "com.qb20nh.cbbg.gametest.WorldPixelsGameTest",
       "com.qb20nh.cbbg.gametest.DebugOverlayGameTest",
       "com.qb20nh.cbbg.gametest.ShaderFailureGameTest",
       "com.qb20nh.cbbg.gametest.FloatPrecisionGameTest",
