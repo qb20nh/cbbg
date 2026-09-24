@@ -41,6 +41,33 @@ OpenGL-only. Packaged testing uses separate candidate and test-driver jars from
 `prepareParityRuntime`, with exact dependency hashes and fresh game directories.
 Run graphics tests locally, never in CI.
 
+`scripts/fabric_parity_runtime.py` runs packaged 26.3 candidates against the
+checked-in runtime and dependency locks. Supply an isolated display and a new
+game directory; it never reuses an existing game directory. For example, using
+an isolated Python environment with `minecraft-launcher-lib==8.0`:
+
+```
+python scripts/fabric_parity_runtime.py \
+  --runtime /path/to/installed-runtime --java /path/to/java-25/bin/java \
+  --game-dir /path/to/new-test-run \
+  --candidate /path/to/parity-candidate.jar --driver /path/to/parity-driver.jar \
+  --gametest-api /path/to/fabric-client-gametest-api.jar \
+  --dependency fabricApi=/path/to/fabric-api.jar \
+  --runtime-lock runtime-locks/26.3-fabric-linux-x86_64.json \
+  --dependency-lock runtime-locks/26.3-fabric-mods.json \
+  --xdg-runtime-dir /path/to/private-runtime-dir \
+  --wayland-display private-test-display --backend vulkan --compat none
+```
+
+For OpenGL on an isolated X display, replace `--wayland-display` with
+`--x-display`. For optional profiles, add each selected catalog dependency using
+`--dependency NAME=JAR`, including Sodium for Iris and Cloth Config for RenderScale.
+Names match catalog dependency keys, such as `modMenu` and `immediatelyFast`.
+The receipt binds artifact and lock hashes, source head, requested/observed backend
+and the ordered scenario result. Failures and timeouts leave a failure receipt;
+none of these receipts claim full release acceptance. Vulkan validation-layer
+paths can be supplied through `VK_LAYER_PATH` and `LD_LIBRARY_PATH` when needed.
+
 For the real Iris restart fixture, build `irisRestartDriverJar` and use its
 `*-iris-restart-driver.jar` in place of the ordinary parity driver. Launch with
 Iris and Sodium and `-Dcbbg.test.restart=prepare`, wait for successful process
