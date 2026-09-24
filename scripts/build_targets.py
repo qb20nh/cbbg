@@ -8,10 +8,10 @@ from targets import ROOT, load_catalog, select_artifacts, select_targets
 
 
 def commands(catalog, task, selection, *, offline=False, properties=(), root=ROOT):
-    if task not in {"build", "check", "runClient", "genSources"}:
+    if task not in {"build", "check", "runClient", "genSources", "dev"}:
         raise ValueError("Unsupported dispatch task: " + task)
     selected = select_targets(catalog, selection, require_implemented=task == "build")
-    if task in {"build", "check", "genSources"}:
+    if task in {"build", "check", "genSources", "dev"}:
         selected = select_artifacts(catalog, selection, require_implemented=task == "build")
     if task == "runClient" and len(selected) != 1:
         raise ValueError("runClient requires exactly one target")
@@ -47,7 +47,7 @@ def commands(catalog, task, selection, *, offline=False, properties=(), root=ROO
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("task", choices=["build", "check", "runClient", "genSources"])
+    parser.add_argument("task", choices=["build", "check", "runClient", "genSources", "dev"])
     parser.add_argument("--targets", required=True)
     parser.add_argument("--offline", action="store_true")
     parser.add_argument("--property", action="append", default=[])

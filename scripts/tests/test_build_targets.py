@@ -52,6 +52,12 @@ class BuildDispatchTest(unittest.TestCase):
             with self.subTest(target=target), self.assertRaisesRegex(ValueError, 'not implemented'):
                 self.plan('build', target)
 
+    def test_development_build_does_not_claim_distribution_readiness(self):
+        command, = self.plan('dev', '26.3-fabric')
+        self.assertEqual('dev', command[3])
+        self.assertIn('-Ptarget=26.3-fabric', command)
+        self.assertNotIn('runClient', command)
+
     def test_source_generation_preserves_isolation(self):
         planned = self.plan('genSources', '26.2-fabric,26.3-forge', offline=True)
         self.assertEqual(2, len(planned))

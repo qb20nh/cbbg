@@ -5,7 +5,7 @@ if (single.isPresent() && multiple.isPresent()) {
     throw new GradleException('Use either -Ptarget or -Ptargets, not both')
 }
 def selection = single.orElse(multiple).get()
-def supported = ['build', 'check', 'runClient', 'genSources']
+def supported = ['build', 'check', 'runClient', 'genSources', 'dev']
 gradle.startParameter.taskNames.each { requested ->
     if (!supported.contains(requested)) {
         throw new GradleException("Unsupported selected-target task: ${requested}")
