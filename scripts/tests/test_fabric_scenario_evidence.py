@@ -1,9 +1,26 @@
 import unittest
 
-from fabric_scenario_evidence import validate_scenarios
+from fabric_scenario_evidence import graphics_identity, validate_scenarios
 
 
 class FabricScenarioEvidenceTests(unittest.TestCase):
+    def test_graphics_identity_preserves_observed_driver_and_extensions(self):
+        log = ('Readback backend=OpenGL GPU=Fixture GPU driver=3.3 Fixture Driver\n'
+               'Using graphics device extensions: GL_B, GL_A\n')
+        result = graphics_identity(log + log, 'opengl')
+        self.assertEqual(result['gpu'], 'Fixture GPU')
+        self.assertEqual(result['driver'], '3.3 Fixture Driver')
+        self.assertEqual(result['reportedExtensions'], ['GL_A', 'GL_B'])
+        self.assertIsNone(result['contextProfile'])
+
+    def test_graphics_identity_rejects_missing_conflicting_or_wrong_backend(self):
+        log = 'Readback backend=Vulkan GPU=Fixture driver=1.4\n'
+        for text, backend in [('', 'vulkan'), (log, 'opengl'),
+                              (log + log.replace('1.4', '1.3'), 'vulkan')]:
+            with self.subTest(text=text, backend=backend):
+                with self.assertRaises(ValueError):
+                    graphics_identity(text, backend)
+
     def setUp(self):
         self.expected = ["example.First", "example.Second"]
         self.trace = "started\texample.First\npassed\texample.First\nstarted\texample.Second\npassed\texample.Second\n"

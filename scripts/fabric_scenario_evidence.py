@@ -3,6 +3,21 @@
 import re
 
 
+def graphics_identity(log, backend):
+    """Extract observed identity without inferring an unreported GL context profile."""
+    readings = set(re.findall(r'Readback backend=(\S+) GPU=(.+?) driver=([^\r\n]+)', log))
+    if len(readings) != 1:
+        raise ValueError('Missing or conflicting graphics identity')
+    actual, gpu, driver = readings.pop()
+    if actual.lower() != backend:
+        raise ValueError('Graphics identity backend mismatch')
+    extensions = set()
+    for value in re.findall(r'Using graphics device extensions: ([^\r\n]+)', log):
+        extensions.update(value.split(', '))
+    return {'backend': actual.lower(), 'gpu': gpu, 'driver': driver,
+            'reportedExtensions': sorted(extensions), 'contextProfile': None}
+
+
 def validate_scenarios(expected, trace, log, exit_code, backend):
     """Require every declared scenario, actual backend identity and clean GPU validation."""
     if backend not in ("opengl", "vulkan"):

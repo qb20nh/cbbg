@@ -5,6 +5,7 @@ import hashlib
 from importlib.metadata import version
 import json
 import os
+import platform
 from pathlib import Path
 import shutil
 import subprocess
@@ -12,7 +13,7 @@ import zipfile
 
 from fabric_dependency_lock import verify_dependencies
 from fabric_runtime_lock import verify_runtime
-from fabric_scenario_evidence import validate_scenarios
+from fabric_scenario_evidence import graphics_identity, validate_scenarios
 from targets import load_catalog, select_targets
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -21,6 +22,18 @@ ROOT = Path(__file__).resolve().parents[1]
 def digest(path):
     with Path(path).open('rb') as stream:
         return hashlib.file_digest(stream, 'sha256').hexdigest()
+
+
+def java_identity(executable):
+    executable = Path(executable).resolve()
+    result = subprocess.run([str(executable), '-version'], capture_output=True,
+                            text=True, check=True, timeout=15)
+    home = executable.parent.parent
+    return {'executable': str(executable), 'versionOutput': (result.stdout + result.stderr).strip(),
+            'files': {name: digest(path) for name, path in {
+                'java': executable, 'release': home / 'release',
+                'modules': home / 'lib/modules',
+                'libjvm': home / 'lib/server/libjvm.so'}.items()}}
 
 
 def main():
@@ -77,6 +90,7 @@ def main():
     command += ['--graphicsBackend', args.backend, '--vulkanValidation', '--renderDebugLabels']
     runtime_bytes = args.runtime_lock.read_bytes()
     verify_runtime(runtime, identity, command, json.loads(runtime_bytes))
+    java = java_identity(args.java)
     environment = dict(os.environ, XDG_RUNTIME_DIR=str(args.xdg_runtime_dir.resolve()),
                        ALSOFT_DRIVERS='null', DISABLE_MANGOHUD='1', DISABLE_VKBASALT='1',
                        DISABLE_GAMESCOPE_WSI='1')
@@ -97,6 +111,10 @@ def main():
     sources.update({name + '.jar': path for name, path in dependencies.items()})
     receipt = {'target': args.target, 'backendRequested': args.backend, 'profile': args.compat,
                'timeoutSeconds': args.timeout, 'releaseAcceptance': False,
+               'java': java, 'host': {'system': platform.system(), 'machine': platform.machine()},
+               'catalogSha256': digest(ROOT / 'targets.json'),
+               'scenarioSha256': hashlib.sha256(json.dumps(expected, separators=(',', ':')).encode()).hexdigest(),
+               'renderer': target['renderer'], 'loaderProfile': identity,
                'runtimeLockSha256': hashlib.sha256(runtime_bytes).hexdigest(),
                'dependencyLockSha256': hashlib.sha256(dependency_bytes).hexdigest(),
                'sourceHead': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT,
@@ -113,13 +131,18 @@ def main():
             result = subprocess.run(command, cwd=game, env=environment, stdout=log,
                                     stderr=subprocess.STDOUT, timeout=args.timeout)
         receipt['exitCode'] = result.returncode
-        receipt['scenarios'] = validate_scenarios(expected,
-            (game / 'evidence/scenarios.tsv').read_text(), (game / 'launch.log').read_text(),
+        log_text = (game / 'launch.log').read_text()
+        scenarios = validate_scenarios(expected,
+            (game / 'evidence/scenarios.tsv').read_text(), log_text,
             result.returncode, args.backend)
+        receipt['graphics'] = graphics_identity(log_text, args.backend)
+        receipt['scenarios'] = scenarios
     except Exception as failure:
         receipt['failure'] = {'type': type(failure).__name__, 'message': str(failure)}
         raise
     finally:
+        receipt['evidence'] = {name: digest(game / name) for name in
+                               ('launch.log', 'evidence/scenarios.tsv') if (game / name).is_file()}
         (game / 'probe.json').write_text(json.dumps(receipt, indent=2) + '\n', encoding='utf-8')
     print(json.dumps({'receipt': str(game / 'probe.json'), 'scenarios': receipt['scenarios']}))
 

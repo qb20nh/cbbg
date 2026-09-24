@@ -64,7 +64,11 @@ For OpenGL on an isolated X display, replace `--wayland-display` with
 `--dependency NAME=JAR`, including Sodium for Iris and Cloth Config for RenderScale.
 Names match catalog dependency keys, such as `modMenu` and `immediatelyFast`.
 The receipt binds artifact and lock hashes, source head, requested/observed backend
-and the ordered scenario result. Failures and timeouts leave a failure receipt;
+and the ordered scenario result. Receipts also include catalog/scenario digests,
+Java version and executable/module/VM hashes, host architecture, observed GPU and
+driver, reported device extensions, and log/trace digests. The current Java
+fingerprint layout is Linux-specific. Unreported GL context profiles remain null.
+Failures and timeouts leave a failure receipt;
 none of these receipts claim full release acceptance. Vulkan validation-layer
 paths can be supplied through `VK_LAYER_PATH` and `LD_LIBRARY_PATH` when needed.
 

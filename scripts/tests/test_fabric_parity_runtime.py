@@ -46,6 +46,7 @@ class LauncherFailureTests(unittest.TestCase):
             'minecraft_launcher_lib.command': command_module}))
         stack.enter_context(patch.object(launcher, 'verify_dependencies'))
         self.runtime_check = stack.enter_context(patch.object(launcher, 'verify_runtime'))
+        stack.enter_context(patch.object(launcher, 'java_identity', return_value={'fixture': True}))
         stack.enter_context(patch.object(launcher.subprocess, 'check_output',
                                         side_effect=['a' * 40, b'']))
         self.run = stack.enter_context(patch.object(launcher.subprocess, 'run'))
@@ -87,6 +88,27 @@ class LauncherFailureTests(unittest.TestCase):
         self.run.assert_not_called()
         self.assertEqual(list(self.game.iterdir()), [sentinel])
         self.assertEqual(sentinel.read_bytes(), b'preserve')
+
+    def test_success_receipt_binds_scenarios_logs_catalog_and_graphics(self):
+        def successful_client(command, **kwargs):
+            evidence = self.game / 'evidence'
+            evidence.mkdir()
+            (evidence / 'scenarios.tsv').write_text(
+                'started\texample.Scenario\npassed\texample.Scenario\n')
+            kwargs['stdout'].write('Readback backend=OpenGL GPU=Fixture driver=3.3\n')
+            return subprocess.CompletedProcess(command, 0)
+        self.run.side_effect = successful_client
+        with patch('builtins.print'):
+            launcher.main()
+        receipt = self.receipt()
+        self.assertNotIn('failure', receipt)
+        self.assertEqual(receipt['catalogSha256'], launcher.digest(launcher.ROOT / 'targets.json'))
+        self.assertEqual(receipt['graphics']['gpu'], 'Fixture')
+        self.assertEqual(receipt['scenarios']['completedEntrypoints'], 1)
+        self.assertEqual(receipt['java'], {'fixture': True})
+        for name, digest in receipt['evidence'].items():
+            self.assertEqual(digest, launcher.digest(self.game / name))
+        self.assertEqual(set(receipt['evidence']), {'launch.log', 'evidence/scenarios.tsv'})
 
     def test_lock_failure_prevents_directory_creation_and_launch(self):
         self.runtime_check.side_effect = ValueError('Runtime inputs differ')
