@@ -221,6 +221,7 @@ if (target.renderer == 'renderpearl') {
     [irisRestart: ['IrisRestartGameTest'],
      maximumNoiseCache: ['Rgba8ReadbackGameTest', 'MaximumNoiseCacheGameTest'],
      worldPixels: ['Rgba8ReadbackGameTest', 'WorldPixelsGameTest'],
+     worldControl: ['Rgba8ReadbackGameTest', 'WorldControlGameTest'],
      dsaBenchmark: ['Rgba8ReadbackGameTest', 'DitherPassGameTest', 'PresentationGameTest',
                     'DsaBenchmarkGameTest']].each { fixture, entrypoints ->
         def fixtureMetadata = tasks.register("${fixture}Metadata") {
@@ -246,6 +247,7 @@ if (target.renderer == 'renderpearl') {
             archiveClassifier = [irisRestart: 'iris-restart-driver',
                                  maximumNoiseCache: 'maximum-noise-cache-driver',
                                  worldPixels: 'world-pixels-driver',
+                                 worldControl: 'world-control-driver',
                                  dsaBenchmark: 'dsa-benchmark-driver'][fixture]
             from(sourceSets.gametest.output) { exclude 'fabric.mod.json' }
             from(fixtureMetadata)

@@ -18,6 +18,10 @@ import net.minecraft.client.Screenshot;
 public final class WorldPixelsGameTest implements FabricClientGameTest {
     @Override
     public void runTest(ClientGameTestContext context) {
+        runScene(context, false);
+    }
+
+    static void runScene(ClientGameTestContext context, boolean disabledControl) {
         CbbgConfig original = CbbgConfig.get();
         boolean hidden = context.computeOnClient(client -> client.gui.hud.isHidden());
         try (var world = context.worldBuilder().create()) {
@@ -33,17 +37,21 @@ public final class WorldPixelsGameTest implements FabricClientGameTest {
             world.getConnection().waitForChunksRender();
             context.runOnClient(client -> {
                 if (!client.gui.hud.isHidden()) client.gui.hud.toggle();
-                CbbgConfig.setMode(CbbgConfig.Mode.ENABLED);
+                CbbgConfig.setMode(disabledControl ? CbbgConfig.Mode.DISABLED : CbbgConfig.Mode.ENABLED);
                 CbbgConfig.setPixelFormat(CbbgConfig.PixelFormat.RGBA32F);
                 CbbgConfig.setStrength(2);
             });
-            context.waitFor(client -> DitherController.isReady()
+            context.waitFor(client -> DitherController.isReady() != disabledControl
                     && client.gui.overlay() == null
                     && client.gameRenderer.mainRenderTarget().getColorTexture().getFormat()
-                            == GpuFormat.RGBA32_FLOAT, 600);
+                            == (disabledControl ? GpuFormat.RGBA8_UNORM : GpuFormat.RGBA32_FLOAT), 600);
             context.waitTicks(20);
-            capture(context, false);
-            capture(context, true);
+            if (disabledControl) {
+                captureDisabled(context);
+            } else {
+                capture(context, false);
+                capture(context, true);
+            }
         } finally {
             context.runOnClient(client -> {
                 if (client.gui.hud.isHidden() != hidden) client.gui.hud.toggle();
@@ -52,6 +60,27 @@ public final class WorldPixelsGameTest implements FabricClientGameTest {
                 CbbgConfig.setStrength(original.strength());
             });
         }
+    }
+
+    private static void captureDisabled(ClientGameTestContext context) {
+        CompletableFuture<Void> result = new CompletableFuture<>();
+        context.runOnClient(client -> {
+            if (DitherController.isReady() || CbbgConfig.get().mode() != CbbgConfig.Mode.DISABLED) {
+                throw new AssertionError("World control must keep CBBG disabled");
+            }
+            Screenshot.takeScreenshot(client.gameRenderer.mainRenderTarget(), image -> {
+                try (image) {
+                    Path directory = Path.of(System.getProperty("cbbg.test.evidence"), "world-disabled");
+                    Files.createDirectories(directory);
+                    image.writeToFile(directory.resolve("actual.png"));
+                    result.complete(null);
+                } catch (Throwable failure) {
+                    result.completeExceptionally(failure);
+                }
+            });
+        });
+        context.waitFor(client -> result.isDone(), 200);
+        result.join();
     }
 
     private static void capture(ClientGameTestContext context, boolean demo) {
