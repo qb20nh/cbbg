@@ -5,6 +5,11 @@ import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.CancellationException;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.FutureTask;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -45,18 +50,20 @@ public class STBNGenerator {
 
     private static final AtomicReference<CompletableFuture<STBNFields>> pendingFuture =
             new AtomicReference<>();
+    private static final ExecutorService WORKER = Executors.newSingleThreadExecutor(task -> {
+        Thread thread = new Thread(task, "cbbg-stbn");
+        thread.setDaemon(true);
+        return thread;
+    });
 
-    public static CompletableFuture<STBNFields> generateAsync(int w, int h, int d, long seed) {
-        // Cancel previous if running?
-        // Actually, we can just replace the reference. The old one will eventually finish or be
-        // GC'd.
-        // But we should try to not waste CPU.
+    public static synchronized CompletableFuture<STBNFields> generateAsync(int w, int h, int d, long seed) {
         CompletableFuture<STBNFields> prev = pendingFuture.get();
         if (prev != null && !prev.isDone()) {
             prev.cancel(true);
         }
 
-        CompletableFuture<STBNFields> future = CompletableFuture.supplyAsync(() -> {
+        CompletableFuture<STBNFields> future = new CompletableFuture<>();
+        FutureTask<STBNFields> task = new FutureTask<>(() -> {
             try {
                 if (Thread.currentThread().isInterrupted()) {
                     return null;
@@ -94,9 +101,29 @@ public class STBNGenerator {
                     return null;
                 throw new CompletionException(e);
             }
+        }) {
+            @Override
+            protected void done() {
+                try {
+                    future.complete(get());
+                } catch (CancellationException cancelled) {
+                    future.cancel(false);
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    future.completeExceptionally(interrupted);
+                } catch (ExecutionException failed) {
+                    future.completeExceptionally(failed.getCause());
+                }
+            }
+        };
+        // CompletableFuture.cancel alone does not interrupt its supplier. Link
+        // cancellation to the actual task; serialize work until it cooperates.
+        future.whenComplete((fields, failure) -> {
+            if (future.isCancelled()) task.cancel(true);
         });
 
         pendingFuture.set(future);
+        WORKER.execute(task);
         return future;
     }
 
