@@ -62,6 +62,7 @@ public final class CbbgClient implements ClientModInitializer {
 
     @Override
     public void onInitializeClient() {
+        CbbgEarlyInit.configureSettings();
         // Ensure config is loaded early.
         CbbgConfig.get();
 
