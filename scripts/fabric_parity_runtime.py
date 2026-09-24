@@ -152,10 +152,9 @@ def main():
         receipt['failure'] = {'type': type(failure).__name__, 'message': str(failure)}
         raise
     finally:
-        receipt['evidence'] = {name: digest(game / name) for name in
-                               ('launch.log', 'evidence/scenarios.tsv', 'evidence/graphics-context.json',
-                                'evidence/dsa-benchmark.json')
-                               if (game / name).is_file()}
+        evidence_files = [game / 'launch.log', *sorted((game / 'evidence').rglob('*'))]
+        receipt['evidence'] = {path.relative_to(game).as_posix(): digest(path)
+                               for path in evidence_files if path.is_file()}
         (game / 'probe.json').write_text(json.dumps(receipt, indent=2) + '\n', encoding='utf-8')
     print(json.dumps({'receipt': str(game / 'probe.json'), 'scenarios': receipt['scenarios']}))
 

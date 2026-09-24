@@ -100,6 +100,9 @@ class LauncherFailureTests(unittest.TestCase):
             kwargs['stdout'].write('Readback backend=OpenGL GPU=Fixture driver=3.3\n')
             (evidence / 'graphics-context.json').write_text(
                 json.dumps({'backend': 'opengl', 'profile': 'core', 'major': 3, 'minor': 3}))
+            (evidence / 'locales').mkdir()
+            (evidence / 'world-opengl.png').write_bytes(b'world capture')
+            (evidence / 'locales/ko_kr.png').write_bytes(b'locale capture')
             return subprocess.CompletedProcess(command, 0)
         self.run.side_effect = successful_client
         with patch('builtins.print'):
@@ -114,7 +117,11 @@ class LauncherFailureTests(unittest.TestCase):
             self.assertEqual(digest, launcher.digest(self.game / name))
         self.assertEqual(receipt['graphics']['contextProfile'], 'core')
         self.assertEqual(set(receipt['evidence']),
-                         {'launch.log', 'evidence/scenarios.tsv', 'evidence/graphics-context.json'})
+                         {'launch.log', 'evidence/scenarios.tsv', 'evidence/graphics-context.json',
+                          'evidence/world-opengl.png', 'evidence/locales/ko_kr.png'})
+        (self.game / 'evidence/world-opengl.png').write_bytes(b'changed capture')
+        self.assertNotEqual(receipt['evidence']['evidence/world-opengl.png'],
+                            launcher.digest(self.game / 'evidence/world-opengl.png'))
 
     def test_lock_failure_prevents_directory_creation_and_launch(self):
         self.runtime_check.side_effect = ValueError('Runtime inputs differ')
