@@ -215,28 +215,31 @@ def parityDriverJar = tasks.register('parityDriverJar', Jar) {
     from sourceSets.gametest.output
 }
 
-// Restart tests need their own entrypoint so startup state is inspected before
-// ordinary scenarios change configuration. Production artifacts are unaffected.
+// Startup-state and slow maximum-size fixtures run independently of the ordinary suite.
 if (target.renderer == 'renderpearl') {
-    def restartMetadata = tasks.register('irisRestartMetadata') {
-        dependsOn tasks.named('processGametestResources')
-        def source = layout.buildDirectory.file('resources/gametest/fabric.mod.json')
-        def destination = layout.buildDirectory.file('iris-restart/fabric.mod.json')
-        inputs.file(source)
-        outputs.file(destination)
-        doLast {
-            def metadata = new JsonSlurper().parse(source.get().asFile)
-            metadata.entrypoints['fabric-client-gametest'] =
-                    ['com.qb20nh.cbbg.gametest.IrisRestartGameTest']
-            destination.get().asFile.parentFile.mkdirs()
-            destination.get().asFile.text = groovy.json.JsonOutput.prettyPrint(
-                    groovy.json.JsonOutput.toJson(metadata))
+    [irisRestart: ['IrisRestartGameTest'],
+     maximumNoiseCache: ['Rgba8ReadbackGameTest', 'MaximumNoiseCacheGameTest']].each { fixture, entrypoints ->
+        def fixtureMetadata = tasks.register("${fixture}Metadata") {
+            dependsOn tasks.named('processGametestResources')
+            def source = layout.buildDirectory.file('resources/gametest/fabric.mod.json')
+            def destination = layout.buildDirectory.file("${fixture}/fabric.mod.json")
+            inputs.file(source)
+            inputs.property('entrypoints', entrypoints)
+            outputs.file(destination)
+            doLast {
+                def metadata = new JsonSlurper().parse(source.get().asFile)
+                metadata.entrypoints['fabric-client-gametest'] =
+                        entrypoints.collect { "com.qb20nh.cbbg.gametest.${it}".toString() }
+                destination.get().asFile.parentFile.mkdirs()
+                destination.get().asFile.text = groovy.json.JsonOutput.prettyPrint(
+                        groovy.json.JsonOutput.toJson(metadata))
+            }
         }
-    }
-    tasks.register('irisRestartDriverJar', Jar) {
-        archiveClassifier = 'iris-restart-driver'
-        from(sourceSets.gametest.output) { exclude 'fabric.mod.json' }
-        from(restartMetadata)
+        tasks.register("${fixture}DriverJar", Jar) {
+            archiveClassifier = fixture == 'irisRestart' ? 'iris-restart-driver' : 'maximum-noise-cache-driver'
+            from(sourceSets.gametest.output) { exclude 'fabric.mod.json' }
+            from(fixtureMetadata)
+        }
     }
 }
 

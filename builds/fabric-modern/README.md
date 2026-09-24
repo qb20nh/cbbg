@@ -51,6 +51,17 @@ The fixture verifies persisted shader selection, actual shader pixels, CBBG
 suspension and recovery after disabling shaders. `control` is a separate fresh
 directory run with CBBG disabled; it is diagnostic evidence, not a restart pass.
 
+For maximum-size image/cache validation, build `maximumNoiseCacheDriverJar`
+and substitute its `*-maximum-noise-cache-driver.jar` for the ordinary driver
+in a fresh game directory. Allow a 600-second process timeout and a 2 GiB Java
+heap. This separate slow fixture generates 256x256x128 noise, checks every native
+image pixel against a fixed CPU checksum, then reloads all PNG frames and checks
+the checksum again. It then loads the cached frames into the live controller,
+renders one full 128-frame GPU cycle without fallback, and disables the effect.
+This checks maximum-size upload/cycling; pixel readback uses the separate small
+synthetic fixtures rather than checking every maximum-size GPU texel.
+Run it after other clients exit; do not run two graphical clients concurrently.
+
 Scenarios cover window resizing, allocation/fallback, format transitions,
 pixel readback, live presentation, screenshots, commands, settings, notifications
 and optional integrations. A passing scenario trace is partial evidence, not
