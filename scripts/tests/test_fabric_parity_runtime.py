@@ -47,6 +47,7 @@ class LauncherFailureTests(unittest.TestCase):
             'minecraft_launcher_lib': types.ModuleType('minecraft_launcher_lib'),
             'minecraft_launcher_lib.command': command_module}))
         stack.enter_context(patch.object(launcher, 'verify_dependencies'))
+        self.gametest_check = stack.enter_context(patch.object(launcher, 'verify_gametest_api'))
         self.runtime_check = stack.enter_context(patch.object(launcher, 'verify_runtime'))
         stack.enter_context(patch.object(launcher, 'java_identity', return_value={'fixture': True}))
         stack.enter_context(patch.object(launcher.subprocess, 'check_output',
@@ -126,6 +127,13 @@ class LauncherFailureTests(unittest.TestCase):
     def test_lock_failure_prevents_directory_creation_and_launch(self):
         self.runtime_check.side_effect = ValueError('Runtime inputs differ')
         with self.assertRaisesRegex(ValueError, 'Runtime inputs differ'):
+            launcher.main()
+        self.run.assert_not_called()
+        self.assertFalse(self.game.exists())
+
+    def test_gametest_lock_failure_prevents_launch(self):
+        self.gametest_check.side_effect = ValueError('Gametest API checksum mismatch')
+        with self.assertRaisesRegex(ValueError, 'Gametest API checksum mismatch'):
             launcher.main()
         self.run.assert_not_called()
         self.assertFalse(self.game.exists())

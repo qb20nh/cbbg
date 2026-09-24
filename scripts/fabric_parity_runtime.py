@@ -11,7 +11,7 @@ import shutil
 import subprocess
 import zipfile
 
-from fabric_dependency_lock import verify_dependencies
+from fabric_dependency_lock import verify_dependencies, verify_gametest_api
 from fabric_runtime_lock import verify_runtime
 from fabric_scenario_evidence import graphics_identity, validate_scenarios
 from targets import load_catalog, select_targets
@@ -79,6 +79,7 @@ def main():
     dependency_bytes = args.dependency_lock.read_bytes()
     dependency_lock = json.loads(dependency_bytes)
     verify_dependencies(target, args.compat, dependencies, dependency_lock)
+    verify_gametest_api(target, args.gametest_api, dependency_lock)
     with zipfile.ZipFile(args.driver) as jar:
         metadata = json.loads(jar.read('fabric.mod.json'))
         expected = metadata['entrypoints']['fabric-client-gametest']
@@ -182,6 +183,7 @@ def main():
             receipt['artifacts'][name] = digest(mods / name)
         verify_dependencies(target, args.compat,
                             {name: mods / (name + '.jar') for name in dependencies}, dependency_lock)
+        verify_gametest_api(target, mods / 'fabric-gametest-api.jar', dependency_lock)
         with log_path.open('w') as log:
             result = subprocess.run(command, cwd=game, env=environment, stdout=log,
                                     stderr=subprocess.STDOUT, timeout=args.timeout)

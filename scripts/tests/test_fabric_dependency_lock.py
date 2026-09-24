@@ -4,7 +4,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from fabric_dependency_lock import verify_dependencies
+from fabric_dependency_lock import verify_dependencies, verify_gametest_api
 
 
 class DependencyLockTests(unittest.TestCase):
@@ -38,6 +38,17 @@ class DependencyLockTests(unittest.TestCase):
         self.jar.write_bytes(b'changed')
         with self.assertRaises(ValueError):
             verify_dependencies(self.target, 'iris+renderscale', self.paths, self.lock)
+
+    def test_gametest_api_requires_matching_pin_and_bytes(self):
+        self.lock['gametestApi'] = {'fabricApiPin': 'pin',
+                                  'sha256': hashlib.sha256(b'original').hexdigest()}
+        verify_gametest_api(self.target, self.jar, self.lock)
+        self.jar.write_bytes(b'changed')
+        with self.assertRaisesRegex(ValueError, 'checksum mismatch'):
+            verify_gametest_api(self.target, self.jar, self.lock)
+        self.lock['gametestApi']['fabricApiPin'] = 'different'
+        with self.assertRaisesRegex(ValueError, 'lock/catalog mismatch'):
+            verify_gametest_api(self.target, self.jar, self.lock)
 
     def test_wrong_target_pin_profile_and_missing_entry_fail(self):
         for mutation in ('target', 'pin', 'entry'):

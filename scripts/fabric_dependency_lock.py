@@ -4,6 +4,16 @@ import hashlib
 from pathlib import Path
 
 
+def verify_gametest_api(target, path, lock):
+    entry = lock.get('gametestApi', {})
+    if entry.get('fabricApiPin') != target['dependencies']['fabricApi']:
+        raise ValueError('Gametest API lock/catalog mismatch')
+    with Path(path).open('rb') as stream:
+        digest = hashlib.file_digest(stream, 'sha256').hexdigest()
+    if digest != entry.get('sha256'):
+        raise ValueError('Gametest API checksum mismatch')
+
+
 def verify_dependencies(target, profile, paths, lock):
     if lock.get('schemaVersion') != 1 or lock.get('target') != target['id']:
         raise ValueError('Dependency lock target/schema mismatch')

@@ -28,8 +28,12 @@ runtime bytes used by those earlier runs. A matching lock is not a test pass.
 by the target catalog. Its entries cite the publisher's version metadata used
 to verify the downloaded bytes. `verify_dependencies` checks catalog pins,
 selected jars and required transitive dependencies (Iris/Sodium and
-RenderScale/Cloth Config). Candidate, driver and gametest API hashes still need
-separate receipt binding. A mod dependency lock does not establish compatibility.
+RenderScale/Cloth Config). Its `gametestApi` entry separately pins the resolved
+test-only API module against the Fabric API catalog pin. The launcher verifies
+that jar before creating the game directory and again after copying it.
+Candidate and driver hashes still need separate receipt binding. A mod dependency
+lock does not establish compatibility. Older receipts retain their original lock
+digest; this additional check does not retroactively change their provenance.
 
 For the dedicated `irisRestartDriverJar`, use `fabric_parity_runtime.py` with
 `--backend opengl --restart-phase prepare`, then repeat the same launch arguments

@@ -1,6 +1,12 @@
 {
   "schemaVersion": 1,
   "target": "26.3-fabric",
+  "gametestApi": {
+    "fabricApiPin": "0.161.0+26.3",
+    "coordinate": "net.fabricmc.fabric-api:fabric-client-gametest-api-v1:6.0.7+4be74c3f5d",
+    "sha256": "09d7d48475eef47a347c12c51bd32c6cffc065a6785f3023f5aa6be4b815cd38",
+    "verification": "Resolved Fabric API module used by the packaged test driver; checksum captured from the actual jar used in the integrated matrix."
+  },
   "verifiedDate": "2026-09-25",
   "verification": "Local bytes matched the primary file SHA-512 in each referenced Modrinth version; SHA-256 recorded below.",
   "dependencies": {
