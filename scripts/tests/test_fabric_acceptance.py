@@ -6,9 +6,8 @@ import unittest
 from unittest.mock import patch
 
 from fabric_acceptance import ROOT, required_runs, verify_results, verify_candidate_results
-from prepare_candidate import prepare
-from parity_evidence import digest, read_json
-from targets import load_catalog, select_targets
+from parity_evidence import catalog_digest, digest, read_json
+from runtime_catalog import load_catalog, select_targets
 
 
 class FabricAcceptanceTests(unittest.TestCase):
@@ -168,8 +167,19 @@ class FabricCandidateTests(unittest.TestCase):
                                        'ordinary_metadata': 'metadata.json', 'runtime_lock': 'runtime.json',
                                        'dependency_lock': 'mods.json',
                                        'drivers': {run['suite']: 'driver.jar' for run in runs}}}]
-        self.manifest = prepare(self.root, inventory, 'v2.0.0-rc.1', 'a' * 40,
-                                self.catalog, [self.target])
+        def reference(name):
+            return {'path': name, 'sha256': digest(self.root / name)}
+
+        record = inventory[0]
+        for key in ('artifact', 'sources', 'source_inventory'):
+            record[key] = reference(record[key])
+        client = record['client_tests']
+        for key in ('catalog', 'contract', 'ordinary_metadata', 'runtime_lock', 'dependency_lock'):
+            client[key] = reference(client[key])
+        client['drivers'] = {suite: reference(name) for suite, name in client['drivers'].items()}
+        self.manifest = {'schema': 2, 'release': 'v2.0.0-rc.1', 'commit': 'a' * 40,
+                         'catalog_sha256': catalog_digest(self.catalog),
+                         'selected_targets': [self.target], 'targets': inventory}
         self.path = self.root / 'candidate.json'
         self.path.write_text(json.dumps(self.manifest))
         self.results = self.enterContext(patch('fabric_acceptance.verify_results',

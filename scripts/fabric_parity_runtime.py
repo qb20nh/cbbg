@@ -14,7 +14,7 @@ import zipfile
 from fabric_dependency_lock import verify_dependencies, verify_gametest_api
 from fabric_runtime_lock import verify_runtime
 from fabric_scenario_evidence import graphics_identity, validate_scenarios
-from targets import load_catalog, select_targets
+from runtime_catalog import load_catalog, select_targets
 
 ROOT = Path(__file__).resolve().parents[1]
 

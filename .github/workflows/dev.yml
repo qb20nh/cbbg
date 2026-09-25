@@ -18,17 +18,20 @@ jobs:
       matrix: ${{ steps.targets.outputs.matrix }}
     steps:
       - uses: actions/checkout@v6.0.1
+      - uses: actions/setup-java@v5.1.0
+        with:
+          java-version: '25'
+          distribution: temurin
+      - uses: gradle/actions/setup-gradle@v5.0.0
       - name: Select catalog targets
         id: targets
         env:
           TARGETS: ${{ inputs.targets }}
         run: |
-          if [[ -n "$TARGETS" ]]; then
-            matrix=$(python3 scripts/targets.py --artifacts --targets "$TARGETS")
-          else
-            matrix=$(python3 scripts/targets.py --artifacts --ci)
-          fi
-          printf 'matrix=%s\n' "$matrix" >> "$GITHUB_OUTPUT"
+          args=()
+          if [[ -n "$TARGETS" ]]; then args+=("-Ptargets=$TARGETS"); fi
+          ./gradlew --no-daemon "${args[@]}" -Poutput=build/dev-matrix.json targetMatrix
+          printf 'matrix=%s\n' "$(cat build/dev-matrix.json)" >> "$GITHUB_OUTPUT"
 
   dev:
     needs: plan
@@ -42,6 +45,10 @@ jobs:
         with:
           java-version: ${{ matrix.java }}
           distribution: temurin
+      - uses: actions/setup-java@v5.1.0
+        with:
+          java-version: '25'
+          distribution: temurin
       - uses: gradle/actions/setup-gradle@v5.0.0
         with:
           cache-cleanup: on-success
@@ -49,10 +56,10 @@ jobs:
         env:
           TARGET_ID: ${{ matrix.id }}
         run: |
-          python3 scripts/build_targets.py ciCheck --targets "$TARGET_ID"
-          python3 scripts/build_targets.py dev --targets "$TARGET_ID"
+          ./gradlew --no-daemon "-Ptarget=$TARGET_ID" ciCheck
+          ./gradlew --no-daemon "-Ptarget=$TARGET_ID" dev
       - uses: actions/upload-artifact@v6
         with:
           name: dev-${{ matrix.id }}
-          path: build/targets/${{ matrix.id }}/dev/*.jar
+          path: ${{ matrix.buildProfile == 'fabric-upstream' && 'build/libs/*-dev-*.jar' || format('build/targets/{0}/dev/*.jar', matrix.id) }}
           if-no-files-found: error

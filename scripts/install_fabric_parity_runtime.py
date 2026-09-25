@@ -7,7 +7,7 @@ from importlib.metadata import version
 import json
 from pathlib import Path
 
-from targets import load_catalog, select_targets
+from runtime_catalog import load_catalog, select_targets
 from fabric_runtime_lock import capture_runtime, fabric_command
 
 

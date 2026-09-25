@@ -1,8 +1,11 @@
-import groovy.json.JsonSlurper
-import java.security.MessageDigest
+import cbbg.gradle.CandidateFiles
+import cbbg.gradle.LegacyPublication
+import cbbg.gradle.Publication
+import groovy.json.JsonOutput
 
 plugins {
     id 'base'
+    id 'cbbg.packaging' apply false
     id 'com.modrinth.minotaur' version '2.10.0'
 }
 
@@ -15,43 +18,44 @@ def requiredFile = { String property ->
     if (!path.isFile()) throw new GradleException('Missing file for -P' + property)
     path
 }
-def sha256 = { File path ->
-    MessageDigest.getInstance('SHA-256').digest(path.bytes).encodeHex().toString()
-}
-def candidateFile = requiredFile('candidate')
+def repositoryRoot = file('../..').canonicalFile
+def publicationSourceRoot = providers.gradleProperty('sourceRoot').orNull
+def sourceRoot = publicationSourceRoot ? file(publicationSourceRoot).canonicalFile : repositoryRoot
 def metadataFile = requiredFile('publicationMetadata')
-def metadata = new JsonSlurper().parse(metadataFile)
-def manifest = new JsonSlurper().parse(candidateFile)
+def metadata = CandidateFiles.read(metadataFile)
 def targetId = providers.gradleProperty('target').orNull
-if (metadata.schema != 1 || manifest.schema != 2 || !targetId) {
-    throw new GradleException('Expected candidate metadata and an explicit -Ptarget')
+if (!(metadata instanceof Map) || metadata.schema != 1 || !targetId) {
+    throw new GradleException('Expected schema 1 publishing metadata and an explicit -Ptarget')
 }
-def selected = metadata.records.findAll { it.targets == [targetId] }
-def targets = manifest.targets.findAll { it.id == targetId }
-if (selected.size() != 1 || targets.size() != 1 || !manifest.selected_targets.contains(targetId)) {
-    throw new GradleException('Publishing target is absent or duplicated')
+def legacy = metadata.legacy == true
+def candidateProperty = providers.gradleProperty('candidate').orNull
+def assetsProperty = providers.gradleProperty('legacyAssets').orNull
+if (legacy == (candidateProperty != null) || legacy != (assetsProperty != null)) {
+    throw new GradleException('Use -Pcandidate for candidate metadata or -PlegacyAssets for legacy metadata')
 }
-def record = selected[0]
-def target = targets[0]
+def candidateFile = legacy ? null : requiredFile('candidate')
+if (legacy && !assetsProperty) throw new GradleException('Missing -PlegacyAssets')
+def legacyAssets = legacy ? file(assetsProperty).canonicalFile : null
+if (legacy && !legacyAssets.isDirectory()) throw new GradleException('Missing legacy assets directory')
+
+def checked = legacy
+        ? LegacyPublication.checkedRecord(metadataFile, sourceRoot, legacyAssets)
+        : Publication.checkedRecord(candidateFile, metadataFile, targetId, sourceRoot)
+def record = checked[1]
+if (record.targets != [targetId]) throw new GradleException('Publishing target differs from selected target')
+def metadataHash = checked[2]
+def assets = legacy ? legacyAssets : candidateFile.parentFile
 def uploadFiles = [:]
 def verifyInputs = {
-    if (sha256(candidateFile) != metadata.manifest_sha256 ||
-            metadata.release != manifest.release || metadata.source_commit != manifest.commit ||
-            new JsonSlurper().parse(metadataFile) != metadata) {
-        throw new GradleException('Candidate or publishing metadata changed')
+    if (CandidateFiles.sha256(metadataFile) != metadataHash) {
+        throw new GradleException('Publishing metadata changed')
     }
+    def current = legacy
+            ? LegacyPublication.checkedRecord(metadataFile, sourceRoot, legacyAssets)
+            : Publication.checkedRecord(candidateFile, metadataFile, targetId, sourceRoot)
+    if (current[1] != record) throw new GradleException('Publishing record changed')
     ['artifact', 'sources'].each { kind ->
-        def reference = record[kind]
-        if (reference != target[kind] || !(reference.path instanceof String) ||
-                new File(reference.path).isAbsolute()) {
-            throw new GradleException('Publishing file differs from candidate: ' + kind)
-        }
-        def path = new File(candidateFile.parentFile, reference.path).canonicalFile
-        if (!path.toPath().startsWith(candidateFile.parentFile.toPath()) || !path.isFile() ||
-                sha256(path) != reference.sha256) {
-            throw new GradleException('Missing or changed candidate file: ' + kind)
-        }
-        uploadFiles[kind] = path
+        uploadFiles[kind] = CandidateFiles.checked(assets, (Map) record[kind])
     }
 }
 verifyInputs()
@@ -80,41 +84,46 @@ modrinth {
 tasks.register('verifyUploadInputs') {
     doLast {
         verifyInputs()
-        logger.lifecycle('Checked candidate files for ' + targetId)
+        logger.lifecycle('Checked publication files for ' + targetId)
     }
 }
 
-def repositoryRoot = file('../..').canonicalFile
-def publicationSourceRoot = providers.gradleProperty('sourceRoot').orNull
-def sourceRoot = publicationSourceRoot ? file(publicationSourceRoot).canonicalFile : repositoryRoot
 def uploadPlan = layout.buildDirectory.file(targetId + '/modrinth-plan.json')
 def uploadResult = layout.buildDirectory.file(targetId + '/modrinth-result.json')
-def retryCommand = ['python3', new File(repositoryRoot, '.github/scripts/modrinth_retry.py'),
-                    '--candidate', candidateFile, '--metadata', metadataFile,
-                    '--source-root', sourceRoot, '--target', targetId]
-tasks.register('planModrinthUpload', Exec) {
+def planUpload = {
+    verifyInputs()
+    Publication.plan(candidateFile, metadataFile, targetId, sourceRoot, null, legacyAssets)
+}
+tasks.register('planModrinthUpload') {
     dependsOn tasks.named('verifyUploadInputs')
     outputs.file(uploadPlan)
     outputs.upToDateWhen { false }
-    commandLine(retryCommand + ['--output', uploadPlan.get().asFile])
+    doLast {
+        def plan = planUpload()
+        def output = uploadPlan.get().asFile
+        output.parentFile.mkdirs()
+        output.text = JsonOutput.prettyPrint(JsonOutput.toJson(plan)) + '\n'
+        logger.lifecycle('Modrinth retry plan: ' + plan.action + ' ' + plan.version_number)
+    }
 }
 
 def uploadSettings = extensions.getByName('modrinth')
 tasks.named('modrinth') {
     dependsOn tasks.named('planModrinthUpload')
     onlyIf('The requested version is not already uploaded') {
-        def plan = new JsonSlurper().parse(uploadPlan.get().asFile)
+        def plan = CandidateFiles.read(uploadPlan.get().asFile)
         if (!(plan.action in ['upload', 'reuse'])) throw new GradleException('Invalid Modrinth upload plan')
         plan.action == 'upload'
     }
     doFirst { verifyInputs() }
     doLast {
         if (!uploadSettings.debugMode.get()) {
-            def result = providers.exec {
-                commandLine(retryCommand + ['--require-existing', '--output', uploadResult.get().asFile])
-            }
-            result.result.get().assertNormalExitValue()
-            logger.lifecycle(result.standardOutput.asText.get().trim())
+            def result = planUpload()
+            if (result.action != 'reuse') throw new GradleException('Uploaded Modrinth version was not found')
+            def output = uploadResult.get().asFile
+            output.parentFile.mkdirs()
+            output.text = JsonOutput.prettyPrint(JsonOutput.toJson(result)) + '\n'
+            logger.lifecycle('Modrinth retry plan: reuse ' + result.version_number)
         }
     }
 }

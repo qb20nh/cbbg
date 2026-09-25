@@ -9,7 +9,9 @@ updates:
     directories:
       - "/"
       - "/core"
+      - "/build-logic"
       - "/build-config/fabric-modern"
+      - "/build-config/fabric-upstream"
       - "/build-config/publishing"
     schedule:
       interval: "weekly"

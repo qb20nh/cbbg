@@ -4,13 +4,11 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
-from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from candidate_manifest import client_candidate
-from fabric_package import verify_candidate
 from parity_evidence import EvidenceError, catalog_digest, digest
-from targets import load_catalog
+from runtime_catalog import load_catalog
 
 
 class CandidateManifestTest(unittest.TestCase):
@@ -79,23 +77,6 @@ class CandidateManifestTest(unittest.TestCase):
                 with self.assertRaisesRegex(EvidenceError, 'Shared ' + kind):
                     self.read()
                 quilt[kind]['sha256'] = original
-
-    def test_package_validation_uses_explicit_candidate_version(self):
-        self.write()
-        with patch('fabric_package.verify_candidate_package', return_value={'checked': True}) as check:
-            result = verify_candidate(self.path, '26.3-fabric', self.root)
-        self.assertEqual(check.call_args.args[3], '1.4.0-rc.1+mc26.3-fabric')
-        self.assertEqual(result['source_inventory_sha256'], self.target['source_inventory']['sha256'])
-        self.assertEqual(result['manifest_sha256'], digest(self.path))
-        self.assertFalse(result['releaseAcceptance'])
-
-    def test_catalog_failure_prevents_package_validation(self):
-        self.manifest['catalog_sha256'] = '0' * 64
-        self.write()
-        with patch('fabric_package.verify_candidate_package') as check:
-            with self.assertRaisesRegex(EvidenceError, 'catalog or target selection'):
-                verify_candidate(self.path, '26.3-fabric', self.root)
-        check.assert_not_called()
 
 
 if __name__ == '__main__':

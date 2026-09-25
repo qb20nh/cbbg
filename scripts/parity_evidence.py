@@ -11,7 +11,7 @@ import json
 from pathlib import Path
 import re
 
-from targets import load_catalog
+from runtime_catalog import load_catalog
 
 
 class EvidenceError(ValueError):

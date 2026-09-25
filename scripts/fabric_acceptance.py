@@ -9,7 +9,7 @@ import zipfile
 from fabric_run_evidence import verify_run, verify_restart
 from candidate_manifest import client_candidate
 from parity_evidence import EvidenceError, checked_file, digest, read_json, unique_by
-from targets import load_catalog, select_targets
+from runtime_catalog import load_catalog, select_targets
 
 ROOT = Path(__file__).resolve().parents[1]
 

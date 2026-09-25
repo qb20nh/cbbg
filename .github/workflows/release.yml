@@ -27,37 +27,38 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+      - uses: actions/setup-java@v5.1.0
+        with:
+          java-version: '25'
+          distribution: temurin
+      - uses: gradle/actions/setup-gradle@v5.0.0
 
       - name: Validate release selection
         id: selection
         env:
           REQUESTED_TARGET: ${{ inputs.target }}
         run: |
-          python3 - <<'PY'
-          import os
-          from pathlib import Path
-          import subprocess
-          import sys
-          sys.path.insert(0, 'scripts')
-          from parity_evidence import selected_target_specs, validate_release_identity
-          from targets import load_catalog
-
-          if os.environ['GITHUB_REF_TYPE'] != 'tag':
-              raise SystemExit('Run this workflow from an explicit release tag')
-          commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
-          validate_release_identity(os.environ['GITHUB_REF_NAME'], commit)
-          selected = selected_target_specs(load_catalog(), [os.environ['REQUESTED_TARGET']])
-          target, = selected.values()
-          if target['loader'] != 'fabric' or target.get('buildProfile') != 'fabric-modern':
-              raise SystemExit('Candidate workflow is not configured for this target')
-          for suffix in ('scenarios', 'mods', 'linux-x86_64'):
-              if not Path('runtime-locks', target['id'] + '-' + suffix + '.json').is_file():
-                  raise SystemExit('Missing candidate test inputs: ' + suffix)
-          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
-              for key, value in [('target', target['id']), ('java', target['java']),
-                                 ('profile', target['buildProfile'])]:
-                  print(str(key) + '=' + str(value), file=output)
-          PY
+          if [[ "$GITHUB_REF_TYPE" != "tag" || ! "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z][0-9A-Za-z.-]*\.[1-9][0-9]*)?$ ]]; then
+            echo "Run this workflow from an explicit version release tag."
+            exit 1
+          fi
+          mkdir -p build
+          ./gradlew --no-daemon "-Ptarget=$REQUESTED_TARGET" \
+            -PrequireImplemented=true -Poutput=build/release-selection.json targetMatrix
+          target="$(jq -r '.include[0].id' build/release-selection.json)"
+          profile="$(jq -r '.include[0].buildProfile' build/release-selection.json)"
+          java="$(jq -r '.include[0].java' build/release-selection.json)"
+          if [[ "$target" != "$REQUESTED_TARGET" || "$profile" != "fabric-modern" ]]; then
+            echo "Candidate workflow is not configured for this target."
+            exit 1
+          fi
+          for suffix in scenarios mods linux-x86_64; do
+            if [[ ! -f "runtime-locks/$target-$suffix.json" ]]; then
+              echo "Missing candidate test inputs: $suffix"
+              exit 1
+            fi
+          done
+          printf 'target=%s\njava=%s\nprofile=%s\n' "$target" "$java" "$profile" >> "$GITHUB_OUTPUT"
 
       - name: Check release does not already exist
         env:
@@ -81,6 +82,7 @@ jobs:
 
       - name: Test candidate tooling
         run: |
+          ./gradlew -p build-logic --no-daemon test
           python3 -m unittest discover -s scripts/tests
           python3 -m unittest discover -s .github/tests
 
@@ -89,16 +91,13 @@ jobs:
           TARGET: ${{ steps.selection.outputs.target }}
           BUILD_PROFILE: ${{ steps.selection.outputs.profile }}
         run: |
-          ./gradlew -p "build-config/${BUILD_PROFILE}" --no-daemon --console=plain \
-            "-Ptarget=${TARGET}" candidateBuildOutputs
-          python3 scripts/bundle_candidate.py \
-            --source-root . \
-            --build-outputs "build/targets/${TARGET}/candidate-build-outputs.json" \
-            --output build/release-candidate \
-            --release "${GITHUB_REF_NAME}" \
-            --contract "runtime-locks/${TARGET}-scenarios.json" \
-            --runtime-lock "runtime-locks/${TARGET}-linux-x86_64.json" \
-            --dependency-lock "runtime-locks/${TARGET}-mods.json"
+          ./gradlew --no-daemon --console=plain "-Ptarget=${TARGET}" candidateBuildOutputs
+          ./gradlew --no-daemon --console=plain \
+            "-PbuildOutputs=build/targets/${TARGET}/candidate-build-outputs.json" \
+            -Poutput=build/release-candidate "-Prelease=${GITHUB_REF_NAME}" \
+            "-Pcontract=runtime-locks/${TARGET}-scenarios.json" \
+            "-PruntimeLock=runtime-locks/${TARGET}-linux-x86_64.json" \
+            "-PdependencyLock=runtime-locks/${TARGET}-mods.json" bundleCandidate
 
       - name: Attest candidate files
         id: provenance
@@ -113,10 +112,10 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           cp "${PROVENANCE_BUNDLE}" build/release-candidate/provenance.jsonl
-          python3 scripts/candidate_provenance.py \
-            --candidate build/release-candidate/candidate.json \
-            --bundle build/release-candidate/provenance.jsonl \
-            --repo "${GH_REPO}"
+          ./gradlew --no-daemon \
+            -Pcandidate=build/release-candidate/candidate.json \
+            -Pbundle=build/release-candidate/provenance.jsonl \
+            "-Prepo=${GH_REPO}" -Poutput=build/provenance-result.json verifyProvenance
 
       - name: Create draft release
         env:

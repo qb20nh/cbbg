@@ -11,7 +11,7 @@ from fabric_dependency_lock import verify_dependencies, verify_gametest_api
 from fabric_parity_runtime import RESTART_DRIVERS, restart_state
 from fabric_scenario_evidence import graphics_identity, validate_scenarios
 from parity_evidence import EvidenceError, checked_file, digest, read_json
-from targets import load_catalog, select_targets
+from runtime_catalog import load_catalog, select_targets
 
 
 def _verify_run(receipt_path, target, *, source_commit, candidate_sha256,

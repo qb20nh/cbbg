@@ -1,0 +1,32 @@
+pluginManagement {
+	includeBuild('../../build-logic')
+	def repositoryProperties = new Properties()
+	file('../../gradle.properties').withInputStream { repositoryProperties.load(it) }
+
+	repositories {
+		maven {
+			name = 'Fabric'
+			url = 'https://maven.fabricmc.net/'
+		}
+		mavenCentral()
+		gradlePluginPortal()
+	}
+
+	plugins {
+		id('net.fabricmc.fabric-loom') version providers.gradleProperty('loom_version').orElse(repositoryProperties.getProperty('loom_version')).get()
+	}
+}
+
+def repositoryProperties = new Properties()
+file('../../gradle.properties').withInputStream { repositoryProperties.load(it) }
+gradle.beforeProject { project ->
+	repositoryProperties.each { key, value ->
+		if (!project.hasProperty(key.toString())) {
+			project.ext.set(key.toString(), value.toString())
+		}
+	}
+}
+
+rootProject.name = 'cbbg'
+include 'core'
+project(':core').projectDir = file('../../core')

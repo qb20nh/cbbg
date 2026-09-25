@@ -1,20 +1,9 @@
 pluginManagement {
-	repositories {
-		maven {
-			name = 'Fabric'
-			url = 'https://maven.fabricmc.net/'
-		}
-		mavenCentral()
-		gradlePluginPortal()
-	}
-
-	plugins {
-		id("net.fabricmc.fabric-loom") version providers.gradleProperty("loom_version")
-	}
+    includeBuild('build-logic')
+    repositories {
+        mavenCentral()
+        gradlePluginPortal()
+    }
 }
 
-if (providers.gradleProperty('target').isPresent() || providers.gradleProperty('targets').isPresent()) {
-	rootProject.buildFileName = 'dispatch.gradle'
-} else {
-	include 'core'
-}
+rootProject.name = 'cbbg'

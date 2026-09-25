@@ -4,7 +4,7 @@ from pathlib import Path
 
 from parity_evidence import (EvidenceError, catalog_digest, checked_file, read_json,
                              selected_target_specs, unique_by, validate_release_identity)
-from targets import load_catalog
+from runtime_catalog import load_catalog
 
 
 def client_candidate(manifest_path, target_id):

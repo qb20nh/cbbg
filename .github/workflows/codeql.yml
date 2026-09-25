@@ -28,10 +28,15 @@ jobs:
       matrix: ${{ steps.targets.outputs.matrix }}
     steps:
     - uses: actions/checkout@v4
+    - uses: actions/setup-java@v5.1.0
+      with:
+        java-version: '25'
+        distribution: temurin
+    - uses: gradle/actions/setup-gradle@v5.0.0
     - id: targets
       run: |
-        matrix=$(python scripts/targets.py --ci --artifacts)
-        echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+        ./gradlew --no-daemon -Poutput=build/codeql-matrix.json targetMatrix
+        echo "matrix=$(cat build/codeql-matrix.json)" >> "$GITHUB_OUTPUT"
 
   analyze-targets:
     name: Analyze (${{ matrix.id }})
@@ -51,6 +56,10 @@ jobs:
       with:
         java-version: ${{ matrix.java }}
         distribution: temurin
+    - uses: actions/setup-java@v5.1.0
+      with:
+        java-version: '25'
+        distribution: temurin
     - uses: github/codeql-action/init@v4
       with:
         languages: java-kotlin
@@ -64,7 +73,7 @@ jobs:
           fabric-modern) ;;
           *) echo "CodeQL build instructions needed for $BUILD_PROFILE" >&2; exit 1 ;;
         esac
-        ./gradlew -p "build-config/$BUILD_PROFILE" -Ptarget="$TARGET" \
+        ./gradlew -Ptarget="$TARGET" \
           compileJava --rerun-tasks --no-build-cache --no-daemon --no-watch-fs
     - uses: github/codeql-action/analyze@v4
       with:
@@ -147,7 +156,7 @@ jobs:
       if: matrix.build-mode == 'manual'
       shell: bash
       run: |
-        ./gradlew compileJava --rerun-tasks --no-build-cache --no-daemon --no-watch-fs
+        ./gradlew -Ptarget=26.2-fabric compileJava --rerun-tasks --no-build-cache --no-daemon --no-watch-fs
 
     - name: Perform CodeQL Analysis
       uses: github/codeql-action/analyze@v4

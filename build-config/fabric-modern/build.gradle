@@ -1,12 +1,13 @@
 plugins {
     id 'net.fabricmc.fabric-loom' version '1.17.21'
+    id 'cbbg.packaging'
 }
 
 import groovy.json.JsonSlurper
 
 def repositoryRoot = file('../..')
 apply from: new File(repositoryRoot, 'build-config/local-runtime.gradle')
-def catalog = new JsonSlurper().parse(new File(repositoryRoot, 'targets.json'))
+def catalog = cbbg.gradle.TargetCatalog.read(new File(repositoryRoot, 'targets.json')).data
 def targetId = providers.gradleProperty('target').getOrElse('26.3-fabric')
 def target = catalog.targets.find { it.id == targetId }
 if (target == null || target.buildProfile != 'fabric-modern') {
@@ -166,9 +167,6 @@ tasks.named('jar') {
     // Source generation is useful before an adapter exists, but an empty adapter
     // must never produce a plausible distribution artifact.
     doFirst {
-        if (!target.implemented) {
-            throw new GradleException("Distribution implementation remains incomplete for ${targetId}")
-        }
         if (!sourceSets.main.resources.matching { include 'fabric.mod.json' }.files) {
             throw new GradleException("Adapter metadata is not implemented for ${targetId}")
         }
@@ -275,19 +273,16 @@ if (target.renderer == 'renderpearl') {
     }
 }
 
-tasks.register('verifyCandidatePackaging', Exec) {
-    group = 'verification'
-    description = 'Check production bytecode and embedded core without launching Minecraft.'
-    dependsOn parityCandidateJar, tasks.named('sourcesJar')
-    workingDir repositoryRoot
-    doFirst {
-        commandLine 'python3', 'scripts/artifact_checks.py', '--target', targetId,
-                '--artifact', parityCandidateJar.get().archiveFile.get().asFile,
-                '--sources', tasks.named('sourcesJar').get().archiveFile.get().asFile
-    }
+tasks.named('checkPackages', cbbg.gradle.CheckPackages) {
+    artifact.set(tasks.named('jar', Jar).flatMap { it.archiveFile })
+    sources.set(tasks.named('sourcesJar', Jar).flatMap { it.archiveFile })
+    javaVersion.set(target.java as int)
+    coreSources.set(new File(repositoryRoot, 'core/src/main/java'))
 }
+tasks.register('verifyCandidatePackaging') { dependsOn tasks.named('checkPackages') }
+tasks.named('check') { dependsOn tasks.named('checkPackages') }
 tasks.register('prepareParityRuntime') {
-    dependsOn parityDriverJar, tasks.named('verifyCandidatePackaging')
+    dependsOn parityCandidateJar, parityDriverJar, tasks.named('verifyCandidatePackaging')
 }
 
 tasks.register('ciCheck') {
@@ -326,8 +321,7 @@ tasks.register('candidateBuildOutputs') {
             if (drivers.containsKey(suite)) throw new GradleException('Duplicate driver suite: ' + suite)
             drivers[suite] = reference(driver.archiveFile.get().asFile)
         }
-        def artifact = reference(parityCandidateJar.get().archiveFile.get().asFile)
-        artifact.filename = tasks.named('jar', Jar).get().archiveFileName.get()
+        def artifact = reference(tasks.named('jar', Jar).get().archiveFile.get().asFile)
         def output = [schema: 1, target: targetId, version: project.version.toString(),
                       source_commit: gitOutput(['rev-parse', 'HEAD']),
                       source_dirty: !gitOutput(['status', '--porcelain', '--untracked-files=all',
@@ -346,7 +340,7 @@ tasks.register('dev', Sync) {
     description = 'Check and package local development jars without release readiness claims.'
     dependsOn tasks.named('check'), tasks.named('verifyCandidatePackaging')
     into layout.buildDirectory.dir('dev')
-    from(parityCandidateJar.flatMap { it.archiveFile }) {
+    from(tasks.named('jar', Jar).flatMap { it.archiveFile }) {
         rename { "${base.archivesName.get()}-${project.version}-dev.jar" }
     }
     from(tasks.named('sourcesJar').flatMap { it.archiveFile }) {

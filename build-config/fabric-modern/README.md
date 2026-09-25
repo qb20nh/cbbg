@@ -1,19 +1,19 @@
 # Modern Fabric build profile
 
 This Loom 1.17.21 build compiles the 26.3 Fabric RenderPearl adapter with Java 25
-and the shared Java 8 core. Other catalog targets are pending. Distribution
-packaging requires completed acceptance checks.
+and the shared Java 8 core. Other catalog targets are pending. Publishing
+requires completed acceptance checks.
 
-Build the 26.2 adapter in `adapters/fabric/26.2` through the root Gradle project.
+Build the 26.2 adapter in `adapters/fabric/26.2` with `-Ptarget=26.2-fabric`.
 It uses the existing renderer and cleanup code. Its metadata and resources stay
 at the root paths required by release tooling.
 
 From the repository root:
 
 ```
-./gradlew -p build-config/fabric-modern genSources -Ptarget=26.3-fabric
+./gradlew genSources -Ptarget=26.3-fabric
 ./gradlew -p build-config/fabric-modern prepareParityRuntime -Ptarget=26.3-fabric
-python3 scripts/build_targets.py check --targets 26.2-fabric
+./gradlew check -Ptarget=26.2-fabric
 ```
 
 The catalog supplies Minecraft, loader/API and optional-mod versions, plus the
