@@ -19,6 +19,8 @@ a target uses. Split a module when a target needs only part of it.
 | `targetMatrix` | Writes JSON with `-Poutput=path`; `-PrequireImplemented=true` requires completed targets. |
 | `selectChecks` | `-Pbase=revision -Phead=revision -Poutput=path`; optional `-PgithubOutput=path`. |
 | `checkPackages` | Builds and checks selected production and source JARs. |
+| `optimizeReleaseJar` | Shrinks, optimizes and obfuscates the selected targets' release JARs, with per-target mappings. |
+| `retrace` | `-Pcandidate=path -Ptarget=id -Pcrash=log-file -Poutput=new-file`; decodes a crash using that release's verified mapping. |
 | `candidateBuildOutputs` | Builds candidate inputs and records their hashes under the selected target's build directory. |
 | `bundleCandidate` | `-PbuildOutputs=path -Pcontract=path -PruntimeLock=path -PdependencyLock=path -Prelease=vX.Y.Z -Poutput=new-directory`. Requires clean source matching the recorded build. |
 | `verifyProvenance` | `-Pcandidate=path -Pbundle=provenance.jsonl -Prepo=owner/repository -Poutput=new-file`. Uses GitHub CLI attestation verification. |
@@ -31,6 +33,12 @@ a target uses. Split a module when a target needs only part of it.
 `candidateBuildOutputs` and `bundleCandidate` currently support the 26.3 Fabric
 release path. A successful build does not establish release readiness. All
 required local runtime results must match the candidate before publication.
+
+Release JARs use ProGuard to shrink, optimize and obfuscate CBBG. Development
+JARs retain ordinary names. Each processed release includes a mapping file on
+GitHub, recorded in its candidate manifest and checksums. Download the manifest
+and matching mapping into one directory before running `retrace`. Use the release
+and target from the crash report; mappings belong to a specific build.
 
 The isolated `build-config/publishing` build uses Minotaur with the prepared
 metadata and downloaded assets. It accepts `-PpublicationMetadata=path`,

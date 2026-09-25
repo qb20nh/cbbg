@@ -20,9 +20,11 @@ java { withSourcesJar() }
 subprojects { apply plugin: 'java' }
 ext.sharedProjects = [project(':common'), project(':rendering')]
 apply from: 'shared-code.gradle'
-tasks.register('parityCandidateJar', Jar) {
-    archiveClassifier = 'candidate'
-    from sourceSets.main.output
+tasks.register('parityCandidateJar', Copy) {
+    from(tasks.named('jar', Jar).flatMap { it.archiveFile }) {
+        rename { 'example-candidate.jar' }
+    }
+    into layout.buildDirectory.dir('libs')
 }
 ''')
         write('common/src/main/java/example/Common.java', 'package example; public class Common {}')

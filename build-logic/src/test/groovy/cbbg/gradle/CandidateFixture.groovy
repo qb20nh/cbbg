@@ -50,15 +50,21 @@ class CandidateFixture {
             CandidateFiles.writeNew(new File(bundle, name), contents)
         }
         new File(bundle, 'ordinary-driver.jar').text = 'synthetic driver'
+        new File(bundle, 'cbbg-1.4.0+mc26.3-fabric-mapping.txt').text = sourcePaths.keySet().collect {
+            String name = it.replace('.java', '').replace('/', '.')
+            name + ' -> ' + name + ':'
+        }.join('\n') + '\n'
         def reference = { String name -> CandidateFiles.reference(bundle, name) }
         Map record = [id: target.id, artifact: reference('cbbg-1.4.0+mc26.3-fabric.jar'),
+                      mapping: reference('cbbg-1.4.0+mc26.3-fabric-mapping.txt'),
+                      processing: [tool: 'proguard', version: ProguardMapping.VERSION],
                       sources: reference('cbbg-1.4.0+mc26.3-fabric-sources.jar'),
                       source_inventory: reference('source-inventory.json'), client_tests: [
                               catalog: reference('catalog.json'), contract: reference('contract.json'),
                               ordinary_metadata: reference('ordinary-metadata.json'),
                               runtime_lock: reference('runtime-lock.json'), dependency_lock: reference('dependency-lock.json'),
                               drivers: [ordinary: reference('ordinary-driver.jar')]]]
-        Map manifest = [schema: 2, release: 'v1.4.0', commit: 'a' * 40,
+        Map manifest = [schema: 3, release: 'v1.4.0', commit: 'a' * 40,
                         catalog_sha256: CandidateFiles.canonicalHash(catalog), selected_targets: [target.id], targets: [record]]
         File manifestFile = new File(bundle, 'candidate.json')
         CandidateFiles.writeNew(manifestFile, manifest)

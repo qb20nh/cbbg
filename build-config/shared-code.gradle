@@ -7,7 +7,7 @@ tasks.named('checkPackages') {
     sharedSources.from(sharedProjects.collect { it.sourceSets.main.java.srcDirs })
 }
 tasks.withType(Jar).configureEach {
-    if (name in ['jar', 'parityCandidateJar']) {
+    if (name == 'jar') {
         from(sharedProjects.collect { it.sourceSets.main.output })
     } else if (name == 'sourcesJar') {
         from(sharedProjects.collect { it.sourceSets.main.allSource })

@@ -92,9 +92,9 @@ class ChangeImpact {
         List<Map> baselines = []
         for (File file : previousManifests) {
             Object parsed = CandidateFiles.read(file)
-            if (!(parsed instanceof Map) || parsed.schema != 2 ||
+            if (!(parsed instanceof Map) || !(parsed.schema in [2, 3]) ||
                     !(parsed.release instanceof String) || !(parsed.commit instanceof String)) {
-                throw new IllegalArgumentException('Expected a schema 2 candidate manifest: ' + file)
+                throw new IllegalArgumentException('Expected a schema 2 or 3 candidate manifest: ' + file)
             }
             Map manifest = (Map) parsed
             CandidateFiles.releaseIdentity(manifest.release, manifest.commit)

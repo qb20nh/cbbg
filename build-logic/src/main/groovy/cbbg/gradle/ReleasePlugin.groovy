@@ -53,6 +53,9 @@ class ReleasePlugin implements Plugin<Project> {
                 doLast(action)
             }
         }
+        task('retrace', 'Decode a crash with its release mapping.') {
+            RetraceLog.translate(input('candidate'), required('target'), input('crash'), input('output'))
+        }
         task('verifyProvenance', 'Check candidate build attestations.') {
             CandidateFiles.writeNew(input('output'), ReleaseChecks.provenance(
                     input('candidate'), input('bundle'), required('repo'), run))

@@ -11,8 +11,8 @@ class CandidateManifest {
     CandidateManifest(File file) {
         this.file = file.canonicalFile
         data = CandidateFiles.read(this.file) as Map
-        if (!(data.schema instanceof Integer) || data.schema != 2) {
-            throw new GradleException('Client validation requires candidate schema 2')
+        if (!(data.schema instanceof Integer) || !(data.schema in [2, 3])) {
+            throw new GradleException('Client validation requires candidate schema 2 or 3')
         }
         CandidateFiles.releaseIdentity(data.release as String, data.commit as String)
         records = [:]
@@ -24,6 +24,13 @@ class CandidateManifest {
                 throw new GradleException('Invalid or duplicate candidate target')
             }
             records[target.id] = target
+            if (data.schema == 3) {
+                if (!(target.mapping instanceof Map) || target.processing != [tool: 'proguard', version: ProguardMapping.VERSION]) {
+                    throw new GradleException('Processed candidate requires a mapping and supported ProGuard version')
+                }
+            } else if (target.containsKey('mapping') || target.containsKey('processing')) {
+                throw new GradleException('Processed candidates require schema 3')
+            }
         }
         Map<String, Map> expected = null
         records.each { id, record ->
@@ -39,7 +46,7 @@ class CandidateManifest {
         specifications = expected
         specifications.each { id, specification ->
             if (specification.artifactOf) {
-                ['artifact', 'sources'].each { kind ->
+                (['artifact', 'sources'] + (data.schema == 3 ? ['mapping'] : [])).each { kind ->
                     if (records[id][kind].sha256 != records[specification.artifactOf][kind].sha256) {
                         throw new GradleException('Shared ' + kind + ' differs from owner: ' + id)
                     }
@@ -53,7 +60,7 @@ class CandidateManifest {
         if (!(tests instanceof Map) || !(tests.drivers instanceof Map) || tests.drivers.isEmpty()) {
             throw new GradleException('Missing client test drivers')
         }
-        ['artifact', 'sources', 'source_inventory'].collect { target[it] as Map } +
+        (['artifact', 'sources', 'source_inventory'] + (target.containsKey('mapping') ? ['mapping'] : [])).collect { target[it] as Map } +
                 ['catalog', 'contract', 'ordinary_metadata', 'runtime_lock', 'dependency_lock'].collect { tests[it] as Map } +
                 tests.drivers.values().collect { it as Map }
     }

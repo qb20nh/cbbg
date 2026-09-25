@@ -33,7 +33,8 @@ class BundleCandidateTest {
             Files.copy(new File(fixture.bundle, reference.path).toPath(), target.toPath())
             CandidateFiles.reference(root, 'build/inputs/' + reference.path) + [filename: reference.path]
         }
-        Map outputs = [schema: 1, target: fixture.target.id, version: '1.4.0+mc26.3-fabric',
+        Map outputs = [schema: 2, target: fixture.target.id, version: '1.4.0+mc26.3-fabric',
+                       processing: fixture.record.processing, mapping: copy(fixture.record.mapping),
                        source_commit: git(root, 'rev-parse', 'HEAD'), source_dirty: false,
                        artifact: copy(fixture.record.artifact), sources: copy(fixture.record.sources),
                        source_inventory: copy(fixture.record.source_inventory),
@@ -91,6 +92,9 @@ class BundleCandidateTest {
                 { it.artifact.filename = 'SHA256SUMS' },
                 { it.artifact.filename = 'provenance.jsonl' },
                 { it.sources.filename = it.artifact.filename },
+                { it.remove('mapping') },
+                { it.mapping.sha256 = '0' * 64 },
+                { it.processing.version = 'unknown' },
                 { it.artifact.sha256 = '0' * 64 },
                 { it.version = '2.0.0+mc26.3-fabric' },
                 { it.source_dirty = true }]

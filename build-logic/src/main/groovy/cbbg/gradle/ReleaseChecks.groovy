@@ -16,7 +16,7 @@ class ReleaseChecks {
         Map<String, File> subjects = [(manifestHash): candidate.file]
         Map<File, String> files = [(candidate.file): manifestHash]
         candidate.records.values().each { record ->
-            ['artifact', 'sources'].each { kind ->
+            (['artifact', 'sources'] + (candidate.data.schema == 3 ? ['mapping'] : [])).each { kind ->
                 File path = CandidateFiles.checked(candidate.file.parentFile, record[kind] as Map)
                 String hash = record[kind].sha256
                 files[path] = hash

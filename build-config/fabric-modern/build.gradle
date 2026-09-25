@@ -162,6 +162,8 @@ if (usesTextureFormat) {
 sourceSets.gametest.java.source(sharedClientTests)
 
 tasks.named('jar') {
+    destinationDirectory = layout.buildDirectory.dir('intermediates/raw-jar')
+    archiveClassifier = 'raw'
     from(new File(repositoryRoot, 'LICENSE'))
     // Source generation is useful before an adapter exists, but an empty adapter
     // must never produce a plausible distribution artifact.
@@ -171,6 +173,21 @@ tasks.named('jar') {
         }
     }
 }
+
+releaseOptimization {
+    targetJdk(javaToolchains, target.java as int)
+    inputJar.set(tasks.named('jar', Jar).flatMap { it.archiveFile })
+    outputJar.set(layout.buildDirectory.file("libs/${base.archivesName.get()}-${project.version}.jar"))
+    mappingFile.set(layout.buildDirectory.file("mapping/${base.archivesName.get()}-${project.version}.map"))
+    rulesFile.set(new File(repositoryRoot, 'build-config/proguard-release.pro'))
+    libraryJars.from(providers.provider {
+        def embedded = sharedProjects.collect { it.layout.buildDirectory.get().asFile.canonicalPath + File.separator }
+        sourceSets.main.compileClasspath.files.findAll { file ->
+            !embedded.any { file.canonicalPath.startsWith(it) }
+        }
+    })
+}
+tasks.named('optimizeReleaseJar') { dependsOn tasks.named('jar', Jar) }
 
 tasks.named('processResources') {
     if (!usesTextureFormat) {
@@ -207,10 +224,12 @@ tasks.named('sourcesJar') {
 
 // Minecraft 26.x uses published names in production; these artifacts need no remap.
 // Keep local candidate testing separate from the distribution readiness gate.
-def parityCandidateJar = tasks.register('parityCandidateJar', Jar) {
-    archiveClassifier = 'parity-candidate'
-    from sourceSets.main.output
-    from new File(repositoryRoot, 'LICENSE')
+def parityCandidateJar = tasks.register('parityCandidateJar', Copy) {
+    dependsOn tasks.named('optimizeReleaseJar')
+    from(releaseOptimization.outputJar) {
+        rename { "${base.archivesName.get()}-${project.version}-parity-candidate.jar" }
+    }
+    into layout.buildDirectory.dir('libs')
 }
 def parityDriverJar = tasks.register('parityDriverJar', Jar) {
     archiveClassifier = 'parity-driver'
@@ -271,13 +290,16 @@ if (target.renderer == 'renderpearl') {
 }
 
 tasks.named('checkPackages', cbbg.gradle.CheckPackages) {
-    artifact.set(tasks.named('jar', Jar).flatMap { it.archiveFile })
+    dependsOn tasks.named('optimizeReleaseJar')
+    artifact.set(releaseOptimization.outputJar)
+    mapping.set(releaseOptimization.mappingFile)
     sources.set(tasks.named('sourcesJar', Jar).flatMap { it.archiveFile })
     javaVersion.set(target.java as int)
     coreSources.set(new File(repositoryRoot, 'core/src/main/java'))
 }
 tasks.register('verifyCandidatePackaging') { dependsOn tasks.named('checkPackages') }
 tasks.named('check') { dependsOn tasks.named('checkPackages') }
+tasks.named('assemble') { dependsOn tasks.named('optimizeReleaseJar') }
 tasks.register('prepareParityRuntime') {
     dependsOn parityCandidateJar, parityDriverJar, tasks.named('verifyCandidatePackaging')
 }
@@ -318,12 +340,14 @@ tasks.register('candidateBuildOutputs') {
             if (drivers.containsKey(suite)) throw new GradleException('Duplicate driver suite: ' + suite)
             drivers[suite] = reference(driver.archiveFile.get().asFile)
         }
-        def artifact = reference(tasks.named('jar', Jar).get().archiveFile.get().asFile)
-        def output = [schema: 1, target: targetId, version: project.version.toString(),
+        def artifact = reference(releaseOptimization.outputJar.get().asFile)
+        def output = [schema: 2, target: targetId, version: project.version.toString(),
                       source_commit: gitOutput(['rev-parse', 'HEAD']),
                       source_dirty: !gitOutput(['status', '--porcelain', '--untracked-files=all',
                                                '--', '.', ':(top,exclude)docs/**']).isEmpty(),
                       artifact: artifact,
+                      mapping: reference(releaseOptimization.mappingFile.get().asFile),
+                      processing: [tool: 'proguard', version: cbbg.gradle.ProguardMapping.VERSION],
                       sources: reference(tasks.named('sourcesJar', Jar).get().archiveFile.get().asFile),
                       source_inventory: reference(layout.buildDirectory.file('source-inventory.json').get().asFile),
                       drivers: drivers]

@@ -48,6 +48,9 @@ class CandidateManifestTest {
                 { it.selected_targets = [] }, { it.selected_targets.add(it.selected_targets[0]) },
                 { it.targets.add(it.targets[0]) }, { it.catalog_sha256 = '0' * 64 },
                 { it.targets[0].remove('source_inventory') },
+                { it.targets[0].remove('mapping') },
+                { it.targets[0].mapping.sha256 = '0' * 64 },
+                { it.targets[0].processing.version = 'unknown' },
                 { it.targets[0].artifact.path = '../outside.jar' },
                 { it.targets[0].client_tests.drivers = [:] }]
         edits.each { edit ->
@@ -76,12 +79,24 @@ class CandidateManifestTest {
         new CandidateManifest(fixture.file)
         File different = new File(fixture.bundle, 'different.jar')
         different.text = 'different'
-        ['artifact', 'sources'].each { kind ->
+        ['artifact', 'sources', 'mapping'].each { kind ->
             Map previous = record[kind]
             record[kind] = CandidateFiles.reference(fixture.bundle, different.name)
             fixture.file.text = JsonOutput.toJson(fixture.manifest)
             assertThrows(Exception) { new CandidateManifest(fixture.file) }
             record[kind] = previous
         }
+    }
+
+    @Test void historicalCandidatesRemainReadableWithoutProcessingClaims() {
+        def fixture = CandidateFixture.create(directory)
+        fixture.manifest.schema = 2
+        fixture.record.remove('mapping')
+        fixture.record.remove('processing')
+        fixture.file.text = JsonOutput.toJson(fixture.manifest)
+        new CandidateManifest(fixture.file).verifyPackages(fixture.root)
+        fixture.record.processing = [tool: 'proguard', version: ProguardMapping.VERSION]
+        fixture.file.text = JsonOutput.toJson(fixture.manifest)
+        assertThrows(Exception) { new CandidateManifest(fixture.file) }
     }
 }

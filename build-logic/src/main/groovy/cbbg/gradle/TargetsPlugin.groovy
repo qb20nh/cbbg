@@ -32,7 +32,7 @@ class TargetsPlugin implements Plugin<Project> {
         if (project.gradle.startParameter.rerunTasks) options.add('--rerun-tasks')
         if (!project.gradle.startParameter.buildCacheEnabled) options.add('--no-build-cache')
         ['build', 'check', 'ciCheck', 'runClient', 'genSources', 'dev', 'compileJava',
-         'checkPackages', 'candidateBuildOutputs'].each { operation ->
+         'checkPackages', 'optimizeReleaseJar', 'candidateBuildOutputs'].each { operation ->
             def parent = project.tasks.register(operation) {
                 group = operation in ['check', 'ciCheck'] ? 'verification' : 'build'
                 description = "Run ${operation} for the selected targets."

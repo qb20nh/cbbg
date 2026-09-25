@@ -49,7 +49,7 @@ abstract class BundleCandidate extends DefaultTask {
         CandidateFiles.releaseIdentity(release, commit)
         if (state[1]) throw new GradleException('Commit source changes before bundling a candidate')
         Map built = CandidateFiles.read(buildOutputs.get().asFile)
-        if (!(built.schema instanceof Integer) || built.schema != 1 || built.source_commit != commit || built.source_dirty != false) {
+        if (!(built.schema instanceof Integer) || built.schema != 2 || built.source_commit != commit || built.source_dirty != false) {
             throw new GradleException('Build outputs do not identify the current clean source')
         }
         def catalog = TargetCatalog.read(new File(root, 'targets.json'))
@@ -81,8 +81,11 @@ abstract class BundleCandidate extends DefaultTask {
             files[name] = [file: file, sha256: sha]
             [path: name, sha256: sha]
         }
-        Map record = [id: target.id]
-        ['artifact', 'sources', 'source_inventory'].each { kind ->
+        if (built.processing != [tool: 'proguard', version: ProguardMapping.VERSION] || !(built.mapping instanceof Map)) {
+            throw new GradleException('Build outputs require ProGuard processing and mapping')
+        }
+        Map record = [id: target.id, processing: built.processing]
+        ['artifact', 'sources', 'source_inventory', 'mapping'].each { kind ->
             record[kind] = add(built[kind].filename, CandidateFiles.checked(root, built[kind]))
         }
         record.client_tests = [catalog: add('catalog.json', new File(root, 'targets.json')),
@@ -103,7 +106,7 @@ abstract class BundleCandidate extends DefaultTask {
                 }
             }
             File manifest = new File(output, 'candidate.json')
-            CandidateFiles.writeNew(manifest, [schema: 2, release: release, commit: commit,
+            CandidateFiles.writeNew(manifest, [schema: 3, release: release, commit: commit,
                     catalog_sha256: CandidateFiles.canonicalHash(catalog.data), targets: [record], selected_targets: [target.id]])
             new CandidateManifest(manifest).verifyPackages(root)
             if (sourceState() != state) throw new GradleException('Source changed while bundling candidate')

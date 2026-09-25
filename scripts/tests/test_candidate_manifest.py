@@ -55,6 +55,24 @@ class CandidateManifestTest(unittest.TestCase):
         with self.assertRaisesRegex(EvidenceError, 'Changed evidence file'):
             self.read()
 
+    def test_processed_candidate_requires_matching_mapping(self):
+        self.manifest['schema'] = 3
+        self.target['processing'] = {'tool': 'proguard', 'version': '7.10.0'}
+        with self.assertRaisesRegex(EvidenceError, 'requires a mapping'):
+            self.read()
+        mapping = self.root / 'mapping.txt'
+        mapping.write_text('example.Renderer -> a:\n')
+        self.target['mapping'] = self.reference(mapping.name)
+        self.assertEqual(self.read()[0]['schema'], 3)
+        mapping.write_text('changed')
+        with self.assertRaisesRegex(EvidenceError, 'Changed evidence file'):
+            self.read()
+
+    def test_historical_candidate_cannot_claim_processing(self):
+        self.target['processing'] = {'tool': 'proguard', 'version': '7.10.0'}
+        with self.assertRaisesRegex(EvidenceError, 'require schema 3'):
+            self.read()
+
     def test_wrong_schema_and_selection(self):
         self.manifest['schema'] = True
         with self.assertRaisesRegex(EvidenceError, 'schema 2'):

@@ -108,6 +108,23 @@ class PackageChecksTest {
         }
     }
 
+    @Test void processedCoreClassesUseTheirOriginalJavaBaseline() {
+        Map s = specimen()
+        File mapping = new File(root, 'mapping.txt')
+        mapping.text = 'example.Core -> example.a:\nexample.Client -> example.Client:\nexample.mixin.RenderMixin -> example.mixin.RenderMixin:\n'
+        byte[] original = s.binary.remove('example/Core.class')
+        s.binary['example/a.class'] = original
+        archive(s.artifact, s.binary)
+        assertEquals(1, PackageChecks.verifyArtifact(s.artifact, s.sources, 25,
+                [new File(root, 'core/src/main/java')], mapping).core_classes)
+        s.binary['example/a.class'] = header(69)
+        archive(s.artifact, s.binary)
+        fails('Core class is not Java 8') {
+            PackageChecks.verifyArtifact(s.artifact, s.sources, 25,
+                    [new File(root, 'core/src/main/java')], mapping)
+        }
+    }
+
     @Test
     void bytecodeAndCoreSourceFailuresAreRejected() {
         Map s = specimen()

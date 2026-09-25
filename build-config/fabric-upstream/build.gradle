@@ -145,6 +145,7 @@ java {
 
 jar {
 	inputs.property "archivesName", project.base.archivesName
+	destinationDirectory = layout.buildDirectory.dir('intermediates/raw-jar')
 
 	archiveVersion = artifactVersion
 
@@ -153,6 +154,33 @@ jar {
 	}
 
 
+}
+
+releaseOptimization {
+    targetJdk(javaToolchains, 25)
+    inputJar.set(tasks.named('jar', Jar).flatMap { it.archiveFile })
+    outputJar.set(layout.buildDirectory.file("libs/${base.archivesName.get()}-${project.version}.jar"))
+    mappingFile.set(layout.buildDirectory.file("mapping/${base.archivesName.get()}-${project.version}.map"))
+    rulesFile.set(new File(repositoryRoot, 'build-config/proguard-release.pro'))
+    libraryJars.from(providers.provider {
+        def embedded = sharedProjects.collect { it.layout.buildDirectory.get().asFile.canonicalPath + File.separator }
+        sourceSets.main.compileClasspath.files.findAll { file ->
+            !embedded.any { file.canonicalPath.startsWith(it) }
+        }
+    })
+}
+tasks.named('optimizeReleaseJar') { dependsOn tasks.named('jar', Jar) }
+tasks.named('assemble') { dependsOn tasks.named('optimizeReleaseJar') }
+
+// The Java component backs Maven publication. Point both binary variants at
+// the same optimized archive used for release assets.
+['apiElements', 'runtimeElements'].each { variant ->
+    configurations.named(variant) {
+        outgoing.artifacts.clear()
+        outgoing.artifact(releaseOptimization.outputJar) {
+            builtBy tasks.named('optimizeReleaseJar')
+        }
+    }
 }
 
 tasks.named("sourcesJar") {
@@ -290,7 +318,7 @@ modrinth {
 		}
 		additionalFiles = additional
 	} else {
-		uploadFile = tasks.named("jar")
+		uploadFile = releaseOptimization.outputJar.get().asFile
 		additionalFiles = [
 			tasks.named("sourcesJar")
 		]
@@ -319,6 +347,8 @@ if (modrinthUploadFilePath != null) {
 	tasks.named("modrinth") {
 		dependsOn.clear()
 	}
+} else {
+    tasks.named("modrinth") { dependsOn tasks.named('optimizeReleaseJar') }
 }
 
 // configure the maven publication

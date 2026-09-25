@@ -64,7 +64,8 @@ class ReleaseChecksTest {
         Closure run = runFor(fixture, commands)
         Map report = ReleaseChecks.provenance(fixture.file,
                 new File(fixture.bundle, 'provenance.jsonl'), 'owner/repo', run)
-        assertEquals(3, report.subjects.size())
+        assertEquals(4, report.subjects.size())
+        assertTrue(report.subjects.any { it.sha256 == fixture.record.mapping.sha256 })
         assertFalse(report.releaseAcceptance)
         List<String> flags = commands.find { it.take(3) == ['gh', 'attestation', 'verify'] }
         assertEquals(fixture.manifest.commit, flags[flags.indexOf('--signer-digest') + 1])

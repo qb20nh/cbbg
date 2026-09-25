@@ -28,7 +28,8 @@ class PackageChecks {
         verifyArtifact(artifact, sources, javaVersion, [coreSources])
     }
 
-    static Map verifyArtifact(File artifact, File sources, int javaVersion, Collection<File> sourceRoots) {
+    static Map verifyArtifact(File artifact, File sources, int javaVersion, Collection<File> sourceRoots,
+                              File mapping = null) {
         if (javaVersion < 8) throw new GradleException('Invalid target Java baseline')
         Map<String, byte[]> expected = [:]
         for (File coreSources : sourceRoots) {
@@ -42,6 +43,15 @@ class PackageChecks {
         }
         if (expected.isEmpty()) throw new GradleException('No core sources to verify')
         Set<String> coreNames = expected.keySet().collect { it.substring(0, it.length() - 5) } as Set
+        Map<String, String> renamed = mapping == null ? [:] : ProguardMapping.classes(mapping)
+        Set<String> coreOutputNames = renamed.findAll { original, output ->
+            original.split('\\$', 2)[0] in coreNames
+        }.values() as Set
+        renamed.keySet().each { original ->
+            if (TEST_PREFIXES.any { original.startsWith(it) } || original + '.class' in TEST_RESOURCES) {
+                throw new GradleException('Test class in production mapping: ' + original)
+            }
+        }
         Set<String> classes = [] as Set
         int coreClasses = 0
         new ZipFile(artifact).withCloseable { ZipFile zip ->
@@ -59,12 +69,12 @@ class PackageChecks {
                 if (major > javaVersion + 44) throw new GradleException('Class exceeds target Java baseline: ' + name)
                 classes.add(name)
                 String base = name.substring(0, name.length() - 6).split('\\$', 2)[0]
-                if (coreNames.contains(base)) {
+                if (mapping == null ? coreNames.contains(base) : coreOutputNames.contains(name.substring(0, name.length() - 6))) {
                     if (major != 52) throw new GradleException('Core class is not Java 8: ' + name)
                     coreClasses++
                 }
             }
-            for (String name : coreNames) {
+            for (String name : (mapping == null ? coreNames : renamed.values())) {
                 if (!classes.contains(name + '.class')) throw new GradleException('Missing core class: ' + name)
             }
         }
@@ -203,7 +213,7 @@ class PackageChecks {
             if (match.find()) sharedRoots.add(new File(sourceRoot, match.group(1)))
         }
         [packaging: verifyArtifact(artifact, sources, (int) specification.java,
-                sharedRoots),
+                sharedRoots, targetRecord.mapping == null ? null : CandidateFiles.checked(base, (Map) targetRecord.mapping)),
          metadata: verifyFabricMetadata(artifact, specification, version),
          sources: sourceCheck]
     }
