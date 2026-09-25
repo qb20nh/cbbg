@@ -101,6 +101,22 @@ class CurseForgeFileTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'metadata changed'):
             self.snapshot(change)
 
+    def test_download_counts_and_urls_can_change(self):
+        self.metadata['downloadCount'] = 10
+        def download(url, size):
+            self.metadata['downloadCount'] = 11
+            self.metadata['downloadUrl'] = 'https://example.com/refreshed-download.jar'
+            return self.sha256
+        self.assertEqual(self.snapshot(download)['sha256'], self.sha256)
+
+    def test_changed_version_labels_are_rejected(self):
+        self.metadata['gameVersions'] = ['26.3', 'Fabric']
+        def download(url, size):
+            self.metadata['gameVersions'] = ['26.2', 'Fabric']
+            return self.sha256
+        with self.assertRaisesRegex(ValueError, 'metadata changed'):
+            self.snapshot(download)
+
     def test_local_changes_during_download_are_rejected(self):
         def change(url, size):
             self.artifact.write_bytes(b'changed')

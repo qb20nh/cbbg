@@ -13,6 +13,14 @@ import release
 API = 'https://api.curseforge.com/v1'
 
 
+def version_metadata(metadata):
+    fields = ('id', 'gameId', 'modId', 'isAvailable', 'displayName', 'fileName',
+              'releaseType', 'fileStatus', 'hashes', 'fileLength', 'gameVersions',
+              'sortableGameVersions', 'dependencies', 'parentProjectFileId',
+              'isServerPack', 'serverPackFileId', 'exposeAsAlternative')
+    return {key: metadata.get(key) for key in fields}
+
+
 def positive_id(value):
     if type(value) is not int or value <= 0:
         raise ValueError('Expected a positive CurseForge ID')
@@ -89,7 +97,8 @@ def file_snapshot(project, file_id, artifact, fetch, download=download_sha256):
         raise ValueError('Invalid CurseForge changelog')
     if download(metadata.get('downloadUrl'), size) != expected_hash:
         raise ValueError('CurseForge file content differs from the artifact')
-    if fetch(endpoint)['data'] != metadata or fetch(endpoint + '/changelog')['data'] != changelog:
+    if (version_metadata(fetch(endpoint)['data']) != version_metadata(metadata) or
+            fetch(endpoint + '/changelog')['data'] != changelog):
         raise ValueError('CurseForge metadata changed during verification')
     with artifact.open('rb') as stream:
         if hashlib.file_digest(stream, 'sha256').hexdigest() != expected_hash:
