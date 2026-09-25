@@ -12,9 +12,6 @@ on:
         required: true
         default: true
         type: boolean
-  workflow_run:
-    workflows: ["Release"]
-    types: [completed]
 
 permissions:
   contents: read
@@ -22,7 +19,6 @@ permissions:
 jobs:
   publish:
     runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') }}
     environment: "build and publish"
     env:
       MOD_VERSION: ""
@@ -42,9 +38,8 @@ jobs:
       PUBLISH_SOURCES_JAR: ""
 
     steps:
-      - name: Validate selected release tag (manual)
+      - name: Validate selected release tag
         id: latest_stable
-        if: ${{ github.event_name == 'workflow_dispatch' }}
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -70,19 +65,10 @@ jobs:
 
           echo "tag=${tag}" >> "${GITHUB_OUTPUT}"
 
-      - name: Checkout (manual)
-        if: ${{ github.event_name == 'workflow_dispatch' }}
+      - name: Checkout release
         uses: actions/checkout@v6.0.1
         with:
           ref: ${{ steps.latest_stable.outputs.tag }}
-          fetch-depth: 0
-          fetch-tags: true
-
-      - name: Checkout (from Release workflow)
-        if: ${{ github.event_name == 'workflow_run' }}
-        uses: actions/checkout@v6.0.1
-        with:
-          ref: ${{ github.event.workflow_run.head_sha }}
           fetch-depth: 0
           fetch-tags: true
 
@@ -91,33 +77,13 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
-          EVENT_NAME: ${{ github.event_name }}
           LATEST_STABLE_TAG: ${{ steps.latest_stable.outputs.tag }}
         run: |
           set -euo pipefail
 
-          if [[ "${EVENT_NAME}" == "workflow_dispatch" ]]; then
-            tag="${LATEST_STABLE_TAG}"
-            if [[ -z "${tag}" ]]; then
-              echo "Latest stable tag is empty; cannot proceed."
-              exit 1
-            fi
-          elif [[ "${EVENT_NAME}" == "workflow_run" ]]; then
-            mapfile -t tags < <(git tag --points-at HEAD | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?\+mc[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*$' || true)
-            if (( ${#tags[@]} == 0 )); then
-              echo "No release tag found pointing at HEAD ($(git rev-parse --short=12 HEAD))."
-              echo "Tags pointing at HEAD:"
-              git tag --points-at HEAD || true
-              exit 1
-            fi
-            if (( ${#tags[@]} > 1 )); then
-              echo "Multiple release tags point at HEAD ($(git rev-parse --short=12 HEAD)); unable to pick one:"
-              printf '%s\n' "${tags[@]}"
-              exit 1
-            fi
-            tag="${tags[0]}"
-          else
-            echo "Unsupported event: ${EVENT_NAME}"
+          tag="${LATEST_STABLE_TAG}"
+          if [[ -z "${tag}" ]]; then
+            echo "An explicit release tag is required."
             exit 1
           fi
 
@@ -337,7 +303,7 @@ jobs:
 
       - name: Validate or publish to Modrinth
         env:
-          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+          DRY_RUN: ${{ inputs.dry_run }}
           MODRINTH_TOKEN: ${{ secrets.MODRINTH_TOKEN }}
           MODRINTH_PROJECT_ID: ${{ env.MODRINTH_PROJECT_ID }}
           MODRINTH_VERSION_NUMBER: ${{ env.ARTIFACT_VERSION }}
@@ -353,7 +319,7 @@ jobs:
           ./gradlew modrinth "${args[@]}"
 
       - name: Upload to CurseForge
-        if: github.event_name != 'workflow_dispatch' || !inputs.dry_run
+        if: ${{ !inputs.dry_run }}
         id: curseforge_upload
         uses: itsmeow/curseforge-upload@v3.1.2
         with:
@@ -369,7 +335,7 @@ jobs:
           changelog_type: markdown
 
       - name: Print CurseForge upload result
-        if: github.event_name != 'workflow_dispatch' || !inputs.dry_run
+        if: ${{ !inputs.dry_run }}
         shell: bash
         run: |
           set -euo pipefail

@@ -132,7 +132,7 @@ class ReleaseValidationTest(unittest.TestCase):
                            ("main", False), ("v1.3.0+mc26.2\nevil", False)]:
             with self.subTest(tag=tag):
                 self.env["REQUESTED_TAG"] = tag
-                self.run_step("Validate selected release tag (manual)", valid)
+                self.run_step("Validate selected release tag", valid)
 
     def test_tag_matches_release_properties_and_java_label(self):
         for mc, java in [("26.2", 25), ("1.21.1", 21), ("1.20.1", 17)]:
