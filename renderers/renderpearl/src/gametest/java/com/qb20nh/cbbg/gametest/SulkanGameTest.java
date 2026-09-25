@@ -95,12 +95,12 @@ public final class SulkanGameTest implements FabricClientGameTest {
         }
     }
 
-    private static void await(ClientGameTestContext context, CompletableFuture<?> future) {
+    static void await(ClientGameTestContext context, CompletableFuture<?> future) {
         context.waitFor(client -> future.isDone(), 1200);
         future.join();
     }
 
-    private static Object invoke(String name, Class<?>[] arguments, Object... values) {
+    static Object invoke(String name, Class<?>[] arguments, Object... values) {
         try {
             return Class.forName("com.sulkan.shaders.runtime.ShaderRuntime")
                     .getMethod(name, arguments).invoke(null, values);

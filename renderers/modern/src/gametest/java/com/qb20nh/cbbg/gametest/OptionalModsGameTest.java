@@ -14,7 +14,8 @@ public final class OptionalModsGameTest implements FabricClientGameTest {
     @Override
     public void runTest(ClientGameTestContext context) {
         List<String> mods = List.of(System.getProperty("cbbg.test.compat", "none").split("\\+"));
-        requirePresence("sodium", mods.contains("sodium") || mods.contains("iris"));
+        requirePresence("sodium", mods.contains("sodium") || mods.contains("iris") || mods.contains("sulkan"));
+        requirePresence("sulkan", mods.contains("sulkan"));
         requirePresence("iris", mods.contains("iris"));
         requirePresence("chatpatches", mods.contains("chatpatches"));
         requirePresence("immediatelyfast", mods.contains("immediatelyfast"));

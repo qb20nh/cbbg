@@ -8,6 +8,7 @@
   "entrypoints": {
     "preLaunch": ["com.qb20nh.cbbg.gametest.TestNoiseSettings"],
     "fabric-client-gametest": [
+      "com.qb20nh.cbbg.gametest.SulkanSetupGameTest",
       "com.qb20nh.cbbg.gametest.WindowResizeGameTest",
       "com.qb20nh.cbbg.gametest.Rgba8ReadbackGameTest",
       "com.qb20nh.cbbg.gametest.WorldPixelsGameTest",
@@ -32,7 +33,8 @@
       "com.qb20nh.cbbg.gametest.MainTargetsGameTest",
       "com.qb20nh.cbbg.gametest.RenderScaleGameTest",
       "com.qb20nh.cbbg.gametest.ImmediatelyFastGameTest",
-      "com.qb20nh.cbbg.gametest.OptionalModsGameTest"
+      "com.qb20nh.cbbg.gametest.OptionalModsGameTest",
+      "com.qb20nh.cbbg.gametest.SulkanGameTest"
     ]
   },
   "depends": {
