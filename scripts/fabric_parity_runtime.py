@@ -45,8 +45,16 @@ def java_identity(executable):
 
 def restart_state(game, shader='iris'):
     if shader == 'sulkan':
-        return {name: digest(game / name) for name in
-                ('config/cbbg.json', 'config/sulkan-shaders.json')}
+        files = [game / 'config/cbbg.json', game / 'config/sulkan-shaders.json']
+        selected = json.loads(files[1].read_text()).get('selectedPackId', '__builtin__')
+        if selected != '__builtin__':
+            if selected != 'cbbg-native-test':
+                raise ValueError('Unexpected Sulkan restart pack')
+            pack = game / 'shaders/cbbg-native-test'
+            if not (pack / 'sulkan.json').is_file() or not (pack / 'color.fsh').is_file():
+                raise ValueError('Sulkan restart pack is missing')
+            files.extend(path for path in sorted(pack.rglob('*')) if path.is_file())
+        return {path.relative_to(game).as_posix(): digest(path) for path in files}
     settings = [game / 'config/cbbg.json', game / 'config/iris.properties']
     pack = sorted((game / 'shaderpacks/cbbg-parity').rglob('*'))
     files = settings + [path for path in pack if path.is_file()]
@@ -103,6 +111,7 @@ def main():
         drivers = {
             ('opengl', 'com.qb20nh.cbbg.gametest.IrisRestartGameTest'): 'iris',
             ('vulkan', 'com.qb20nh.cbbg.gametest.SulkanRestartGameTest'): 'sulkan',
+            ('vulkan', 'com.qb20nh.cbbg.gametest.SulkanExternalRestartGameTest'): 'sulkan',
         }
         restart_shader = drivers.get((args.backend, expected[0])) if len(expected) == 1 else None
         if restart_shader is None:

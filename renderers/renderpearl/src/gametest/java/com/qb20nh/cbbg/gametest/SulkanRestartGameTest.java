@@ -16,6 +16,10 @@ import org.slf4j.LoggerFactory;
 public final class SulkanRestartGameTest implements FabricClientGameTest {
     @Override
     public void runTest(ClientGameTestContext context) {
+        run(context, "__builtin__");
+    }
+
+    static void run(ClientGameTestContext context, String pack) {
         String phase = System.getProperty("cbbg.test.restart");
         if (!"prepare".equals(phase) && !"verify".equals(phase) && !"control".equals(phase)) {
             throw new AssertionError("Sulkan restart requires prepare, verify or control");
@@ -35,7 +39,7 @@ public final class SulkanRestartGameTest implements FabricClientGameTest {
                 Object config = SulkanGameTest.invoke("config", new Class<?>[0]);
                 try {
                     if (!(Boolean) config.getClass().getMethod("enabled").invoke(config)
-                            || !"__builtin__".equals(config.getClass().getMethod("selectedPackId").invoke(config))) {
+                            || !pack.equals(config.getClass().getMethod("selectedPackId").invoke(config))) {
                         throw new AssertionError("Sulkan selection did not survive restart");
                     }
                 } catch (ReflectiveOperationException failure) {
@@ -46,11 +50,12 @@ public final class SulkanRestartGameTest implements FabricClientGameTest {
                     throw new AssertionError("CBBG settings did not survive restart");
                 }
             } else {
+                if (!pack.equals("__builtin__")) SulkanExternalGameTest.install(client);
                 CbbgConfig.setMode(phase.equals("control") ? CbbgConfig.Mode.DISABLED : CbbgConfig.Mode.DEMO);
                 CbbgConfig.setPixelFormat(CbbgConfig.PixelFormat.RGBA16F);
             }
         });
-        if (!phase.equals("verify")) select(context, true);
+        if (!phase.equals("verify")) select(context, true, pack);
         try (var world = context.worldBuilder().create()) {
             world.getConnection().waitForChunksRender();
             context.waitFor(client -> SulkanCompat.isShaderPackActive() && !DitherController.isReady(), 600);
@@ -65,8 +70,13 @@ public final class SulkanRestartGameTest implements FabricClientGameTest {
                     throw new AssertionError("Sulkan restart did not suspend CBBG cleanly");
                 }
             });
+            if (!pack.equals("__builtin__")) {
+                context.waitFor(client -> client.gui.overlay() == null, 600);
+                context.waitTicks(5);
+                SulkanExternalGameTest.capture(context, "restart-" + phase, true);
+            }
             if (phase.equals("verify")) {
-                select(context, false);
+                select(context, false, pack);
                 context.waitFor(client -> !SulkanCompat.isShaderPackActive() && DitherController.isReady()
                         && DitherController.getPresentationCount() > stopped, 600);
                 context.runOnClient(client -> {
@@ -77,15 +87,20 @@ public final class SulkanRestartGameTest implements FabricClientGameTest {
                         throw new AssertionError("Disabling Sulkan after restart did not restore CBBG");
                     }
                 });
+                if (!pack.equals("__builtin__")) {
+                    SulkanExternalGameTest.capture(context, "restart-disabled", false);
+                }
             }
         }
     }
 
-    private static void select(ClientGameTestContext context, boolean enabled) {
+    private static void select(ClientGameTestContext context, boolean enabled, String pack) {
         CompletableFuture<?> reload = context.computeOnClient(client ->
                 (CompletableFuture<?>) SulkanGameTest.invoke("applySelection",
                         new Class<?>[] {Minecraft.class, boolean.class, String.class},
-                        client, enabled, "__builtin__"));
+                        client, enabled, pack));
         SulkanGameTest.await(context, reload);
+        context.waitFor(client -> client.gui.overlay() == null, 600);
+        context.waitTicks(5);
     }
 }

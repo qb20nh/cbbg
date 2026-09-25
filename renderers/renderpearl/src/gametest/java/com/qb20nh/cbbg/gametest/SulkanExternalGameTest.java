@@ -29,19 +29,7 @@ public final class SulkanExternalGameTest implements FabricClientGameTest {
             if (!"vulkan".equalsIgnoreCase(info.backendName())) {
                 throw new AssertionError("External pack test requires Vulkan");
             }
-            Path pack = client.gameDirectory.toPath().resolve("shaders/cbbg-native-test");
-            try {
-                Files.createDirectories(pack);
-                for (String name : new String[] {"sulkan.json", "color.fsh"}) {
-                    try (var input = getClass().getResourceAsStream("/sulkan-fixture/" + name)) {
-                        if (input == null) throw new AssertionError("Missing native pack fixture: " + name);
-                        Files.copy(input, pack.resolve(name));
-                    }
-                }
-            } catch (java.io.IOException failure) {
-                throw new AssertionError("Could not install native test pack", failure);
-            }
-            SulkanGameTest.invoke("reloadPacks", new Class<?>[0]);
+            install(client);
             CbbgConfig.setMode(CbbgConfig.Mode.DEMO);
         });
         try (var world = context.worldBuilder().create()) {
@@ -77,7 +65,23 @@ public final class SulkanExternalGameTest implements FabricClientGameTest {
         context.waitTicks(5);
     }
 
-    private static void capture(ClientGameTestContext context, String name, boolean shader) {
+    static void install(Minecraft client) {
+        Path pack = client.gameDirectory.toPath().resolve("shaders/cbbg-native-test");
+        try {
+            Files.createDirectories(pack);
+            for (String name : new String[] {"sulkan.json", "color.fsh"}) {
+                try (var input = SulkanExternalGameTest.class.getResourceAsStream("/sulkan-fixture/" + name)) {
+                    if (input == null) throw new AssertionError("Missing native pack fixture: " + name);
+                    Files.copy(input, pack.resolve(name));
+                }
+            }
+        } catch (java.io.IOException failure) {
+            throw new AssertionError("Could not install native test pack", failure);
+        }
+        SulkanGameTest.invoke("reloadPacks", new Class<?>[0]);
+    }
+
+    static void capture(ClientGameTestContext context, String name, boolean shader) {
         CompletableFuture<Void> capture = new CompletableFuture<>();
         context.runOnClient(client -> Screenshot.takeScreenshot(client.gameRenderer.mainRenderTarget(), image -> {
             try (image) {
