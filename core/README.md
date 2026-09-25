@@ -1,14 +1,15 @@
 # Shared Java 8 core
 
-This independently buildable module contains FFT/STBN math, configuration and
-format fallback policy and cache validation. It has no Minecraft, loader or graphics dependencies.
-Minecraft supplies Gson; compilation and standalone tests use the oldest
-supported API, 2.2.4. The Fabric client embeds the core classes and sources in
-its artifact; the module also remains independently testable.
-Async scheduling, image decoding, capability probes and diagnostics remain in the
-client adapter. Each loader supplies filesystem paths and warning callbacks;
-cache filenames and hash validation are shared. Initialize configuration
-through `CbbgConfig.configure` before accessing settings.
+This module provides FFT/STBN math, configuration, format fallback rules and
+cache validation. It can be built and tested independently of Minecraft, loaders
+and graphics libraries. Minecraft supplies Gson; compilation and standalone
+tests use the oldest supported API, 2.2.4. Fabric jars include the core classes
+and sources.
+
+The client adapter handles async scheduling, image decoding, graphics capability
+checks and diagnostics. Each loader supplies filesystem paths and warning
+callbacks. The core defines cache filenames and validates hashes. Call
+`CbbgConfig.configure` before accessing settings.
 
 From the repository root, use a JDK supported by the Gradle wrapper:
 

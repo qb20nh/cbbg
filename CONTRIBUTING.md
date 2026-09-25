@@ -2,7 +2,7 @@
 
 Thanks for contributing!
 
-This repo is a client-side fabric mod for Minecraft that reduces visible color banding by upgrading the main render target precision and applying spatiotemporal blue noise dithering.
+cbbg is a client-side Fabric mod for Minecraft. It reduces color banding with a higher-precision main render target and spatiotemporal blue-noise dithering.
 
 ## Development setup
 
@@ -46,7 +46,7 @@ macOS/Linux:
 
 ## Branch model
 
-- `main` is the canonical development line.
+- `main` is the main development branch.
 - Each long-lived Minecraft maintenance line is named exactly:
   - `mc<minecraft_version>` (examples: `mc1.21.1`)
 
@@ -54,7 +54,7 @@ Backports should generally be cherry-picked from `main` into the maintenance bra
 
 ## Versioning and releases
 
-`gradle.properties` is the single source of truth:
+Set versions in `gradle.properties`:
 
 - `mod_version=X.Y.Z` (or `X.Y.Z-rc.1` for prereleases)
 - `minecraft_version=<minecraft_version>`
@@ -70,25 +70,21 @@ Gradle computes the published mod/artifact version as:
 
 Do not hardcode these values in `fabric.mod.json`.
 
-### Tag format (canonical across all branches)
+### Tag format
 
-Git tags are **repo-global** (not branch-local), so tags must include the Minecraft line to avoid collisions.
+Git tags apply to the whole repository. Include the Minecraft version to distinguish releases for different versions.
 
 Release tags must be:
 
 - Stable: `vX.Y.Z+mc<minecraft_version>`
 - Prerelease: `vX.Y.Z-rc.1+mc<minecraft_version>`
 
-### Branch-gated releases
+### Release branches
 
-Releases are intentionally **branch-gated** by CI:
-
-The tagged commit must be contained in either:
+CI requires the tagged commit to belong to either:
 
 - `main`, or
 - `mc<minecraft_version>` (for the Minecraft line you are releasing)
-
-This prevents accidental releases from random branches.
 
 ### Release procedure (maintainers only)
 
@@ -123,7 +119,7 @@ git push origin "vX.Y.Z+mc<MINECRAFT_VERSION>"
 
 - **GitHub Release creation**: pushing a matching tag triggers [`.github/workflows/release.yml`](.github/workflows/release.yml).
   - Validates the tag matches `gradle.properties` (`mod_version`, `minecraft_version`).
-  - Enforces branch gating.
+  - Checks that the commit belongs to an allowed release branch.
   - Builds and uploads the JARs to the GitHub Release.
 - **Publishing**: [`.github/workflows/publish.yml`](.github/workflows/publish.yml) runs after `Release` and publishes the exact GitHub Release artifacts (Modrinth/CurseForge).
   - The publishing JDK and CurseForge Java label come from the tagged source's `fabric.mod.json`.
@@ -131,7 +127,7 @@ git push origin "vX.Y.Z+mc<MINECRAFT_VERSION>"
   - Downloaded JAR metadata and class-file Java requirements are checked before uploading.
   - Manual publishing requires an explicit existing release tag; it never selects another Minecraft line's latest release implicitly.
   - Manual runs default to `dry_run`: validate the immutable release and packaged metadata, make authenticated CurseForge GET requests, resolve destination labels, and execute Minotaur with `debugMode=true` without uploading. This verifies CurseForge read authentication, not project upload permission. Disable `dry_run` to publish.
-  - Client GameTests run with and without RenderScale before a new GitHub Release is created. Sodium checks remain deferred.
+  - Client GameTests run with and without RenderScale before a new GitHub Release is created. Sodium checks are still pending.
   - Stable releases and prereleases must be immutable. Publish a new prerelease tag instead of replacing an existing prerelease's assets.
 
 ## ~~Adding a new Minecraft maintenance line (future)~~
@@ -144,7 +140,7 @@ When adding support for a new Minecraft version while keeping older lines mainta
    - update Fabric/Loader/dependency versions as needed
 3. Ensure the release workflows exist on the branch:
    - cherry-pick the relevant workflow commits from `main` into the new branch
-4. Release using the canonical tag format `v<mod_version>+mc<minecraft_version>`.
+4. Release using the tag format `v<mod_version>+mc<minecraft_version>`.
 
 > [!IMPORTANT]
 > We’re restructuring the repository to support multiple Minecraft versions and mod loaders on a single branch. Please discuss your plans with the maintainers before starting a backport or a port to a newer version.

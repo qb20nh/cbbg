@@ -11,9 +11,9 @@ color banding be gone - Remove pesky color banding from Minecraft
 **cbbg**<sup>/'kabij/</sup> is a client-side Fabric mod that reduces visible color banding by:
 
 - Using a **higher-precision render target** (RGBA16F)
-- Applying **STBN blue-noise dithering** to final image
+- Applying **STBN blue-noise dithering** to the final image
 
-Helps reduce color banding on following:
+This reduces banding in:
 
 - Smooth lighting
 - Skybox
@@ -31,7 +31,7 @@ Helps reduce color banding on following:
 - Install **Fabric Loader** and **Fabric API** for your Minecraft version.
 - Put the `cbbg-x.x.x.jar` into your `.minecraft/mods` folder.
 
-This mod is **client-only**. It does not need to be installed on servers.
+Install this **client-only** mod on your Minecraft client.
 
 ## Configuration
 
