@@ -15,6 +15,7 @@ public class ProcessedRenderPassMixin {
 
     @Inject(method = "setPipeline", at = @At("RETURN"))
     private void cbbgTestPipeline(CompiledRenderPipeline pipeline, CallbackInfo ci) {
+        ProcessedRenderObservations.select(pipeline);
         cbbgTestPass = ProcessedRenderObservations.isDither(pipeline);
     }
 

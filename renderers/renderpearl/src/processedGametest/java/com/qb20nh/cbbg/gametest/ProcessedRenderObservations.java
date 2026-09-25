@@ -14,6 +14,7 @@ public final class ProcessedRenderObservations {
             Collections.newSetFromMap(new WeakHashMap<>()));
     private static final AtomicLong DRAWS = new AtomicLong();
     private static final AtomicLong FIRST_DRAW = new AtomicLong();
+    private static CompiledRenderPipeline selectedPipeline;
 
     private ProcessedRenderObservations() {}
 
@@ -26,6 +27,15 @@ public final class ProcessedRenderObservations {
 
     public static boolean isDither(CompiledRenderPipeline pipeline) {
         return PIPELINES.contains(pipeline);
+    }
+
+    /** Read and written on the render thread, immediately around setPipeline. */
+    public static CompiledRenderPipeline selectedPipeline() {
+        return selectedPipeline;
+    }
+
+    public static void select(CompiledRenderPipeline pipeline) {
+        selectedPipeline = pipeline;
     }
 
     public static void recordDraw() {

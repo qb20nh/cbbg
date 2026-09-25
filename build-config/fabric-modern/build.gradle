@@ -178,6 +178,7 @@ if (targetId == '26.3-fabric') {
     def processedSharedTests = objects.sourceDirectorySet('processedSharedTests', 'Shared processed-compatible tests')
     processedSharedTests.srcDir(new File(repositoryRoot, 'renderers/renderpearl/src/gametest/java'))
     processedSharedTests.include 'com/qb20nh/cbbg/gametest/mixin/ScenarioProgressMixin.java',
+            'com/qb20nh/cbbg/gametest/FloatPrecisionGameTest.java',
             'com/qb20nh/cbbg/gametest/WindowResizeGameTest.java'
 
     // Select resolved external artifacts, including Loom's Minecraft jar, without
