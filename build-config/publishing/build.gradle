@@ -1,0 +1,90 @@
+import groovy.json.JsonSlurper
+import java.security.MessageDigest
+
+plugins {
+    id 'base'
+    id 'com.modrinth.minotaur' version '2.10.0'
+}
+
+layout.buildDirectory = file('../../build/publishing')
+
+def requiredFile = { String property ->
+    def value = providers.gradleProperty(property).orNull
+    if (!value) throw new GradleException('Missing -P' + property)
+    def path = file(value).canonicalFile
+    if (!path.isFile()) throw new GradleException('Missing file for -P' + property)
+    path
+}
+def sha256 = { File path ->
+    MessageDigest.getInstance('SHA-256').digest(path.bytes).encodeHex().toString()
+}
+def candidateFile = requiredFile('candidate')
+def metadataFile = requiredFile('publicationMetadata')
+def metadata = new JsonSlurper().parse(metadataFile)
+def manifest = new JsonSlurper().parse(candidateFile)
+def targetId = providers.gradleProperty('target').orNull
+if (metadata.schema != 1 || manifest.schema != 2 || !targetId) {
+    throw new GradleException('Expected candidate metadata and an explicit -Ptarget')
+}
+def selected = metadata.records.findAll { it.targets == [targetId] }
+def targets = manifest.targets.findAll { it.id == targetId }
+if (selected.size() != 1 || targets.size() != 1 || !manifest.selected_targets.contains(targetId)) {
+    throw new GradleException('Publishing target is absent or duplicated')
+}
+def record = selected[0]
+def target = targets[0]
+def uploadFiles = [:]
+def verifyInputs = {
+    if (sha256(candidateFile) != metadata.manifest_sha256 ||
+            metadata.release != manifest.release || metadata.source_commit != manifest.commit ||
+            new JsonSlurper().parse(metadataFile) != metadata) {
+        throw new GradleException('Candidate or publishing metadata changed')
+    }
+    ['artifact', 'sources'].each { kind ->
+        def reference = record[kind]
+        if (reference != target[kind] || !(reference.path instanceof String) ||
+                new File(reference.path).isAbsolute()) {
+            throw new GradleException('Publishing file differs from candidate: ' + kind)
+        }
+        def path = new File(candidateFile.parentFile, reference.path).canonicalFile
+        if (!path.toPath().startsWith(candidateFile.parentFile.toPath()) || !path.isFile() ||
+                sha256(path) != reference.sha256) {
+            throw new GradleException('Missing or changed candidate file: ' + kind)
+        }
+        uploadFiles[kind] = path
+    }
+}
+verifyInputs()
+
+modrinth {
+    def upload = record.modrinth
+    def secret = providers.environmentVariable('MODRINTH_TOKEN').orNull
+    if (secret) token = secret
+    projectId = upload.project_id
+    versionNumber = upload.version_number
+    versionName = upload.version_name
+    versionType = upload.version_type
+    changelog = upload.changelog
+    gameVersions = upload.game_versions
+    loaders = upload.loaders
+    uploadFile = uploadFiles.artifact
+    additionalFiles = [uploadFiles.sources]
+    detectLoaders = false
+    autoAddDependsOn = false
+    failSilently = false
+    dependencies {
+        upload.required_projects.each { identifier -> required.project identifier }
+    }
+}
+
+tasks.register('verifyUploadInputs') {
+    doLast {
+        verifyInputs()
+        logger.lifecycle('Checked candidate files for ' + targetId)
+    }
+}
+
+tasks.named('modrinth') {
+    dependsOn tasks.named('verifyUploadInputs')
+    doFirst { verifyInputs() }
+}
