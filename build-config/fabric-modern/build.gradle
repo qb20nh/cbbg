@@ -47,7 +47,10 @@ dependencies {
     if (testCompat.tokenize('+').contains('immediatelyfast')) {
         runtimeOnly("maven.modrinth:immediatelyfast:${target.dependencies.immediatelyFast}") { transitive = false }
     }
-    if (testCompat.tokenize('+').any { it == 'iris' || it == 'sodium' }) {
+    if (testCompat.tokenize('+').contains('sulkan')) {
+        runtimeOnly("maven.modrinth:sulkan:${target.dependencies.sulkan}") { transitive = false }
+    }
+    if (testCompat.tokenize('+').any { it == 'iris' || it == 'sodium' || it == 'sulkan' }) {
         runtimeOnly("maven.modrinth:sodium:${target.dependencies.sodium}") { transitive = false }
     }
     if (testCompat.tokenize('+').contains('chatpatches')) {
@@ -219,6 +222,7 @@ def parityDriverJar = tasks.register('parityDriverJar', Jar) {
 // Startup-state and slow maximum-size fixtures run independently of the ordinary suite.
 if (target.renderer == 'renderpearl') {
     [irisRestart: ['IrisRestartGameTest'],
+     sulkan: ['SulkanGameTest'],
      maximumNoiseCache: ['Rgba8ReadbackGameTest', 'MaximumNoiseCacheGameTest'],
      worldPixels: ['Rgba8ReadbackGameTest', 'WorldPixelsGameTest'],
      worldControl: ['Rgba8ReadbackGameTest', 'WorldControlGameTest'],
@@ -248,6 +252,7 @@ if (target.renderer == 'renderpearl') {
         }
         tasks.register("${fixture}DriverJar", Jar) {
             archiveClassifier = [irisRestart: 'iris-restart-driver',
+                                 sulkan: 'sulkan-driver',
                                  maximumNoiseCache: 'maximum-noise-cache-driver',
                                  worldPixels: 'world-pixels-driver',
                                  worldControl: 'world-control-driver',

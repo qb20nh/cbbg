@@ -4,7 +4,7 @@ import com.mojang.renderpearl.api.commands.RenderPassDescriptor;
 import com.mojang.renderpearl.api.pipeline.CompiledRenderPipeline;
 import com.mojang.renderpearl.frontend.FrontendRenderPass;
 import com.qb20nh.cbbg.render.FloatPipelines;
-import com.qb20nh.cbbg.compat.iris.IrisCompat;
+import com.qb20nh.cbbg.CbbgClient;
 import java.util.List;
 import java.util.Optional;
 import org.joml.Vector4fc;
@@ -21,7 +21,7 @@ public abstract class FrontendRenderPassMixin {
 
     @ModifyVariable(method = "setPipeline", at = @At("HEAD"), argsOnly = true)
     private CompiledRenderPipeline cbbg$matchFloatAttachments(CompiledRenderPipeline pipeline) {
-        return IrisCompat.isShaderPackActive() ? pipeline
+        return CbbgClient.areShadersActive() ? pipeline
                 : FloatPipelines.forAttachments(pipeline, colorAttachments);
     }
 }

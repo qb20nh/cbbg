@@ -21,7 +21,7 @@ def verify_dependencies(target, profile, paths, lock):
         raise ValueError('Unknown compatibility profile')
     aliases = {name.lower(): name for name in lock['dependencies']}
     selected = set() if profile == 'none' else set(profile.split('+'))
-    if 'iris' in selected:
+    if 'iris' in selected or 'sulkan' in selected:
         selected.add('sodium')
     if 'renderscale' in selected:
         selected.add('clothconfig')

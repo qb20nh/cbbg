@@ -10,6 +10,11 @@
   "verifiedDate": "2026-09-25",
   "verification": "Local bytes matched the primary file SHA-512 in each referenced Modrinth version; SHA-256 recorded below.",
   "dependencies": {
+    "sulkan": {
+      "pin": "o5nFa0hw",
+      "sha256": "947c0ba49bc91f44f4e50f2633c0edc1ee0f2855b0dd0afffbf9ed0f0f37cced",
+      "source": "https://api.modrinth.com/v2/version/o5nFa0hw"
+    },
     "fabricApi": {
       "pin": "0.161.0+26.3",
       "sha256": "86f16178a3cecc887a85a4cfe9a79d92fa7341d8f39b5951a4d6ad800ab657a6",

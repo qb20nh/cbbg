@@ -62,6 +62,7 @@
   "cbbg.config.size.label": "サイズ",
   "cbbg.config.status.disabled_render_error": "⚠ 描画エラーのため cbbg が無効化されました (ログ参照)",
   "cbbg.config.status.iris_active": "⚠ Iris が有効: cbbg は強制 OFF",
+  "cbbg.config.status.shader_active": "⚠ %s が有効: cbbg は強制 OFF",
   "cbbg.config.status.mode_disabled": "cbbg は無効です (設定を編集するにはモードを有効化)",
   "cbbg.config.status.no_float_formats": "⚠ RGBA16F/32F 非対応: RGBA8 のままです",
   "cbbg.config.strength.label": "強さ",

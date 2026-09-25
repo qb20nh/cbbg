@@ -2,6 +2,7 @@ package com.qb20nh.cbbg;
 
 import com.qb20nh.cbbg.config.CbbgConfig;
 import com.qb20nh.cbbg.compat.iris.IrisCompat;
+import com.qb20nh.cbbg.compat.sulkan.SulkanCompat;
 import com.qb20nh.cbbg.command.CbbgClientCommands;
 import com.qb20nh.cbbg.render.DitherController;
 import com.qb20nh.cbbg.render.GenerationNotifications;
@@ -15,7 +16,11 @@ import net.minecraft.resources.Identifier;
 
 public final class CbbgClient implements ClientModInitializer {
     public static CbbgConfig.Mode getEffectiveMode() {
-        return IrisCompat.isShaderPackActive() ? CbbgConfig.Mode.DISABLED : CbbgConfig.get().mode();
+        return areShadersActive() ? CbbgConfig.Mode.DISABLED : CbbgConfig.get().mode();
+    }
+
+    public static boolean areShadersActive() {
+        return IrisCompat.isShaderPackActive() || SulkanCompat.isShaderPackActive();
     }
 
     public static boolean isEnabled() {

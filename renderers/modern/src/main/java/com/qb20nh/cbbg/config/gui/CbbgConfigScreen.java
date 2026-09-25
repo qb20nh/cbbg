@@ -2,6 +2,7 @@ package com.qb20nh.cbbg.config.gui;
 
 import org.jspecify.annotations.NonNull;
 import com.qb20nh.cbbg.compat.iris.IrisCompat;
+import com.qb20nh.cbbg.compat.sulkan.SulkanCompat;
 import com.qb20nh.cbbg.config.CbbgConfig;
 import com.qb20nh.cbbg.render.DitherController;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
@@ -139,6 +140,10 @@ public final class CbbgConfigScreen extends Screen {
         if (irisActive) {
             context.centeredText(this.font,
                     Component.translatable("cbbg.config.status.iris_active"), cx, statusY,
+                    0xFFFFAA00);
+        } else if (SulkanCompat.isShaderPackActive()) {
+            context.centeredText(this.font,
+                    Component.translatable("cbbg.config.status.shader_active", "Sulkan"), cx, statusY,
                     0xFFFFAA00);
         } else if (CbbgConfig.get().mode() == CbbgConfig.Mode.DISABLED) {
             context.centeredText(this.font,

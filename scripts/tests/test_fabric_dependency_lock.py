@@ -34,6 +34,16 @@ class DependencyLockTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             verify_dependencies(self.target, 'none', self.paths, self.lock)
 
+    def test_sulkan_requires_sodium(self):
+        self.target['dependencies']['sulkan'] = 'pin'
+        self.target['compatibilityProfiles']['sulkan'] = ['vulkan']
+        self.lock['dependencies']['sulkan'] = dict(self.lock['dependencies']['sodium'])
+        paths = dict.fromkeys(('fabricApi', 'sulkan', 'sodium'), self.jar)
+        verify_dependencies(self.target, 'sulkan', paths, self.lock)
+        del paths['sodium']
+        with self.assertRaisesRegex(ValueError, 'Missing or extra'):
+            verify_dependencies(self.target, 'sulkan', paths, self.lock)
+
     def test_changed_bytes_fail(self):
         self.jar.write_bytes(b'changed')
         with self.assertRaises(ValueError):

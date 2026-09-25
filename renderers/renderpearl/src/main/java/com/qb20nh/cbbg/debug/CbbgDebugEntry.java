@@ -3,6 +3,7 @@ package com.qb20nh.cbbg.debug;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.qb20nh.cbbg.CbbgClient;
 import com.qb20nh.cbbg.compat.iris.IrisCompat;
+import com.qb20nh.cbbg.compat.sulkan.SulkanCompat;
 import com.qb20nh.cbbg.config.CbbgConfig;
 import com.qb20nh.cbbg.render.DitherController;
 import net.minecraft.client.Minecraft;
@@ -27,7 +28,8 @@ public final class CbbgDebugEntry implements DebugScreenEntry {
         displayer.addLine("cbbg: mode=" + CbbgClient.getEffectiveMode()
                 + " (user=" + CbbgConfig.get().mode() + ") iris="
                 + (IrisCompat.isShaderPackActive() ? 1 : 0)
-                + " dis=" + (DitherController.isDisabled() ? 1 : 0));
+                + " dis=" + (DitherController.isDisabled() ? 1 : 0)
+                + " sulkan=" + (SulkanCompat.isShaderPackActive() ? 1 : 0));
         displayer.addLine("cbbg: main=" + (main == null ? "?" : main.getFormat().name())
                 + " lm=" + lightmap.texture().getFormat().name()
                 + " backend=" + backend + framebufferState(backend)
