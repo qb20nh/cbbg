@@ -70,6 +70,12 @@ def load_catalog(path=ROOT / "targets.json"):
             raise ValueError("Invalid shared artifact reference: " + target["id"])
         if target["implemented"] and not owner["implemented"]:
             raise ValueError("Shared artifact owner is not implemented: " + target["id"])
+    if 'ciTargets' in catalog:
+        selected = catalog['ciTargets']
+        if (not isinstance(selected, list) or not selected
+                or any(not isinstance(item, str) or item not in ids for item in selected)
+                or len(selected) != len(set(selected))):
+            raise ValueError('CI targets must be known, unique target IDs')
     return catalog
 
 
@@ -129,20 +135,30 @@ def build_matrix(catalog, selection=None, require_implemented=False):
     return rows
 
 
+def select_ci_targets(catalog, require_implemented=False):
+    if not catalog.get('ciTargets'):
+        raise ValueError('No CI targets configured')
+    return select_targets(catalog, ','.join(catalog['ciTargets']), require_implemented)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     selection = parser.add_mutually_exclusive_group()
     selection.add_argument("--targets", help="Exact comma-separated target IDs")
     selection.add_argument("--build-profile", help="Configured targets in one isolated build profile")
+    selection.add_argument('--ci', action='store_true', help='Select the catalog CI targets')
     parser.add_argument("--require-implemented", action="store_true")
     parser.add_argument('--artifacts', action='store_true',
                         help='Emit one build job per artifact, retaining selected runtime IDs')
     args = parser.parse_args()
     try:
         catalog = load_catalog()
-        selected = (select_build_profile(catalog, args.build_profile, args.require_implemented)
-                    if args.build_profile is not None
-                    else select_targets(catalog, args.targets, args.require_implemented))
+        if args.ci:
+            selected = select_ci_targets(catalog, args.require_implemented)
+        elif args.build_profile is not None:
+            selected = select_build_profile(catalog, args.build_profile, args.require_implemented)
+        else:
+            selected = select_targets(catalog, args.targets, args.require_implemented)
         if args.artifacts:
             selected = build_matrix(catalog, ','.join(target['id'] for target in selected),
                                     args.require_implemented)

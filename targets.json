@@ -1,5 +1,6 @@
 {
   "schema": 1,
+  "ciTargets": ["26.3-fabric"],
   "projects": {"modrinth": "UBlXUQbC", "curseforge": "1408371"},
   "targets": [
     {"id": "1.7.10-legacy-fabric", "minecraft": "1.7.10", "loader": "legacy-fabric", "java": 8, "renderer": "gl2", "backends": ["opengl"], "buildProfile": "legacy-fabric", "dependencies": {"loader": "0.18.3", "yarnBuild": 603, "fabricApi": "1.13.5+1.7.10"}, "implemented": false},

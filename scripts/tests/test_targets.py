@@ -6,7 +6,7 @@ import tempfile
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from targets import build_matrix, load_catalog, select_targets, select_build_profile, select_artifacts
+from targets import build_matrix, load_catalog, select_ci_targets, select_targets, select_build_profile, select_artifacts
 
 
 class TargetCatalogTest(unittest.TestCase):
@@ -53,6 +53,27 @@ class TargetCatalogTest(unittest.TestCase):
         del target['buildProfile']
         with self.assertRaisesRegex(ValueError, 'No build profile'):
             build_matrix(self.catalog, '26.3-fabric')
+
+    def test_ci_selection_comes_from_catalog(self):
+        self.assertEqual([target['id'] for target in select_ci_targets(self.catalog)], ['26.3-fabric'])
+        with self.assertRaisesRegex(ValueError, 'not implemented'):
+            select_ci_targets(self.catalog, require_implemented=True)
+        self.catalog['ciTargets'] = ['26.2-fabric', '26.3-fabric']
+        self.assertEqual([target['id'] for target in select_ci_targets(self.catalog)],
+                         ['26.2-fabric', '26.3-fabric'])
+        del self.catalog['ciTargets']
+        with self.assertRaisesRegex(ValueError, 'No CI targets'):
+            select_ci_targets(self.catalog)
+
+    def test_invalid_ci_selection_is_rejected(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / 'targets.json'
+            for value in [[], ['unknown'], ['26.3-fabric', '26.3-fabric'], [False], '26.3-fabric']:
+                with self.subTest(value=value):
+                    self.catalog['ciTargets'] = value
+                    path.write_text(json.dumps(self.catalog))
+                    with self.assertRaisesRegex(ValueError, 'CI targets'):
+                        load_catalog(path)
 
     def test_unknown_empty_and_duplicate_selection_fail(self):
         for selection in ("unknown", "", "1.20.1-forge,", "1.20.1-forge,1.20.1-forge"):

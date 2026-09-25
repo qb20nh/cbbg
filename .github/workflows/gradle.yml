@@ -1,112 +1,104 @@
-# This workflow uses actions that are not certified by GitHub.
-# They are provided by a third-party and are governed by
-# separate terms of service, privacy policy, and support
-# documentation.
-# This workflow will build a Java project with Gradle and cache/restore any dependencies to improve the workflow execution time
-# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-java-with-gradle
-
 name: Java CI with Gradle
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [main]
   pull_request:
-    branches: [ "main" ]
+    branches: [main]
+
+permissions:
+  contents: read
 
 jobs:
-  build:
-
+  plan:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-
+    outputs:
+      matrix: ${{ steps.targets.outputs.matrix }}
     steps:
-    - uses: actions/checkout@v6.0.1
-    - name: Set up JDK 25
-      uses: actions/setup-java@v5.1.0
-      with:
-        java-version: '25'
-        distribution: 'temurin'
+      - uses: actions/checkout@v6.0.1
+      - name: Select catalog targets
+        id: targets
+        run: |
+          matrix=$(python3 scripts/targets.py --ci --artifacts)
+          printf 'matrix=%s\n' "$matrix" >> "$GITHUB_OUTPUT"
+      - name: Test build and release tooling
+        run: |
+          python3 -m unittest discover -s scripts/tests
+          python3 -m unittest discover -s .github/tests
 
-    # Cache Fabric Loom's project-local cache (Minecraft jars, remapped artifacts, etc).
-    # This is separate from Gradle User Home (~/.gradle) caching and provides a big speedup
-    # for subsequent CI runs on Minecraft/Fabric projects.
-    - &cache_loom
-      name: Cache Loom artifacts
-      uses: actions/cache@v5.0.1
-      with:
-        path: |
-          .gradle/loom-cache
-        key: ${{ runner.os }}-loom-${{ hashFiles('gradle.properties', 'settings.gradle', 'build.gradle', 'gradle/wrapper/gradle-wrapper.properties') }}
-        restore-keys: |
-          ${{ runner.os }}-loom-
-
-    # Configure Gradle for optimal use in GitHub Actions, including caching of downloaded dependencies.
-    # See: https://raw.githubusercontent.com/gradle/actions/refs/heads/main/docs/setup-gradle.md
-    - name: Setup Gradle
-      uses: gradle/actions/setup-gradle@v5.0.0
-      with:
-        # Default behavior writes caches only from the default branch; PRs are read-only.
-        cache-cleanup: on-success
-
-    - name: Build with Gradle Wrapper
-      run: ./gradlew build
-
-    - name: Test release validation
-      run: python3 -m unittest discover -s .github/tests -v
-
-  client-tests:
+  core:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
     strategy:
       fail-fast: false
       matrix:
-        profile: [baseline, renderscale]
+        java: [8, 17, 21, 25]
     steps:
       - uses: actions/checkout@v6.0.1
-      - uses: actions/setup-java@v5.1.0
+      - name: Install test runtime
+        id: test-java
+        uses: actions/setup-java@v5.1.0
+        with:
+          java-version: ${{ matrix.java }}
+          distribution: temurin
+      - name: Install build JDK
+        uses: actions/setup-java@v5.1.0
         with:
           java-version: '25'
           distribution: temurin
       - uses: gradle/actions/setup-gradle@v5.0.0
-      - name: Install headless display
-        run: sudo apt-get update && sudo apt-get install -y xvfb libgl1-mesa-dri libglx-mesa0
-      - name: Run client integration tests
+      - name: Test core on selected runtime
         env:
-          PROFILE: ${{ matrix.profile }}
-          LIBGL_ALWAYS_SOFTWARE: 'true'
-          ALSOFT_DRIVERS: 'null'
-        run: |
-          args=()
-          if [[ "${PROFILE}" == renderscale ]]; then args+=(-PtestRenderScale); fi
-          xvfb-run -a ./gradlew runClientGameTest "${args[@]}"
+          TEST_JAVA: ${{ matrix.java }}
+          TEST_JAVA_HOME: ${{ steps.test-java.outputs.path }}
+        run: >-
+          ./gradlew -p core test --no-daemon
+          "-PtestJava=$TEST_JAVA"
+          "-Dorg.gradle.java.installations.paths=$TEST_JAVA_HOME"
+
+  build:
+    needs: plan
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v6.0.1
+      - uses: actions/setup-java@v5.1.0
+        with:
+          java-version: ${{ matrix.java }}
+          distribution: temurin
+      - uses: gradle/actions/setup-gradle@v5.0.0
+        with:
+          cache-cleanup: on-success
+      - name: Compile and check target packages
+        env:
+          TARGET_ID: ${{ matrix.id }}
+        run: python3 scripts/build_targets.py ciCheck --targets "$TARGET_ID"
       - uses: actions/upload-artifact@v6
         if: always()
         with:
-          name: client-tests-${{ matrix.profile }}
+          name: checks-${{ matrix.id }}
           path: |
-            build/run/clientGameTest/logs/
-            build/run/clientGameTest/screenshots/
+            build/targets/${{ matrix.id }}/reports/
+            core/build/reports/tests/
 
   dependency-submission:
     if: github.event_name == 'push'
-
+    needs: plan
     runs-on: ubuntu-latest
     permissions:
       contents: write
-
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
     steps:
-    - uses: actions/checkout@v6.0.1
-    - name: Set up JDK 25
-      uses: actions/setup-java@v5.1.0
-      with:
-        java-version: '25'
-        distribution: 'temurin'
-
-    - *cache_loom
-
-    # Generates and submits a dependency graph, enabling Dependabot Alerts for all project dependencies.
-    # See: https://github.com/gradle/actions/blob/main/dependency-submission/README.md
-    - name: Generate and submit dependency graph
-      uses: gradle/actions/dependency-submission@af1da67850ed9a4cedd57bfd976089dd991e2582 # v4.0.0
+      - uses: actions/checkout@v6.0.1
+      - uses: actions/setup-java@v5.1.0
+        with:
+          java-version: ${{ matrix.java }}
+          distribution: temurin
+      - name: Generate and submit target dependency graph
+        uses: gradle/actions/dependency-submission@af1da67850ed9a4cedd57bfd976089dd991e2582 # v4.0.0
+        with:
+          build-root-directory: .
+          additional-arguments: -p build-config/${{ matrix.buildProfile }} -Ptarget=${{ matrix.id }}

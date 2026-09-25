@@ -2,63 +2,57 @@ name: Build Dev JAR
 
 on:
   workflow_dispatch:
+    inputs:
+      targets:
+        description: Comma-separated target IDs; empty uses the catalog CI selection
+        required: false
+        type: string
+
+permissions:
+  contents: read
 
 jobs:
-  dev:
+  plan:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    env:
-      DEV_JAR: ""
-      DEV_JAR_NAME: ""
-
+    outputs:
+      matrix: ${{ steps.targets.outputs.matrix }}
     steps:
       - uses: actions/checkout@v6.0.1
+      - name: Select catalog targets
+        id: targets
+        env:
+          TARGETS: ${{ inputs.targets }}
+        run: |
+          if [[ -n "$TARGETS" ]]; then
+            matrix=$(python3 scripts/targets.py --artifacts --targets "$TARGETS")
+          else
+            matrix=$(python3 scripts/targets.py --artifacts --ci)
+          fi
+          printf 'matrix=%s\n' "$matrix" >> "$GITHUB_OUTPUT"
 
-      - name: Set up JDK 25
-        uses: actions/setup-java@v5.1.0
+  dev:
+    needs: plan
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v6.0.1
+      - uses: actions/setup-java@v5.1.0
         with:
-          java-version: "25"
-          distribution: "temurin"
-
-      # Cache Fabric Loom's project-local cache (Minecraft jars, mappings, remapped artifacts, etc).
-      # This is separate from Gradle User Home (~/.gradle) caching handled by setup-gradle.
-      - name: Cache Loom artifacts
-        uses: actions/cache@v5.0.1
-        with:
-          path: |
-            .gradle/loom-cache
-          key: ${{ runner.os }}-loom-${{ hashFiles('gradle.properties', 'settings.gradle', 'build.gradle', 'gradle/wrapper/gradle-wrapper.properties') }}
-          restore-keys: |
-            ${{ runner.os }}-loom-
-
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v5.0.0
+          java-version: ${{ matrix.java }}
+          distribution: temurin
+      - uses: gradle/actions/setup-gradle@v5.0.0
         with:
           cache-cleanup: on-success
-
-      - name: Build dev jar
-        run: ./gradlew dev
-
-      - name: Locate dev jar
-        shell: bash
+      - name: Check and build development jars
+        env:
+          TARGET_ID: ${{ matrix.id }}
         run: |
-          set -euo pipefail
-
-          jar="$(ls -1t build/libs/*-dev-*.jar | grep -v -- '-sources\.jar$' | head -n1 || true)"
-          if [[ -z "${jar}" ]]; then
-            echo "Dev jar not found under build/libs"
-            ls -la build/libs || true
-            exit 1
-          fi
-
-          echo "DEV_JAR=${jar}" >> "${GITHUB_ENV}"
-          jar_name="$(basename "${jar}")"
-          echo "DEV_JAR_NAME=${jar_name}" >> "${GITHUB_ENV}"
-
-      - name: Upload dev jar artifact
-        uses: actions/upload-artifact@v6
+          python3 scripts/build_targets.py ciCheck --targets "$TARGET_ID"
+          python3 scripts/build_targets.py dev --targets "$TARGET_ID"
+      - uses: actions/upload-artifact@v6
         with:
-          name: ${{ env.DEV_JAR_NAME }}
-          path: ${{ env.DEV_JAR }}
+          name: dev-${{ matrix.id }}
+          path: build/targets/${{ matrix.id }}/dev/*.jar
           if-no-files-found: error
