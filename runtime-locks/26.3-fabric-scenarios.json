@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "target": "26.3-fabric",
+  "ordinaryMetadata": "renderers/renderpearl/src/gametest/resources/fabric.mod.json",
+  "additionalRuns": [
+    {
+      "suite": "maximum-noise-cache",
+      "profiles": ["none"],
+      "backends": ["opengl", "vulkan"],
+      "restart": false,
+      "entrypoints": ["Rgba8ReadbackGameTest", "MaximumNoiseCacheGameTest"]
+    },
+    {
+      "suite": "world-control",
+      "profiles": ["none"],
+      "backends": ["opengl", "vulkan"],
+      "restart": false,
+      "entrypoints": ["Rgba8ReadbackGameTest", "WorldControlGameTest"]
+    },
+    {
+      "suite": "iris-restart",
+      "requiresMod": "iris",
+      "backends": ["opengl"],
+      "restart": true,
+      "entrypoints": ["IrisRestartGameTest"]
+    },
+    {
+      "suite": "sulkan-restart",
+      "requiresMod": "sulkan",
+      "backends": ["vulkan"],
+      "restart": true,
+      "entrypoints": ["SulkanRestartGameTest"]
+    },
+    {
+      "suite": "sulkan-external-restart",
+      "requiresMod": "sulkan",
+      "backends": ["vulkan"],
+      "restart": true,
+      "entrypoints": ["SulkanExternalRestartGameTest"]
+    }
+  ]
+}
