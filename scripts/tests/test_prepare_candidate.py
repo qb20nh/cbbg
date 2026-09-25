@@ -55,14 +55,18 @@ class PrepareCandidateTest(unittest.TestCase):
             prepare(self.root, [self.inventory[0]], 'v2.0.0', 'a' * 40, self.catalog, ['quilt'])
 
     def test_client_bundle_records_all_driver_and_input_hashes(self):
+        (self.root / 'source-inventory.json').write_text('{"schema": 1, "sources": []}')
         inputs = {'catalog': 'artifact', 'contract': 'scenario_contract',
                   'ordinary_metadata': 'harness', 'runtime_lock': 'dependency_lock',
                   'dependency_lock': 'dependency_lock', 'drivers': {'ordinary': 'harness'}}
         for entry in self.inventory:
             entry['client_tests'] = inputs
+            entry['source_inventory'] = 'source-inventory.json'
         manifest = self.prepare()
         self.assertEqual(manifest['schema'], 2)
         self.assertEqual(manifest['selected_targets'], ['fabric', 'quilt'])
+        self.assertEqual(checked_file(self.root, manifest['targets'][0]['source_inventory']),
+                         self.root / 'source-inventory.json')
         tests = manifest['targets'][0]['client_tests']
         for kind in ('catalog', 'contract', 'ordinary_metadata', 'runtime_lock', 'dependency_lock'):
             self.assertTrue(checked_file(self.root, tests[kind]).is_file())
@@ -71,6 +75,12 @@ class PrepareCandidateTest(unittest.TestCase):
     def test_mixed_client_bundle_formats_rejected(self):
         self.inventory[0]['client_tests'] = {}
         with self.assertRaisesRegex(EvidenceError, 'Every selected target'):
+            self.prepare()
+
+    def test_client_bundle_requires_source_inventory(self):
+        for entry in self.inventory:
+            entry['client_tests'] = {}
+        with self.assertRaisesRegex(EvidenceError, 'Missing candidate source inventory'):
             self.prepare()
 
     def test_missing_duplicate_and_unexpected_targets_fail(self):

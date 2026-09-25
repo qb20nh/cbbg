@@ -40,6 +40,9 @@ def prepare(directory, inventory, release, commit, catalog, selection=None):
         for kind in ('artifact', 'sources') if client_bundles else FILES:
             record[kind] = file_reference(base, supplied[identifier][kind])
         if client_bundles:
+            if 'source_inventory' not in supplied[identifier]:
+                raise EvidenceError('Missing candidate source inventory: ' + identifier)
+            record['source_inventory'] = file_reference(base, supplied[identifier]['source_inventory'])
             tests = supplied[identifier]['client_tests']
             record['client_tests'] = {kind: file_reference(base, tests[kind]) for kind in CLIENT_FILES}
             if not isinstance(tests['drivers'], dict) or not tests['drivers']:

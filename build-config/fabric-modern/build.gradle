@@ -202,7 +202,10 @@ tasks.named('processResources') {
     }
 }
 
+apply from: new File(repositoryRoot, 'build-config/source-inventory.gradle')
+
 tasks.named('sourcesJar') {
+    dependsOn tasks.named('sourceInventory')
     from(project(':core').sourceSets.main.allSource)
 }
 

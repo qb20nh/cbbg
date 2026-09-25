@@ -152,6 +152,7 @@ class FabricCandidateTests(unittest.TestCase):
         self.catalog = load_catalog()
         self.target = '26.3-fabric'
         (self.root / 'catalog.json').write_text(json.dumps(self.catalog))
+        (self.root / 'source-inventory.json').write_text('{"schema": 1, "sources": []}')
         for name in ('artifact.jar', 'sources.jar', 'driver.jar'):
             (self.root / name).write_bytes(name.encode())
         for source, name in [
@@ -162,6 +163,7 @@ class FabricCandidateTests(unittest.TestCase):
             (self.root / name).write_bytes((ROOT / source).read_bytes())
         runs = required_runs(select_targets(self.catalog, self.target)[0], read_json(self.root / 'contract.json'))
         inventory = [{'id': self.target, 'artifact': 'artifact.jar', 'sources': 'sources.jar',
+                      'source_inventory': 'source-inventory.json',
                       'client_tests': {'catalog': 'catalog.json', 'contract': 'contract.json',
                                        'ordinary_metadata': 'metadata.json', 'runtime_lock': 'runtime.json',
                                        'dependency_lock': 'mods.json',

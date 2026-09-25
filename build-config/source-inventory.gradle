@@ -1,0 +1,38 @@
+import groovy.json.JsonOutput
+import java.security.MessageDigest
+
+def repositoryRoot = rootProject.file('../..').canonicalFile.toPath()
+def inventorySources = [sourceSets.main, project(':core').sourceSets.main]
+def inventoryFile = layout.buildDirectory.file('source-inventory.json')
+tasks.register('sourceInventory') {
+    inputs.files(inventorySources.collect { it.allJava })
+    outputs.file(inventoryFile)
+    doLast {
+        def destination = inventoryFile.get().asFile
+        def entries = new TreeMap<String, Map>()
+        inventorySources.each { sourceSet ->
+            sourceSet.allJava.visit { detail ->
+                if (detail.directory) return
+                def path = detail.file.canonicalFile.toPath()
+                if (!path.startsWith(repositoryRoot)) {
+                    throw new GradleException('Source is outside the repository: ' + detail.relativePath)
+                }
+                def archivePath = detail.relativePath.pathString
+                if (entries.containsKey(archivePath)) {
+                    throw new GradleException('Duplicate source archive path: ' + archivePath)
+                }
+                entries[archivePath] = [
+                    archive_path: archivePath,
+                    source_path: repositoryRoot.relativize(path).toString().replace('\\', '/'),
+                    sha256: MessageDigest.getInstance('SHA-256').digest(detail.file.bytes).encodeHex().toString()
+                ]
+            }
+        }
+        if (entries.isEmpty()) throw new GradleException('No production Java sources selected')
+        destination.parentFile.mkdirs()
+        destination.text = JsonOutput.prettyPrint(JsonOutput.toJson([
+            schema: 1, sources: entries.values().toList()
+        ])) + '\n'
+        logger.lifecycle('Recorded {} production Java sources', entries.size())
+    }
+}
