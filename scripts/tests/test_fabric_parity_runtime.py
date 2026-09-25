@@ -14,6 +14,33 @@ import zipfile
 import fabric_parity_runtime as launcher
 
 
+class SourceStatusTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        subprocess.run(['git', 'init', '-q', str(self.root)], check=True)
+        (self.root / 'docs').mkdir()
+        (self.root / 'docs/plan.md').write_text('Local plan')
+
+    def test_local_docs_do_not_mark_source_dirty(self):
+        self.assertFalse(launcher.source_dirty(self.root))
+
+    def test_untracked_source_marks_source_dirty(self):
+        (self.root / 'renderer.java').write_text('class Renderer {}')
+        self.assertTrue(launcher.source_dirty(self.root))
+
+    def test_staged_source_marks_source_dirty(self):
+        (self.root / 'targets.json').write_text('{}')
+        subprocess.run(['git', 'add', 'targets.json'], cwd=self.root, check=True)
+        self.assertTrue(launcher.source_dirty(self.root))
+
+    def test_docs_in_other_directories_are_included(self):
+        (self.root / 'adapter/docs').mkdir(parents=True)
+        (self.root / 'adapter/docs/input.md').write_text('Packaged input')
+        self.assertTrue(launcher.source_dirty(self.root))
+
+
 class LauncherFailureTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()

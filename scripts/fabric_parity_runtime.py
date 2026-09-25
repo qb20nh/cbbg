@@ -24,6 +24,13 @@ def digest(path):
         return hashlib.file_digest(stream, 'sha256').hexdigest()
 
 
+def source_dirty(root):
+    # Local plans and test records are deliberately excluded from version control.
+    return bool(subprocess.check_output(
+        ['git', 'status', '--porcelain', '--untracked-files=all', '--', '.',
+         ':(top,exclude)docs/**'], cwd=root))
+
+
 def java_identity(executable):
     executable = Path(executable).resolve()
     result = subprocess.run([str(executable), '-version'], capture_output=True,
@@ -154,7 +161,7 @@ def main():
                'dependencyLockSha256': hashlib.sha256(dependency_bytes).hexdigest(),
                'sourceHead': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT,
                                                      text=True).strip(),
-               'sourceDirty': bool(subprocess.check_output(['git', 'status', '--porcelain'], cwd=ROOT)),
+               'sourceDirty': source_dirty(ROOT),
                'artifacts': {}}
     receipt['restartPhase'] = args.restart_phase
     if args.restart_phase == 'verify':
