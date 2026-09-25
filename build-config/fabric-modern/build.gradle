@@ -174,6 +174,37 @@ if (usesTextureFormat) {
 }
 sourceSets.gametest.java.source(sharedClientTests)
 
+if (targetId == '26.3-fabric') {
+    def processedSharedTests = objects.sourceDirectorySet('processedSharedTests', 'Shared processed-compatible tests')
+    processedSharedTests.srcDir(new File(repositoryRoot, 'renderers/renderpearl/src/gametest/java'))
+    processedSharedTests.include 'com/qb20nh/cbbg/gametest/mixin/ScenarioProgressMixin.java',
+            'com/qb20nh/cbbg/gametest/WindowResizeGameTest.java'
+
+    // Select resolved external artifacts, including Loom's Minecraft jar, without
+    // carrying unprocessed main classes or the shared project outputs into compilation.
+    def externalCompileClasspath = configurations.compileClasspath.incoming.artifactView {
+        componentFilter { it instanceof org.gradle.api.artifacts.component.ModuleComponentIdentifier }
+    }.files
+    sourceSets.create('processedGametest') {
+        java.setSrcDirs([new File(repositoryRoot, 'renderers/renderpearl/src/processedGametest/java')])
+        java.source(processedSharedTests)
+        resources.setSrcDirs([new File(repositoryRoot, 'renderers/renderpearl/src/processedGametest/resources')])
+        compileClasspath = files(releaseOptimization.outputJar, externalCompileClasspath)
+        runtimeClasspath = output + compileClasspath
+    }
+    tasks.named('compileProcessedGametestJava') {
+        dependsOn tasks.named('optimizeReleaseJar')
+    }
+    tasks.register('processedDriverJar', Jar) {
+        archiveClassifier = 'processed-driver'
+        from sourceSets.processedGametest.output
+    }
+    tasks.register('prepareProcessedRuntime') {
+        dependsOn tasks.named('optimizeReleaseJar'), tasks.named('processedDriverJar'),
+                tasks.named('checkPackages')
+    }
+}
+
 tasks.named('jar') {
     destinationDirectory = layout.buildDirectory.dir('intermediates/raw-jar')
     archiveClassifier = 'raw'
@@ -359,7 +390,7 @@ tasks.register('candidateBuildOutputs') {
             }.standardOutput.asText.get().trim()
         }
         def drivers = new TreeMap<String, Map>()
-        tasks.withType(Jar).matching { it.name.endsWith('DriverJar') }.each { driver ->
+        tasks.withType(Jar).matching { it.name.endsWith('DriverJar') && it.name != 'processedDriverJar' }.each { driver ->
             def suite = driver == parityDriverJar.get() ? 'ordinary' :
                     driver.archiveClassifier.get().replaceFirst(/-driver$/, '')
             if (drivers.containsKey(suite)) throw new GradleException('Duplicate driver suite: ' + suite)

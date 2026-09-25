@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "id": "cbbg-renderer-test",
+  "version": "1.0.0",
+  "name": "CBBG processed release tests",
+  "environment": "client",
+  "mixins": ["cbbg.processed-test.mixins.json"],
+  "entrypoints": {
+    "fabric-client-gametest": [
+      "com.qb20nh.cbbg.gametest.ReleaseLifecycleGameTest",
+      "com.qb20nh.cbbg.gametest.WindowResizeGameTest",
+      "com.qb20nh.cbbg.gametest.ReleaseFramebufferGameTest"
+    ]
+  },
+  "depends": {
+    "cbbg": "*",
+    "fabricloader": ">=0.19.5",
+    "minecraft": "26.3",
+    "fabric-client-gametest-api-v1": "*"
+  }
+}
