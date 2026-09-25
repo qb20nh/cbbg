@@ -120,6 +120,28 @@ class CandidateMetadataTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'selected loaders'):
                 release.resolve_candidate_destinations(metadata)
 
+    def test_modrinth_only_does_not_read_curseforge_token_or_api(self):
+        metadata = self.metadata()
+        with patch.dict('os.environ', {}, clear=True), patch.object(
+                release, 'get_json', side_effect=[[{'version': '26.3'}], [{'name': 'fabric'}]]) as get:
+            resolved = release.resolve_candidate_destinations(metadata, 'modrinth')
+        self.assertEqual(get.call_count, 2)
+        self.assertNotIn('game_versions', resolved['records'][0]['curseforge'])
+
+    def test_curseforge_only_skips_modrinth_api(self):
+        metadata = self.metadata()
+        versions = [{'id': 1, 'name': '26.3', 'gameVersionTypeID': 10},
+                    {'id': 2, 'name': 'Java 25', 'gameVersionTypeID': 11},
+                    {'id': 3, 'name': 'Fabric', 'gameVersionTypeID': 12},
+                    {'id': 4, 'name': 'Client', 'gameVersionTypeID': 13}]
+        types = [{'id': 10, 'name': 'Minecraft 26.3'}, {'id': 13, 'name': 'Environment'}]
+        with patch.dict('os.environ', {'CF_API_TOKEN': 'fixture'}), patch.object(
+                release, 'get_json', side_effect=[versions, types]) as get:
+            resolved = release.resolve_candidate_destinations(metadata, 'curseforge')
+        self.assertEqual(get.call_count, 2)
+        self.assertEqual(resolved['records'][0]['curseforge']['game_versions'],
+                         ['1', '2', '3', '4'])
+
 
 if __name__ == '__main__':
     unittest.main()

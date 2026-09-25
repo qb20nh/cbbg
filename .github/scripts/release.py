@@ -185,22 +185,28 @@ def checked_publication_record(candidate, metadata_path, target, source_root):
     return expected, record, metadata_hash
 
 
-def resolve_candidate_destinations(metadata):
-    modrinth_versions = get_json('https://api.modrinth.com/v2/tag/game_version')
-    modrinth_loaders = get_json('https://api.modrinth.com/v2/tag/loader')
-    headers = {'X-Api-Token': os.environ['CF_API_TOKEN']}
-    versions = get_json('https://minecraft.curseforge.com/api/game/versions', headers)
-    types = get_json('https://minecraft.curseforge.com/api/game/version-types', headers)
+def resolve_candidate_destinations(metadata, services='both'):
+    if services not in ('both', 'modrinth', 'curseforge'):
+        raise ValueError('Invalid publishing service selection')
     resolved = json.loads(json.dumps(metadata))
+    if services in ('both', 'modrinth'):
+        modrinth_versions = get_json('https://api.modrinth.com/v2/tag/game_version')
+        modrinth_loaders = get_json('https://api.modrinth.com/v2/tag/loader')
+    if services in ('both', 'curseforge'):
+        headers = {'X-Api-Token': os.environ['CF_API_TOKEN']}
+        versions = get_json('https://minecraft.curseforge.com/api/game/versions', headers)
+        types = get_json('https://minecraft.curseforge.com/api/game/version-types', headers)
     for record in resolved['records']:
         modrinth = record['modrinth']
-        if not set(modrinth['game_versions']) <= {item['version'] for item in modrinth_versions}:
-            raise ValueError('Modrinth does not recognize the selected Minecraft versions')
-        if not set(modrinth['loaders']) <= {item['name'] for item in modrinth_loaders}:
-            raise ValueError('Modrinth does not recognize the selected loaders')
-        curseforge = record['curseforge']
-        curseforge['game_versions'] = curseforge_version_ids(
-            modrinth['game_versions'][0], curseforge['version_labels'], versions, types)
+        if services in ('both', 'modrinth'):
+            if not set(modrinth['game_versions']) <= {item['version'] for item in modrinth_versions}:
+                raise ValueError('Modrinth does not recognize the selected Minecraft versions')
+            if not set(modrinth['loaders']) <= {item['name'] for item in modrinth_loaders}:
+                raise ValueError('Modrinth does not recognize the selected loaders')
+        if services in ('both', 'curseforge'):
+            curseforge = record['curseforge']
+            curseforge['game_versions'] = curseforge_version_ids(
+                modrinth['game_versions'][0], curseforge['version_labels'], versions, types)
     return resolved
 
 

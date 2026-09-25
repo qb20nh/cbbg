@@ -85,11 +85,13 @@ tasks.register('verifyUploadInputs') {
 }
 
 def repositoryRoot = file('../..').canonicalFile
+def publicationSourceRoot = providers.gradleProperty('sourceRoot').orNull
+def sourceRoot = publicationSourceRoot ? file(publicationSourceRoot).canonicalFile : repositoryRoot
 def uploadPlan = layout.buildDirectory.file(targetId + '/modrinth-plan.json')
 def uploadResult = layout.buildDirectory.file(targetId + '/modrinth-result.json')
 def retryCommand = ['python3', new File(repositoryRoot, '.github/scripts/modrinth_retry.py'),
                     '--candidate', candidateFile, '--metadata', metadataFile,
-                    '--source-root', repositoryRoot, '--target', targetId]
+                    '--source-root', sourceRoot, '--target', targetId]
 tasks.register('planModrinthUpload', Exec) {
     dependsOn tasks.named('verifyUploadInputs')
     outputs.file(uploadPlan)

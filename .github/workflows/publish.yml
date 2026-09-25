@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Existing immutable release tag (for example v1.3.0+mc26.2)"
+        description: "Existing immutable release tag (vX.Y.Z or historical vX.Y.Z+mcVERSION)"
         required: true
         type: string
       dry_run:
@@ -12,12 +12,27 @@ on:
         required: true
         default: true
         type: boolean
+      services:
+        description: "Upload destinations; check CurseForge files before retrying an upload"
+        required: true
+        default: both
+        type: choice
+        options:
+          - both
+          - modrinth
+          - curseforge
 
 permissions:
   contents: read
+  attestations: read
+
+concurrency:
+  group: publish-${{ inputs.tag }}
+  cancel-in-progress: false
 
 jobs:
   publish:
+    if: contains(inputs.tag, '+mc')
     runs-on: ubuntu-latest
     environment: "build and publish"
     env:
@@ -38,6 +53,11 @@ jobs:
       PUBLISH_SOURCES_JAR: ""
 
     steps:
+      - name: Require a new dispatch for CurseForge retries
+        if: ${{ !inputs.dry_run && inputs.services != 'modrinth' && github.run_attempt != '1' }}
+        run: |
+          echo "Check the CurseForge project files, then start a new dispatch for the intended service."
+          exit 1
       - name: Validate selected release tag
         id: latest_stable
         shell: bash
@@ -241,14 +261,15 @@ jobs:
         env:
           MODRINTH_TOKEN: ${{ secrets.MODRINTH_TOKEN }}
           CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          SERVICES: ${{ inputs.services }}
         run: |
           set -euo pipefail
 
-          if [[ -z "${MODRINTH_TOKEN}" ]]; then
+          if [[ "${SERVICES:-both}" != "curseforge" && -z "${MODRINTH_TOKEN}" ]]; then
             echo "Missing secret: MODRINTH_TOKEN (configured as an Environment secret; make sure the environment name matches: 'build and publish')."
             exit 1
           fi
-          if [[ -z "${CF_API_TOKEN}" ]]; then
+          if [[ "${SERVICES:-both}" != "modrinth" && -z "${CF_API_TOKEN}" ]]; then
             echo "Missing secret: CF_API_TOKEN (configured as an Environment secret; make sure the environment name matches: 'build and publish')."
             exit 1
           fi
@@ -296,12 +317,14 @@ jobs:
         run: python3 .release-tools/.github/scripts/release.py artifacts
 
       - name: Check CurseForge API authentication and destination labels
+        if: inputs.services != 'modrinth'
         env:
           CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
         shell: bash
         run: python3 .release-tools/.github/scripts/release.py destinations
 
       - name: Validate or publish to Modrinth
+        if: inputs.services != 'curseforge'
         env:
           DRY_RUN: ${{ inputs.dry_run }}
           MODRINTH_TOKEN: ${{ secrets.MODRINTH_TOKEN }}
@@ -319,7 +342,7 @@ jobs:
           ./gradlew modrinth "${args[@]}"
 
       - name: Upload to CurseForge
-        if: ${{ !inputs.dry_run }}
+        if: ${{ !inputs.dry_run && inputs.services != 'modrinth' }}
         id: curseforge_upload
         uses: itsmeow/curseforge-upload@v3.1.2
         with:
@@ -335,7 +358,7 @@ jobs:
           changelog_type: markdown
 
       - name: Print CurseForge upload result
-        if: ${{ !inputs.dry_run }}
+        if: ${{ !inputs.dry_run && inputs.services != 'modrinth' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -348,3 +371,114 @@ jobs:
 
           echo "CurseForge file id: ${cf_file_id}"
           echo "CurseForge file URL: https://www.curseforge.com/minecraft/mc-mods/cbbg/files/${cf_file_id}"
+
+  candidate:
+    if: ${{ !contains(inputs.tag, '+mc') }}
+    runs-on: ubuntu-latest
+    environment: "build and publish"
+    steps:
+      - name: Require a new dispatch for CurseForge retries
+        if: ${{ !inputs.dry_run && inputs.services != 'modrinth' && github.run_attempt != '1' }}
+        run: |
+          echo "Check the CurseForge project files, then start a new dispatch for the intended service."
+          exit 1
+      - name: Checkout publishing tools
+        uses: actions/checkout@v6.0.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+      - name: Checkout candidate source
+        uses: actions/checkout@v6.0.1
+        with:
+          ref: ${{ inputs.tag }}
+          path: .release-source
+          persist-credentials: false
+      - name: Prepare candidate publication
+        id: publication
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ inputs.tag }}
+          SERVICES: ${{ inputs.services }}
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+        run: |
+          mkdir -p build
+          python3 .github/scripts/prepare_publication.py \
+            --release "$RELEASE_TAG" --repo "$GH_REPO" \
+            --source-root .release-source --assets release-assets \
+            --output build/publication.json --github-output "$GITHUB_OUTPUT" \
+            --services "$SERVICES"
+      - uses: actions/setup-java@v5.1.0
+        if: inputs.services != 'curseforge'
+        with:
+          java-version: '25'
+          distribution: temurin
+      - uses: gradle/actions/setup-gradle@v5.0.0
+        if: inputs.services != 'curseforge'
+      - name: Validate or publish candidate to Modrinth
+        if: inputs.services != 'curseforge'
+        env:
+          DRY_RUN: ${{ inputs.dry_run }}
+          MODRINTH_TOKEN: ${{ secrets.MODRINTH_TOKEN }}
+          TARGET_ID: ${{ steps.publication.outputs.target }}
+        run: |
+          args=(--no-daemon -p build-config/publishing
+            "-Pcandidate=$PWD/release-assets/candidate.json"
+            "-PpublicationMetadata=$PWD/build/publication.json"
+            "-PsourceRoot=$PWD/.release-source" "-Ptarget=$TARGET_ID")
+          if [[ "$DRY_RUN" == "true" ]]; then
+            args+=(--init-script .github/scripts/modrinth-dry-run.init.gradle)
+          elif [[ -z "$MODRINTH_TOKEN" ]]; then
+            echo "Missing MODRINTH_TOKEN for upload."
+            exit 1
+          fi
+          ./gradlew "${args[@]}" modrinth
+      - name: Upload candidate to CurseForge
+        if: ${{ !inputs.dry_run && inputs.services != 'modrinth' }}
+        id: curseforge_upload
+        uses: itsmeow/curseforge-upload@v3.1.2
+        with:
+          token: ${{ secrets.CF_API_TOKEN }}
+          project_id: ${{ steps.publication.outputs.cf_project_id }}
+          game_endpoint: minecraft
+          relations: ${{ steps.publication.outputs.cf_relations }}
+          file_path: ${{ steps.publication.outputs.artifact }}
+          game_versions: ${{ steps.publication.outputs.cf_game_versions }}
+          release_type: ${{ steps.publication.outputs.cf_release_type }}
+          display_name: ${{ steps.publication.outputs.cf_display_name }}
+          changelog: ${{ steps.publication.outputs.cf_changelog }}
+          changelog_type: markdown
+      - name: Save CurseForge upload record
+        if: ${{ !inputs.dry_run && inputs.services != 'modrinth' }}
+        env:
+          CF_FILE_ID: ${{ steps.curseforge_upload.outputs.id }}
+        run: |
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+          identifier = os.environ['CF_FILE_ID']
+          if not identifier.isascii() or not identifier.isdecimal() or int(identifier) <= 0:
+              raise SystemExit('CurseForge upload returned no valid file ID; check the project before retrying')
+          path = Path('build/publication.json')
+          metadata = json.loads(path.read_text())
+          record, = metadata['records']
+          result = {'release': metadata['release'], 'source_commit': metadata['source_commit'],
+                    'targets': record['targets'], 'artifact': record['artifact'],
+                    'metadata_sha256': hashlib.sha256(path.read_bytes()).hexdigest(),
+                    'file_id': identifier,
+                    'url': 'https://www.curseforge.com/minecraft/mc-mods/cbbg/files/' + identifier}
+          Path('build/curseforge-result.json').write_text(json.dumps(result, indent=2) + '\n')
+          print(result['url'])
+          PY
+      - name: Save publication records
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: publication-${{ inputs.tag }}-${{ inputs.services }}
+          path: |
+            build/publication.json
+            build/curseforge-result.json
+            build/publishing/**/modrinth-plan.json
+            build/publishing/**/modrinth-result.json
