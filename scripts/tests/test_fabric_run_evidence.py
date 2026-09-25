@@ -77,6 +77,11 @@ class FabricRunEvidenceTest(unittest.TestCase):
         self.assertEqual(self.expected, result['scenarios'])
         self.assertFalse(result['releaseAcceptance'])
 
+    def test_fabric_run_cannot_validate_quilt(self):
+        self.target['loader'] = 'quilt'
+        with self.assertRaisesRegex(ValueError, 'requires a Fabric target'):
+            self.verify()
+
     def test_changed_file_rejected(self):
         (self.game / 'launch.log').write_text('changed')
         with self.assertRaisesRegex(ValueError, 'Changed evidence file'):

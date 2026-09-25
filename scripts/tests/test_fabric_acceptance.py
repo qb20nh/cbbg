@@ -5,7 +5,8 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from fabric_acceptance import ROOT, required_runs, verify_results
+from fabric_acceptance import ROOT, required_runs, verify_results, verify_candidate_results
+from prepare_candidate import prepare
 from parity_evidence import digest, read_json
 from targets import load_catalog, select_targets
 
@@ -141,6 +142,76 @@ class FabricResultMatrixTests(unittest.TestCase):
         self.restart.side_effect = ValueError('Restart run failed')
         with self.assertRaisesRegex(ValueError, 'Restart run failed'):
             self.verify()
+
+
+class FabricCandidateTests(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name)
+        self.catalog = load_catalog()
+        self.target = '26.3-fabric'
+        (self.root / 'catalog.json').write_text(json.dumps(self.catalog))
+        for name in ('artifact.jar', 'sources.jar', 'driver.jar'):
+            (self.root / name).write_bytes(name.encode())
+        for source, name in [
+                ('runtime-locks/26.3-fabric-scenarios.json', 'contract.json'),
+                ('runtime-locks/26.3-fabric-linux-x86_64.json', 'runtime.json'),
+                ('runtime-locks/26.3-fabric-mods.json', 'mods.json'),
+                ('renderers/renderpearl/src/gametest/resources/fabric.mod.json', 'metadata.json')]:
+            (self.root / name).write_bytes((ROOT / source).read_bytes())
+        runs = required_runs(select_targets(self.catalog, self.target)[0], read_json(self.root / 'contract.json'))
+        inventory = [{'id': self.target, 'artifact': 'artifact.jar', 'sources': 'sources.jar',
+                      'client_tests': {'catalog': 'catalog.json', 'contract': 'contract.json',
+                                       'ordinary_metadata': 'metadata.json', 'runtime_lock': 'runtime.json',
+                                       'dependency_lock': 'mods.json',
+                                       'drivers': {run['suite']: 'driver.jar' for run in runs}}}]
+        self.manifest = prepare(self.root, inventory, 'v2.0.0-rc.1', 'a' * 40,
+                                self.catalog, [self.target])
+        self.path = self.root / 'candidate.json'
+        self.path.write_text(json.dumps(self.manifest))
+        self.results = self.enterContext(patch('fabric_acceptance.verify_results',
+                                              return_value={'releaseAcceptance': False}))
+
+    def verify(self):
+        return verify_candidate_results(self.path, self.target, self.root / 'results.json')
+
+    def test_candidate_supplies_expected_artifacts_and_source(self):
+        result = self.verify()
+        args, kwargs = self.results.call_args
+        self.assertEqual(kwargs['source_commit'], 'a' * 40)
+        self.assertEqual(kwargs['candidate_sha256'], digest(self.root / 'artifact.jar'))
+        self.assertEqual(kwargs['metadata_path'], self.root / 'metadata.json')
+        self.assertEqual(set(args[3].values()), {digest(self.root / 'driver.jar')})
+        self.assertEqual(result['manifest_sha256'], digest(self.path))
+        self.assertEqual(result['release'], 'v2.0.0-rc.1')
+        self.assertFalse(result['releaseAcceptance'])
+
+    def test_changed_candidate_artifact_rejected(self):
+        (self.root / 'artifact.jar').write_bytes(b'changed')
+        with self.assertRaisesRegex(ValueError, 'Changed evidence file'):
+            self.verify()
+        self.results.assert_not_called()
+
+    def test_changed_test_driver_rejected(self):
+        (self.root / 'driver.jar').write_bytes(b'changed')
+        with self.assertRaisesRegex(ValueError, 'Changed evidence file'):
+            self.verify()
+
+    def test_changed_contract_rejected(self):
+        (self.root / 'contract.json').write_text('{}')
+        with self.assertRaisesRegex(ValueError, 'Changed evidence file'):
+            self.verify()
+
+    def test_wrong_catalog_digest_rejected(self):
+        self.manifest['catalog_sha256'] = '0' * 64
+        self.path.write_text(json.dumps(self.manifest))
+        with self.assertRaisesRegex(ValueError, 'catalog or target selection differs'):
+            self.verify()
+
+    def test_missing_target_rejected(self):
+        with self.assertRaisesRegex(ValueError, 'absent from candidate'):
+            verify_candidate_results(self.path, '26.2-fabric', self.root / 'results.json')
 
 
 if __name__ == '__main__':

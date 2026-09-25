@@ -7,18 +7,20 @@ import re
 import zipfile
 
 from fabric_run_evidence import verify_run, verify_restart
-from parity_evidence import EvidenceError, checked_file, digest, read_json, unique_by
+from parity_evidence import (EvidenceError, catalog_digest, checked_file, digest, read_json,
+                             selected_target_specs, unique_by, validate_release_identity)
 from targets import load_catalog, select_targets
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def required_runs(target, contract, root=ROOT):
+def required_runs(target, contract, root=ROOT, metadata_path=None):
     if contract.get('schemaVersion') != 1 or contract.get('target') != target['id']:
         raise EvidenceError('Scenario contract target or version differs')
-    metadata_path = (root / contract['ordinaryMetadata']).resolve()
-    if root.resolve() not in metadata_path.parents:
-        raise EvidenceError('Ordinary metadata is outside the repository')
+    if metadata_path is None:
+        metadata_path = (root / contract['ordinaryMetadata']).resolve()
+        if root.resolve() not in metadata_path.parents:
+            raise EvidenceError('Ordinary metadata is outside the repository')
     metadata = read_json(metadata_path)
     ordinary = metadata['entrypoints']['fabric-client-gametest']
     if metadata.get('id') != 'cbbg-renderer-test':
@@ -67,9 +69,9 @@ def required_runs(target, contract, root=ROOT):
     return runs
 
 
-def verify_results(index_path, target, contract_path, driver_hashes, **inputs):
+def verify_results(index_path, target, contract_path, driver_hashes, *, metadata_path=None, **inputs):
     index_path = Path(index_path)
-    required = required_runs(target, read_json(contract_path))
+    required = required_runs(target, read_json(contract_path), metadata_path=metadata_path)
     key = lambda run: (run['suite'], run['profile'], run['backend'])
     expected = unique_by(required, key, 'required run')
     supplied = unique_by(read_json(index_path), key, 'run result')
@@ -94,17 +96,51 @@ def verify_results(index_path, target, contract_path, driver_hashes, **inputs):
                 or result['scenarios'] != requirement['entrypoints']):
             raise EvidenceError('Saved run differs from required configuration: ' + str(cell))
         results.append(dict(result, suite=cell[0]))
-    metadata_path = ROOT / read_json(contract_path)['ordinaryMetadata']
+    if metadata_path is None:
+        metadata_path = ROOT / read_json(contract_path)['ordinaryMetadata']
     return {'target': target['id'], 'source_commit': inputs['source_commit'],
             'candidate_sha256': inputs['candidate_sha256'], 'drivers': driver_hashes,
             'contract_sha256': digest(contract_path), 'ordinary_metadata_sha256': digest(metadata_path),
             'index_sha256': digest(index_path), 'runs': results, 'releaseAcceptance': False}
 
 
+def verify_candidate_results(manifest_path, target_id, index_path):
+    manifest_path = Path(manifest_path)
+    manifest = read_json(manifest_path)
+    if type(manifest.get('schema')) is not int or manifest['schema'] != 2:
+        raise EvidenceError('Client result validation requires candidate schema 2')
+    validate_release_identity(manifest['release'], manifest['commit'])
+    targets = unique_by(manifest['targets'], lambda item: item['id'], 'candidate target')
+    if target_id not in targets:
+        raise EvidenceError('Target is absent from candidate')
+    target = targets[target_id]
+    base = manifest_path.parent
+    checked_file(base, target['artifact'])
+    checked_file(base, target['sources'])
+    tests = target['client_tests']
+    files = {kind: checked_file(base, tests[kind]) for kind in
+             ('catalog', 'contract', 'ordinary_metadata', 'runtime_lock', 'dependency_lock')}
+    catalog = load_catalog(files['catalog'])
+    selected = selected_target_specs(catalog, manifest['selected_targets'])
+    if targets.keys() != selected.keys() or manifest['catalog_sha256'] != catalog_digest(catalog):
+        raise EvidenceError('Candidate catalog or target selection differs')
+    specification = selected[target_id]
+    for suite, reference in tests['drivers'].items():
+        checked_file(base, reference)
+    result = verify_results(index_path, specification, files['contract'],
+                            {suite: reference['sha256'] for suite, reference in tests['drivers'].items()},
+                            metadata_path=files['ordinary_metadata'], source_commit=manifest['commit'],
+                            candidate_sha256=target['artifact']['sha256'], catalog_path=files['catalog'],
+                            runtime_lock_path=files['runtime_lock'], dependency_lock_path=files['dependency_lock'])
+    result.update(manifest_sha256=digest(manifest_path), release=manifest['release'])
+    return result
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--target', default='26.3-fabric')
-    parser.add_argument('--contract', type=Path, required=True)
+    parser.add_argument('--contract', type=Path)
+    parser.add_argument('--candidate', type=Path, help='Use the candidate manifest for all expected inputs')
     parser.add_argument('--results', type=Path, help='Index of saved run receipts to validate')
     parser.add_argument('--drivers', type=Path, help='Expected SHA-256 by suite name')
     parser.add_argument('--source-commit')
@@ -114,6 +150,16 @@ def main():
     parser.add_argument('--dependency-lock', type=Path)
     args = parser.parse_args()
     try:
+        if args.candidate:
+            if not args.results:
+                parser.error('Candidate validation requires a result index')
+            if any(value is not None for value in (args.contract, args.drivers, args.source_commit,
+                    args.candidate_sha256, args.runtime_lock, args.dependency_lock)):
+                parser.error('Candidate validation takes its expected inputs from the manifest')
+            print(json.dumps(verify_candidate_results(args.candidate, args.target, args.results), indent=2))
+            return
+        if not args.contract:
+            parser.error('Run selection requires a contract')
         target = select_targets(load_catalog(args.catalog), args.target)[0]
         if args.results:
             if any(value is None for value in (args.drivers, args.source_commit,

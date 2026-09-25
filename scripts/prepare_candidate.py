@@ -11,6 +11,16 @@ from parity_evidence import EvidenceError, catalog_digest, digest, read_json, un
 from targets import load_catalog
 
 FILES = ("artifact", "sources", "harness", "dependency_lock", "scenario_contract")
+CLIENT_FILES = ('catalog', 'contract', 'ordinary_metadata', 'runtime_lock', 'dependency_lock')
+
+
+def file_reference(base, relative):
+    if not isinstance(relative, str) or not relative or Path(relative).is_absolute():
+        raise EvidenceError('Candidate paths must be relative')
+    path = (base / relative).resolve()
+    if base not in path.parents or not path.is_file():
+        raise EvidenceError('Missing or escaping candidate file: ' + relative)
+    return {'path': path.relative_to(base).as_posix(), 'sha256': digest(path)}
 
 
 def prepare(directory, inventory, release, commit, catalog, selection=None):
@@ -21,17 +31,21 @@ def prepare(directory, inventory, release, commit, catalog, selection=None):
                                      [target['id'] for target in catalog['targets']])
     if supplied.keys() != expected.keys():
         raise EvidenceError("Inventory must cover the full target selection")
+    client_bundles = any('client_tests' in item for item in supplied.values())
+    if client_bundles and any('client_tests' not in item for item in supplied.values()):
+        raise EvidenceError('Every selected target needs a client test bundle')
     targets = []
     for identifier in expected:
         record = {"id": identifier}
-        for kind in FILES:
-            relative = supplied[identifier][kind]
-            if not isinstance(relative, str) or not relative or Path(relative).is_absolute():
-                raise EvidenceError("Candidate paths must be relative")
-            path = (base / relative).resolve()
-            if base not in path.parents or not path.is_file():
-                raise EvidenceError("Missing or escaping candidate file: " + relative)
-            record[kind] = {"path": path.relative_to(base).as_posix(), "sha256": digest(path)}
+        for kind in ('artifact', 'sources') if client_bundles else FILES:
+            record[kind] = file_reference(base, supplied[identifier][kind])
+        if client_bundles:
+            tests = supplied[identifier]['client_tests']
+            record['client_tests'] = {kind: file_reference(base, tests[kind]) for kind in CLIENT_FILES}
+            if not isinstance(tests['drivers'], dict) or not tests['drivers']:
+                raise EvidenceError('Missing client test drivers')
+            record['client_tests']['drivers'] = {
+                suite: file_reference(base, path) for suite, path in sorted(tests['drivers'].items())}
         targets.append(record)
     indexed = {record["id"]: record for record in targets}
     for identifier, specification in expected.items():
@@ -40,9 +54,9 @@ def prepare(directory, inventory, release, commit, catalog, selection=None):
             for kind in ("artifact", "sources"):
                 if indexed[identifier][kind]["sha256"] != indexed[owner][kind]["sha256"]:
                     raise EvidenceError("Shared " + kind + " differs from owner: " + identifier)
-    manifest = {"schema": 1, "release": release, "commit": commit,
+    manifest = {"schema": 2 if client_bundles else 1, "release": release, "commit": commit,
                 "catalog_sha256": catalog_digest(catalog), "targets": targets}
-    if selection is not None:
+    if selection is not None or client_bundles:
         manifest['selected_targets'] = list(expected)
     return manifest
 

@@ -89,8 +89,12 @@ def selected_target_specs(catalog, selection):
     selected = set(selection)
     for target_id, specification in catalog_targets.items():
         owner = specification.get('artifactOf')
-        if owner is not None and ((target_id in selected) != (owner in selected)):
-            raise EvidenceError('Selection omits a shared-artifact runtime: ' + target_id)
+        if owner is not None:
+            if target_id in selected and owner not in selected:
+                raise EvidenceError('Selection omits a shared-artifact runtime: ' + target_id)
+            if (owner in selected and target_id not in selected
+                    and specification.get('implemented', True)):
+                raise EvidenceError('Selection omits a shared-artifact runtime: ' + target_id)
     return {name: target for name, target in catalog_targets.items() if name in selected}
 
 

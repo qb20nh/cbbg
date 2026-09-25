@@ -17,6 +17,8 @@ from targets import load_catalog, select_targets
 def _verify_run(receipt_path, target, *, source_commit, candidate_sha256,
                 driver_sha256, catalog_path, runtime_lock_path, dependency_lock_path,
                 restart_phase=None):
+    if target.get('loader') != 'fabric':
+        raise EvidenceError('Fabric run validation requires a Fabric target')
     receipt_path = Path(receipt_path)
     game = receipt_path.parent.resolve()
     report = read_json(receipt_path)

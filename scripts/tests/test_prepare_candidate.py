@@ -46,6 +46,33 @@ class PrepareCandidateTest(unittest.TestCase):
             prepare(self.root, self.inventory, 'v2.0.0', 'a' * 40,
                     self.catalog, ['fabric'])
 
+    def test_unimplemented_shared_runtime_does_not_block_owner_selection(self):
+        self.catalog['targets'][1]['implemented'] = False
+        inventory = [entry for entry in self.inventory if entry['id'] == 'fabric']
+        manifest = prepare(self.root, inventory, 'v2.0.0', 'a' * 40, self.catalog, ['fabric'])
+        self.assertEqual(manifest['selected_targets'], ['fabric'])
+        with self.assertRaisesRegex(EvidenceError, 'shared-artifact runtime'):
+            prepare(self.root, [self.inventory[0]], 'v2.0.0', 'a' * 40, self.catalog, ['quilt'])
+
+    def test_client_bundle_records_all_driver_and_input_hashes(self):
+        inputs = {'catalog': 'artifact', 'contract': 'scenario_contract',
+                  'ordinary_metadata': 'harness', 'runtime_lock': 'dependency_lock',
+                  'dependency_lock': 'dependency_lock', 'drivers': {'ordinary': 'harness'}}
+        for entry in self.inventory:
+            entry['client_tests'] = inputs
+        manifest = self.prepare()
+        self.assertEqual(manifest['schema'], 2)
+        self.assertEqual(manifest['selected_targets'], ['fabric', 'quilt'])
+        tests = manifest['targets'][0]['client_tests']
+        for kind in ('catalog', 'contract', 'ordinary_metadata', 'runtime_lock', 'dependency_lock'):
+            self.assertTrue(checked_file(self.root, tests[kind]).is_file())
+        self.assertEqual(checked_file(self.root, tests['drivers']['ordinary']), self.root / 'harness')
+
+    def test_mixed_client_bundle_formats_rejected(self):
+        self.inventory[0]['client_tests'] = {}
+        with self.assertRaisesRegex(EvidenceError, 'Every selected target'):
+            self.prepare()
+
     def test_missing_duplicate_and_unexpected_targets_fail(self):
         original = self.inventory
         for records in (original[:1], original + original[:1], original + [{"id": "unknown"}]):
