@@ -9,6 +9,8 @@ import sys
 import urllib.request
 import zipfile
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scripts'))
+
 
 def read_java():
     requirement = json.loads(Path("src/main/resources/fabric.mod.json").read_text())["depends"]["java"]
@@ -105,7 +107,6 @@ def validate_destinations():
 
 def candidate_metadata(candidate, source_root, notes):
     # Historical release checkouts need only the commands above.
-    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scripts'))
     from candidate_manifest import client_candidate
     from fabric_package import verify_candidate
     from parity_evidence import digest, read_json
@@ -156,6 +157,32 @@ def candidate_metadata(candidate, source_root, notes):
         raise ValueError('Candidate changed during metadata generation')
     return {'schema': 1, 'release': manifest['release'], 'source_commit': manifest['commit'],
             'manifest_sha256': manifest_hash, 'records': records}
+
+
+def checked_publication_record(candidate, metadata_path, target, source_root):
+    from parity_evidence import digest, read_json
+
+    metadata_hash = digest(metadata_path)
+    metadata = read_json(metadata_path)
+    records = [record for record in metadata['records'] if record['targets'] == [target]]
+    if len(records) != 1:
+        raise ValueError('Expected one publishing record for the selected target')
+    record = records[0]
+    expected = candidate_metadata(candidate, source_root, record['modrinth']['changelog'])
+    expected_records = [item for item in expected['records'] if item['targets'] == [target]]
+    if (len(expected_records) != 1 or any(metadata.get(key) != expected[key] for key in
+            ('schema', 'release', 'source_commit', 'manifest_sha256')) or
+            any(record.get(key) != expected_records[0][key] for key in
+                ('targets', 'artifact', 'sources', 'modrinth'))):
+        raise ValueError('Publishing metadata differs from the checked candidate')
+    if 'curseforge' in expected_records[0]:
+        curseforge = dict(record['curseforge'])
+        curseforge.pop('game_versions', None)
+        if curseforge != expected_records[0]['curseforge']:
+            raise ValueError('CurseForge metadata differs from the checked candidate')
+    if digest(metadata_path) != metadata_hash:
+        raise ValueError('Publishing metadata changed during validation')
+    return expected, record, metadata_hash
 
 
 def resolve_candidate_destinations(metadata):

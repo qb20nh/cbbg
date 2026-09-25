@@ -75,6 +75,22 @@ class CandidateMetadataTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'Invalid publishing project'):
             self.metadata()
 
+    def test_edited_curseforge_labels_fail_the_shared_record_check(self):
+        metadata = self.metadata()
+        metadata['records'][0]['curseforge']['version_labels'].append('Forge')
+        path = self.root / 'publication.json'
+        path.write_text(json.dumps(metadata))
+        with self.assertRaisesRegex(ValueError, 'CurseForge metadata differs'):
+            release.checked_publication_record(self.path, path, '26.3-fabric', self.root)
+
+    def test_shared_record_check_accepts_resolved_destination_ids(self):
+        metadata = self.metadata()
+        metadata['records'][0]['curseforge']['game_versions'] = ['1', '2', '3', '4']
+        path = self.root / 'publication.json'
+        path.write_text(json.dumps(metadata))
+        _, record, _ = release.checked_publication_record(self.path, path, '26.3-fabric', self.root)
+        self.assertEqual(record['curseforge']['game_versions'], ['1', '2', '3', '4'])
+
     def test_destination_resolution_requires_every_label(self):
         metadata = self.metadata()
         original = copy.deepcopy(metadata)

@@ -6,32 +6,19 @@ import json
 import os
 from pathlib import Path
 import re
-import sys
 from urllib.parse import quote
 
 import release
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scripts'))
-from parity_evidence import checked_file, digest, read_json
+from parity_evidence import checked_file, digest
 
 API = 'https://api.modrinth.com/v2'
 
 
 def plan_upload(candidate, metadata_path, target, source_root, fetch=release.get_json):
     candidate = Path(candidate)
-    metadata_hash = digest(metadata_path)
-    metadata = read_json(metadata_path)
-    records = [record for record in metadata['records'] if record['targets'] == [target]]
-    if len(records) != 1:
-        raise ValueError('Expected one publishing record for the selected target')
-    record = records[0]
-    expected = release.candidate_metadata(candidate, source_root, record['modrinth']['changelog'])
-    expected_records = [item for item in expected['records'] if item['targets'] == [target]]
-    if (len(expected_records) != 1 or any(metadata.get(key) != expected[key] for key in
-            ('schema', 'release', 'source_commit', 'manifest_sha256')) or
-            any(record.get(key) != expected_records[0][key] for key in
-                ('targets', 'artifact', 'sources', 'modrinth'))):
-        raise ValueError('Publishing metadata differs from the checked candidate')
+    expected, record, metadata_hash = release.checked_publication_record(
+        candidate, metadata_path, target, source_root)
     upload = record['modrinth']
     project = fetch(API + '/project/' + quote(upload['project_id'], safe=''))
     if project.get('id') != upload['project_id'] or not re.fullmatch(r'[\w-]+', project.get('slug', '')):
