@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "name": "CBBG external shader test",
+  "resources": {"result": {"format": "RGBA8_UNORM"}},
+  "passes": [{"name": "color", "fragment": "color.fsh", "reads": {}, "writes": ["result"]}],
+  "present": "result"
+}
