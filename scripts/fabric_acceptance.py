@@ -1,10 +1,13 @@
-"""List the packaged client runs required for a selected Fabric target."""
+"""Select required Fabric runs and validate their saved results."""
 
 import argparse
 import json
 from pathlib import Path
+import re
+import zipfile
 
-from parity_evidence import EvidenceError, read_json
+from fabric_run_evidence import verify_run, verify_restart
+from parity_evidence import EvidenceError, checked_file, digest, read_json, unique_by
 from targets import load_catalog, select_targets
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -64,17 +67,68 @@ def required_runs(target, contract, root=ROOT):
     return runs
 
 
+def verify_results(index_path, target, contract_path, driver_hashes, **inputs):
+    index_path = Path(index_path)
+    required = required_runs(target, read_json(contract_path))
+    key = lambda run: (run['suite'], run['profile'], run['backend'])
+    expected = unique_by(required, key, 'required run')
+    supplied = unique_by(read_json(index_path), key, 'run result')
+    if supplied.keys() != expected.keys():
+        raise EvidenceError('Run coverage differs; missing=' + str(sorted(expected.keys() - supplied.keys()))
+                            + '; unexpected=' + str(sorted(supplied.keys() - expected.keys())))
+    suites = {run['suite'] for run in required}
+    if (driver_hashes.keys() != suites or any(
+            not isinstance(value, str) or not re.fullmatch('[0-9a-f]{64}', value)
+            for value in driver_hashes.values())):
+        raise EvidenceError('Expected driver hashes must cover every required suite')
+    results = []
+    paths = set()
+    for cell, requirement in expected.items():
+        receipt = checked_file(index_path.parent, supplied[cell]['receipt'])
+        if receipt in paths:
+            raise EvidenceError('Receipt reused for different required runs')
+        paths.add(receipt)
+        verifier = verify_restart if requirement['restart'] else verify_run
+        result = verifier(receipt, target, driver_sha256=driver_hashes[cell[0]], **inputs)
+        if (result['profile'] != cell[1] or result['backend'] != cell[2]
+                or result['scenarios'] != requirement['entrypoints']):
+            raise EvidenceError('Saved run differs from required configuration: ' + str(cell))
+        results.append(dict(result, suite=cell[0]))
+    metadata_path = ROOT / read_json(contract_path)['ordinaryMetadata']
+    return {'target': target['id'], 'source_commit': inputs['source_commit'],
+            'candidate_sha256': inputs['candidate_sha256'], 'drivers': driver_hashes,
+            'contract_sha256': digest(contract_path), 'ordinary_metadata_sha256': digest(metadata_path),
+            'index_sha256': digest(index_path), 'runs': results, 'releaseAcceptance': False}
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--target', default='26.3-fabric')
     parser.add_argument('--contract', type=Path, required=True)
+    parser.add_argument('--results', type=Path, help='Index of saved run receipts to validate')
+    parser.add_argument('--drivers', type=Path, help='Expected SHA-256 by suite name')
+    parser.add_argument('--source-commit')
+    parser.add_argument('--candidate-sha256')
+    parser.add_argument('--catalog', type=Path, default=ROOT / 'targets.json')
+    parser.add_argument('--runtime-lock', type=Path)
+    parser.add_argument('--dependency-lock', type=Path)
     args = parser.parse_args()
     try:
-        target = select_targets(load_catalog(), args.target)[0]
-        runs = required_runs(target, read_json(args.contract))
-    except (ValueError, KeyError, TypeError, OSError) as error:
+        target = select_targets(load_catalog(args.catalog), args.target)[0]
+        if args.results:
+            if any(value is None for value in (args.drivers, args.source_commit,
+                    args.candidate_sha256, args.runtime_lock, args.dependency_lock)):
+                parser.error('Result validation requires drivers, source commit, candidate hash and both locks')
+            result = verify_results(args.results, target, args.contract, read_json(args.drivers),
+                                    source_commit=args.source_commit, candidate_sha256=args.candidate_sha256,
+                                    catalog_path=args.catalog, runtime_lock_path=args.runtime_lock,
+                                    dependency_lock_path=args.dependency_lock)
+        else:
+            result = {'target': target['id'], 'runs': required_runs(target, read_json(args.contract)),
+                      'releaseAcceptance': False}
+    except (ValueError, KeyError, TypeError, OSError, zipfile.BadZipFile) as error:
         parser.error(str(error))
-    print(json.dumps({'target': target['id'], 'runs': runs, 'releaseAcceptance': False}, indent=2))
+    print(json.dumps(result, indent=2))
 
 
 if __name__ == '__main__':
