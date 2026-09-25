@@ -17,7 +17,8 @@ public abstract class RenderTargetMixin {
             "Lcom/mojang/renderpearl/api/device/GpuDevice;createTexture(Ljava/util/function/Supplier;ILcom/mojang/renderpearl/api/GpuFormat;IIII)Lcom/mojang/renderpearl/api/textures/GpuTexture;"))
     private GpuTexture cbbg$resizeMain(GpuDevice device, Supplier<String> label, int usage,
             GpuFormat format, int width, int height, int layers, int mips) {
-        return FloatAttachments.createMainOrOriginal((Object) this instanceof MainTarget,
+        // The mixin is merged after ProGuard runs; keep the type check for runtime.
+        return FloatAttachments.createMainOrOriginal(MainTarget.class.isInstance(this),
                 device, label, usage, format, width, height, layers, mips);
     }
 }
