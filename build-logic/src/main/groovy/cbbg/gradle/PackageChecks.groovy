@@ -25,12 +25,18 @@ class PackageChecks {
     ] as Set
 
     static Map verifyArtifact(File artifact, File sources, int javaVersion, File coreSources) {
+        verifyArtifact(artifact, sources, javaVersion, [coreSources])
+    }
+
+    static Map verifyArtifact(File artifact, File sources, int javaVersion, Collection<File> sourceRoots) {
         if (javaVersion < 8) throw new GradleException('Invalid target Java baseline')
         Map<String, byte[]> expected = [:]
-        if (coreSources.isDirectory()) {
-            coreSources.eachFileRecurse(FileType.FILES) { File file ->
-                if (file.name.endsWith('.java') && !(file.name in ['package-info.java', 'module-info.java'])) {
-                    expected[coreSources.toPath().relativize(file.toPath()).toString().replace('\\', '/')] = file.bytes
+        for (File coreSources : sourceRoots) {
+            if (coreSources.isDirectory()) {
+                coreSources.eachFileRecurse(FileType.FILES) { File file ->
+                    if (file.name.endsWith('.java') && !(file.name in ['package-info.java', 'module-info.java'])) {
+                        expected[coreSources.toPath().relativize(file.toPath()).toString().replace('\\', '/')] = file.bytes
+                    }
                 }
             }
         }
@@ -190,10 +196,16 @@ class PackageChecks {
         File inventoryFile = CandidateFiles.checked(base, (Map) targetRecord.source_inventory)
         Object inventory = CandidateFiles.read(inventoryFile)
         if (!(inventory instanceof Map)) throw new GradleException('Invalid source inventory schema')
+        Map sourceCheck = verifySourceInventory(sources, (Map) inventory, sourceRoot)
+        Set<File> sharedRoots = [new File(sourceRoot, 'core/src/main/java')] as Set
+        inventory.sources.each { entry ->
+            def match = entry.source_path =~ /^(core\/(?:[^\/]+\/)?src\/main\/java)\//
+            if (match.find()) sharedRoots.add(new File(sourceRoot, match.group(1)))
+        }
         [packaging: verifyArtifact(artifact, sources, (int) specification.java,
-                new File(sourceRoot, 'core/src/main/java')),
+                sharedRoots),
          metadata: verifyFabricMetadata(artifact, specification, version),
-         sources: verifySourceInventory(sources, (Map) inventory, sourceRoot)]
+         sources: sourceCheck]
     }
 
     private static List<String> productionEntries(ZipFile zip) {

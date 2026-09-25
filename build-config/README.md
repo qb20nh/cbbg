@@ -5,6 +5,12 @@ defines target dependencies, build profiles, runtime Java versions and default
 CI selection. Each profile uses its own Gradle process and can use its own
 wrapper. The preserved 26.2 build is `fabric-upstream`.
 
+Each profile declares `sharedProjects` and applies `shared-code.gradle` to use
+that list for compilation and binary/source packaging. `core` contains common
+configuration and FFT code; `core:rendering` contains rendering helpers, and
+`core:legacy` contains legacy commands and language support. Add only the modules
+a target uses. Split a module when a target needs only part of it.
+
 | Task | Inputs and result |
 | --- | --- |
 | `build`, `check`, `dev`, `genSources` | Optional `-Ptarget=id` or `-Ptargets=id,id`; defaults to `ciTargets`. |

@@ -13,7 +13,8 @@ layout.buildDirectory = new File(repositoryRoot, 'build')
 apply from: new File(repositoryRoot, 'build-config/local-runtime.gradle')
 apply from: new File(repositoryRoot, 'build-config/upstream-packaging.gradle')
 
-evaluationDependsOn(':core')
+ext.sharedProjects = [project(':core')]
+apply from: new File(repositoryRoot, 'build-config/shared-code.gradle')
 
 // Single source of truth for the mod version across:
 // - fabric.mod.json (${version})
@@ -49,7 +50,6 @@ repositories {
 }
 
 dependencies {
-	implementation project(':core')
 	// To change the versions see the gradle.properties file
 	minecraft "com.mojang:minecraft:${project.minecraft_version}"
 	implementation "net.fabricmc:fabric-loader:${project.loader_version}"
@@ -144,7 +144,6 @@ java {
 }
 
 jar {
-	from(project(':core').sourceSets.main.output)
 	inputs.property "archivesName", project.base.archivesName
 
 	archiveVersion = artifactVersion
@@ -157,7 +156,6 @@ jar {
 }
 
 tasks.named("sourcesJar") {
-	from(project(':core').sourceSets.main.allSource)
 	archiveVersion = artifactVersion
 }
 

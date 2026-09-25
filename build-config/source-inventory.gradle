@@ -2,7 +2,7 @@ import groovy.json.JsonOutput
 import java.security.MessageDigest
 
 def repositoryRoot = rootProject.file('../..').canonicalFile.toPath()
-def inventorySources = [sourceSets.main, project(':core').sourceSets.main]
+def inventorySources = [sourceSets.main] + sharedProjects.collect { it.sourceSets.main }
 def inventoryFile = layout.buildDirectory.file('source-inventory.json')
 tasks.register('sourceInventory') {
     inputs.files(inventorySources.collect { it.allJava })

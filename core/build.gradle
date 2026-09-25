@@ -17,12 +17,25 @@ tasks.withType(JavaCompile).configureEach {
 }
 
 dependencies {
+    testImplementation project('rendering')
+    testImplementation project('legacy')
     // Minecraft supplies Gson; compile against the oldest supported runtime API.
     compileOnly 'com.google.code.gson:gson:2.2.4'
     testImplementation 'com.google.code.gson:gson:2.2.4'
     testImplementation platform('org.junit:junit-bom:5.10.2')
     testImplementation 'org.junit.jupiter:junit-jupiter'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+subprojects {
+    apply plugin: 'java-library'
+    java {
+        sourceCompatibility = JavaVersion.VERSION_1_8
+        targetCompatibility = JavaVersion.VERSION_1_8
+        withSourcesJar()
+    }
+    tasks.withType(JavaCompile).configureEach { options.release = 8 }
+    dependencies { implementation project.parent }
 }
 
 sourceSets.test.java.srcDir 'src/testSupport/java'

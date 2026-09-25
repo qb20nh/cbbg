@@ -1,0 +1,15 @@
+// One dependency list supplies compilation, binary packaging and source packaging.
+sharedProjects.each { shared ->
+    evaluationDependsOn(shared.path)
+    dependencies.add('implementation', shared)
+}
+tasks.named('checkPackages') {
+    sharedSources.from(sharedProjects.collect { it.sourceSets.main.java.srcDirs })
+}
+tasks.withType(Jar).configureEach {
+    if (name in ['jar', 'parityCandidateJar']) {
+        from(sharedProjects.collect { it.sourceSets.main.output })
+    } else if (name == 'sourcesJar') {
+        from(sharedProjects.collect { it.sourceSets.main.allSource })
+    }
+}

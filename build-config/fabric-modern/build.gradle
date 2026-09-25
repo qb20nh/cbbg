@@ -20,7 +20,8 @@ group = modProperties.maven_group
 base.archivesName = modProperties.archives_base_name
 layout.buildDirectory = new File(repositoryRoot, "build/targets/${targetId}")
 
-evaluationDependsOn(':core')
+ext.sharedProjects = [project(':core'), project(':core:rendering')]
+apply from: new File(repositoryRoot, 'build-config/shared-code.gradle')
 
 repositories {
     mavenCentral()
@@ -37,7 +38,6 @@ dependencies {
     minecraft "com.mojang:minecraft:${target.minecraft}"
     implementation "net.fabricmc:fabric-loader:${target.dependencies.loader}"
     implementation "net.fabricmc.fabric-api:fabric-api:${target.dependencies.fabricApi}"
-    implementation project(':core')
     compileOnly("com.terraformersmc:modmenu:${target.dependencies.modMenu}") { transitive = false }
     if (testCompat.tokenize('+').contains('modmenu')) {
         runtimeOnly("com.terraformersmc:modmenu:${target.dependencies.modMenu}") { transitive = false }
@@ -162,7 +162,6 @@ if (usesTextureFormat) {
 sourceSets.gametest.java.source(sharedClientTests)
 
 tasks.named('jar') {
-    from(project(':core').sourceSets.main.output)
     from(new File(repositoryRoot, 'LICENSE'))
     // Source generation is useful before an adapter exists, but an empty adapter
     // must never produce a plausible distribution artifact.
@@ -204,7 +203,6 @@ apply from: new File(repositoryRoot, 'build-config/source-inventory.gradle')
 
 tasks.named('sourcesJar') {
     dependsOn tasks.named('sourceInventory')
-    from(project(':core').sourceSets.main.allSource)
 }
 
 // Minecraft 26.x uses published names in production; these artifacts need no remap.
@@ -212,7 +210,6 @@ tasks.named('sourcesJar') {
 def parityCandidateJar = tasks.register('parityCandidateJar', Jar) {
     archiveClassifier = 'parity-candidate'
     from sourceSets.main.output
-    from project(':core').sourceSets.main.output
     from new File(repositoryRoot, 'LICENSE')
 }
 def parityDriverJar = tasks.register('parityDriverJar', Jar) {

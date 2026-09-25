@@ -29,4 +29,7 @@ gradle.beforeProject { project ->
 
 rootProject.name = 'cbbg'
 include 'core'
+include 'core:rendering', 'core:legacy'
 project(':core').projectDir = file('../../core')
+project(':core:rendering').projectDir = file('../../core/rendering')
+project(':core:legacy').projectDir = file('../../core/legacy')

@@ -82,6 +82,32 @@ class PackageChecksTest {
         assertEquals([java_sources: 1], result.sources)
     }
 
+    @Test void selectedSharedModulesKeepTheJava8Requirement() {
+        Map s = specimen()
+        File helper = new File(root, 'core/rendering/src/main/java/example/Helper.java')
+        helper.parentFile.mkdirs()
+        helper.bytes = 'package example; class Helper {}'.bytes
+        s.sourceEntries['example/Helper.java'] = helper.bytes
+        archive(s.sources, s.sourceEntries)
+        s.inventory.sources.add([archive_path: 'example/Helper.java',
+                source_path: 'core/rendering/src/main/java/example/Helper.java', sha256: hash(helper.bytes)])
+        s.inventoryFile.bytes = json(s.inventory)
+        for (int major : [52, 69]) {
+            s.binary['example/Helper.class'] = header(major)
+            archive(s.artifact, s.binary)
+            Map record = [artifact: reference(s.artifact), sources: reference(s.sources),
+                          source_inventory: reference(s.inventoryFile)]
+            if (major == 52) {
+                assertEquals(2, PackageChecks.verifyCandidatePackage(root, record, s.target, '1.4.0', root)
+                        .packaging.core_classes)
+            } else {
+                fails('Core class is not Java 8') {
+                    PackageChecks.verifyCandidatePackage(root, record, s.target, '1.4.0', root)
+                }
+            }
+        }
+    }
+
     @Test
     void bytecodeAndCoreSourceFailuresAreRejected() {
         Map s = specimen()
