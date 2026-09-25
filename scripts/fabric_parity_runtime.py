@@ -36,7 +36,10 @@ def java_identity(executable):
                 'libjvm': home / 'lib/server/libjvm.so'}.items()}}
 
 
-def restart_state(game):
+def restart_state(game, shader='iris'):
+    if shader == 'sulkan':
+        return {name: digest(game / name) for name in
+                ('config/cbbg.json', 'config/sulkan-shaders.json')}
     settings = [game / 'config/cbbg.json', game / 'config/iris.properties']
     pack = sorted((game / 'shaderpacks/cbbg-parity').rglob('*'))
     files = settings + [path for path in pack if path.is_file()]
@@ -88,9 +91,15 @@ def main():
     if args.dsa_mode and (args.backend != 'opengl'
                          or 'com.qb20nh.cbbg.gametest.DsaBenchmarkGameTest' not in expected):
         parser.error('DSA selection requires the OpenGL benchmark driver')
-    if args.restart_phase and (args.backend != 'opengl' or
-            expected != ['com.qb20nh.cbbg.gametest.IrisRestartGameTest']):
-        parser.error('Restart phases require the dedicated OpenGL Iris restart driver')
+    restart_shader = None
+    if args.restart_phase:
+        drivers = {
+            ('opengl', 'com.qb20nh.cbbg.gametest.IrisRestartGameTest'): 'iris',
+            ('vulkan', 'com.qb20nh.cbbg.gametest.SulkanRestartGameTest'): 'sulkan',
+        }
+        restart_shader = drivers.get((args.backend, expected[0])) if len(expected) == 1 else None
+        if restart_shader is None:
+            parser.error('Restart phases require the dedicated Iris/OpenGL or Sulkan/Vulkan driver')
 
     runtime = args.runtime.resolve()
     game = args.game_dir.resolve()
@@ -171,7 +180,7 @@ def main():
         for name, expected_hash in previous['evidence'].items():
             if digest(game / name) != expected_hash:
                 raise ValueError('Restart prepare evidence changed: ' + name)
-        state = restart_state(game)
+        state = restart_state(game, restart_shader)
         if state != previous['persistedState']:
             raise ValueError('Restart persisted state changed')
         receipt['prepareReceiptSha256'] = digest(previous_path)
@@ -200,7 +209,7 @@ def main():
         receipt['graphics']['contextProfile'] = context.get('profile')
         receipt['scenarios'] = scenarios
         if args.restart_phase:
-            receipt['persistedState'] = restart_state(game)
+            receipt['persistedState'] = restart_state(game, restart_shader)
     except Exception as failure:
         receipt['failure'] = {'type': type(failure).__name__, 'message': str(failure)}
         raise

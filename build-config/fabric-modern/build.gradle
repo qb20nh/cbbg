@@ -223,6 +223,7 @@ def parityDriverJar = tasks.register('parityDriverJar', Jar) {
 if (target.renderer == 'renderpearl') {
     [irisRestart: ['IrisRestartGameTest'],
      sulkan: ['SulkanGameTest'],
+     sulkanRestart: ['SulkanRestartGameTest'],
      maximumNoiseCache: ['Rgba8ReadbackGameTest', 'MaximumNoiseCacheGameTest'],
      worldPixels: ['Rgba8ReadbackGameTest', 'WorldPixelsGameTest'],
      worldControl: ['Rgba8ReadbackGameTest', 'WorldControlGameTest'],
@@ -253,6 +254,7 @@ if (target.renderer == 'renderpearl') {
         tasks.register("${fixture}DriverJar", Jar) {
             archiveClassifier = [irisRestart: 'iris-restart-driver',
                                  sulkan: 'sulkan-driver',
+                                 sulkanRestart: 'sulkan-restart-driver',
                                  maximumNoiseCache: 'maximum-noise-cache-driver',
                                  worldPixels: 'world-pixels-driver',
                                  worldControl: 'world-control-driver',
