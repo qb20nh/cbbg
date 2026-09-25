@@ -1,2 +1,6 @@
+pluginManagement {
+    includeBuild('../build-logic')
+}
+
 rootProject.name = 'cbbg-core'
 include 'rendering', 'legacy'

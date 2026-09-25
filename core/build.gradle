@@ -1,5 +1,6 @@
 plugins {
     id 'java-library'
+    id 'cbbg.private-gson'
 }
 
 repositories {
@@ -19,9 +20,8 @@ tasks.withType(JavaCompile).configureEach {
 dependencies {
     testImplementation project('rendering')
     testImplementation project('legacy')
-    // Minecraft supplies Gson; compile against the oldest supported runtime API.
-    compileOnly 'com.google.code.gson:gson:2.2.4'
-    testImplementation 'com.google.code.gson:gson:2.2.4'
+    // Reference Gson remains available only to compare the private streaming codec in tests.
+    testImplementation "com.google.code.gson:gson:${providers.gradleProperty('testGsonVersion').getOrElse('2.2.4')}"
     testImplementation platform('org.junit:junit-bom:5.10.2')
     testImplementation 'org.junit.jupiter:junit-jupiter'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'

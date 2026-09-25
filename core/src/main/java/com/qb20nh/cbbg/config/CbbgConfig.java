@@ -1,10 +1,12 @@
 package com.qb20nh.cbbg.config;
 
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
-import com.google.gson.JsonParseException;
+import com.qb20nh.cbbg.internal.gson.stream.JsonReader;
+import com.qb20nh.cbbg.internal.gson.stream.JsonToken;
+import com.qb20nh.cbbg.internal.gson.stream.JsonWriter;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
+import java.io.EOFException;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -57,7 +59,6 @@ public final class CbbgConfig {
         }
     }
 
-    private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static Path path;
     private static BiConsumer<String, Throwable> warning;
 
@@ -194,11 +195,8 @@ public final class CbbgConfig {
         }
 
         try (BufferedReader reader = Files.newBufferedReader(path, StandardCharsets.UTF_8)) {
-            DiskModel model = GSON.fromJson(reader, DiskModel.class);
-            float strength = model.strength == null ? 1.0f : model.strength.floatValue();
-            return new CbbgConfig(model.mode, model.pixelFormat, model.stbnSize, model.stbnDepth,
-                    model.stbnSeed, strength, model.notifyChat, model.notifyToast);
-        } catch (JsonParseException e) {
+            return read(reader);
+        } catch (ParseFailure e) {
             warning.accept("Failed to parse " + path + " (resetting to defaults).", e);
             CbbgConfig cfg = new CbbgConfig(Mode.ENABLED);
             save(path, cfg, warning);
@@ -217,16 +215,19 @@ public final class CbbgConfig {
         try {
             Files.createDirectories(path.toAbsolutePath().getParent());
             try (BufferedWriter writer = Files.newBufferedWriter(path, StandardCharsets.UTF_8)) {
-                DiskModel model = new DiskModel();
-                model.mode = cfg.mode();
-                model.pixelFormat = cfg.pixelFormat();
-                model.stbnSize = cfg.stbnSize();
-                model.stbnDepth = cfg.stbnDepth();
-                model.stbnSeed = cfg.stbnSeed();
-                model.strength = cfg.strength();
-                model.notifyChat = cfg.notifyChat();
-                model.notifyToast = cfg.notifyToast();
-                GSON.toJson(model, writer);
+                JsonWriter json = new JsonWriter(writer);
+                json.setIndent("  ");
+                json.setHtmlSafe(true);
+                json.beginObject();
+                json.name("mode").value(cfg.mode().name());
+                json.name("pixelFormat").value(cfg.pixelFormat().name());
+                json.name("stbnSize").value(cfg.stbnSize());
+                json.name("stbnDepth").value(cfg.stbnDepth());
+                json.name("stbnSeed").value(cfg.stbnSeed());
+                json.name("strength").value(Float.valueOf(cfg.strength()));
+                json.name("notifyChat").value(cfg.notifyChat());
+                json.name("notifyToast").value(cfg.notifyToast());
+                json.endObject();
             }
         } catch (Exception e) {
             warning.accept("Failed to write " + path + ".", e);
@@ -240,16 +241,135 @@ public final class CbbgConfig {
         return Math.min(4.0f, Math.max(0.5f, strength));
     }
 
-    private static final class DiskModel {
-        Mode mode;
-        PixelFormat pixelFormat;
-        int stbnSize = 128;
-        int stbnDepth = 64;
-        long stbnSeed = 0;
-        Float strength;
-        boolean notifyChat = true;
-        boolean notifyToast = true;
+    private static CbbgConfig read(BufferedReader input) throws IOException {
+        JsonReader json = new JsonReader(input);
+        json.setLenient(true);
+        try {
+            // Gson's fromJson returns null for an empty document, which the old load path
+            // reports as a read failure rather than resetting the file.
+            try {
+                json.peek();
+            } catch (EOFException e) {
+                throw new EmptyDocument(e);
+            }
+            if (json.peek() == JsonToken.NULL) {
+                json.nextNull();
+                throw new EmptyDocument(null);
+            }
+
+            Mode mode = null;
+            PixelFormat pixelFormat = null;
+            int stbnSize = 128;
+            int stbnDepth = 64;
+            long stbnSeed = 0;
+            float strength = 1.0f;
+            boolean notifyChat = true;
+            boolean notifyToast = true;
+
+            json.beginObject();
+            while (json.hasNext()) {
+                String name = json.nextName();
+                if ("mode".equals(name)) {
+                    if (json.peek() == JsonToken.NULL) {
+                        json.nextNull();
+                        mode = null;
+                    } else {
+                        mode = modeValue(json.nextString());
+                    }
+                } else if ("pixelFormat".equals(name)) {
+                    if (json.peek() == JsonToken.NULL) {
+                        json.nextNull();
+                        pixelFormat = null;
+                    } else {
+                        pixelFormat = pixelFormatValue(json.nextString());
+                    }
+                } else if ("stbnSize".equals(name)) {
+                    if (json.peek() == JsonToken.NULL) json.nextNull();
+                    else stbnSize = readInt(json);
+                } else if ("stbnDepth".equals(name)) {
+                    if (json.peek() == JsonToken.NULL) json.nextNull();
+                    else stbnDepth = readInt(json);
+                } else if ("stbnSeed".equals(name)) {
+                    if (json.peek() == JsonToken.NULL) json.nextNull();
+                    else stbnSeed = readLong(json);
+                } else if ("strength".equals(name)) {
+                    if (json.peek() == JsonToken.NULL) {
+                        json.nextNull();
+                        strength = 1.0f;
+                    } else {
+                        strength = (float) json.nextDouble();
+                    }
+                } else if ("notifyChat".equals(name)) {
+                    if (json.peek() == JsonToken.NULL) json.nextNull();
+                    else notifyChat = readBoolean(json);
+                } else if ("notifyToast".equals(name)) {
+                    if (json.peek() == JsonToken.NULL) json.nextNull();
+                    else notifyToast = readBoolean(json);
+                } else {
+                    json.skipValue();
+                }
+            }
+            json.endObject();
+            // Gson checks for trailing content with lenient mode restored to false.
+            json.setLenient(false);
+            if (json.peek() != JsonToken.END_DOCUMENT) {
+                throw new TrailingContent();
+            }
+            return new CbbgConfig(mode, pixelFormat, stbnSize, stbnDepth, stbnSeed, strength,
+                    notifyChat, notifyToast);
+        } catch (EmptyDocument | TrailingContent e) {
+            throw e;
+        } catch (IOException | IllegalStateException e) {
+            throw new ParseFailure(e);
+        }
     }
+
+    private static int readInt(JsonReader json) throws IOException {
+        try {
+            return json.nextInt();
+        } catch (NumberFormatException e) {
+            throw new ParseFailure(e);
+        }
+    }
+
+    private static long readLong(JsonReader json) throws IOException {
+        try {
+            return json.nextLong();
+        } catch (NumberFormatException e) {
+            throw new ParseFailure(e);
+        }
+    }
+
+    private static boolean readBoolean(JsonReader json) throws IOException {
+        if (json.peek() == JsonToken.STRING) {
+            return Boolean.parseBoolean(json.nextString());
+        }
+        return json.nextBoolean();
+    }
+
+    private static Mode modeValue(String name) {
+        for (Mode value : Mode.values()) {
+            if (value.name().equals(name)) return value;
+        }
+        return null;
+    }
+
+    private static PixelFormat pixelFormatValue(String name) {
+        for (PixelFormat value : PixelFormat.values()) {
+            if (value.name().equals(name)) return value;
+        }
+        return null;
+    }
+
+    private static final class ParseFailure extends RuntimeException {
+        ParseFailure(Throwable cause) { super(cause); }
+    }
+
+    private static final class EmptyDocument extends RuntimeException {
+        EmptyDocument(Throwable cause) { super(cause); }
+    }
+
+    private static final class TrailingContent extends RuntimeException {}
 
     public Mode mode() { return mode; }
     public PixelFormat pixelFormat() { return pixelFormat; }

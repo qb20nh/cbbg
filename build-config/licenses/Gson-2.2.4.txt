@@ -1,0 +1,8 @@
+Gson 2.2.4 streaming parser
+Copyright 2008 Google Inc.
+
+The binary streaming parser in this mod is generated from
+com.google.code.gson:gson:2.2.4 and redistributed under the Apache License,
+Version 2.0. The accompanying Apache-2.0.txt contains the license text.
+The source distribution contains gson-2.2.4-sources.jar, private-gson.map
+for the fixed public streaming names, and mapping.txt for all relocations.

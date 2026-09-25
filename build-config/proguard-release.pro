@@ -2,18 +2,15 @@
 # Other loaders need their own entrypoint and reflection rules when implemented.
 # Fabric metadata and Mixin JSON refer to these binary names at runtime.
 -keep class com.qb20nh.cbbg.CbbgEarlyInit { *; }
+-keep class com.qb20nh.cbbg.CbbgLanguageAdapter { *; }
 -keep class com.qb20nh.cbbg.CbbgClient { *; }
 -keep class com.qb20nh.cbbg.compat.modmenu.CbbgModMenuApi { *; }
 -keep class com.qb20nh.cbbg.mixin.** { *; }
 
-# Gson constructs this private model and reads/writes its field names reflectively.
--keepclassmembers class com.qb20nh.cbbg.config.CbbgConfig$DiskModel {
+# JsonReader's Gson 2.2.4 compatibility bridge has a constructor that only
+# calls its empty superclass constructor. Preserve constructor semantics.
+-assumenoexternalsideeffects class com.qb20nh.cbbg.internal.gson.stream.JsonReader$1 {
     <init>();
-    <fields>;
-}
--keepclassmembers enum com.qb20nh.cbbg.config.CbbgConfig$* { *; }
--keepclassmembers class * {
-    @com.google.gson.annotations.SerializedName <fields>;
 }
 
 # Preserve Java 25 structural metadata, runtime annotations, and source positions for Retrace.

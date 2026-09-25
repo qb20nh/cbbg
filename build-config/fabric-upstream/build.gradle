@@ -13,7 +13,7 @@ layout.buildDirectory = new File(repositoryRoot, 'build')
 apply from: new File(repositoryRoot, 'build-config/local-runtime.gradle')
 apply from: new File(repositoryRoot, 'build-config/upstream-packaging.gradle')
 
-ext.sharedProjects = [project(':core')]
+ext.sharedProjects = [project(':core'), project(':core:rendering')]
 apply from: new File(repositoryRoot, 'build-config/shared-code.gradle')
 
 // Single source of truth for the mod version across:
@@ -38,7 +38,6 @@ repositories {
 	// Loom adds the essential maven repositories to download Minecraft and libraries from automatically.
 	// See https://docs.gradle.org/current/userguide/declaring_repositories.html
 	// for more information about repositories.
-	maven { url = "https://maven.florianmichael.de/releases" }
 	maven {
 		url = "https://api.modrinth.com/maven"
 		content { includeGroup "maven.modrinth" }
@@ -54,8 +53,6 @@ dependencies {
 	minecraft "com.mojang:minecraft:${project.minecraft_version}"
 	implementation "net.fabricmc:fabric-loader:${project.loader_version}"
 	implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
-	implementation "de.florianmichael:AsmFabricLoader:2.0.1"
-	include "de.florianmichael:AsmFabricLoader:2.0.1"
 
     implementation "com.terraformersmc:modmenu:${project.modmenu_version}"
     localRuntime "com.terraformersmc:modmenu:${project.modmenu_version}"
@@ -95,6 +92,7 @@ if (providers.gradleProperty("testRenderScale").isPresent()) {
 }
 
 processResources {
+	exclude 'licenses/LICENSE_AsmFabricLoader.txt'
 	inputs.property "version", project.version
 	inputs.property "minecraft_version", project.minecraft_version
 
@@ -349,6 +347,30 @@ if (modrinthUploadFilePath != null) {
 	}
 } else {
     tasks.named("modrinth") { dependsOn tasks.named('optimizeReleaseJar') }
+}
+
+def earlyStartupMetadata = tasks.register('earlyStartupMetadata') {
+    def output = layout.buildDirectory.dir('generated/early-startup-driver')
+    outputs.dir(output)
+    doLast {
+        File metadata = new File(output.get().asFile, 'fabric.mod.json')
+        metadata.parentFile.mkdirs()
+        metadata.text = groovy.json.JsonOutput.toJson([
+            schemaVersion: 1, id: 'cbbg-early-startup-test', version: '1.0.0', environment: 'client',
+            entrypoints: ['fabric-client-gametest': ['com.qb20nh.cbbg.gametest.EarlyStartupGameTest']],
+            mixins: ['cbbg-early-startup-test.mixins.json']
+        ])
+        new File(metadata.parentFile, 'cbbg-early-startup-test.mixins.json').text = groovy.json.JsonOutput.toJson([
+            required: true, package: 'com.qb20nh.cbbg.gametest.mixin', compatibilityLevel: 'JAVA_25',
+            client: ['EarlyRenderPassMixin'], injectors: [defaultRequire: 1]
+        ])
+    }
+}
+tasks.register('earlyStartupDriverJar', Jar) {
+    archiveClassifier = 'early-startup-driver'
+    dependsOn tasks.named('gametestClasses'), earlyStartupMetadata
+    from(sourceSets.gametest.output) { exclude 'fabric.mod.json' }
+    from(earlyStartupMetadata)
 }
 
 // configure the maven publication

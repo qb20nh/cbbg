@@ -26,6 +26,10 @@ gradlePlugin {
             id = 'cbbg.packaging'
             implementationClass = 'cbbg.gradle.PackagingPlugin'
         }
+        privateGson {
+            id = 'cbbg.private-gson'
+            implementationClass = 'cbbg.gradle.PrivateGsonPlugin'
+        }
         release {
             id = 'cbbg.release'
             implementationClass = 'cbbg.gradle.ReleasePlugin'

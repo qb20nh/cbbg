@@ -32,20 +32,15 @@ tasks.named('optimizeReleaseJar') { dependsOn tasks.named('jar') }
 package com.qb20nh.cbbg;
 public class CbbgClient {
     public static void main(String[] args) throws Exception {
-        var constructor = Class.forName("com.qb20nh.cbbg.config.CbbgConfig$DiskModel")
-            .getDeclaredConstructor();
-        constructor.setAccessible(true);
-        Object model = constructor.newInstance();
-        var field = model.getClass().getDeclaredField("value");
-        field.setAccessible(true);
-        System.out.println(com.qb20nh.cbbg.internal.Useful.live() + ":" + field.get(model));
+        System.out.println(com.qb20nh.cbbg.internal.Useful.live() + ":"
+            + com.qb20nh.cbbg.config.CbbgConfig.value());
     }
 }
 ''')
         write('src/main/java/com/qb20nh/cbbg/config/CbbgConfig.java', '''
 package com.qb20nh.cbbg.config;
 public class CbbgConfig {
-    private static class DiskModel { String value = "ok"; }
+    public static String value() { return "ok"; }
 }
 ''')
         write('src/main/java/com/qb20nh/cbbg/internal/Useful.java', '''

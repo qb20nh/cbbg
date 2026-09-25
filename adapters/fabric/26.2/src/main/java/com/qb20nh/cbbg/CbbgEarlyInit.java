@@ -2,13 +2,17 @@ package com.qb20nh.cbbg;
 
 import com.qb20nh.cbbg.config.CbbgConfig;
 import com.qb20nh.cbbg.render.stbn.STBNGenerator;
-import de.florianmichael.asmfabricloader.api.event.PrePrePreLaunchEntrypoint;
 import net.fabricmc.loader.api.FabricLoader;
+import net.fabricmc.loader.api.entrypoint.PreLaunchEntrypoint;
 
-public class CbbgEarlyInit implements PrePrePreLaunchEntrypoint {
+public class CbbgEarlyInit implements PreLaunchEntrypoint {
 
     @Override
-    public void onLanguageAdapterLaunch() {
+    public void onPreLaunch() {
+        startPreparation();
+    }
+
+    static void startPreparation() {
         configureSettings();
         CbbgConfig cfg = CbbgConfig.get();
         STBNGenerator.generateAsync(cfg.stbnSize(), cfg.stbnSize(), cfg.stbnDepth(),

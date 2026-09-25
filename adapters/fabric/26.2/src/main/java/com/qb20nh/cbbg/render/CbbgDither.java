@@ -312,7 +312,7 @@ public final class CbbgDither {
 
             // Start generation
             STBNGenerator.generateAsync(cfg.stbnSize(), cfg.stbnSize(), cfg.stbnDepth(),
-                    cfg.stbnSeed());
+                    cfg.stbnSeed(), true);
             isGenerating = true;
 
             // Notify
@@ -338,6 +338,10 @@ public final class CbbgDither {
     }
 
     public static void ensureStbnLoaded() {
+        CbbgConfig cfg = CbbgConfig.get();
+        if (!STBNGenerator.matches(cfg.stbnSize(), cfg.stbnSize(), cfg.stbnDepth(), cfg.stbnSeed())) {
+            initAsync();
+        }
         CompletableFuture<STBNGenerator.STBNFields> pendingGen = STBNGenerator.get();
         if (pendingGen != null && pendingGen.isDone() && !pendingGen.isCancelled()
                 && pendingGen != processedGeneration) {
