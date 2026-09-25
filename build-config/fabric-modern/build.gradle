@@ -237,12 +237,18 @@ tasks.named('sourcesJar') {
 
 // Minecraft 26.x uses published names in production; these artifacts need no remap.
 // Keep local candidate testing separate from the distribution readiness gate.
-def parityCandidateJar = tasks.register('parityCandidateJar', Copy) {
+def parityCandidateFile = layout.buildDirectory.file(
+        "libs/${base.archivesName.get()}-${project.version}-parity-candidate.jar")
+def parityCandidateJar = tasks.register('parityCandidateJar') {
     dependsOn tasks.named('optimizeReleaseJar')
-    from(releaseOptimization.outputJar) {
-        rename { "${base.archivesName.get()}-${project.version}-parity-candidate.jar" }
+    inputs.file(releaseOptimization.outputJar)
+    outputs.file(parityCandidateFile)
+    doLast {
+        def destination = parityCandidateFile.get().asFile
+        destination.parentFile.mkdirs()
+        java.nio.file.Files.copy(releaseOptimization.outputJar.get().asFile.toPath(),
+                destination.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING)
     }
-    into layout.buildDirectory.dir('libs')
 }
 def parityDriverJar = tasks.register('parityDriverJar', Jar) {
     archiveClassifier = 'parity-driver'

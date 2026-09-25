@@ -120,6 +120,8 @@ def main():
 
     runtime = args.runtime.resolve()
     game = args.game_dir.resolve()
+    display_jvm_arguments = ['-DMC_DEBUG_ENABLED=true',
+                             '-DMC_DEBUG_PREFER_WAYLAND=' + str(bool(args.wayland_display)).lower()]
     evidence = game / ('evidence-' + args.restart_phase if args.restart_phase else 'evidence')
     log_path = game / (args.restart_phase + '-launch.log' if args.restart_phase else 'launch.log')
     receipt_path = game / (args.restart_phase + '-probe.json' if args.restart_phase else 'probe.json')
@@ -127,7 +129,7 @@ def main():
     command = get_minecraft_command(identity, str(runtime), {
         'username': 'CbbgParity', 'uuid': '00000000000000000000000000000001', 'token': '0',
         'executablePath': str(args.java.resolve()), 'gameDirectory': str(game),
-        'jvmArguments': ['-Xmx2G', '-Dfabric.client.gametest',
+        'jvmArguments': ['-Xmx2G', *display_jvm_arguments, '-Dfabric.client.gametest',
                         '-Dcbbg.test.dsa=' + (args.dsa_mode or 'auto'),
                         '-Dcbbg.test.restart=' + (args.restart_phase or ''),
                         '-Dfabric.client.gametest.modid=cbbg-renderer-test',

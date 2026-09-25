@@ -69,7 +69,11 @@ class LauncherFailureTests(unittest.TestCase):
         stack.enter_context(patch.object(launcher, 'version', return_value='8.0'))
         # Isolate client execution, not receipt writing or scenario validation.
         command_module = types.ModuleType('minecraft_launcher_lib.command')
-        command_module.get_minecraft_command = lambda *args: ['java', 'fixture.Main']
+        self.launch_options = None
+        def get_minecraft_command(*args):
+            self.launch_options = args[2]
+            return ['java', 'fixture.Main']
+        command_module.get_minecraft_command = get_minecraft_command
         stack.enter_context(patch.dict(sys.modules, {
             'minecraft_launcher_lib': types.ModuleType('minecraft_launcher_lib'),
             'minecraft_launcher_lib.command': command_module}))
@@ -83,6 +87,23 @@ class LauncherFailureTests(unittest.TestCase):
 
     def receipt(self):
         return json.loads((self.game / 'probe.json').read_text())
+
+    def test_x11_launch_prefers_x11_in_minecraft(self):
+        self.run.side_effect = subprocess.TimeoutExpired(['java'], 240)
+        with self.assertRaises(subprocess.TimeoutExpired):
+            launcher.main()
+        self.assertIn('-DMC_DEBUG_ENABLED=true', self.launch_options['jvmArguments'])
+        self.assertIn('-DMC_DEBUG_PREFER_WAYLAND=false', self.launch_options['jvmArguments'])
+
+    def test_wayland_launch_prefers_wayland_in_minecraft(self):
+        args = [arg for arg in sys.argv if arg not in ('--x-display', ':99')]
+        args.extend(['--wayland-display', 'wayland-7'])
+        with patch.object(sys, 'argv', args):
+            self.run.side_effect = subprocess.TimeoutExpired(['java'], 240)
+            with self.assertRaises(subprocess.TimeoutExpired):
+                launcher.main()
+        self.assertIn('-DMC_DEBUG_ENABLED=true', self.launch_options['jvmArguments'])
+        self.assertIn('-DMC_DEBUG_PREFER_WAYLAND=true', self.launch_options['jvmArguments'])
 
     def test_timeout_is_recorded_without_success(self):
         self.run.side_effect = subprocess.TimeoutExpired(['java'], 240)
