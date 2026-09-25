@@ -1,5 +1,6 @@
 """Check a Fabric candidate's packaging, metadata and source inventory."""
 
+import argparse
 import json
 from pathlib import Path, PurePosixPath
 import zipfile
@@ -7,6 +8,23 @@ import zipfile
 
 class FabricPackageError(ValueError):
     pass
+
+
+def verify_candidate(manifest_path, target_id, source_root):
+    from candidate_manifest import client_candidate
+    from parity_evidence import digest
+
+    manifest_path = Path(manifest_path)
+    manifest, target, specification = client_candidate(manifest_path, target_id)
+    version = manifest['release'][1:] + '+mc' + specification['minecraft'] + '-fabric'
+    checks = verify_candidate_package(manifest_path.parent, target, specification,
+                                      version, source_root)
+    return {'target': target_id, 'manifest_sha256': digest(manifest_path),
+            'source_commit': manifest['commit'], 'release': manifest['release'],
+            'artifact_sha256': target['artifact']['sha256'],
+            'sources_sha256': target['sources']['sha256'],
+            'source_inventory_sha256': target['source_inventory']['sha256'],
+            'checks': checks, 'releaseAcceptance': False}
 
 
 def verify_candidate_package(base, target, specification, version, source_root):
@@ -110,3 +128,21 @@ def verify_fabric_metadata(artifact, target, version):
                 read_json(config['refmap'])
             count += declared
         return {'declared_classes': count, 'mixin_configs': len(mixins)}
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--candidate', type=Path, required=True)
+    parser.add_argument('--target', required=True)
+    parser.add_argument('--source-root', type=Path, required=True,
+                        help='Source checkout matching the candidate inventory')
+    args = parser.parse_args()
+    try:
+        result = verify_candidate(args.candidate, args.target, args.source_root)
+    except (ValueError, KeyError, TypeError, OSError, zipfile.BadZipFile) as error:
+        parser.error(str(error))
+    print(json.dumps(result, indent=2))
+
+
+if __name__ == '__main__':
+    main()

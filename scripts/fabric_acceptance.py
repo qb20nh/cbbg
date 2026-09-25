@@ -7,8 +7,8 @@ import re
 import zipfile
 
 from fabric_run_evidence import verify_run, verify_restart
-from parity_evidence import (EvidenceError, catalog_digest, checked_file, digest, read_json,
-                             selected_target_specs, unique_by, validate_release_identity)
+from candidate_manifest import client_candidate
+from parity_evidence import EvidenceError, checked_file, digest, read_json, unique_by
 from targets import load_catalog, select_targets
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -106,25 +106,11 @@ def verify_results(index_path, target, contract_path, driver_hashes, *, metadata
 
 def verify_candidate_results(manifest_path, target_id, index_path):
     manifest_path = Path(manifest_path)
-    manifest = read_json(manifest_path)
-    if type(manifest.get('schema')) is not int or manifest['schema'] != 2:
-        raise EvidenceError('Client result validation requires candidate schema 2')
-    validate_release_identity(manifest['release'], manifest['commit'])
-    targets = unique_by(manifest['targets'], lambda item: item['id'], 'candidate target')
-    if target_id not in targets:
-        raise EvidenceError('Target is absent from candidate')
-    target = targets[target_id]
+    manifest, target, specification = client_candidate(manifest_path, target_id)
     base = manifest_path.parent
-    checked_file(base, target['artifact'])
-    checked_file(base, target['sources'])
     tests = target['client_tests']
     files = {kind: checked_file(base, tests[kind]) for kind in
              ('catalog', 'contract', 'ordinary_metadata', 'runtime_lock', 'dependency_lock')}
-    catalog = load_catalog(files['catalog'])
-    selected = selected_target_specs(catalog, manifest['selected_targets'])
-    if targets.keys() != selected.keys() or manifest['catalog_sha256'] != catalog_digest(catalog):
-        raise EvidenceError('Candidate catalog or target selection differs')
-    specification = selected[target_id]
     for suite, reference in tests['drivers'].items():
         checked_file(base, reference)
     result = verify_results(index_path, specification, files['contract'],

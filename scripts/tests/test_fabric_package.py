@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 import tempfile
 import struct
+import subprocess
 import sys
 import unittest
 import warnings
@@ -165,9 +166,37 @@ class FabricPackageTest(unittest.TestCase):
         result = verify_candidate_package(root, target, self.target, '1.4.0', root)
         self.assertEqual(result['sources']['java_sources'], 1)
         self.assertEqual(result['packaging']['core_classes'], 1)
+
+        from parity_evidence import catalog_digest
+        from targets import load_catalog
+        catalog = load_catalog()
+        catalog_file = root / 'catalog.json'
+        catalog_file.write_text(json.dumps(catalog))
+        self.metadata['version'] = '1.4.0+mc26.3-fabric'
+        entries['fabric.mod.json'] = json.dumps(self.metadata).encode()
+        with zipfile.ZipFile(self.jar, 'w') as archive:
+            for name, data in entries.items():
+                archive.writestr(name, data)
+        target.update(id='26.3-fabric', artifact=reference(self.jar),
+                      client_tests={'catalog': reference(catalog_file)})
+        manifest = root / 'candidate.json'
+        manifest.write_text(json.dumps({
+            'schema': 2, 'release': 'v1.4.0', 'commit': 'a' * 40,
+            'selected_targets': ['26.3-fabric'], 'catalog_sha256': catalog_digest(catalog),
+            'targets': [target]}))
+        command = [sys.executable, str(Path(__file__).resolve().parents[1] / 'fabric_package.py'),
+                   '--candidate', str(manifest), '--target', '26.3-fabric', '--source-root', str(root)]
+        completed = subprocess.run(command, text=True, capture_output=True, timeout=10)
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        report = json.loads(completed.stdout)
+        self.assertEqual(report['checks']['sources']['java_sources'], 1)
+        self.assertFalse(report['releaseAcceptance'])
         inventory.write_text('{}')
         with self.assertRaises(ValueError):
-            verify_candidate_package(root, target, self.target, '1.4.0', root)
+            verify_candidate_package(root, target, self.target, self.metadata['version'], root)
+        completed = subprocess.run(command, text=True, capture_output=True, timeout=10)
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertIn('Changed evidence file', completed.stderr)
 
 
 if __name__ == '__main__':
