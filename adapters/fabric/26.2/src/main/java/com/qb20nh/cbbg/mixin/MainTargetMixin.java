@@ -39,17 +39,19 @@ public abstract class MainTargetMixin {
         GpuTexture texture = null;
         GpuOutOfMemoryException oom = null;
         Exception failure = null;
+        boolean isOpenGl = MainTargetFormatSupport.isOpenGl();
 
-        GlFormatOverride.pushMainTargetColor();
+        if (isOpenGl) GlFormatOverride.pushMainTargetColor();
         try {
-            texture = device.createTexture(label, usage, format, width, height, depthOrLayers,
+            texture = device.createTexture(label, usage,
+                    isOpenGl ? format : MainTargetFormatSupport.toGpuFormat(effective), width, height, depthOrLayers,
                     mipLevels);
         } catch (GpuOutOfMemoryException e) {
             oom = e;
         } catch (Exception e) {
             failure = e;
         } finally {
-            GlFormatOverride.popMainTargetColor();
+            if (isOpenGl) GlFormatOverride.popMainTargetColor();
         }
 
         if (oom == null && failure == null) {
@@ -66,9 +68,10 @@ public abstract class MainTargetMixin {
                     mipLevels);
         }
 
-        GlFormatOverride.pushMainTargetColor();
+        if (isOpenGl) GlFormatOverride.pushMainTargetColor();
         try {
-            return device.createTexture(label, usage, format, width, height, depthOrLayers,
+            return device.createTexture(label, usage,
+                    isOpenGl ? format : MainTargetFormatSupport.toGpuFormat(fallback), width, height, depthOrLayers,
                     mipLevels);
         } catch (GpuOutOfMemoryException e) {
             MainTargetFormatSupport.disable(fallback, e);
@@ -78,7 +81,7 @@ public abstract class MainTargetMixin {
             return device.createTexture(label, usage, format, width, height, depthOrLayers,
                     mipLevels);
         } finally {
-            GlFormatOverride.popMainTargetColor();
+            if (isOpenGl) GlFormatOverride.popMainTargetColor();
         }
     }
 }

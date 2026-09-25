@@ -1,7 +1,9 @@
 package com.qb20nh.cbbg.render;
 
+import com.mojang.blaze3d.GpuFormat;
 import com.mojang.blaze3d.opengl.GlStateManager;
 import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.blaze3d.textures.GpuTexture;
 import com.qb20nh.cbbg.Cbbg;
 import com.qb20nh.cbbg.config.CbbgConfig;
 import java.nio.ByteBuffer;
@@ -11,8 +13,7 @@ import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL30;
 
 /**
- * Tracks whether higher-precision main render target formats are usable on the current OpenGL
- * device/driver.
+ * Tracks whether higher-precision main render target formats are usable on the current device.
  *
  * <p>
  * If we detect an allocation/renderability failure, we fall back to a lower format for the
@@ -32,6 +33,18 @@ public final class MainTargetFormatSupport {
     private static final AtomicBoolean loggedNoFloatFormats = new AtomicBoolean(false);
 
     private MainTargetFormatSupport() {}
+
+    public static boolean isOpenGl() {
+        return RenderSystem.getDevice().getDeviceInfo().backendName().equalsIgnoreCase("opengl");
+    }
+
+    public static GpuFormat toGpuFormat(CbbgConfig.PixelFormat format) {
+        return switch (format) {
+            case RGBA16F -> GpuFormat.RGBA16_FLOAT;
+            case RGBA32F -> GpuFormat.RGBA32_FLOAT;
+            case RGBA8 -> GpuFormat.RGBA8_UNORM;
+        };
+    }
 
     public static CbbgConfig.PixelFormat getEffective(CbbgConfig.PixelFormat requested) {
         if (requested == null) {
@@ -91,7 +104,7 @@ public final class MainTargetFormatSupport {
     private static boolean isRgba16fSupported() {
         SupportState state = rgba16f;
         if (state == SupportState.UNKNOWN) {
-            rgba16f = probeColorRenderable(GL30.GL_RGBA16F) ? SupportState.SUPPORTED
+            rgba16f = probeColorRenderable(CbbgConfig.PixelFormat.RGBA16F) ? SupportState.SUPPORTED
                     : SupportState.UNSUPPORTED;
             state = rgba16f;
             if (state == SupportState.UNSUPPORTED) {
@@ -104,7 +117,7 @@ public final class MainTargetFormatSupport {
     private static boolean isRgba32fSupported() {
         SupportState state = rgba32f;
         if (state == SupportState.UNKNOWN) {
-            rgba32f = probeColorRenderable(GL30.GL_RGBA32F) ? SupportState.SUPPORTED
+            rgba32f = probeColorRenderable(CbbgConfig.PixelFormat.RGBA32F) ? SupportState.SUPPORTED
                     : SupportState.UNSUPPORTED;
             state = rgba32f;
             if (state == SupportState.UNSUPPORTED) {
@@ -157,8 +170,21 @@ public final class MainTargetFormatSupport {
                 "No supported float main render target formats detected (RGBA16F/RGBA32F). The main target will remain RGBA8.");
     }
 
-    private static boolean probeColorRenderable(int internalFormat) {
+    private static boolean probeColorRenderable(CbbgConfig.PixelFormat format) {
         RenderSystem.assertOnRenderThread();
+
+        if (!isOpenGl()) {
+            try (GpuTexture ignored = RenderSystem.getDevice().createTexture(
+                    "cbbg format probe", 15, toGpuFormat(format), 16, 16, 1, 1)) {
+                return true;
+            } catch (Exception e) {
+                Cbbg.LOGGER.debug("Format probe threw (treating as unsupported).", e);
+                return false;
+            }
+        }
+
+        int internalFormat = format == CbbgConfig.PixelFormat.RGBA32F
+                ? GL30.GL_RGBA32F : GL30.GL_RGBA16F;
 
         int prevTex = GlStateManager._getInteger(GL11.GL_TEXTURE_BINDING_2D);
         int prevFbo = GlStateManager._getInteger(GL30.GL_FRAMEBUFFER_BINDING);

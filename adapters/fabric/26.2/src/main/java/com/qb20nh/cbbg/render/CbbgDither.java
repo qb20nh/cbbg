@@ -110,6 +110,31 @@ public final class CbbgDither {
         // Texture recreation happens lazily in ensureGpuTargets via manager
     }
 
+    public static void close() {
+        if (ditherInfoUbo != null) {
+            ditherInfoUbo.close();
+            ditherInfoUbo = null;
+        }
+        if (ditherTarget != null) {
+            ditherTarget.destroyBuffers();
+            ditherTarget = null;
+        }
+        stbnManager.close();
+        closeFrames(stbnFrames);
+        stbnFrames = null;
+    }
+
+    private static void closeFrames(NativeImage[] frames) {
+        if (frames == null) {
+            return;
+        }
+        for (NativeImage frame : frames) {
+            if (frame != null) {
+                frame.close();
+            }
+        }
+    }
+
     public static boolean isDisabled() {
         return disabled;
     }
@@ -359,8 +384,13 @@ public final class CbbgDither {
 
     private static void onStbnGenerationComplete(STBNGenerator.STBNFields fields) {
         CbbgConfig cfg = CbbgConfig.get();
-        stbnFrames =
+        NativeImage[] nextFrames =
                 STBNLoader.loadOrGenerate(cfg.stbnSize(), cfg.stbnSize(), cfg.stbnDepth(), fields);
+        NativeImage[] previousFrames = stbnFrames;
+        stbnFrames = nextFrames;
+        if (previousFrames != nextFrames) {
+            closeFrames(previousFrames);
+        }
 
         // Update state dims
         if (stbnFrames != null && stbnFrames.length > 0) {

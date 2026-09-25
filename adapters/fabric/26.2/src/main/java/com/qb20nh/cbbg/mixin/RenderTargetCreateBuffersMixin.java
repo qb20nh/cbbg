@@ -48,7 +48,9 @@ public abstract class RenderTargetCreateBuffersMixin {
 
         // MainTarget can be resized via the base RenderTarget.resize() path, which calls
         // createBuffers(). Ensure the main color attachment stays float even after resizes.
-        boolean isMainTarget = ((Object) this instanceof MainTarget);
+        // This method is merged into RenderTarget at runtime. An instanceof here is folded to
+        // false by release optimization before Mixin merges the class.
+        boolean isMainTarget = MainTarget.class.isInstance(this);
 
         // --- ImmediatelyFast compat: do not remove ---
         // Rationale: ImmediatelyFast (and many other mods) define their own custom RenderTargets
@@ -85,24 +87,30 @@ public abstract class RenderTargetCreateBuffersMixin {
         GpuTexture texture = null;
         GpuOutOfMemoryException oom = null;
         Exception failure = null;
+        boolean isOpenGl = MainTargetFormatSupport.isOpenGl();
 
-        if (isMainTarget) {
-            GlFormatOverride.pushMainTargetColor();
-        } else {
-            GlFormatOverride.pushFormat(toGlInternalFormat(effective));
+        if (isOpenGl) {
+            if (isMainTarget) {
+                GlFormatOverride.pushMainTargetColor();
+            } else {
+                GlFormatOverride.pushFormat(toGlInternalFormat(effective));
+            }
         }
         try {
-            texture = device.createTexture(label, usage, format, width, height, depthOrLayers,
+            texture = device.createTexture(label, usage,
+                    isOpenGl ? format : MainTargetFormatSupport.toGpuFormat(effective), width, height, depthOrLayers,
                     mipLevels);
         } catch (GpuOutOfMemoryException e) {
             oom = e;
         } catch (Exception e) {
             failure = e;
         } finally {
-            if (isMainTarget) {
-                GlFormatOverride.popMainTargetColor();
-            } else {
-                GlFormatOverride.popFormat();
+            if (isOpenGl) {
+                if (isMainTarget) {
+                    GlFormatOverride.popMainTargetColor();
+                } else {
+                    GlFormatOverride.popFormat();
+                }
             }
         }
 
@@ -111,11 +119,12 @@ public abstract class RenderTargetCreateBuffersMixin {
                 // Diagnostic only: confirm the blur post-chain internal target is actually float.
                 // This helps distinguish "blur re-quantizes to RGBA8" from "dither strength needs
                 // adjustment for blurred gradients".
-                int internal = getTextureInternalFormat(texture);
                 Cbbg.LOGGER.info(
-                        "cbbg menu blur alloc: label=\"{}\" requested={} effective={} glInternal={}",
+                        "cbbg menu blur alloc: label=\"{}\" requested={} effective={} internal={}",
                         label.get(), requested.getSerializedName(), effective.getSerializedName(),
-                        CbbgGlNames.glInternalName(internal));
+                        texture instanceof GlTexture
+                                ? CbbgGlNames.glInternalName(getTextureInternalFormat(texture))
+                                : texture.getFormat());
             }
             return texture;
         }
@@ -147,13 +156,16 @@ public abstract class RenderTargetCreateBuffersMixin {
                     mipLevels);
         }
 
-        if (isMainTarget) {
-            GlFormatOverride.pushMainTargetColor();
-        } else {
-            GlFormatOverride.pushFormat(toGlInternalFormat(fallback));
+        if (isOpenGl) {
+            if (isMainTarget) {
+                GlFormatOverride.pushMainTargetColor();
+            } else {
+                GlFormatOverride.pushFormat(toGlInternalFormat(fallback));
+            }
         }
         try {
-            return device.createTexture(label, usage, format, width, height, depthOrLayers,
+            return device.createTexture(label, usage,
+                    isOpenGl ? format : MainTargetFormatSupport.toGpuFormat(fallback), width, height, depthOrLayers,
                     mipLevels);
         } catch (GpuOutOfMemoryException e) {
             if (isMainTarget) {
@@ -169,10 +181,12 @@ public abstract class RenderTargetCreateBuffersMixin {
             return device.createTexture(label, usage, format, width, height, depthOrLayers,
                     mipLevels);
         } finally {
-            if (isMainTarget) {
-                GlFormatOverride.popMainTargetColor();
-            } else {
-                GlFormatOverride.popFormat();
+            if (isOpenGl) {
+                if (isMainTarget) {
+                    GlFormatOverride.popMainTargetColor();
+                } else {
+                    GlFormatOverride.popFormat();
+                }
             }
         }
     }
