@@ -1,9 +1,12 @@
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import unittest
 
-from change_impact import changed_paths, select_checks
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from change_impact import changed_paths, ci_plan, select_checks
+from targets import load_catalog
 
 
 class ChangeImpactTests(unittest.TestCase):
@@ -62,6 +65,18 @@ class ChangeImpactTests(unittest.TestCase):
         for path in ('', '../file', '/file', 'dir\\file'):
             with self.subTest(path=path), self.assertRaises(ValueError):
                 self.select(path)
+
+    def test_ci_skips_builds_for_publication_changes(self):
+        catalog = load_catalog()
+        plan = ci_plan(catalog, select_checks(catalog, ['.github/scripts/release.py']))
+        self.assertEqual(plan, {'matrix': {'include': []}, 'build': False, 'core': False})
+
+    def test_ci_runs_configured_targets_and_all_core_jvms_for_core_changes(self):
+        catalog = load_catalog()
+        plan = ci_plan(catalog, select_checks(catalog, ['core/src/main/java/Example.java']))
+        self.assertTrue(plan['build'])
+        self.assertTrue(plan['core'])
+        self.assertEqual([row['id'] for row in plan['matrix']['include']], catalog['ciTargets'])
 
     def test_renames_include_both_dependency_locations(self):
         with tempfile.TemporaryDirectory() as directory:

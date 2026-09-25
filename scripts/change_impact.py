@@ -2,10 +2,10 @@
 
 import argparse
 import json
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 import subprocess
 
-from targets import ROOT
+from targets import ROOT, build_matrix, select_ci_targets
 
 
 def select_checks(catalog, paths):
@@ -65,31 +65,60 @@ def changed_paths(root, base, head):
     return result.stdout.decode('utf-8').rstrip('\0').split('\0') if result.stdout else []
 
 
+def ci_plan(catalog, report):
+    selected = [target['id'] for target in select_ci_targets(catalog)
+                if target['id'] in report['targets']]
+    rows = build_matrix(catalog, ','.join(selected)) if selected else []
+    return {'matrix': {'include': rows}, 'build': bool(rows),
+            'core': 'core-java-8-17-21-25' in report['checks']}
+
+
+def catalog_at(commit):
+    result = subprocess.run(['git', 'show', commit + ':targets.json'], cwd=ROOT,
+                            check=True, capture_output=True, text=True)
+    catalog = json.loads(result.stdout)
+    if catalog.get('schema') != 1:
+        raise ValueError('Unsupported target catalog schema at ' + commit)
+    return catalog
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--base', required=True)
     parser.add_argument('--head', default='HEAD')
+    parser.add_argument('--github-output', type=Path)
     args = parser.parse_args()
     try:
         def resolve(revision):
             return subprocess.run(['git', 'rev-parse', '--verify', '--end-of-options',
                                    revision + '^{commit}'], cwd=ROOT, check=True,
                                   capture_output=True, text=True).stdout.strip()
-        base_commit, head_commit = resolve(args.base), resolve(args.head)
-        # Both catalogs matter when dependencies or source locations change.
-        base = subprocess.run(['git', 'show', base_commit + ':targets.json'], cwd=ROOT,
-                              check=True, capture_output=True, text=True)
-        current = subprocess.run(['git', 'show', head_commit + ':targets.json'], cwd=ROOT,
-                                 check=True, capture_output=True, text=True)
-        paths = changed_paths(ROOT, base_commit, head_commit)
-        before = select_checks(json.loads(base.stdout), paths)
-        after = select_checks(json.loads(current.stdout), paths)
-        print(json.dumps({'base': base_commit, 'head': head_commit,
-                          'targets': sorted(set(before['targets']) | set(after['targets'])),
-                          'checks': sorted(set(before['checks']) | set(after['checks'])),
-                          'before': before['changes'], 'after': after['changes']}, indent=2))
+        head_commit = resolve(args.head)
+        catalog = catalog_at(head_commit)
+        if args.base and set(args.base) == {'0'}:
+            report = {'base': None, 'head': head_commit,
+                      **select_checks(catalog, ['<initial-push>'])}
+        else:
+            report = compare_commits(resolve(args.base), head_commit)
+        report['ci'] = ci_plan(catalog, report)
+        if args.github_output:
+            with args.github_output.open('a', encoding='utf-8') as output:
+                for name, value in report['ci'].items():
+                    output.write(name + '=' + json.dumps(value, separators=(',', ':')) + '\n')
+        print(json.dumps(report, indent=2))
     except (ValueError, KeyError, OSError, subprocess.CalledProcessError) as error:
         parser.error(str(error))
+
+
+def compare_commits(base_commit, head_commit):
+    # Both catalogs matter when dependencies or source locations change.
+    paths = changed_paths(ROOT, base_commit, head_commit)
+    before = select_checks(catalog_at(base_commit), paths)
+    after = select_checks(catalog_at(head_commit), paths)
+    return {'base': base_commit, 'head': head_commit,
+            'targets': sorted(set(before['targets']) | set(after['targets'])),
+            'checks': sorted(set(before['checks']) | set(after['checks'])),
+            'before': before['changes'], 'after': after['changes']}
 
 
 if __name__ == '__main__':

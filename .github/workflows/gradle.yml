@@ -14,19 +14,32 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.targets.outputs.matrix }}
+      build: ${{ steps.targets.outputs.build }}
+      core: ${{ steps.targets.outputs.core }}
     steps:
       - uses: actions/checkout@v6.0.1
+        with:
+          fetch-depth: 0
       - name: Select catalog targets
         id: targets
+        env:
+          BASE_COMMIT: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: |
-          matrix=$(python3 scripts/targets.py --ci --artifacts)
-          printf 'matrix=%s\n' "$matrix" >> "$GITHUB_OUTPUT"
+          mkdir -p build
+          python3 scripts/change_impact.py --base "$BASE_COMMIT" \
+            --github-output "$GITHUB_OUTPUT" > build/change-impact.json
+      - uses: actions/upload-artifact@v6
+        with:
+          name: change-impact
+          path: build/change-impact.json
       - name: Test build and release tooling
         run: |
           python3 -m unittest discover -s scripts/tests
           python3 -m unittest discover -s .github/tests
 
   core:
+    needs: plan
+    if: needs.plan.outputs.core == 'true'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -57,6 +70,7 @@ jobs:
 
   build:
     needs: plan
+    if: needs.plan.outputs.build == 'true'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -83,7 +97,7 @@ jobs:
             core/build/reports/tests/
 
   dependency-submission:
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' && needs.plan.outputs.build == 'true'
     needs: plan
     runs-on: ubuntu-latest
     permissions:
