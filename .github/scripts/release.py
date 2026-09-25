@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import re
 import struct
+import sys
 import urllib.request
 import zipfile
 
@@ -60,17 +61,9 @@ def get_json(url, headers=None):
         return json.load(response)
 
 
-def validate_destinations():
-    mc = os.environ["MINECRAFT_VERSION"]
-    modrinth = get_json("https://api.modrinth.com/v2/tag/game_version")
-    if mc not in {v["version"] for v in modrinth}:
-        raise SystemExit(f"Modrinth does not recognize Minecraft {mc}")
-    headers = {"X-Api-Token": os.environ["CF_API_TOKEN"]}
-    versions = get_json("https://minecraft.curseforge.com/api/game/versions", headers)
-    types = get_json("https://minecraft.curseforge.com/api/game/version-types", headers)
-    print("CurseForge authenticated GET requests succeeded; upload permission is not tested")
+def curseforge_version_ids(mc, labels, versions, types):
     ids = []
-    for label in os.environ["CURSEFORGE_GAME_VERSIONS"].split(","):
+    for label in labels:
         type_name, sep, name = label.partition(":")
         if not sep:
             name = type_name
@@ -92,9 +85,96 @@ def validate_destinations():
                 [t for t in types if t.get("id") in candidate_types]))
             raise SystemExit(f"CurseForge label {label!r} resolved to {len(matches)} entries; refusing partial metadata")
         ids.append(str(matches[0]["id"]))
+    return ids
+
+
+def validate_destinations():
+    mc = os.environ["MINECRAFT_VERSION"]
+    modrinth = get_json("https://api.modrinth.com/v2/tag/game_version")
+    if mc not in {v["version"] for v in modrinth}:
+        raise SystemExit(f"Modrinth does not recognize Minecraft {mc}")
+    headers = {"X-Api-Token": os.environ["CF_API_TOKEN"]}
+    versions = get_json("https://minecraft.curseforge.com/api/game/versions", headers)
+    types = get_json("https://minecraft.curseforge.com/api/game/version-types", headers)
+    print("CurseForge authenticated GET requests succeeded; upload permission is not tested")
+    ids = curseforge_version_ids(mc, os.environ["CURSEFORGE_GAME_VERSIONS"].split(","), versions, types)
     with open(os.environ["GITHUB_ENV"], "a") as out:
         out.write("CURSEFORGE_GAME_VERSIONS=" + ",".join(ids) + "\n")
     print("All destination version labels resolved")
+
+
+def candidate_metadata(candidate, source_root, notes):
+    # Historical release checkouts need only the commands above.
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scripts'))
+    from candidate_manifest import client_candidate
+    from fabric_package import verify_candidate
+    from parity_evidence import digest, read_json
+
+    candidate = Path(candidate)
+    source_root = Path(source_root)
+    if not isinstance(notes, str) or not notes.strip():
+        raise ValueError('Release notes are empty')
+    manifest_hash = digest(candidate)
+    manifest = read_json(candidate)
+    if not isinstance(manifest.get('selected_targets'), list) or not manifest['selected_targets']:
+        raise ValueError('Candidate requires an explicit target selection')
+    properties = (source_root / 'gradle.properties').read_text()
+
+    def project_id(key, pattern):
+        values = re.findall(r'^' + key + r'=([^\r\n]+)', properties, re.MULTILINE)
+        if len(values) != 1 or not re.fullmatch(pattern, values[0]):
+            raise ValueError('Invalid publishing project: ' + key)
+        return values[0]
+
+    modrinth = project_id('modrinth_project_id', r'[A-Za-z0-9]+')
+    curseforge = project_id('curseforge_project_id', r'[1-9][0-9]*')
+    records = []
+    for identifier in manifest['selected_targets']:
+        current, target, specification = client_candidate(candidate, identifier)
+        if current != manifest:
+            raise ValueError('Candidate changed during metadata generation')
+        verify_candidate(candidate, identifier, source_root)
+        # Add other loaders when their package checks and release paths are ready.
+        if specification['loader'] != 'fabric':
+            raise ValueError('Publishing metadata is not configured for ' + identifier)
+        minecraft = specification['minecraft']
+        version = manifest['release'][1:] + '+mc' + minecraft + '-fabric'
+        channel = 'beta' if '-' in manifest['release'] else 'release'
+        records.append({
+            'targets': [identifier], 'artifact': target['artifact'], 'sources': target['sources'],
+            'modrinth': {'project_id': modrinth, 'version_number': version,
+                         'version_name': 'cbbg ' + version, 'version_type': channel,
+                         'game_versions': [minecraft], 'loaders': [specification['loader']],
+                         'required_projects': ['fabric-api'], 'changelog': notes},
+            'curseforge': {'project_id': curseforge, 'display_name': 'cbbg ' + version,
+                           'release_type': channel,
+                           'version_labels': [minecraft, 'Java ' + str(specification['java']),
+                                              'Fabric', 'Environment:Client'],
+                           'relations': 'fabric-api:requiredDependency',
+                           'changelog': notes, 'changelog_type': 'markdown'}})
+    if digest(candidate) != manifest_hash:
+        raise ValueError('Candidate changed during metadata generation')
+    return {'schema': 1, 'release': manifest['release'], 'source_commit': manifest['commit'],
+            'manifest_sha256': manifest_hash, 'records': records}
+
+
+def resolve_candidate_destinations(metadata):
+    modrinth_versions = get_json('https://api.modrinth.com/v2/tag/game_version')
+    modrinth_loaders = get_json('https://api.modrinth.com/v2/tag/loader')
+    headers = {'X-Api-Token': os.environ['CF_API_TOKEN']}
+    versions = get_json('https://minecraft.curseforge.com/api/game/versions', headers)
+    types = get_json('https://minecraft.curseforge.com/api/game/version-types', headers)
+    resolved = json.loads(json.dumps(metadata))
+    for record in resolved['records']:
+        modrinth = record['modrinth']
+        if not set(modrinth['game_versions']) <= {item['version'] for item in modrinth_versions}:
+            raise ValueError('Modrinth does not recognize the selected Minecraft versions')
+        if not set(modrinth['loaders']) <= {item['name'] for item in modrinth_loaders}:
+            raise ValueError('Modrinth does not recognize the selected loaders')
+        curseforge = record['curseforge']
+        curseforge['game_versions'] = curseforge_version_ids(
+            modrinth['game_versions'][0], curseforge['version_labels'], versions, types)
+    return resolved
 
 
 def extract_notes():
@@ -123,8 +203,26 @@ def main():
     commands = {"java": read_java, "artifacts": validate_artifacts,
                 "destinations": validate_destinations, "notes": extract_notes}
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=commands)
+    parser.add_argument("command", choices=[*commands, 'candidate'])
+    parser.add_argument('--candidate', type=Path)
+    parser.add_argument('--source-root', type=Path)
+    parser.add_argument('--notes', type=Path)
+    parser.add_argument('--output', type=Path)
+    parser.add_argument('--resolve-destinations', action='store_true')
     args = parser.parse_args()
+    if args.command == 'candidate':
+        if any(value is None for value in (args.candidate, args.source_root, args.notes, args.output)):
+            parser.error('Candidate metadata requires --candidate, --source-root, --notes and --output')
+        try:
+            result = candidate_metadata(args.candidate, args.source_root, args.notes.read_text())
+            if args.resolve_destinations:
+                result = resolve_candidate_destinations(result)
+            with args.output.open('x', encoding='utf-8') as stream:
+                stream.write(json.dumps(result, indent=2) + '\n')
+        except (ValueError, KeyError, TypeError, OSError, zipfile.BadZipFile) as error:
+            parser.error(str(error))
+        print('Created publishing metadata: ' + str(args.output))
+        return
     commands[args.command]()
 
 
