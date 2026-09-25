@@ -84,7 +84,35 @@ tasks.register('verifyUploadInputs') {
     }
 }
 
-tasks.named('modrinth') {
+def repositoryRoot = file('../..').canonicalFile
+def uploadPlan = layout.buildDirectory.file(targetId + '/modrinth-plan.json')
+def uploadResult = layout.buildDirectory.file(targetId + '/modrinth-result.json')
+def retryCommand = ['python3', new File(repositoryRoot, '.github/scripts/modrinth_retry.py'),
+                    '--candidate', candidateFile, '--metadata', metadataFile,
+                    '--source-root', repositoryRoot, '--target', targetId]
+tasks.register('planModrinthUpload', Exec) {
     dependsOn tasks.named('verifyUploadInputs')
+    outputs.file(uploadPlan)
+    outputs.upToDateWhen { false }
+    commandLine(retryCommand + ['--output', uploadPlan.get().asFile])
+}
+
+def uploadSettings = extensions.getByName('modrinth')
+tasks.named('modrinth') {
+    dependsOn tasks.named('planModrinthUpload')
+    onlyIf('The requested version is not already uploaded') {
+        def plan = new JsonSlurper().parse(uploadPlan.get().asFile)
+        if (!(plan.action in ['upload', 'reuse'])) throw new GradleException('Invalid Modrinth upload plan')
+        plan.action == 'upload'
+    }
     doFirst { verifyInputs() }
+    doLast {
+        if (!uploadSettings.debugMode.get()) {
+            def result = providers.exec {
+                commandLine(retryCommand + ['--require-existing', '--output', uploadResult.get().asFile])
+            }
+            result.result.get().assertNormalExitValue()
+            logger.lifecycle(result.standardOutput.asText.get().trim())
+        }
+    }
 }
