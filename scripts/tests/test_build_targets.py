@@ -66,6 +66,14 @@ class BuildDispatchTest(unittest.TestCase):
         self.assertIn('-Ptarget=26.3-forge', planned[1])
         self.assertTrue(all('--offline' in command for command in planned))
 
+    def test_ci_checks_build_shared_artifact_once(self):
+        command, = self.plan('ciCheck', '26.3-fabric,26.3-quilt', offline=True)
+        self.assertEqual(command[3], 'ciCheck')
+        self.assertIn('-Ptarget=26.3-fabric', command)
+        self.assertIn('--offline', command)
+        with self.assertRaisesRegex(ValueError, 'CI checks are not configured'):
+            self.plan('ciCheck', '26.2-fabric')
+
     def test_client_selection_and_forwarded_properties(self):
         with self.assertRaisesRegex(ValueError, 'exactly one'):
             self.plan('runClient', '26.2-fabric,26.2-neoforge')

@@ -8,10 +8,10 @@ from targets import ROOT, load_catalog, select_artifacts, select_targets
 
 
 def commands(catalog, task, selection, *, offline=False, properties=(), root=ROOT):
-    if task not in {"build", "check", "runClient", "genSources", "dev"}:
+    if task not in {"build", "check", "ciCheck", "runClient", "genSources", "dev"}:
         raise ValueError("Unsupported dispatch task: " + task)
     selected = select_targets(catalog, selection, require_implemented=task == "build")
-    if task in {"build", "check", "genSources", "dev"}:
+    if task in {"build", "check", "ciCheck", "genSources", "dev"}:
         selected = select_artifacts(catalog, selection, require_implemented=task == "build")
     if task == "runClient" and len(selected) != 1:
         raise ValueError("runClient requires exactly one target")
@@ -23,6 +23,8 @@ def commands(catalog, task, selection, *, offline=False, properties=(), root=ROO
         profile = target.get("buildProfile")
         if profile is None:
             raise ValueError("No build profile configured for " + target["id"])
+        if task == 'ciCheck' and profile != 'fabric-modern':
+            raise ValueError('CI checks are not configured for ' + target['id'])
         if profile == "fabric-upstream":
             if target["id"] != "26.2-fabric":
                 raise ValueError("Upstream build belongs to 26.2-fabric")
@@ -47,7 +49,7 @@ def commands(catalog, task, selection, *, offline=False, properties=(), root=ROO
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("task", choices=["build", "check", "runClient", "genSources", "dev"])
+    parser.add_argument("task", choices=["build", "check", "ciCheck", "runClient", "genSources", "dev"])
     parser.add_argument("--targets", required=True)
     parser.add_argument("--offline", action="store_true")
     parser.add_argument("--property", action="append", default=[])

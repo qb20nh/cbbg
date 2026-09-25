@@ -6,7 +6,7 @@ import tempfile
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from targets import load_catalog, select_targets, select_build_profile, select_artifacts
+from targets import build_matrix, load_catalog, select_targets, select_build_profile, select_artifacts
 
 
 class TargetCatalogTest(unittest.TestCase):
@@ -34,6 +34,25 @@ class TargetCatalogTest(unittest.TestCase):
             self.assertEqual(expected, set(target["backends"]), target["id"])
         owners = {target.get("artifactOf", target["id"]) for target in self.catalog["targets"]}
         self.assertEqual(owners, {target["id"] for target in select_artifacts(self.catalog)})
+
+    def test_build_matrix_shares_compilation_but_keeps_runtime_selection(self):
+        rows = build_matrix(self.catalog, '26.3-quilt,26.3-fabric')
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]['id'], '26.3-fabric')
+        self.assertEqual(rows[0]['java'], 25)
+        self.assertEqual(rows[0]['buildProfile'], 'fabric-modern')
+        self.assertEqual(rows[0]['runtimeTargets'], ['26.3-fabric', '26.3-quilt'])
+        quilt_only = build_matrix(self.catalog, '26.3-quilt')
+        self.assertEqual(quilt_only[0]['id'], '26.3-fabric')
+        self.assertEqual(quilt_only[0]['runtimeTargets'], ['26.3-quilt'])
+
+    def test_build_matrix_rejects_unconfigured_or_unimplemented_selection(self):
+        target = next(t for t in self.catalog['targets'] if t['id'] == '26.3-fabric')
+        with self.assertRaisesRegex(ValueError, 'not implemented'):
+            build_matrix(self.catalog, '26.3-fabric', require_implemented=True)
+        del target['buildProfile']
+        with self.assertRaisesRegex(ValueError, 'No build profile'):
+            build_matrix(self.catalog, '26.3-fabric')
 
     def test_unknown_empty_and_duplicate_selection_fail(self):
         for selection in ("unknown", "", "1.20.1-forge,", "1.20.1-forge,1.20.1-forge"):

@@ -290,6 +290,13 @@ tasks.register('prepareParityRuntime') {
     dependsOn parityDriverJar, tasks.named('verifyCandidatePackaging')
 }
 
+tasks.register('ciCheck') {
+    group = 'verification'
+    description = 'Run unit tests and package production and test jars without launching Minecraft.'
+    dependsOn tasks.named('check'), project(':core').tasks.named('check'), tasks.named('verifyCandidatePackaging')
+    dependsOn tasks.withType(Jar).matching { it.name.endsWith('DriverJar') }
+}
+
 tasks.register('dev', Sync) {
     group = 'build'
     description = 'Check and package local development jars without release readiness claims.'

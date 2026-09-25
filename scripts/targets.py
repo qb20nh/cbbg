@@ -114,18 +114,38 @@ def select_artifacts(catalog, selection=None, require_implemented=False):
     return owners
 
 
+def build_matrix(catalog, selection=None, require_implemented=False):
+    runtimes = select_targets(catalog, selection, require_implemented)
+    owners = select_artifacts(catalog, selection, require_implemented)
+    rows = []
+    for owner in owners:
+        if not owner.get('buildProfile'):
+            raise ValueError('No build profile configured for ' + owner['id'])
+        row = {field: owner[field] for field in
+               ('id', 'minecraft', 'loader', 'java', 'renderer', 'buildProfile')}
+        row['runtimeTargets'] = [target['id'] for target in runtimes
+                                 if target.get('artifactOf', target['id']) == owner['id']]
+        rows.append(row)
+    return rows
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     selection = parser.add_mutually_exclusive_group()
     selection.add_argument("--targets", help="Exact comma-separated target IDs")
     selection.add_argument("--build-profile", help="Configured targets in one isolated build profile")
     parser.add_argument("--require-implemented", action="store_true")
+    parser.add_argument('--artifacts', action='store_true',
+                        help='Emit one build job per artifact, retaining selected runtime IDs')
     args = parser.parse_args()
     try:
         catalog = load_catalog()
         selected = (select_build_profile(catalog, args.build_profile, args.require_implemented)
                     if args.build_profile is not None
                     else select_targets(catalog, args.targets, args.require_implemented))
+        if args.artifacts:
+            selected = build_matrix(catalog, ','.join(target['id'] for target in selected),
+                                    args.require_implemented)
     except (ValueError, KeyError, TypeError) as error:
         parser.error(str(error))
     print(json.dumps({"include": selected}, separators=(",", ":")))
