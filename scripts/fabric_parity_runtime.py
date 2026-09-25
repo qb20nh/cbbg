@@ -18,6 +18,12 @@ from targets import load_catalog, select_targets
 
 ROOT = Path(__file__).resolve().parents[1]
 
+RESTART_DRIVERS = {
+    ('opengl', 'com.qb20nh.cbbg.gametest.IrisRestartGameTest'): 'iris',
+    ('vulkan', 'com.qb20nh.cbbg.gametest.SulkanRestartGameTest'): 'sulkan',
+    ('vulkan', 'com.qb20nh.cbbg.gametest.SulkanExternalRestartGameTest'): 'sulkan',
+}
+
 
 def digest(path):
     with Path(path).open('rb') as stream:
@@ -108,12 +114,7 @@ def main():
         parser.error('DSA selection requires the OpenGL benchmark driver')
     restart_shader = None
     if args.restart_phase:
-        drivers = {
-            ('opengl', 'com.qb20nh.cbbg.gametest.IrisRestartGameTest'): 'iris',
-            ('vulkan', 'com.qb20nh.cbbg.gametest.SulkanRestartGameTest'): 'sulkan',
-            ('vulkan', 'com.qb20nh.cbbg.gametest.SulkanExternalRestartGameTest'): 'sulkan',
-        }
-        restart_shader = drivers.get((args.backend, expected[0])) if len(expected) == 1 else None
+        restart_shader = RESTART_DRIVERS.get((args.backend, expected[0])) if len(expected) == 1 else None
         if restart_shader is None:
             parser.error('Restart phases require the dedicated Iris/OpenGL or Sulkan/Vulkan driver')
 
