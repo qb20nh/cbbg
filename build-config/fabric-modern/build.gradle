@@ -297,6 +297,50 @@ tasks.register('ciCheck') {
     dependsOn tasks.withType(Jar).matching { it.name.endsWith('DriverJar') }
 }
 
+tasks.register('candidateBuildOutputs') {
+    dependsOn tasks.named('ciCheck')
+    def destination = layout.buildDirectory.file('candidate-build-outputs.json')
+    outputs.file(destination)
+    outputs.upToDateWhen { false }
+    doLast {
+        def root = repositoryRoot.canonicalFile.toPath()
+        def reference = { File file ->
+            def path = file.canonicalFile.toPath()
+            if (!path.startsWith(root) || !file.isFile()) {
+                throw new GradleException('Missing or invalid candidate output: ' + file.name)
+            }
+            [path: root.relativize(path).toString().replace('\\', '/'),
+             sha256: java.security.MessageDigest.getInstance('SHA-256').digest(file.bytes).encodeHex().toString(),
+             filename: file.name]
+        }
+        def gitOutput = { List<String> arguments ->
+            providers.exec {
+                workingDir repositoryRoot
+                commandLine(['git'] + arguments)
+            }.standardOutput.asText.get().trim()
+        }
+        def drivers = new TreeMap<String, Map>()
+        tasks.withType(Jar).matching { it.name.endsWith('DriverJar') }.each { driver ->
+            def suite = driver == parityDriverJar.get() ? 'ordinary' :
+                    driver.archiveClassifier.get().replaceFirst(/-driver$/, '')
+            if (drivers.containsKey(suite)) throw new GradleException('Duplicate driver suite: ' + suite)
+            drivers[suite] = reference(driver.archiveFile.get().asFile)
+        }
+        def artifact = reference(parityCandidateJar.get().archiveFile.get().asFile)
+        artifact.filename = tasks.named('jar', Jar).get().archiveFileName.get()
+        def output = [schema: 1, target: targetId, version: project.version.toString(),
+                      source_commit: gitOutput(['rev-parse', 'HEAD']),
+                      source_dirty: !gitOutput(['status', '--porcelain', '--untracked-files=all',
+                                               '--', '.', ':(top,exclude)docs/**']).isEmpty(),
+                      artifact: artifact,
+                      sources: reference(tasks.named('sourcesJar', Jar).get().archiveFile.get().asFile),
+                      source_inventory: reference(layout.buildDirectory.file('source-inventory.json').get().asFile),
+                      drivers: drivers]
+        destination.get().asFile.text = groovy.json.JsonOutput.prettyPrint(
+                groovy.json.JsonOutput.toJson(output)) + '\n'
+    }
+}
+
 tasks.register('dev', Sync) {
     group = 'build'
     description = 'Check and package local development jars without release readiness claims.'
