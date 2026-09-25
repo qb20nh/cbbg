@@ -5,7 +5,7 @@ plugins {
 import groovy.json.JsonSlurper
 
 def repositoryRoot = file('../..')
-apply from: new File(repositoryRoot, 'builds/local-runtime.gradle')
+apply from: new File(repositoryRoot, 'build-config/local-runtime.gradle')
 def catalog = new JsonSlurper().parse(new File(repositoryRoot, 'targets.json'))
 def targetId = providers.gradleProperty('target').getOrElse('26.3-fabric')
 def target = catalog.targets.find { it.id == targetId }

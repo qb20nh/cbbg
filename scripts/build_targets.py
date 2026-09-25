@@ -28,8 +28,8 @@ def commands(catalog, task, selection, *, offline=False, properties=(), root=ROO
                 raise ValueError("Upstream build belongs to 26.2-fabric")
             directory = root
         else:
-            directory = root / "builds" / profile
-            if directory.parent != root / "builds" or not (directory / "build.gradle").is_file():
+            directory = root / "build-config" / profile
+            if directory.parent != root / "build-config" or not (directory / "build.gradle").is_file():
                 raise ValueError("Invalid build profile: " + profile)
         wrapper = directory / "gradlew"
         if not wrapper.is_file():

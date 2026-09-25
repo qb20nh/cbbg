@@ -14,8 +14,8 @@ compatibility with the existing release tooling.
 From the repository root:
 
 ```
-./gradlew -p builds/fabric-modern genSources -Ptarget=26.3-fabric
-./gradlew -p builds/fabric-modern prepareParityRuntime -Ptarget=26.3-fabric
+./gradlew -p build-config/fabric-modern genSources -Ptarget=26.3-fabric
+./gradlew -p build-config/fabric-modern prepareParityRuntime -Ptarget=26.3-fabric
 python3 scripts/build_targets.py check --targets 26.2-fabric
 ```
 
@@ -32,8 +32,8 @@ and translations without modifying the preserved 26.2 Java implementation.
 Local graphical tests, using a private display:
 
 ```
-./gradlew -p builds/fabric-modern runClientGameTest -Ptarget=26.3-fabric -Pbackend=opengl
-./gradlew -p builds/fabric-modern runClientGameTest -Ptarget=26.3-fabric -Pbackend=vulkan
+./gradlew -p build-config/fabric-modern runClientGameTest -Ptarget=26.3-fabric -Pbackend=opengl
+./gradlew -p build-config/fabric-modern runClientGameTest -Ptarget=26.3-fabric -Pbackend=vulkan
 ```
 
 Use `-Pcompat=<profile>` for a listed catalog combination. Iris profiles are

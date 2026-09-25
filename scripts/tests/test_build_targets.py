@@ -21,11 +21,11 @@ class BuildDispatchTest(unittest.TestCase):
         # unfinished targets being present in the current branch.
         for profile in ('forge-classic', 'neoforge-modern', 'forge-modern',
                         'legacy-fabric', 'forge-legacy', 'fabric-modern'):
-            directory = self.root / 'builds' / profile
+            directory = self.root / 'build-config' / profile
             directory.mkdir(parents=True)
             (directory / 'build.gradle').touch()
         for profile in ('forge-classic', 'forge-modern'):
-            (self.root / 'builds' / profile / 'gradlew').touch()
+            (self.root / 'build-config' / profile / 'gradlew').touch()
 
     def plan(self, task, selection, **kwargs):
         return commands(self.catalog, task, selection, root=self.root, **kwargs)
@@ -33,7 +33,7 @@ class BuildDispatchTest(unittest.TestCase):
     def test_mixed_loaders_keep_wrappers_and_catalog_order(self):
         planned = self.plan('check', '26.2-neoforge,1.20.1-forge')
         self.assertEqual(2, len(planned))
-        self.assertEqual(str(self.root / 'builds/forge-classic/gradlew'), planned[0][0])
+        self.assertEqual(str(self.root / 'build-config/forge-classic/gradlew'), planned[0][0])
         self.assertEqual(str(self.root / 'gradlew'), planned[1][0])
         self.assertIn('-Ptarget=26.2-neoforge', planned[1])
 
@@ -62,7 +62,7 @@ class BuildDispatchTest(unittest.TestCase):
         planned = self.plan('genSources', '26.2-fabric,26.3-forge', offline=True)
         self.assertEqual(2, len(planned))
         self.assertFalse(any(arg.startswith('-Ptarget') for arg in planned[0]))
-        self.assertEqual(str(self.root / 'builds/forge-modern/gradlew'), planned[1][0])
+        self.assertEqual(str(self.root / 'build-config/forge-modern/gradlew'), planned[1][0])
         self.assertIn('-Ptarget=26.3-forge', planned[1])
         self.assertTrue(all('--offline' in command for command in planned))
 
