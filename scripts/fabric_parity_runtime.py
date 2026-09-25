@@ -81,12 +81,24 @@ def main():
     parser.add_argument('--timeout', type=int, default=240)
     parser.add_argument('--dsa-mode', choices=['auto', 'emulated'])
     parser.add_argument('--restart-phase', choices=['prepare', 'verify', 'control'])
+    parser.add_argument('--cbbg-config', type=Path,
+                        help='Initial CBBG settings for a fresh, non-restart run')
     display = parser.add_mutually_exclusive_group(required=True)
     display.add_argument('--wayland-display')
     display.add_argument('--x-display')
     args = parser.parse_args()
     if not 1 <= args.timeout <= 600:
         parser.error('Timeout must be between 1 and 600 seconds')
+    initial_config = None
+    if args.cbbg_config:
+        if args.restart_phase:
+            parser.error('Initial config cannot replace restart settings')
+        initial_config = args.cbbg_config.read_bytes()
+        try:
+            if not isinstance(json.loads(initial_config), dict):
+                parser.error('Initial CBBG config must be a JSON object')
+        except (ValueError, UnicodeError):
+            parser.error('Initial CBBG config must be a JSON object')
     target = select_targets(load_catalog(), args.target)[0]
     if args.backend not in target['compatibilityProfiles'].get(args.compat, []):
         parser.error('Backend is not supported by the selected catalog profile')
@@ -205,6 +217,12 @@ def main():
         receipt['prepareReceiptSha256'] = digest(previous_path)
         receipt['inputState'] = state
     try:
+        if initial_config is not None:
+            (game / 'config').mkdir()
+            (game / 'config/cbbg.json').write_bytes(initial_config)
+            evidence.mkdir(parents=True)
+            (evidence / 'initial-cbbg.json').write_bytes(initial_config)
+            receipt['initialConfigSha256'] = hashlib.sha256(initial_config).hexdigest()
         for name, source in sources.items():
             if args.restart_phase != 'verify':
                 shutil.copyfile(source, mods / name)

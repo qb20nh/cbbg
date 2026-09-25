@@ -88,6 +88,44 @@ class LauncherFailureTests(unittest.TestCase):
     def receipt(self):
         return json.loads((self.game / 'probe.json').read_text())
 
+    def test_initial_config_is_installed_before_launch_and_retained(self):
+        settings = self.root / 'settings.json'
+        settings.write_text('{"strength": 2}\n')
+        def client(command, **kwargs):
+            self.assertEqual((self.game / 'config/cbbg.json').read_bytes(), settings.read_bytes())
+            (self.game / 'config/cbbg.json').write_text('{"strength": 1}')
+            raise subprocess.TimeoutExpired(command, 240)
+        self.run.side_effect = client
+        with patch.object(sys, 'argv', sys.argv + ['--cbbg-config', str(settings)]):
+            with self.assertRaises(subprocess.TimeoutExpired):
+                launcher.main()
+        receipt = self.receipt()
+        retained = self.game / 'evidence/initial-cbbg.json'
+        self.assertEqual(retained.read_bytes(), settings.read_bytes())
+        self.assertEqual(receipt['initialConfigSha256'], launcher.digest(settings))
+        self.assertEqual(receipt['evidence']['evidence/initial-cbbg.json'], launcher.digest(settings))
+
+    def test_invalid_initial_config_prevents_launch(self):
+        settings = self.root / 'settings.json'
+        for value in ('{', '[]', 'null'):
+            settings.write_text(value)
+            with self.subTest(value=value), patch.object(sys, 'argv',
+                    sys.argv + ['--cbbg-config', str(settings)]):
+                with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+                    launcher.main()
+            self.run.assert_not_called()
+            self.assertFalse(self.game.exists())
+
+    def test_restart_cannot_replace_initial_config(self):
+        settings = self.root / 'settings.json'
+        settings.write_text('{"strength": 2}')
+        with patch.object(sys, 'argv', sys.argv + ['--cbbg-config', str(settings),
+                                                 '--restart-phase', 'verify']):
+            with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+                launcher.main()
+        self.run.assert_not_called()
+        self.assertFalse(self.game.exists())
+
     def test_x11_launch_prefers_x11_in_minecraft(self):
         self.run.side_effect = subprocess.TimeoutExpired(['java'], 240)
         with self.assertRaises(subprocess.TimeoutExpired):

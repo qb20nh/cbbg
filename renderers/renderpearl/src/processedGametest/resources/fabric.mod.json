@@ -9,6 +9,8 @@
     "fabric-client-gametest": [
       "com.qb20nh.cbbg.gametest.ReleaseLifecycleGameTest",
       "com.qb20nh.cbbg.gametest.ReleaseReadbackGameTest",
+      "com.qb20nh.cbbg.gametest.ReleaseDitherGameTest",
+      "com.qb20nh.cbbg.gametest.ReleaseWorldPixelsGameTest",
       "com.qb20nh.cbbg.gametest.FloatPrecisionGameTest",
       "com.qb20nh.cbbg.gametest.WindowResizeGameTest",
       "com.qb20nh.cbbg.gametest.ReleaseFramebufferGameTest"

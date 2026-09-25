@@ -177,7 +177,9 @@ sourceSets.gametest.java.source(sharedClientTests)
 if (targetId == '26.3-fabric') {
     def processedSharedTests = objects.sourceDirectorySet('processedSharedTests', 'Shared processed-compatible tests')
     processedSharedTests.srcDir(new File(repositoryRoot, 'renderers/renderpearl/src/gametest/java'))
+    processedSharedTests.srcDir(new File(repositoryRoot, 'core/src/testSupport/java'))
     processedSharedTests.include 'com/qb20nh/cbbg/gametest/mixin/ScenarioProgressMixin.java',
+            'com/qb20nh/cbbg/reference/DitherReference.java',
             'com/qb20nh/cbbg/gametest/FloatPrecisionGameTest.java',
             'com/qb20nh/cbbg/gametest/WindowResizeGameTest.java'
 
@@ -195,6 +197,11 @@ if (targetId == '26.3-fabric') {
     }
     tasks.named('compileProcessedGametestJava') {
         dependsOn tasks.named('optimizeReleaseJar')
+    }
+    tasks.named('processProcessedGametestResources') {
+        from(new File(repositoryRoot, 'renderers/renderpearl/src/gametest/resources')) {
+            include 'cbbg-world-goldens/**'
+        }
     }
     tasks.register('processedDriverJar', Jar) {
         archiveClassifier = 'processed-driver'

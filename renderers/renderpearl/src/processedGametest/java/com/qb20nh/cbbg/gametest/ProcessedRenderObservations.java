@@ -2,6 +2,7 @@ package com.qb20nh.cbbg.gametest;
 
 import com.mojang.renderpearl.api.pipeline.CompiledRenderPipeline;
 import com.mojang.renderpearl.api.pipeline.RenderPipeline;
+import com.mojang.renderpearl.api.textures.GpuTextureView;
 import java.lang.management.ManagementFactory;
 import java.util.Collections;
 import java.util.Set;
@@ -15,6 +16,8 @@ public final class ProcessedRenderObservations {
     private static final AtomicLong DRAWS = new AtomicLong();
     private static final AtomicLong FIRST_DRAW = new AtomicLong();
     private static CompiledRenderPipeline selectedPipeline;
+    private static GpuTextureView lastDitherOutput;
+    private static long ditherSelections;
 
     private ProcessedRenderObservations() {}
 
@@ -36,6 +39,20 @@ public final class ProcessedRenderObservations {
 
     public static void select(CompiledRenderPipeline pipeline) {
         selectedPipeline = pipeline;
+    }
+
+    /** The real color attachment selected for the most recent dither or demo draw. */
+    public static void ditherOutput(GpuTextureView output) {
+        lastDitherOutput = output;
+        ditherSelections++;
+    }
+
+    public static GpuTextureView lastDitherOutput() {
+        return lastDitherOutput;
+    }
+
+    public static long ditherSelections() {
+        return ditherSelections;
     }
 
     public static void recordDraw() {
