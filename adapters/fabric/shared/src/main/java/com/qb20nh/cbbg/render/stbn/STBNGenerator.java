@@ -10,6 +10,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.FutureTask;
+import java.util.function.BooleanSupplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -50,18 +51,82 @@ public class STBNGenerator {
 
     private static final AtomicReference<CompletableFuture<STBNFields>> pendingFuture =
             new AtomicReference<>();
+    private record Key(int width, int height, int depth, long seed) {}
+    private static Key earlyKey;
+    private static CompletableFuture<STBNFields> earlyFuture;
     private static final ExecutorService WORKER = Executors.newSingleThreadExecutor(task -> {
         Thread thread = new Thread(task, "cbbg-stbn");
         thread.setDaemon(true);
         return thread;
     });
 
-    public static synchronized CompletableFuture<STBNFields> generateAsync(int w, int h, int d, long seed) {
-        CompletableFuture<STBNFields> prev = pendingFuture.get();
-        if (prev != null && !prev.isDone()) {
-            prev.cancel(true);
-        }
+    /** Starts the CPU work during Fabric adapter construction. The first matching request reuses it. */
+    public static CompletableFuture<STBNFields> prepareEarly(int w, int h, int d, long seed) {
+        return prepareEarly(w, h, d, seed, () -> STBNCache.isCacheValid(w, h, d, seed));
+    }
 
+    static synchronized CompletableFuture<STBNFields> prepareEarly(int w, int h, int d, long seed,
+            BooleanSupplier cacheValid) {
+        CompletableFuture<STBNFields> prev = pendingFuture.get();
+        if (prev != null && !prev.isDone()) prev.cancel(true);
+        earlyKey = new Key(w, h, d, seed);
+        earlyFuture = submitJob(w, h, d, seed, cacheValid);
+        pendingFuture.set(earlyFuture);
+        return earlyFuture;
+    }
+
+    public static CompletableFuture<STBNFields> generateAsync(int w, int h, int d, long seed) {
+        return generateAsync(w, h, d, seed, () -> STBNCache.isCacheValid(w, h, d, seed));
+    }
+
+    static synchronized CompletableFuture<STBNFields> generateAsync(int w, int h, int d, long seed,
+            BooleanSupplier cacheValid) {
+        CompletableFuture<STBNFields> early = earlyFuture;
+        Key key = earlyKey;
+        earlyFuture = null;
+        earlyKey = null;
+        if (early != null && key.equals(new Key(w, h, d, seed))
+                && !early.isCancelled() && !early.isCompletedExceptionally()) {
+            CompletableFuture<STBNFields> claimed = new CompletableFuture<>();
+            AtomicReference<CompletableFuture<STBNFields>> active = new AtomicReference<>(early);
+            pendingFuture.set(claimed);
+            claimed.whenComplete((fields, failure) -> {
+                if (claimed.isCancelled()) active.get().cancel(true);
+            });
+            early.whenComplete((fields, failure) -> {
+                if (claimed.isCancelled()) return;
+                if (failure != null || fields != null) {
+                    complete(claimed, fields, failure);
+                    return;
+                }
+                // A cache hit yielded no fields. Recheck on the worker in case the cache
+                // was cleared or damaged while startup work was waiting to be claimed.
+                synchronized (STBNGenerator.class) {
+                    if (claimed.isCancelled() || pendingFuture.get() != claimed) return;
+                    CompletableFuture<STBNFields> retry = submitJob(w, h, d, seed, cacheValid);
+                    active.set(retry);
+                    if (claimed.isCancelled()) retry.cancel(true);
+                    retry.whenComplete((value, error) -> complete(claimed, value, error));
+                }
+            });
+            return claimed;
+        }
+        CompletableFuture<STBNFields> prev = pendingFuture.get();
+        if (prev != null && !prev.isDone()) prev.cancel(true);
+        CompletableFuture<STBNFields> next = submitJob(w, h, d, seed, cacheValid);
+        pendingFuture.set(next);
+        return next;
+    }
+
+    private static void complete(CompletableFuture<STBNFields> future, STBNFields fields,
+            Throwable failure) {
+        if (failure instanceof CancellationException) future.cancel(false);
+        else if (failure != null) future.completeExceptionally(failure);
+        else future.complete(fields);
+    }
+
+    private static CompletableFuture<STBNFields> submitJob(int w, int h, int d, long seed,
+            BooleanSupplier cacheValid) {
         CompletableFuture<STBNFields> future = new CompletableFuture<>();
         FutureTask<STBNFields> task = new FutureTask<>(() -> {
             try {
@@ -69,7 +134,7 @@ public class STBNGenerator {
                     return null;
                 }
 
-                if (STBNCache.isCacheValid(w, h, d, seed)) {
+                if (cacheValid.getAsBoolean()) {
                     LOGGER.info("Valid STBN cache found for {}x{}x{}. Skipping math generation.", w,
                             h, d);
                     return null;
@@ -122,7 +187,6 @@ public class STBNGenerator {
             if (future.isCancelled()) task.cancel(true);
         });
 
-        pendingFuture.set(future);
         WORKER.execute(task);
         return future;
     }

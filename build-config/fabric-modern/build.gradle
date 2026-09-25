@@ -38,6 +38,9 @@ dependencies {
     minecraft "com.mojang:minecraft:${target.minecraft}"
     implementation "net.fabricmc:fabric-loader:${target.dependencies.loader}"
     implementation "net.fabricmc.fabric-api:fabric-api:${target.dependencies.fabricApi}"
+    testImplementation platform('org.junit:junit-bom:5.10.2')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
     compileOnly("com.terraformersmc:modmenu:${target.dependencies.modMenu}") { transitive = false }
     if (testCompat.tokenize('+').contains('modmenu')) {
         runtimeOnly("com.terraformersmc:modmenu:${target.dependencies.modMenu}") { transitive = false }
@@ -64,6 +67,14 @@ dependencies {
     }
 }
 
+test {
+    useJUnitPlatform()
+    def testGameDir = layout.buildDirectory.dir('test-gamedir').get().asFile
+    doFirst { testGameDir.mkdirs() }
+    workingDir = testGameDir
+    systemProperty 'fabric.gameDir', testGameDir.absolutePath
+}
+
 java {
     toolchain.languageVersion = JavaLanguageVersion.of(target.java as int)
     withSourcesJar()
@@ -81,6 +92,8 @@ sourceSets.main {
     java.setSrcDirs(sourceGroups.collect { new File(repositoryRoot, "${it}/src/main/java") })
     resources.setSrcDirs(sourceGroups.collect { new File(repositoryRoot, "${it}/src/main/resources") })
 }
+sourceSets.test.java.setSrcDirs([new File(repositoryRoot,
+        'adapters/fabric/modern/src/test/java')])
 
 // Reuse compatible Fabric commands and noise sources without copies.
 def sharedModern = objects.sourceDirectorySet('sharedModern', 'Shared modern Fabric sources')
@@ -238,7 +251,8 @@ def parityDriverJar = tasks.register('parityDriverJar', Jar) {
 
 // Startup-state and slow maximum-size fixtures run independently of the ordinary suite.
 if (target.renderer == 'renderpearl') {
-    [irisRestart: ['IrisRestartGameTest'],
+    [earlyStartup: ['EarlyStartupGameTest'],
+     irisRestart: ['IrisRestartGameTest'],
      sulkan: ['SulkanGameTest'],
      sulkanRestart: ['SulkanRestartGameTest'],
      sulkanExternal: ['SulkanExternalGameTest'],
@@ -262,6 +276,10 @@ if (target.renderer == 'renderpearl') {
                 def metadata = new JsonSlurper().parse(source.get().asFile)
                 metadata.entrypoints['fabric-client-gametest'] =
                         entrypoints.collect { "com.qb20nh.cbbg.gametest.${it}".toString() }
+                if (fixture == 'earlyStartup') {
+                    metadata.entrypoints.remove('preLaunch')
+                    metadata.mixins = ['cbbg.early-startup-test.mixins.json']
+                }
                 if (fixture == 'dsaBenchmark') {
                     metadata.entrypoints.client = ['com.qb20nh.cbbg.gametest.DsaBenchmarkSettings']
                 }
@@ -271,7 +289,8 @@ if (target.renderer == 'renderpearl') {
             }
         }
         tasks.register("${fixture}DriverJar", Jar) {
-            archiveClassifier = [irisRestart: 'iris-restart-driver',
+            archiveClassifier = [earlyStartup: 'early-startup-driver',
+                                 irisRestart: 'iris-restart-driver',
                                  sulkan: 'sulkan-driver',
                                  sulkanRestart: 'sulkan-restart-driver',
                                  sulkanExternal: 'sulkan-external-driver',
