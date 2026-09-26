@@ -35,9 +35,7 @@ public final class FloatAttachments {
             device, label, usage, config.pixelFormat(), width, height, depthOrLayers, mipLevels);
       }
     }
-    if (!mainTarget
-        && MenuBlurScope.format() != null
-        && original == MenuBlurScope.format()) {
+    if (!mainTarget && MenuBlurScope.format() != null && original == MenuBlurScope.format()) {
       String name = label == null ? null : label.get();
       if (name != null && name.startsWith("FBO ")) {
         return create(

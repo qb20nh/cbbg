@@ -73,8 +73,7 @@ public final class FloatAttachmentsGameTest implements FabricClientGameTest {
                   default -> () -> "CBBG fallback fixture";
                 };
             try (GpuTexture texture =
-                FloatAttachments.create(
-                    device, label, 15, PixelFormat.RGBA32F, 2, 2, 1, 1)) {
+                FloatAttachments.create(device, label, 15, PixelFormat.RGBA32F, 2, 2, 1, 1)) {
               GpuFormat expected =
                   switch (failures) {
                     case 0 -> GpuFormat.RGBA32_FLOAT;
@@ -125,7 +124,8 @@ public final class FloatAttachmentsGameTest implements FabricClientGameTest {
       throw new AssertionError("Original allocation failure was not propagated");
     } catch (GpuOutOfMemoryException expected) {
       if (!attempts.equals(List.of(GpuFormat.RGBA32_FLOAT))) {
-        throw new AssertionError("Unexpected precision fallback for a non-blur target: " + attempts);
+        throw new AssertionError(
+            "Unexpected precision fallback for a non-blur target: " + attempts);
       }
     }
   }

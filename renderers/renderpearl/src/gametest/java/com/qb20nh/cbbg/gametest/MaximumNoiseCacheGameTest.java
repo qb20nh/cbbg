@@ -41,14 +41,16 @@ public final class MaximumNoiseCacheGameTest implements FabricClientGameTest {
       }
       var fields = STBNGenerator.generateAsync(SIZE, SIZE, DEPTH, SEED).get(300, TimeUnit.SECONDS);
       if (fields == null) throw new AssertionError("Cold generation returned no fields");
-      assertImages(Objects.requireNonNull(STBNLoader.loadOrGenerate(SIZE, SIZE, DEPTH, SEED, fields)));
+      assertImages(
+          Objects.requireNonNull(STBNLoader.loadOrGenerate(SIZE, SIZE, DEPTH, SEED, fields)));
       if (!STBNCache.isCacheValid(SIZE, SIZE, DEPTH, SEED)) {
         throw new AssertionError("Maximum-size PNG cache is incomplete");
       }
       if (STBNGenerator.generateAsync(SIZE, SIZE, DEPTH, SEED).get(30, TimeUnit.SECONDS) != null) {
         throw new AssertionError("Warm cache unexpectedly regenerated noise");
       }
-      assertImages(Objects.requireNonNull(STBNLoader.loadOrGenerate(SIZE, SIZE, DEPTH, SEED, null)));
+      assertImages(
+          Objects.requireNonNull(STBNLoader.loadOrGenerate(SIZE, SIZE, DEPTH, SEED, null)));
       context.runOnClient(
           client -> {
             CbbgConfig.setStbnSize(SIZE);

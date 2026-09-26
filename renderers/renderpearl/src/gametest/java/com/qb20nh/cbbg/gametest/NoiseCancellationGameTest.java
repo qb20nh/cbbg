@@ -124,7 +124,8 @@ public final class NoiseCancellationGameTest implements FabricClientGameTest {
       throw new AssertionError("Forced noise fixture requires an unused cache");
     }
     try {
-      int[] stale = readFixture(new STBNGenerator.STBNFields(new double[4], new double[4], seed), seed);
+      int[] stale =
+          readFixture(new STBNGenerator.STBNFields(new double[4], new double[4], seed), seed);
       if (!STBNCache.isCacheValid(2, 2, 1, seed)) {
         throw new AssertionError("Forced noise fixture did not create a valid cache");
       }
