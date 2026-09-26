@@ -150,8 +150,16 @@ class ChangeImpact {
         byte[] changed = git(root, ['diff', '--name-only', '--no-renames', '-z', base, head, '--'])
         List<String> paths = changed.length ? new String(changed, StandardCharsets.UTF_8)
                 .split('\\u0000', -1).findAll { it } : []
-        Map before = select(catalogAt(root, base), paths)
-        Map after = select(catalogAt(root, head), paths)
+        TargetCatalog current = catalogAt(root, head)
+        boolean previousCatalogExists = git(root, ['ls-tree', '--name-only', base, '--', 'targets.json']).length > 0
+        Map before
+        if (previousCatalogExists) {
+            before = select(catalogAt(root, base), paths)
+        } else {
+            before = select(current, ['targets.json'])
+            before.changes[0].reason = 'baseline predates the target catalog; all current targets selected'
+        }
+        Map after = select(current, paths)
         [base: base, head: head, targets: ((before.targets + after.targets) as Set).sort(),
          checks: ((before.checks + after.checks) as Set).sort(),
          before: before.changes, after: after.changes]

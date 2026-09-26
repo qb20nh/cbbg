@@ -64,6 +64,34 @@ class ChangeImpactTest {
     }
 
     @Test
+    void baselineBeforeCatalogCreationSelectsAllCurrentTargets() {
+        git('init')
+        write('README.md', 'Existing mod')
+        git('add', '.')
+        git('commit', '-m', 'base')
+        String base = git('rev-parse', 'HEAD')
+        write('targets.json', JsonOutput.toJson(catalogData()))
+        git('add', '.')
+        git('commit', '-m', 'head')
+
+        Map report = ChangeImpact.compare(root, base, 'HEAD')
+        assertEquals(['1-fabric', '1-forge', '1-quilt'], report.targets)
+        assertTrue(report.checks.contains('core-java-8-17-21-25'))
+        assertTrue(ChangeImpact.ci(new TargetCatalog(catalogData()), report).build)
+
+        write('targets.json', '{invalid')
+        git('add', '.')
+        git('commit', '-m', 'invalid catalog')
+        String invalid = git('rev-parse', 'HEAD')
+        write('targets.json', JsonOutput.toJson(catalogData()))
+        git('add', '.')
+        git('commit', '-m', 'valid catalog')
+        assertThrows(com.google.gson.stream.MalformedJsonException) {
+            ChangeImpact.compare(root, invalid, 'HEAD')
+        }
+    }
+
+    @Test
     void comparesBothCatalogsAndBothSidesOfRename() {
         git('init')
         write('targets.json', JsonOutput.toJson(catalogData()))

@@ -53,6 +53,7 @@ gradlePlugin {
 
 test {
     useJUnitPlatform()
+    testLogging { exceptionFormat = 'full' }
     systemProperty 'cbbg.repository', projectDir.parentFile.absolutePath
     maxParallelForks = 1
 }
