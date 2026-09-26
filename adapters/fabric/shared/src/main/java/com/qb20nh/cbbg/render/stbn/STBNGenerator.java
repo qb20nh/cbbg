@@ -195,6 +195,14 @@ public class STBNGenerator {
         return pendingFuture.get();
     }
 
+    public static synchronized void shutdown() {
+        earlyKey = null;
+        earlyFuture = null;
+        CompletableFuture<STBNFields> pending = pendingFuture.getAndSet(null);
+        if (pending != null) pending.cancel(true);
+        WORKER.shutdownNow();
+    }
+
     public static int calculatePixelColor(double u, double v) {
         return BlueNoise.calculatePixelColor(u, v);
     }

@@ -2,6 +2,7 @@ package com.qb20nh.cbbg.mixin;
 
 import com.mojang.renderpearl.api.textures.GpuTextureView;
 import com.qb20nh.cbbg.render.DitherController;
+import com.qb20nh.cbbg.render.stbn.STBNGenerator;
 import com.qb20nh.cbbg.compat.renderscale.RenderScaleTargets;
 import net.minecraft.client.Minecraft;
 import org.spongepowered.asm.mixin.Mixin;
@@ -26,6 +27,7 @@ public abstract class MinecraftMixin {
     @Inject(method = "close", at = @At("HEAD"))
     private void cbbg$close(CallbackInfo ci) {
         DitherController.close();
+        STBNGenerator.shutdown();
         RenderScaleTargets.close();
     }
 }
