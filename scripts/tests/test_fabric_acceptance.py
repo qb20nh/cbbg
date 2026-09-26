@@ -24,23 +24,43 @@ class FabricAcceptanceTests(unittest.TestCase):
 
     def test_restart_runs_follow_shader_profiles(self):
         runs = required_runs(self.target, self.contract)
-        for suite, mod, backend in [('iris-restart', 'iris', 'opengl'),
-                                    ('sulkan-restart', 'sulkan', 'vulkan'),
-                                    ('sulkan-external-restart', 'sulkan', 'vulkan')]:
+        for suite, mod, backend in [('iris-restart', 'iris', 'opengl')]:
             selected = [run for run in runs if run['suite'] == suite]
             self.assertEqual({run['profile'] for run in selected}, {
                 profile for profile in self.target['compatibilityProfiles'] if mod in profile.split('+')})
             self.assertTrue(all(run['restart'] and run['backend'] == backend for run in selected))
 
     def test_added_shader_profile_requires_restart_runs(self):
-        self.target['compatibilityProfiles']['sulkan+modmenu'] = ['vulkan']
+        self.target['compatibilityProfiles']['iris+modmenu'] = ['opengl']
         selected = [run['suite'] for run in required_runs(self.target, self.contract)
-                    if run['profile'] == 'sulkan+modmenu']
-        self.assertEqual(set(selected), {'ordinary', 'sulkan-restart', 'sulkan-external-restart'})
+                    if run['profile'] == 'iris+modmenu']
+        self.assertEqual(set(selected), {'ordinary', 'iris-restart'})
 
     def test_duplicate_suite_rejected(self):
         self.contract['additionalRuns'].append(copy.deepcopy(self.contract['additionalRuns'][0]))
         with self.assertRaisesRegex(ValueError, 'duplicate suite'):
+            required_runs(self.target, self.contract)
+
+    def test_startup_requires_a_cache_mode_and_dedicated_driver(self):
+        suite = dict(suite='startup', profiles=['none'], backends=['opengl'],
+                     restart=False, entrypoints=['ReleaseEarlyStartupGameTest'])
+        self.contract['additionalRuns'].append(suite)
+        for mode in (None, 'unknown'):
+            suite['startupMode'] = mode
+            with self.assertRaisesRegex(ValueError, 'Invalid startup suite'):
+                required_runs(self.target, self.contract)
+        for mode in ('cold', 'warm', 'damaged'):
+            suite['startupMode'] = mode
+            selected = [run for run in required_runs(self.target, self.contract)
+                        if run['suite'] == 'startup']
+            self.assertEqual([run['startupMode'] for run in selected], [mode])
+        suite['restart'] = True
+        with self.assertRaisesRegex(ValueError, 'Invalid startup suite'):
+            required_runs(self.target, self.contract)
+
+    def test_cache_mode_on_other_driver_rejected(self):
+        self.contract['additionalRuns'][0]['startupMode'] = 'cold'
+        with self.assertRaisesRegex(ValueError, 'Invalid startup suite'):
             required_runs(self.target, self.contract)
 
     def test_unknown_profile_rejected(self):
@@ -72,6 +92,7 @@ class FabricResultMatrixTests(unittest.TestCase):
             self.rows.append({key: run[key] for key in ('suite', 'profile', 'backend')})
             self.rows[-1]['receipt'] = {'path': path.name, 'sha256': digest(path)}
             self.results[path] = {'target': self.target['id'], 'profile': run['profile'],
+                                  'startupMode': run.get('startupMode'),
                                   'backend': run['backend'], 'scenarios': run['entrypoints'],
                                   'releaseAcceptance': False}
         # Run-file checks have their own tests; exercise matrix selection and dispatch here.
@@ -122,6 +143,21 @@ class FabricResultMatrixTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'differs from required configuration'):
             self.verify()
 
+    def test_wrong_startup_mode_rejected(self):
+        for number, run in enumerate(self.runs):
+            if run['suite'] != 'startup-cold':
+                continue
+            result = self.results[self.root / (str(number) + '.json')]
+            for mode in ('warm', 'damaged', None):
+                result['startupMode'] = mode
+                with self.subTest(mode=mode), self.assertRaisesRegex(
+                        ValueError, 'differs from required configuration'):
+                    self.verify()
+            result['startupMode'] = 'cold'
+            self.verify()
+            return
+        self.fail('Cold startup suite missing')
+
     def test_incomplete_scenario_list_rejected(self):
         self.results[self.root / '0.json']['scenarios'] = ['Example.incomplete']
         with self.assertRaisesRegex(ValueError, 'differs from required configuration'):
@@ -158,7 +194,7 @@ class FabricCandidateTests(unittest.TestCase):
                 ('runtime-locks/26.3-fabric-scenarios.json', 'contract.json'),
                 ('runtime-locks/26.3-fabric-linux-x86_64.json', 'runtime.json'),
                 ('runtime-locks/26.3-fabric-mods.json', 'mods.json'),
-                ('renderers/renderpearl/src/gametest/resources/fabric.mod.json', 'metadata.json')]:
+                ('renderers/renderpearl/src/processedGametest/resources/fabric.mod.json', 'metadata.json')]:
             (self.root / name).write_bytes((ROOT / source).read_bytes())
         runs = required_runs(select_targets(self.catalog, self.target)[0], read_json(self.root / 'contract.json'))
         inventory = [{'id': self.target, 'artifact': 'artifact.jar', 'sources': 'sources.jar',

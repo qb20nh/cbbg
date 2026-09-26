@@ -1,0 +1,8 @@
+{
+  "mode": "ENABLED",
+  "pixelFormat": "RGBA16F",
+  "stbnSize": 16,
+  "stbnDepth": 8,
+  "stbnSeed": 74123,
+  "strength": 2
+}

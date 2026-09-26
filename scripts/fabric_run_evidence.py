@@ -9,7 +9,7 @@ import zipfile
 
 from fabric_dependency_lock import verify_dependencies, verify_gametest_api
 from fabric_parity_runtime import RESTART_DRIVERS, restart_state
-from fabric_scenario_evidence import graphics_identity, validate_scenarios
+from fabric_scenario_evidence import graphics_identity, validate_scenarios, validate_shutdown, validate_startup
 from parity_evidence import EvidenceError, checked_file, digest, read_json
 from runtime_catalog import load_catalog, select_targets
 
@@ -90,6 +90,8 @@ def _verify_run(receipt_path, target, *, source_commit, candidate_sha256,
     log = paths[log_name].read_text()
     results = validate_scenarios(expected, paths[trace_name].read_text(),
                                  log, report['exitCode'], backend)
+    validate_shutdown(expected, game / directory / 'shutdown.json')
+    validate_startup(expected, report.get('startupMode'), game / directory, game / '.cbbg', log, backend)
     if report.get('scenarios') != results:
         raise EvidenceError('Scenario summary differs from trace')
     graphics = graphics_identity(log, backend)
@@ -100,6 +102,7 @@ def _verify_run(receipt_path, target, *, source_commit, candidate_sha256,
     if report.get('graphics') != graphics:
         raise EvidenceError('Graphics summary differs from saved files')
     return {'target': target['id'], 'profile': profile, 'backend': backend,
+            'startupMode': report.get('startupMode'),
             'source_commit': source_commit, 'receipt_sha256': digest(receipt_path),
             'scenarios': expected, 'evidence_files': len(paths), 'releaseAcceptance': False}
 

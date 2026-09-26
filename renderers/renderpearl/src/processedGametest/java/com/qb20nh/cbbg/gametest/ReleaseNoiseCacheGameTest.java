@@ -172,6 +172,14 @@ public final class ReleaseNoiseCacheGameTest implements FabricClientGameTest {
         return pixels;
     }
 
+    static String verifySeed74123Cache() throws Exception {
+        String actual = pixelHash(readCache(74123));
+        if (!SEED_OTHER_PIXELS.equals(actual)) {
+            throw new AssertionError("Startup noise differs from CPU reference for seed 74123");
+        }
+        return actual;
+    }
+
     private static String pixelHash(int[] pixels) throws Exception {
         ByteBuffer bytes = ByteBuffer.allocate(pixels.length * Integer.BYTES).order(ByteOrder.BIG_ENDIAN);
         for (int pixel : pixels) bytes.putInt(pixel);

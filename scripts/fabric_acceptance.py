@@ -7,6 +7,7 @@ import re
 import zipfile
 
 from fabric_run_evidence import verify_run, verify_restart
+from fabric_scenario_evidence import STARTUP_DRIVER
 from candidate_manifest import client_candidate
 from parity_evidence import EvidenceError, checked_file, digest, read_json, unique_by
 from runtime_catalog import load_catalog, select_targets
@@ -49,6 +50,12 @@ def required_runs(target, contract, root=ROOT, metadata_path=None):
                 or any(not isinstance(value, str) or not value for value in scenarios)
                 or len(scenarios) != len(set(scenarios))):
             raise EvidenceError('Invalid suite entrypoints: ' + name)
+        startup_mode = suite.get('startupMode')
+        if ((STARTUP_DRIVER in scenarios and
+             (scenarios != [STARTUP_DRIVER] or startup_mode not in ('cold', 'warm', 'damaged')
+              or suite['restart']))
+                or (STARTUP_DRIVER not in scenarios and startup_mode is not None)):
+            raise EvidenceError('Invalid startup suite: ' + name)
         selected = suite['profiles']
         backends = suite['backends']
         if (not isinstance(selected, list) or not selected
@@ -62,7 +69,8 @@ def required_runs(target, contract, root=ROOT, metadata_path=None):
             for backend in backends:
                 if backend in profiles[profile]:
                     runs.append({'suite': name, 'profile': profile, 'backend': backend,
-                                 'restart': suite['restart'], 'entrypoints': scenarios})
+                                 'restart': suite['restart'], 'entrypoints': scenarios,
+                                 'startupMode': startup_mode})
                     count += 1
         if not count:
             raise EvidenceError('Suite has no applicable configurations: ' + name)
@@ -93,7 +101,8 @@ def verify_results(index_path, target, contract_path, driver_hashes, *, metadata
         verifier = verify_restart if requirement['restart'] else verify_run
         result = verifier(receipt, target, driver_sha256=driver_hashes[cell[0]], **inputs)
         if (result['profile'] != cell[1] or result['backend'] != cell[2]
-                or result['scenarios'] != requirement['entrypoints']):
+                or result['scenarios'] != requirement['entrypoints']
+                or result.get('startupMode') != requirement['startupMode']):
             raise EvidenceError('Saved run differs from required configuration: ' + str(cell))
         results.append(dict(result, suite=cell[0]))
     if metadata_path is None:

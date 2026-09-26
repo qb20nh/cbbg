@@ -13,7 +13,8 @@ import zipfile
 
 from fabric_dependency_lock import verify_dependencies, verify_gametest_api
 from fabric_runtime_lock import verify_runtime
-from fabric_scenario_evidence import graphics_identity, validate_scenarios
+from fabric_scenario_evidence import (STARTUP_CACHE_FILES, STARTUP_DRIVER, graphics_identity,
+                                      validate_scenarios, validate_shutdown, validate_startup)
 from runtime_catalog import load_catalog, select_targets
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -31,6 +32,22 @@ RESTART_DRIVERS = {
 def digest(path):
     with Path(path).open('rb') as stream:
         return hashlib.file_digest(stream, 'sha256').hexdigest()
+
+
+def prepare_startup_cache(game, evidence, mode, source):
+    cache = game / '.cbbg'
+    cache.mkdir()
+    if source is not None:
+        for name in STARTUP_CACHE_FILES:
+            shutil.copyfile(source / name, cache / name)
+        if mode == 'damaged':
+            (cache / 'stbn_16x16x8_7.png').write_bytes(bytes([1, 2, 3]))
+        for path in cache.iterdir():
+            os.utime(path, (946684800, 946684800))
+    evidence.mkdir(parents=True, exist_ok=True)
+    record = {'mode': mode, 'files': {path.name: {'sha256': digest(path),
+              'mtimeNs': path.stat().st_mtime_ns} for path in sorted(cache.iterdir())}}
+    (evidence / 'startup-input.json').write_text(json.dumps(record, indent=2) + '\n')
 
 
 def source_dirty(root):
@@ -86,6 +103,9 @@ def main():
     parser.add_argument('--restart-phase', choices=['prepare', 'verify', 'control'])
     parser.add_argument('--cbbg-config', type=Path,
                         help='Initial CBBG settings for a fresh, non-restart run')
+    parser.add_argument('--startup-mode', choices=['cold', 'warm', 'damaged'])
+    parser.add_argument('--startup-cache', type=Path,
+                        help='Cache directory copied into a fresh warm/damaged startup test')
     display = parser.add_mutually_exclusive_group(required=True)
     display.add_argument('--wayland-display')
     display.add_argument('--x-display')
@@ -127,6 +147,11 @@ def main():
     if args.dsa_mode and (args.backend != 'opengl'
                          or 'com.qb20nh.cbbg.gametest.DsaBenchmarkGameTest' not in expected):
         parser.error('DSA selection requires the OpenGL benchmark driver')
+    if args.startup_mode or STARTUP_DRIVER in expected or args.startup_cache:
+        if (expected != [STARTUP_DRIVER] or not args.startup_mode or args.restart_phase
+                or initial_config is None or args.compat != 'none'
+                or (args.startup_mode == 'cold') != (args.startup_cache is None)):
+            parser.error('Startup requires its dedicated driver, initial config and matching cache input')
     restart_shader = None
     if args.restart_phase:
         restart_shader = RESTART_DRIVERS.get((args.backend, expected[0])) if len(expected) == 1 else None
@@ -191,6 +216,7 @@ def main():
                'sourceDirty': source_dirty(ROOT),
                'artifacts': {}}
     receipt['restartPhase'] = args.restart_phase
+    receipt['startupMode'] = args.startup_mode
     if args.restart_phase == 'verify':
         previous_path = game / 'prepare-probe.json'
         previous = json.loads(previous_path.read_text())
@@ -226,6 +252,8 @@ def main():
             evidence.mkdir(parents=True)
             (evidence / 'initial-cbbg.json').write_bytes(initial_config)
             receipt['initialConfigSha256'] = hashlib.sha256(initial_config).hexdigest()
+        if args.startup_mode:
+            prepare_startup_cache(game, evidence, args.startup_mode, args.startup_cache)
         for name, source in sources.items():
             if args.restart_phase != 'verify':
                 shutil.copyfile(source, mods / name)
@@ -241,6 +269,8 @@ def main():
         scenarios = validate_scenarios(expected,
             (evidence / 'scenarios.tsv').read_text(), log_text,
             result.returncode, args.backend)
+        validate_shutdown(expected, evidence / 'shutdown.json')
+        validate_startup(expected, args.startup_mode, evidence, game / '.cbbg', log_text, args.backend)
         receipt['graphics'] = graphics_identity(log_text, args.backend)
         context = json.loads((evidence / 'graphics-context.json').read_text())
         if context.get('backend') != args.backend:

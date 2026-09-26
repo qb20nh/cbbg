@@ -168,6 +168,25 @@ class LauncherFailureTests(unittest.TestCase):
         self.assertEqual(receipt['exitCode'], 1)
         self.assertNotIn('scenarios', receipt)
 
+    def test_completed_shutdown_entrypoint_requires_cleanup_result(self):
+        entrypoint = 'com.qb20nh.cbbg.gametest.ReleaseShutdownGameTest'
+        with zipfile.ZipFile(self.driver, 'w') as jar:
+            jar.writestr('fabric.mod.json', json.dumps({
+                'id': 'cbbg-renderer-test',
+                'entrypoints': {'fabric-client-gametest': [entrypoint]}}))
+        def client(command, **kwargs):
+            evidence = self.game / 'evidence'
+            evidence.mkdir()
+            (evidence / 'scenarios.tsv').write_text(
+                f'started\t{entrypoint}\npassed\t{entrypoint}\n')
+            kwargs['stdout'].write('Readback backend=OpenGL GPU=Fixture driver=3.3\n')
+            return subprocess.CompletedProcess(command, 0)
+        self.run.side_effect = client
+        with self.assertRaises(FileNotFoundError):
+            launcher.main()
+        self.assertIn('failure', self.receipt())
+        self.assertNotIn('scenarios', self.receipt())
+
     def test_existing_directory_is_untouched(self):
         self.game.mkdir()
         sentinel = self.game / 'personal-data'

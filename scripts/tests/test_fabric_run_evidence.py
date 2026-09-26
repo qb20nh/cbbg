@@ -77,6 +77,35 @@ class FabricRunEvidenceTest(unittest.TestCase):
         self.assertEqual(self.expected, result['scenarios'])
         self.assertFalse(result['releaseAcceptance'])
 
+    def test_shutdown_cleanup_is_rechecked_from_saved_result(self):
+        self.expected = ['com.qb20nh.cbbg.gametest.ReleaseShutdownGameTest']
+        with zipfile.ZipFile(self.game / 'mods/driver.jar', 'w') as jar:
+            jar.writestr('fabric.mod.json', json.dumps({'id': 'cbbg-renderer-test',
+                'entrypoints': {'fabric-client-gametest': self.expected}}))
+        self.report['artifacts']['driver.jar'] = digest(self.game / 'mods/driver.jar')
+        self.report['scenarioSha256'] = hashlib.sha256(
+            json.dumps(self.expected, separators=(',', ':')).encode()).hexdigest()
+        trace = ''.join(state + '\t' + self.expected[0] + '\n' for state in ('started', 'passed'))
+        (self.game / 'evidence/scenarios.tsv').write_text(trace)
+        self.report['evidence']['evidence/scenarios.tsv'] = digest(self.game / 'evidence/scenarios.tsv')
+        self.report['scenarios'] = validate_scenarios(self.expected, trace, self.log, 0, 'opengl')
+        self.save()
+        with self.assertRaises(FileNotFoundError):
+            self.verify()
+        path = self.game / 'evidence/shutdown.json'
+        record = dict(kind='idle', workerTerminated=True, resourcesChecked=2,
+                      resourcesClosed=True, generationStarted=False, generationCompleted=False)
+        path.write_text(json.dumps(record))
+        self.report['evidence']['evidence/shutdown.json'] = digest(path)
+        self.save()
+        self.verify()
+        record['workerTerminated'] = False
+        path.write_text(json.dumps(record))
+        self.report['evidence']['evidence/shutdown.json'] = digest(path)
+        self.save()
+        with self.assertRaisesRegex(ValueError, 'shutdown checks'):
+            self.verify()
+
     def test_fabric_run_cannot_validate_quilt(self):
         self.target['loader'] = 'quilt'
         with self.assertRaisesRegex(ValueError, 'requires a Fabric target'):
