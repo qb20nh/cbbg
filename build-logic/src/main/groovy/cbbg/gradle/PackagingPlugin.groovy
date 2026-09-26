@@ -6,7 +6,7 @@ import proguard.gradle.ProGuardTask
 
 class PackagingPlugin implements Plugin<Project> {
     void apply(Project project) {
-        def optimization = project.extensions.create('releaseOptimization', ReleaseOptimization, project.objects)
+        def optimization = project.extensions.create('releaseOptimization', ReleaseOptimization, project.objects, project)
         optimization.usageFile.convention(project.layout.buildDirectory.file('reports/proguard/usage.txt'))
         optimization.configurationFile.convention(project.layout.buildDirectory.file('reports/proguard/configuration.txt'))
         project.tasks.register('optimizeReleaseJar', ProGuardTask) {
