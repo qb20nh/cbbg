@@ -8,6 +8,8 @@
 		"GlConstMixin",
 		"GlCommandEncoderMixin",
 		"MainTargetMixin",
+		"MinecraftMixin",
+		"RenderPassMixin",
 		"RenderTargetCreateBuffersMixin",
 		"ScreenshotMixin"
 	],

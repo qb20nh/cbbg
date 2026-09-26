@@ -1,156 +1,72 @@
 # Contributing to cbbg
 
-Thanks for contributing!
+cbbg is a client-side Minecraft mod that reduces color banding with a
+higher-precision render target and spatiotemporal blue-noise dithering.
 
-This repo is a client-side fabric mod for Minecraft that reduces visible color banding by upgrading the main render target precision and applying spatiotemporal blue noise dithering.
+## Development
 
-## Development setup
+Install Git and JDK 25. Use `gradlew.bat` on Windows or `./gradlew` on macOS/Linux:
 
-### Prerequisites
-
-- JDK 25 for the Minecraft 26.2 line (older maintenance branches retain their own Java requirements)
-- Git
-
-### Build
-
-Windows:
-
-```
-.\gradlew.bat build
-```
-
-macOS/Linux:
-
-```
+```sh
 ./gradlew build
+./gradlew check
+./gradlew runClient -Ptarget=26.3-fabric
+./gradlew build -Ptarget=26.2-fabric
 ```
 
-### Run the game (dev environment)
+Root commands default to the development targets listed in `targets.json`.
+Use `-Ptarget=id` or `-Ptargets=id,id` for another selection. Runtime Java
+requirements can differ from the JDK used to run Gradle.
 
-Windows:
+Keep changes focused and readable. Run checks for the affected code; run local
+game tests when rendering or game behavior changes. CI compiles, runs unit
+tests and checks packages. It never launches Minecraft clients.
 
-```
-.\gradlew.bat runClient
-```
+## Targets and versions
 
-macOS/Linux:
+Minecraft versions and loaders share one branch. `targets.json` records their
+dependencies, source groups, build profiles and implementation status. Shared
+code belongs in the core or renderer modules; adapters handle version-specific
+APIs. Discuss new ports before adding a profile.
 
-```
-./gradlew runClient
-```
+Set `mod_version=X.Y.Z` or `X.Y.Z-rc.1` in `gradle.properties`. Modern artifacts
+use `<mod_version>+mc<minecraft_version>-<loader>` and release tags use `vX.Y.Z`
+or `vX.Y.Z-rc.1`. Gradle expands the version and Minecraft requirement in mod
+metadata. Keep these values in properties and the catalog.
 
-## Project conventions
+The preserved 26.2 profile retains its `<mod_version>+mc<minecraft_version>`
+artifact names and root source resources. The publisher also accepts existing
+historical `vX.Y.Z+mc<minecraft_version>` releases.
 
-- Keep changes focused and readable.
-- Try to minimize compiler/linter warnings.
+## Releases
 
-## Branch model
+1. Finish the selected target and update its version and changelog. Obtain
+   approval before release preparation commits, pushes and tags.
+2. After approval, create and push the release tag. Manually dispatch
+   [Release](.github/workflows/release.yml) from that tag with the selected target.
+3. The workflow builds and checks the candidate, records its inputs, creates
+   attestations and uploads a GitHub draft. It refuses to replace an existing
+   release.
+4. Download the candidate and test its packaged JAR locally. Complete every
+   required loader, graphics backend and compatibility configuration using
+   fresh game directories and the recorded dependency versions. Keep raw test
+   records local.
+5. Run `checkRelease` against the draft, candidate and local results. After
+   explicit approval, run `publishRelease` with the final release notes.
+   GitHub immutable releases must be enabled.
+6. Manually dispatch [Publish](.github/workflows/publish.yml) with the exact
+   published tag and selected destinations. Start with `dry_run=true` to check
+   downloaded files, service labels and retry state. Disable it after approval
+   to upload those files to Modrinth and/or CurseForge.
 
-- `main` is the canonical development line.
-- Each long-lived Minecraft maintenance line is named exactly:
-  - `mc<minecraft_version>` (examples: `mc1.21.1`)
+The publisher uses tools from its workflow revision and source from the release
+tag. It verifies an immutable release and uploads its existing JARs. Modrinth
+retries compare remote metadata and file hashes. CurseForge uses the upload
+token; inspect its project files before starting a new dispatch to retry an
+upload. If publication returns an uncertain result, check the service before
+retrying.
 
-Backports should generally be cherry-picked from `main` into the maintenance branch when applicable.
-
-## Versioning and releases
-
-`gradle.properties` is the single source of truth:
-
-- `mod_version=X.Y.Z` (or `X.Y.Z-rc.1` for prereleases)
-- `minecraft_version=<minecraft_version>`
-
-Gradle computes the published mod/artifact version as:
-
-- `<mod_version>+mc<minecraft_version>`
-
-`fabric.mod.json` is expanded during the build:
-
-- `"version": "${version}"`
-- `"minecraft": "~${minecraft_version}"`
-
-Do not hardcode these values in `fabric.mod.json`.
-
-### Tag format (canonical across all branches)
-
-Git tags are **repo-global** (not branch-local), so tags must include the Minecraft line to avoid collisions.
-
-Release tags must be:
-
-- Stable: `vX.Y.Z+mc<minecraft_version>`
-- Prerelease: `vX.Y.Z-rc.1+mc<minecraft_version>`
-
-### Branch-gated releases
-
-Releases are intentionally **branch-gated** by CI:
-
-The tagged commit must be contained in either:
-
-- `main`, or
-- `mc<minecraft_version>` (for the Minecraft line you are releasing)
-
-This prevents accidental releases from random branches.
-
-### Release procedure (maintainers only)
-
-1. Ensure you’re on the branch you intend to release from (`main` or `mc<minecraft_version>`).
-2. Update `CHANGELOG.md`:
-   - Move entries from `## [Unreleased]` into a new `## [X.Y.Z] - YYYY-MM-DD` section.
-   - When reusing a mod version for another Minecraft line, use `## [X.Y.Z+mc<MINECRAFT_VERSION>] - YYYY-MM-DD`. Release notes prefer this exact artifact version before falling back to the legacy version-only section.
-3. Bump `gradle.properties`:
-   - Update `mod_version=...`
-   - Ensure `minecraft_version=...` matches the branch line.
-4. Commit the release prep change:
-
-```bash
-git add CHANGELOG.md gradle.properties
-git commit -m "Prepare release X.Y.Z"
-```
-
-5. Create an annotated tag on that commit:
-
-```bash
-git tag -a "vX.Y.Z+mc<MINECRAFT_VERSION>" -m "Release vX.Y.Z+mc<MINECRAFT_VERSION>"
-```
-
-6. Push the branch and tag:
-
-```bash
-git push origin <branch>
-git push origin "vX.Y.Z+mc<MINECRAFT_VERSION>"
-```
-
-### How CI/CD works
-
-- **GitHub Release creation**: pushing a matching tag triggers [`.github/workflows/release.yml`](.github/workflows/release.yml).
-  - Validates the tag matches `gradle.properties` (`mod_version`, `minecraft_version`).
-  - Enforces branch gating.
-  - Builds and uploads the JARs to the GitHub Release.
-- **Publishing**: [`.github/workflows/publish.yml`](.github/workflows/publish.yml) runs after `Release` and publishes the exact GitHub Release artifacts (Modrinth/CurseForge).
-  - The publishing JDK and CurseForge Java label come from the tagged source's `fabric.mod.json`.
-  - Python validation lives in `.github/scripts/release.py`. The publisher checks out these tools from its own workflow revision so older release tags remain supported.
-  - Downloaded JAR metadata and class-file Java requirements are checked before uploading.
-  - Manual publishing requires an explicit existing release tag; it never selects another Minecraft line's latest release implicitly.
-  - Manual runs default to `dry_run`: validate the immutable release and packaged metadata, make authenticated CurseForge GET requests, resolve destination labels, and execute Minotaur with `debugMode=true` without uploading. This verifies CurseForge read authentication, not project upload permission. Disable `dry_run` to publish.
-  - Client GameTests run with and without RenderScale before a new GitHub Release is created. Sodium checks remain deferred.
-  - Stable releases and prereleases must be immutable. Publish a new prerelease tag instead of replacing an existing prerelease's assets.
-
-## ~~Adding a new Minecraft maintenance line (future)~~
-
-When adding support for a new Minecraft version while keeping older lines maintained:
-
-1. Create a new maintenance branch named `mc<minecraft_version>` (example: `mc26.1`).
-2. Update `gradle.properties` on that branch:
-   - `minecraft_version=...`
-   - update Fabric/Loader/dependency versions as needed
-3. Ensure the release workflows exist on the branch:
-   - cherry-pick the relevant workflow commits from `main` into the new branch
-4. Release using the canonical tag format `v<mod_version>+mc<minecraft_version>`.
-
-> [!IMPORTANT]
-> We’re restructuring the repository to support multiple Minecraft versions and mod loaders on a single branch. Please discuss your plans with the maintainers before starting a backport or a port to a newer version.
-
-## Troubleshooting releases
-
-- **Tag … does not match gradle.properties …**: the tag’s `mod_version` or `minecraft_version` doesn’t match `gradle.properties` on the tagged commit.
-- **Branch gating failure**: the tag points to a commit that is not reachable from `main` or `mc<minecraft_version>`. Retag a commit on the correct branch (or fix the branch name/version).
-- **Multiple tags on the same commit**: `publish.yml` refuses to guess which tag to publish; remove/avoid ambiguity.
+See [the build command reference](build-config/README.md) for task inputs.
+Hotfix checks take explicit prior release manifests and expand testing to
+affected released targets. Historical branches remain usable for existing
+releases; new ports belong in the shared target catalog.

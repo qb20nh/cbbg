@@ -6,6 +6,16 @@
 version: 2
 updates:
   - package-ecosystem: "gradle" # See documentation for possible values
-    directory: "/" # Location of package manifests
+    directories:
+      - "/"
+      - "/core"
+      - "/build-logic"
+      - "/build-config/fabric-modern"
+      - "/build-config/fabric-upstream"
+      - "/build-config/publishing"
+    schedule:
+      interval: "weekly"
+  - package-ecosystem: "github-actions"
+    directory: "/"
     schedule:
       interval: "weekly"

@@ -1,0 +1,61 @@
+plugins {
+    id 'java-library'
+    id 'cbbg.private-gson'
+    id 'cbbg.quality'
+    id 'cbbg.formatting'
+}
+
+repositories {
+    mavenCentral()
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
+    withSourcesJar()
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.release = 8
+}
+
+dependencies {
+    testImplementation project('rendering')
+    testImplementation project('legacy')
+    // Reference Gson remains available only to compare the private streaming codec in tests.
+    testImplementation "com.google.code.gson:gson:${providers.gradleProperty('testGsonVersion').getOrElse('2.2.4')}"
+    testImplementation platform('org.junit:junit-bom:5.10.2')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+subprojects {
+    apply plugin: 'java-library'
+    apply plugin: 'cbbg.quality'
+    repositories { mavenCentral() }
+    java {
+        sourceCompatibility = JavaVersion.VERSION_1_8
+        targetCompatibility = JavaVersion.VERSION_1_8
+        withSourcesJar()
+    }
+    tasks.withType(JavaCompile).configureEach { options.release = 8 }
+    dependencies { implementation project.parent }
+}
+
+sourceSets.test.java.srcDir 'src/testSupport/java'
+
+['check', 'qualityCheck'].each { operation ->
+    tasks.named(operation) {
+        dependsOn subprojects.collect { it.tasks.named(operation) }
+    }
+}
+
+test {
+    useJUnitPlatform()
+    // Compile with a modern JDK, but exercise exactly the requested runtime.
+    if (providers.gradleProperty('testJava').isPresent()) {
+        javaLauncher = javaToolchains.launcherFor {
+            languageVersion = JavaLanguageVersion.of(providers.gradleProperty('testJava').get())
+        }
+    }
+}

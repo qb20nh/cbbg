@@ -1,0 +1,13 @@
+tasks.named('checkPackages') {
+    dependsOn tasks.named('optimizeReleaseJar')
+    artifact.set(releaseOptimization.outputJar)
+    mapping.set(releaseOptimization.mappingFile)
+    sources.set(tasks.named('sourcesJar', Jar).flatMap { it.archiveFile })
+    javaVersion.set(25)
+    coreSources.set(file('../../core/src/main/java'))
+}
+
+tasks.register('ciCheck') {
+    group = 'verification'
+    dependsOn tasks.named('check'), tasks.named('checkPackages'), project(':core').tasks.named('check')
+}

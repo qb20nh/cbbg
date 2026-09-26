@@ -62,6 +62,7 @@
   "cbbg.config.size.label": "크기",
   "cbbg.config.status.disabled_render_error": "⚠ 렌더링 오류로 인해 cbbg가 비활성화됨 (로그 확인)",
   "cbbg.config.status.iris_active": "⚠ Iris 활성화됨: cbbg 강제 OFF",
+  "cbbg.config.status.shader_active": "⚠ %s 활성화됨: cbbg 강제 OFF",
   "cbbg.config.status.mode_disabled": "cbbg가 비활성화됨 (설정을 편집하려면 모드를 활성화하세요)",
   "cbbg.config.status.no_float_formats": "⚠ RGBA16F/32F 미지원: RGBA8로 고정",
   "cbbg.config.strength.label": "강도",

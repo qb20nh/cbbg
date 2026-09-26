@@ -1,0 +1,206 @@
+package com.qb20nh.cbbg.render.stbn;
+
+import com.mojang.blaze3d.platform.NativeImage;
+import com.qb20nh.cbbg.Cbbg;
+import com.qb20nh.cbbg.config.CbbgConfig;
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.security.NoSuchAlgorithmException;
+import java.util.*;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
+
+@NullMarked
+public class STBNLoader {
+
+  private STBNLoader() {}
+
+  private static final Path CACHE_DIR = STBNCache.CACHE_DIR;
+  private static final String HASH_FILE_FMT = STBNCache.HASH_FILE_FMT;
+  private static final String IMAGE_BASE_FMT = STBNCache.IMAGE_BASE_FMT;
+
+  public static NativeImage @Nullable [] loadOrGenerate(
+      int width, int height, int frames, STBNGenerator.@Nullable STBNFields fields) {
+    // 1. Try Cache
+    long seed = fields == null ? CbbgConfig.get().stbnSeed() : fields.seed();
+    if (fields == null) {
+      NativeImage[] cached = loadFromCache(width, height, frames, seed);
+      if (cached.length == frames) {
+        Cbbg.LOGGER.info("STBN Frames loaded from cache.");
+        return cached;
+      }
+    }
+
+    // 2. Generate from fields
+    if (fields != null) {
+      NativeImage[] generated = generateFramesFromFields(fields, width, height, frames);
+      Cbbg.LOGGER.info("STBN Images generated from math fields.");
+      saveToCache(generated, width, height, frames, seed);
+      return generated;
+    }
+
+    return null;
+  }
+
+  private static NativeImage[] generateFramesFromFields(
+      STBNGenerator.STBNFields fields, int width, int height, int frames) {
+    NativeImage[] images = new NativeImage[frames];
+    for (int z = 0; z < frames; z++) {
+      images[z] = new NativeImage(width, height, false);
+      for (int y = 0; y < height; y++) {
+        for (int x = 0; x < width; x++) {
+          int idx = (z * height + y) * width + x;
+          double u = fields.uField()[idx];
+          double v = fields.vField()[idx];
+          StbnImagePixels.set(images[z], x, y, STBNGenerator.calculatePixelColor(u, v));
+        }
+      }
+    }
+    return images;
+  }
+
+  private static NativeImage[] loadFromCache(int w, int h, int d, long seed) {
+    try {
+      if (!Files.exists(CACHE_DIR)) {
+        return new NativeImage[0];
+      }
+
+      Path hashFile = CACHE_DIR.resolve(String.format(HASH_FILE_FMT, w, h, d));
+      if (!Files.exists(hashFile)) {
+        return new NativeImage[0];
+      }
+
+      Map<String, String> hashes = new HashMap<>();
+      List<String> lines = Files.readAllLines(hashFile);
+      if (!NoiseCache.matchesSeed(lines, seed)) return new NativeImage[0];
+      for (String line : lines) {
+        String[] parts = line.trim().split("\\s+", 0);
+        if (parts.length >= 2) {
+          hashes.put(parts[1], parts[0]);
+        }
+      }
+
+      NativeImage[] images = new NativeImage[d];
+      for (int z = 0; z < d; z++) {
+        String baseName = String.format(IMAGE_BASE_FMT, w, h, d, z);
+        String expectedHash = hashes.get(baseName + ".png");
+
+        if (expectedHash == null) {
+          cleanupImages(images, z);
+          return new NativeImage[0];
+        }
+
+        NativeImage image = loadCachedFrame(w, h, d, z, expectedHash);
+        if (image == null) {
+          cleanupImages(images, z);
+          return new NativeImage[0];
+        }
+        images[z] = image;
+      }
+      return images;
+    } catch (Exception e) {
+      Cbbg.LOGGER.warn("Failed to load STBN cache", e);
+      return new NativeImage[0];
+    }
+  }
+
+  private static @Nullable NativeImage loadCachedFrame(
+      int w, int h, int d, int z, String expectedHash)
+      throws IOException, NoSuchAlgorithmException {
+    String baseName = String.format(IMAGE_BASE_FMT, w, h, d, z);
+    Path imageFile = CACHE_DIR.resolve(baseName + ".png");
+
+    if (!Files.exists(imageFile)) {
+      return null;
+    }
+
+    byte[] imageBytes = Files.readAllBytes(imageFile);
+    String actualHash = STBNCache.calculateSHA256(imageBytes);
+
+    if (!actualHash.equalsIgnoreCase(expectedHash)) {
+      return null;
+    }
+
+    return NativeImage.read(new ByteArrayInputStream(imageBytes));
+  }
+
+  private static void saveToCache(NativeImage[] images, int w, int h, int d, long seed) {
+    try {
+      Files.createDirectories(CACHE_DIR);
+      StringBuilder hashContent = new StringBuilder(NoiseCache.seedHeader(seed));
+
+      for (int z = 0; z < d; z++) {
+        if (images[z] != null) {
+          String baseName = String.format(IMAGE_BASE_FMT, w, h, d, z);
+          String fileName = baseName + ".png";
+          Path imageFile = Objects.requireNonNull(CACHE_DIR.resolve(fileName));
+
+          images[z].writeToFile(imageFile);
+
+          // Compute hash
+          byte[] imageBytes = Files.readAllBytes(imageFile);
+          String hash = STBNCache.calculateSHA256(imageBytes);
+
+          // Append to hash manifest format: hash filename
+          hashContent.append(hash).append("  ").append(fileName).append(System.lineSeparator());
+        }
+      }
+
+      Path hashFile =
+          Objects.requireNonNull(CACHE_DIR.resolve(String.format(HASH_FILE_FMT, w, h, d)));
+      Files.writeString(hashFile, hashContent.toString());
+
+    } catch (IOException | NoSuchAlgorithmException e) {
+      Cbbg.LOGGER.warn("Failed to save STBN cache", e);
+    }
+  }
+
+  private static void cleanupImages(NativeImage[] images, int count) {
+    for (int i = 0; i < count; i++) {
+      if (images[i] != null) {
+        images[i].close();
+      }
+    }
+  }
+
+  public static boolean isCacheValid(int w, int h, int d) {
+    return STBNCache.isCacheValid(w, h, d);
+  }
+
+  public static void clearCacheExceptDefaults() {
+    try {
+      if (!Files.exists(CACHE_DIR)) {
+        return;
+      }
+      // Defaults: 128x128x64
+      String defaultHashFile = String.format(HASH_FILE_FMT, 128, 128, 64);
+
+      try (var stream = Files.walk(CACHE_DIR)) {
+        stream
+            .filter(Files::isRegularFile)
+            .forEach(
+                path -> {
+                  String name = Objects.requireNonNull(path.getFileName()).toString();
+                  // Check if it matches default pattern
+                  if (name.equals(defaultHashFile)) {
+                    return; // Keep default hash
+                  }
+                  // Check if it's a default image (stbn_128x128x64_*)
+                  if (name.startsWith("stbn_128x128x64_") && name.endsWith(".png")) {
+                    return; // Keep default images
+                  }
+
+                  try {
+                    Files.delete(path);
+                  } catch (IOException e) {
+                    Cbbg.LOGGER.warn("Failed to delete cached file: " + path, e);
+                  }
+                });
+      }
+    } catch (IOException e) {
+      Cbbg.LOGGER.warn("Failed to clear STBN cache", e);
+    }
+  }
+}

@@ -1,231 +1,134 @@
 name: Release
 
 on:
-  push:
-    tags:
-      # This is a glob (not a regex). Exact SemVer validation is enforced in the "Validate tag" step below.
-      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Candidate target; run this workflow from the release tag"
+        required: true
+        type: choice
+        options:
+          - 26.3-fabric
 
 permissions:
   contents: write
   id-token: write
   attestations: write
 
-jobs:
-  release:
-    runs-on: ubuntu-latest
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
+jobs:
+  candidate:
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6.0.1
         with:
-          # Branch gating needs ancestry checks against remote branches.
-          # Full history keeps the checks reliable.
           fetch-depth: 0
-          fetch-tags: true
-
-      - name: Set up JDK 25
+          persist-credentials: false
+      - name: Set up build Java 25
         uses: actions/setup-java@v5.1.0
         with:
-          java-version: "25"
-          distribution: "temurin"
+          java-version: '25'
+          distribution: temurin
+      - uses: gradle/actions/setup-gradle@v5.0.0
 
-      # Cache Fabric Loom's project-local cache (Minecraft jars, mappings, remapped artifacts, etc).
-      # This is separate from Gradle User Home (~/.gradle) caching handled by setup-gradle.
-      - name: Cache Loom artifacts
-        uses: actions/cache@v5.0.1
-        with:
-          path: |
-            .gradle/loom-cache
-          key: ${{ runner.os }}-loom-${{ hashFiles('gradle.properties', 'settings.gradle', 'build.gradle', 'gradle/wrapper/gradle-wrapper.properties') }}
-          restore-keys: |
-            ${{ runner.os }}-loom-
-
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v5.0.0
-        with:
-          # Use GitHub Actions cache for Gradle User Home (~/.gradle), including dependency cache
-          # and the local Gradle build cache.
-          #
-          # Release builds are trusted, so allow cache writes.
-          cache-read-only: false
-          # Keep cache size under control.
-          cache-cleanup: on-success
-
-      - name: Validate tag matches gradle.properties
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          tag="${GITHUB_REF_NAME}"
-
-          # Tag format (all branches):
-          # - Stable:     vX.Y.Z+mc<MINECRAFT_VERSION>
-          # - Prerelease: vX.Y.Z-rc.1+mc<MINECRAFT_VERSION>
-          #
-          # The mc suffix prevents collisions across maintenance lines.
-          #
-          # Note: The workflow trigger above is only a glob; the regex here is the real gate.
-          #
-          # minecraft_version is validated as SemVer build-metadata identifiers:
-          #   [0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*
-          if ! [[ "${tag}" =~ ^v([0-9]+[.][0-9]+[.][0-9]+(-[0-9A-Za-z.-]+)?)[+]mc([0-9A-Za-z-]+([.][0-9A-Za-z-]+)*)$ ]]; then
-            echo "Tag (${tag}) must be in the form vX.Y.Z(-PRERELEASE)?+mc<MINECRAFT_VERSION>."
-            exit 1
-          fi
-          version="${BASH_REMATCH[1]}"
-          tag_minecraft_version="${BASH_REMATCH[3]}"
-
-          is_prerelease=0
-          if [[ "${version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+- ]]; then
-            is_prerelease=1
-          fi
-
-          mod_version="$(grep -E '^mod_version=' gradle.properties | cut -d= -f2 | tr -d '\r')"
-          if [[ "${version}" != "${mod_version}" ]]; then
-            echo "Tag (${tag}) does not match gradle.properties mod_version (${mod_version}). Expected tag v${mod_version}+mc${tag_minecraft_version}."
-            exit 1
-          fi
-
-          archives_base_name="$(grep -E '^archives_base_name=' gradle.properties | cut -d= -f2 | tr -d '\r')"
-          if [[ -z "${archives_base_name}" ]]; then
-            echo "archives_base_name is empty in gradle.properties."
-            exit 1
-          fi
-
-          minecraft_version="$(grep -E '^minecraft_version=' gradle.properties | cut -d= -f2 | tr -d '\r')"
-          if [[ -z "${minecraft_version}" ]]; then
-            echo "minecraft_version is empty in gradle.properties."
-            exit 1
-          fi
-          if [[ "${tag_minecraft_version}" != "${minecraft_version}" ]]; then
-            echo "Tag (${tag}) minecraft version (${tag_minecraft_version}) does not match gradle.properties minecraft_version (${minecraft_version})."
-            exit 1
-          fi
-
-          # Branch gating
-          # Prevent accidental releases from random branches by requiring the tagged commit to be
-          # contained in either:
-          # - origin/main (canonical line), or
-          # - origin/mc<minecraft_version> (maintenance line for this Minecraft version)
-          expected_branch="mc${minecraft_version}"
-
-          # For branch gating we only need remote branch tips, not tags.
-          # Fetching tags here can fail when a release tag is recreated/moved while a run is in-flight
-          # (git will refuse to clobber an existing local tag).
-          git fetch --prune --no-tags origin "+refs/heads/*:refs/remotes/origin/*"
-
-          sha="$(git rev-parse HEAD)"
-          allowed=0
-
-          if git show-ref --verify --quiet "refs/remotes/origin/main" \
-            && git merge-base --is-ancestor "${sha}" "refs/remotes/origin/main"; then
-            allowed=1
-          fi
-
-          if git show-ref --verify --quiet "refs/remotes/origin/${expected_branch}" \
-            && git merge-base --is-ancestor "${sha}" "refs/remotes/origin/${expected_branch}"; then
-            allowed=1
-          fi
-
-          if [[ "${allowed}" -ne 1 ]]; then
-            echo "Tag (${tag}) points to commit ${sha}, which is not contained in origin/main or origin/${expected_branch}."
-            echo "Remote branches containing this commit:"
-            git branch -r --contains "${sha}" || true
-            exit 1
-          fi
-
-          # Release artifacts include Minecraft version as SemVer build metadata:
-          # <mod_version>+mc<minecraft_version>
-          artifact_version="${mod_version}+mc${minecraft_version}"
-
-          echo "MOD_VERSION=${mod_version}" >> "${GITHUB_ENV}"
-          echo "RELEASE_TAG=${tag}" >> "${GITHUB_ENV}"
-          echo "ARCHIVES_BASE_NAME=${archives_base_name}" >> "${GITHUB_ENV}"
-          echo "MINECRAFT_VERSION=${minecraft_version}" >> "${GITHUB_ENV}"
-          echo "ARTIFACT_VERSION=${artifact_version}" >> "${GITHUB_ENV}"
-          echo "IS_PRERELEASE=${is_prerelease}" >> "${GITHUB_ENV}"
-
-      - name: Build with Gradle Wrapper
-        run: ./gradlew build
-
-      - name: Test release validation
-        run: python3 -m unittest discover -s .github/tests -v
-
-      - name: Test client integrations before release
+      - name: Validate release selection
+        id: selection
         env:
-          LIBGL_ALWAYS_SOFTWARE: 'true'
-          ALSOFT_DRIVERS: 'null'
+          REQUESTED_TARGET: ${{ inputs.target }}
         run: |
-          sudo apt-get update
-          sudo apt-get install -y xvfb libgl1-mesa-dri libglx-mesa0
-          xvfb-run -a ./gradlew runClientGameTest
-          xvfb-run -a ./gradlew runClientGameTest -PtestRenderScale
-
-      - name: Validate artifacts exist
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          jar="build/libs/${ARCHIVES_BASE_NAME}-${ARTIFACT_VERSION}.jar"
-          sources_jar="build/libs/${ARCHIVES_BASE_NAME}-${ARTIFACT_VERSION}-sources.jar"
-
-          if [[ ! -f "${jar}" ]]; then
-            echo "Missing artifact: ${jar}"
-            ls -la build/libs || true
+          if [[ "$GITHUB_REF_TYPE" != "tag" || ! "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z][0-9A-Za-z.-]*\.[1-9][0-9]*)?$ ]]; then
+            echo "Run this workflow from an explicit version release tag."
             exit 1
           fi
-
-          if [[ ! -f "${sources_jar}" ]]; then
-            echo "Missing artifact: ${sources_jar}"
-            ls -la build/libs || true
+          mkdir -p build
+          ./gradlew --no-daemon "-Ptarget=$REQUESTED_TARGET" \
+            -PrequireImplemented=true -Poutput=build/release-selection.json targetMatrix
+          target="$(jq -r '.include[0].id' build/release-selection.json)"
+          profile="$(jq -r '.include[0].buildProfile' build/release-selection.json)"
+          java="$(jq -r '.include[0].java' build/release-selection.json)"
+          if [[ "$target" != "$REQUESTED_TARGET" || "$profile" != "fabric-modern" ]]; then
+            echo "Candidate workflow is not configured for this target."
             exit 1
           fi
+          for suffix in scenarios mods linux-x86_64; do
+            if [[ ! -f "runtime-locks/$target-$suffix.json" ]]; then
+              echo "Missing candidate test inputs: $suffix"
+              exit 1
+            fi
+          done
+          printf 'target=%s\njava=%s\nprofile=%s\n' "$target" "$java" "$profile" >> "$GITHUB_OUTPUT"
 
-      - name: Generate artifact checksums (for provenance)
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          jar="build/libs/${ARCHIVES_BASE_NAME}-${ARTIFACT_VERSION}.jar"
-          sources_jar="build/libs/${ARCHIVES_BASE_NAME}-${ARTIFACT_VERSION}-sources.jar"
-
-          sha256sum "${jar}" "${sources_jar}" > subject.checksums.txt
-
-      - name: Attest build provenance
-        uses: actions/attest-build-provenance@v3
-        with:
-          subject-checksums: subject.checksums.txt
-
-      - name: Extract release notes from CHANGELOG.md
-        shell: bash
-        run: python3 .github/scripts/release.py notes
-
-      - name: Create immutable GitHub Release
+      - name: Check release does not already exist
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
-        shell: bash
         run: |
-          set -euo pipefail
-
-          release_tag="${RELEASE_TAG}"
-          mod_version="${MOD_VERSION}"
-          minecraft_version="${MINECRAFT_VERSION}"
-          jar="build/libs/${ARCHIVES_BASE_NAME}-${ARTIFACT_VERSION}.jar"
-          sources_jar="build/libs/${ARCHIVES_BASE_NAME}-${ARTIFACT_VERSION}-sources.jar"
-
-          if gh release view "${release_tag}" >/dev/null 2>&1; then
-            echo "Release ${release_tag} already exists; use a new version/tag instead of replacing assets."
+          if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+            echo "Release already exists; its candidate files cannot be replaced."
             exit 1
           fi
+
+      - name: Set up target Java ${{ steps.selection.outputs.java }}
+        uses: actions/setup-java@v5.1.0
+        with:
+          java-version: ${{ steps.selection.outputs.java }}
+          distribution: temurin
+
+      - uses: gradle/actions/setup-gradle@v5.0.0
+        with:
+          cache-read-only: false
+          cache-cleanup: on-success
+
+      - name: Test candidate tooling
+        run: |
+          ./gradlew -p build-logic --no-daemon test
+          python3 -m unittest discover -s scripts/tests
+          python3 -m unittest discover -s .github/tests
+
+      - name: Build and bundle candidate
+        env:
+          TARGET: ${{ steps.selection.outputs.target }}
+          BUILD_PROFILE: ${{ steps.selection.outputs.profile }}
+        run: |
+          ./gradlew --no-daemon --console=plain "-Ptarget=${TARGET}" candidateBuildOutputs
+          ./gradlew --no-daemon --console=plain \
+            "-PbuildOutputs=build/targets/${TARGET}/candidate-build-outputs.json" \
+            -Poutput=build/release-candidate "-Prelease=${GITHUB_REF_NAME}" \
+            "-Pcontract=runtime-locks/${TARGET}-scenarios.json" \
+            "-PruntimeLock=runtime-locks/${TARGET}-linux-x86_64.json" \
+            "-PdependencyLock=runtime-locks/${TARGET}-mods.json" bundleCandidate
+
+      - name: Attest candidate files
+        id: provenance
+        uses: actions/attest-build-provenance@v3
+        with:
+          subject-path: build/release-candidate/*
+
+      - name: Verify candidate provenance
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PROVENANCE_BUNDLE: ${{ steps.provenance.outputs.bundle-path }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          cp "${PROVENANCE_BUNDLE}" build/release-candidate/provenance.jsonl
+          ./gradlew --no-daemon \
+            -Pcandidate=build/release-candidate/candidate.json \
+            -Pbundle=build/release-candidate/provenance.jsonl \
+            "-Prepo=${GH_REPO}" -Poutput=build/provenance-result.json verifyProvenance
+
+      - name: Create draft release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
           flags=()
-          if [[ "${IS_PRERELEASE}" == "1" ]]; then
+          if [[ "${GITHUB_REF_NAME}" == *-* ]]; then
             flags+=(--prerelease)
           fi
-          gh release create "${release_tag}" \
-            "${jar}" \
-            "${sources_jar}" \
-            --verify-tag \
-            --title "cbbg ${mod_version} for Minecraft ${minecraft_version}" \
-            --notes-file release_notes.md \
+          gh release create "${GITHUB_REF_NAME}" build/release-candidate/* \
+            --verify-tag --draft --title "cbbg ${GITHUB_REF_NAME#v}" \
+            --notes "Candidate for local acceptance testing. Release notes will be added before publication." \
             "${flags[@]}"

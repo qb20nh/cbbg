@@ -11,9 +11,9 @@ color banding be gone - Remove pesky color banding from Minecraft
 **cbbg**<sup>/'kabij/</sup> is a client-side Fabric mod that reduces visible color banding by:
 
 - Using a **higher-precision render target** (RGBA16F)
-- Applying **STBN blue-noise dithering** to final image
+- Applying **STBN blue-noise dithering** to the final image
 
-Helps reduce color banding on following:
+This reduces banding in:
 
 - Smooth lighting
 - Skybox
@@ -31,7 +31,7 @@ Helps reduce color banding on following:
 - Install **Fabric Loader** and **Fabric API** for your Minecraft version.
 - Put the `cbbg-x.x.x.jar` into your `.minecraft/mods` folder.
 
-This mod is **client-only**. It does not need to be installed on servers.
+Install this **client-only** mod on your Minecraft client.
 
 ## Configuration
 
@@ -68,6 +68,29 @@ Valid values: `ENABLED`, `DISABLED`, `DEMO`.
 
 - **Iris shaderpacks**: when an Iris shaderpack is active, cbbg is **forced OFF** to avoid pipeline conflicts.
 - **GPU support**: if RGBA16F allocation fails on your device/driver, cbbg will automatically fall back to RGBA8 for the remainder of the session.
+
+## Development
+
+Use Java 25 to run Gradle. The root commands select targets from `targets.json`;
+the default is the current development target, 26.3 Fabric.
+
+```sh
+./gradlew build
+./gradlew check -Ptarget=26.3-fabric
+./gradlew build -Ptarget=26.2-fabric
+./gradlew genSources -Ptarget=26.3-fabric
+./gradlew runClient -Ptarget=26.3-fabric
+```
+
+Use `-Ptargets=id,id` to build several targets. Shared artifacts compile once;
+each loader still needs its own local game tests. `checkCatalog` validates the
+catalog, and `checkPackages` checks production and source JARs. Build profiles
+live under `build-config/`; generated files go under `build/`.
+
+Release tasks bundle existing build outputs, verify provenance and local test
+results, then prepare uploads from an immutable GitHub release. See
+[the build command reference](build-config/README.md) for inputs. Python runs
+the local game tests and analyzes graphics results. CI runs non-graphical checks.
 
 ## Credits
 

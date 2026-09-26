@@ -1,0 +1,59 @@
+plugins {
+    id 'groovy-gradle-plugin'
+}
+
+repositories {
+    mavenCentral()
+    gradlePluginPortal()
+}
+
+dependencies {
+    implementation 'com.diffplug.spotless:spotless-plugin-gradle:8.10.3'
+    implementation 'net.ltgt.gradle:gradle-errorprone-plugin:5.1.1'
+    compileOnly 'com.uber.nullaway:nullaway:0.14.2'
+    compileOnly 'com.google.guava:guava:33.5.0-jre'
+    compileOnly 'org.jspecify:jspecify:1.0.0'
+    // Streaming JSON preserves duplicate-key rejection in candidate records.
+    implementation 'com.google.code.gson:gson:2.14.0'
+    implementation 'com.guardsquare:proguard-gradle:7.10.0'
+    implementation 'com.guardsquare:proguard-retrace:7.10.0'
+    testImplementation platform('org.junit:junit-bom:5.10.2')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+gradlePlugin {
+    plugins {
+        quality {
+            id = 'cbbg.quality'
+            implementationClass = 'cbbg.gradle.QualityPlugin'
+        }
+        formatting {
+            id = 'cbbg.formatting'
+            implementationClass = 'cbbg.gradle.FormattingPlugin'
+        }
+        targets {
+            id = 'cbbg.targets'
+            implementationClass = 'cbbg.gradle.TargetsPlugin'
+        }
+        packaging {
+            id = 'cbbg.packaging'
+            implementationClass = 'cbbg.gradle.PackagingPlugin'
+        }
+        privateGson {
+            id = 'cbbg.private-gson'
+            implementationClass = 'cbbg.gradle.PrivateGsonPlugin'
+        }
+        release {
+            id = 'cbbg.release'
+            implementationClass = 'cbbg.gradle.ReleasePlugin'
+        }
+    }
+}
+
+test {
+    useJUnitPlatform()
+    testLogging { exceptionFormat = 'full' }
+    systemProperty 'cbbg.repository', projectDir.parentFile.absolutePath
+    maxParallelForks = 1
+}

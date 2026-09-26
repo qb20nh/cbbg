@@ -1,0 +1,489 @@
+plugins {
+    id 'net.fabricmc.fabric-loom' version '1.17.21'
+    id 'cbbg.packaging'
+    id 'cbbg.quality'
+}
+
+import groovy.json.JsonSlurper
+
+def repositoryRoot = file('../..')
+apply from: new File(repositoryRoot, 'build-config/local-runtime.gradle')
+def catalog = cbbg.gradle.TargetCatalog.read(new File(repositoryRoot, 'targets.json')).data
+def targetId = providers.gradleProperty('target').getOrElse('26.3-fabric')
+def target = catalog.targets.find { it.id == targetId }
+if (target == null || target.buildProfile != 'fabric-modern') {
+    throw new GradleException("Target ${targetId} is not configured for the modern Fabric profile")
+}
+def modProperties = new Properties()
+new File(repositoryRoot, 'gradle.properties').withInputStream { modProperties.load(it) }
+version = "${modProperties.mod_version}+mc${target.minecraft}-${target.loader}"
+group = modProperties.maven_group
+base.archivesName = modProperties.archives_base_name
+layout.buildDirectory = new File(repositoryRoot, "build/targets/${targetId}")
+
+ext.sharedProjects = [project(':core'), project(':core:rendering')]
+apply from: new File(repositoryRoot, 'build-config/shared-code.gradle')
+
+repositories {
+    mavenCentral()
+    maven { url = 'https://maven.terraformersmc.com/releases/' }
+    maven { url = 'https://api.modrinth.com/maven' }
+}
+
+def testCompat = providers.gradleProperty('compat').getOrElse('none')
+if (!target.compatibilityProfiles.containsKey(testCompat)) {
+    throw new GradleException("Unsupported compatibility fixture: ${testCompat}")
+}
+
+dependencies {
+    minecraft "com.mojang:minecraft:${target.minecraft}"
+    implementation "net.fabricmc:fabric-loader:${target.dependencies.loader}"
+    implementation "net.fabricmc.fabric-api:fabric-api:${target.dependencies.fabricApi}"
+    testImplementation platform('org.junit:junit-bom:5.10.2')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    compileOnly("com.terraformersmc:modmenu:${target.dependencies.modMenu}") { transitive = false }
+    if (testCompat.tokenize('+').contains('modmenu')) {
+        runtimeOnly("com.terraformersmc:modmenu:${target.dependencies.modMenu}") { transitive = false }
+    }
+    if (testCompat.tokenize('+').contains('iris')) {
+        runtimeOnly("maven.modrinth:iris:${target.dependencies.iris}") { transitive = false }
+    }
+    if (testCompat.tokenize('+').contains('immediatelyfast')) {
+        runtimeOnly("maven.modrinth:immediatelyfast:${target.dependencies.immediatelyFast}") { transitive = false }
+    }
+    if (testCompat.tokenize('+').contains('sulkan')) {
+        runtimeOnly("maven.modrinth:sulkan:${target.dependencies.sulkan}") { transitive = false }
+    }
+    if (testCompat.tokenize('+').any { it == 'iris' || it == 'sodium' || it == 'sulkan' }) {
+        runtimeOnly("maven.modrinth:sodium:${target.dependencies.sodium}") { transitive = false }
+    }
+    if (testCompat.tokenize('+').contains('chatpatches')) {
+        runtimeOnly("maven.modrinth:chatpatches:${target.dependencies.chatPatches}") { transitive = false }
+        runtimeOnly("maven.modrinth:yacl:${target.dependencies.yacl}") { transitive = false }
+    }
+    if (testCompat.tokenize('+').contains('renderscale')) {
+        runtimeOnly("maven.modrinth:renderscale:${target.dependencies.renderScale}") { transitive = false }
+        runtimeOnly("maven.modrinth:cloth-config:${target.dependencies.clothConfig}") { transitive = false }
+    }
+}
+
+test {
+    useJUnitPlatform()
+    def testGameDir = layout.buildDirectory.dir('test-gamedir').get().asFile
+    doFirst { testGameDir.mkdirs() }
+    workingDir = testGameDir
+    systemProperty 'fabric.gameDir', testGameDir.absolutePath
+}
+
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(target.java as int)
+    withSourcesJar()
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.release = target.java as int
+}
+
+def sourceGroups = ["renderers/${target.renderer}", "adapters/minecraft/${target.minecraft}",
+                    "adapters/fabric/${target.minecraft}"]
+def usesTextureFormat = target.renderer == 'blaze-texture-format'
+sourceGroups.addAll(target.sourceGroups ?: [])
+sourceSets.main {
+    java.setSrcDirs(sourceGroups.collect { new File(repositoryRoot, "${it}/src/main/java") })
+    resources.setSrcDirs(sourceGroups.collect { new File(repositoryRoot, "${it}/src/main/resources") })
+}
+sourceSets.test.java.setSrcDirs([new File(repositoryRoot,
+        'adapters/fabric/modern/src/test/java')])
+
+// Reuse compatible Fabric commands and noise sources without copies.
+def sharedModern = objects.sourceDirectorySet('sharedModern', 'Shared modern Fabric sources')
+sharedModern.srcDir(new File(repositoryRoot, 'adapters/fabric/shared/src/main/java'))
+if (usesTextureFormat) {
+    sharedModern.exclude 'com/qb20nh/cbbg/CbbgEarlyInit.java',
+            'com/qb20nh/cbbg/CbbgClient.java',
+            'com/qb20nh/cbbg/config/gui/CbbgConfigScreen.java',
+            'com/qb20nh/cbbg/render/BlazePlatform.java'
+    sourceSets.main.resources.srcDir(new File(repositoryRoot, 'src/main/resources'))
+} else {
+    sharedModern.include 'com/qb20nh/cbbg/Cbbg.java',
+            'com/qb20nh/cbbg/platform/LoaderPlatform.java',
+            'com/qb20nh/cbbg/command/CbbgClientCommands.java',
+            'com/qb20nh/cbbg/platform/Text.java',
+            'com/qb20nh/cbbg/command/CommandPlatform.java',
+            'com/qb20nh/cbbg/config/gui/CbbgConfigWidgets.java',
+            'com/qb20nh/cbbg/config/gui/WidgetPlatform.java',
+            'com/qb20nh/cbbg/compat/iris/IrisCompat.java',
+            'com/qb20nh/cbbg/compat/renderscale/RenderScaleCompat.java',
+            'com/qb20nh/cbbg/compat/modmenu/CbbgModMenuApi.java',
+            'com/qb20nh/cbbg/render/stbn/STBNGenerator.java',
+            'com/qb20nh/cbbg/render/stbn/STBNLoader.java',
+            'com/qb20nh/cbbg/render/stbn/StbnImagePixels.java',
+            'com/qb20nh/cbbg/render/stbn/STBNCache.java'
+    sharedModern.include 'com/qb20nh/cbbg/render/MainTargets.java'
+}
+sourceSets.main.java.source(sharedModern)
+
+fabricApi {
+    configureTests {
+        createSourceSet = true
+        modId = 'cbbg-renderer-test'
+        enableGameTests = false
+        enableClientGameTests = true
+        eula = true
+    }
+}
+
+def testBackend = providers.gradleProperty('backend').getOrElse('opengl')
+if (!target.backends.contains(testBackend)) {
+    throw new GradleException("Backend ${testBackend} is not supported by ${targetId}")
+}
+if (!target.compatibilityProfiles[testCompat].contains(testBackend)) {
+    throw new GradleException("Compatibility fixture ${testCompat} does not support ${testBackend} for ${targetId}")
+}
+loom.runs.named('clientGameTest') {
+    if (!usesTextureFormat) {
+        programArgs '--graphicsBackend', testBackend
+    }
+    vmArg "-Dcbbg.test.backend=${testBackend}"
+    vmArg "-Dcbbg.test.compat=${testCompat}"
+    vmArg "-Dcbbg.test.modmenu.version=${target.dependencies.modMenu}"
+    def evidenceProfile = testCompat == 'none' ? 'readback' : testCompat
+    vmArg "-Dcbbg.test.evidence=${layout.buildDirectory.get().asFile}/evidence/${evidenceProfile}"
+}
+
+sourceSets.gametest {
+    java.setSrcDirs(sourceGroups.collect { new File(repositoryRoot, "${it}/src/gametest/java") })
+    java.srcDirs(sourceGroups.collect { new File(repositoryRoot, "${it}/src/parity/java") })
+    java.srcDir(new File(repositoryRoot, 'core/src/testSupport/java'))
+    resources.setSrcDirs(sourceGroups.collect { new File(repositoryRoot, "${it}/src/gametest/resources") })
+}
+
+def sharedClientTests = objects.sourceDirectorySet('sharedClientTests', 'Shared Fabric UI scenarios')
+sharedClientTests.srcDir(new File(repositoryRoot, 'adapters/fabric/shared/src/gametest/java'))
+if (usesTextureFormat) {
+    sharedClientTests.exclude 'com/qb20nh/cbbg/gametest/ClientTestAccess.java'
+    def sharedCompatTests = objects.sourceDirectorySet('sharedCompatTests', 'Shared optional-mod scenarios')
+    sharedCompatTests.srcDir(new File(repositoryRoot, 'renderers/modern/src/gametest/java'))
+    sharedCompatTests.include 'com/qb20nh/cbbg/gametest/ModMenuGameTest.java',
+            'com/qb20nh/cbbg/gametest/IrisFixture.java',
+            'com/qb20nh/cbbg/gametest/RenderScaleTestAccess.java',
+            'com/qb20nh/cbbg/gametest/OptionalModsGameTest.java'
+    sourceSets.gametest.java.source(sharedCompatTests)
+} else {
+    sharedClientTests.include 'com/qb20nh/cbbg/gametest/CbbgConfigScreenGameTest.java'
+}
+sourceSets.gametest.java.source(sharedClientTests)
+
+if (targetId == '26.3-fabric') {
+    def processedSharedTests = objects.sourceDirectorySet('processedSharedTests', 'Shared processed-compatible tests')
+    processedSharedTests.srcDir(new File(repositoryRoot, 'renderers/renderpearl/src/gametest/java'))
+    processedSharedTests.srcDir(new File(repositoryRoot, 'renderers/modern/src/gametest/java'))
+    processedSharedTests.srcDir(new File(repositoryRoot, 'core/src/testSupport/java'))
+    processedSharedTests.include 'com/qb20nh/cbbg/gametest/mixin/ScenarioProgressMixin.java',
+            'com/qb20nh/cbbg/reference/DitherReference.java',
+            'com/qb20nh/cbbg/gametest/FloatPrecisionGameTest.java',
+            'com/qb20nh/cbbg/gametest/IrisFixture.java',
+            'com/qb20nh/cbbg/gametest/RenderScaleTestAccess.java',
+            'com/qb20nh/cbbg/gametest/EarlyStartupGameTest.java',
+            'com/qb20nh/cbbg/gametest/mixin/EarlyPipelineCacheMixin.java',
+            'com/qb20nh/cbbg/gametest/mixin/EarlyRenderPassMixin.java',
+            'com/qb20nh/cbbg/gametest/WindowResizeGameTest.java'
+
+    // Select resolved external artifacts, including Loom's Minecraft jar, without
+    // carrying unprocessed main classes or the shared project outputs into compilation.
+    def externalCompileClasspath = configurations.compileClasspath.incoming.artifactView {
+        componentFilter { it instanceof org.gradle.api.artifacts.component.ModuleComponentIdentifier }
+    }.files
+    sourceSets.create('processedGametest') {
+        java.setSrcDirs([new File(repositoryRoot, 'renderers/renderpearl/src/processedGametest/java')])
+        java.source(processedSharedTests)
+        resources.setSrcDirs([new File(repositoryRoot, 'renderers/renderpearl/src/processedGametest/resources')])
+        compileClasspath = files(releaseOptimization.outputJar, externalCompileClasspath)
+        runtimeClasspath = output + compileClasspath
+    }
+    tasks.named('compileProcessedGametestJava') {
+        dependsOn tasks.named('optimizeReleaseJar')
+    }
+    tasks.named('processProcessedGametestResources') {
+        from(new File(repositoryRoot, 'renderers/modern/src/gametest/resources')) {
+            include 'cbbg-iris-fixture/**'
+        }
+        from(new File(repositoryRoot, 'renderers/renderpearl/src/gametest/resources')) {
+            include 'cbbg-world-goldens/**', 'sulkan-fixture/**', 'cbbg.early-startup-test.mixins.json'
+        }
+    }
+    tasks.register('processedDriverJar', Jar) {
+        archiveClassifier = 'processed-driver'
+        from sourceSets.processedGametest.output
+    }
+    [MaximumNoiseCache: 'maximum-noise-cache', WorldControl: 'world-control', IrisRestart: 'iris-restart',
+     Shutdown: 'shutdown', GeneratingShutdown: 'generating-shutdown',
+     EarlyStartup: 'early-startup',
+     EarlyStartupCold: 'startup-cold', EarlyStartupWarm: 'startup-warm',
+     EarlyStartupDamaged: 'startup-damaged',
+     Sulkan: 'sulkan', SulkanRestart: 'sulkan-restart',
+     SulkanExternal: 'sulkan-external', SulkanExternalRestart: 'sulkan-external-restart'].each { suite, classifier ->
+        def suiteMetadata = tasks.register("processed${suite}Metadata") {
+            dependsOn tasks.named('processProcessedGametestResources')
+            def source = layout.buildDirectory.file('resources/processedGametest/fabric.mod.json')
+            def destination = layout.buildDirectory.file("processed${suite}/fabric.mod.json")
+            def test = suite.startsWith('EarlyStartup') ? 'EarlyStartup' : suite
+            def entrypoint = "com.qb20nh.cbbg.gametest.Release${test}GameTest".toString()
+            inputs.file(source)
+            inputs.property('entrypoint', entrypoint)
+            outputs.file(destination)
+            doLast {
+                def metadata = new JsonSlurper().parse(source.get().asFile)
+                metadata.entrypoints['fabric-client-gametest'] = [entrypoint]
+                if (suite.startsWith('EarlyStartup')) {
+                    metadata.entrypoints.preLaunch = ['com.qb20nh.cbbg.gametest.ReleaseStartupPreLaunch']
+                    metadata.mixins.add('cbbg.early-startup-test.mixins.json')
+                }
+                destination.get().asFile.parentFile.mkdirs()
+                destination.get().asFile.text = groovy.json.JsonOutput.prettyPrint(
+                        groovy.json.JsonOutput.toJson(metadata))
+            }
+        }
+        tasks.register("processed${suite}DriverJar", Jar) {
+            archiveClassifier = "processed-${classifier}-driver"
+            from(sourceSets.processedGametest.output) { exclude 'fabric.mod.json' }
+            from(suiteMetadata)
+        }
+    }
+    tasks.register('prepareProcessedRuntime') {
+        dependsOn tasks.named('optimizeReleaseJar'), tasks.named('processedDriverJar'),
+                tasks.named('checkPackages')
+    }
+}
+
+tasks.named('jar') {
+    destinationDirectory = layout.buildDirectory.dir('intermediates/raw-jar')
+    archiveClassifier = 'raw'
+    from(new File(repositoryRoot, 'LICENSE'))
+    // Source generation is useful before an adapter exists, but an empty adapter
+    // must never produce a plausible distribution artifact.
+    doFirst {
+        if (!sourceSets.main.resources.matching { include 'fabric.mod.json' }.files) {
+            throw new GradleException("Adapter metadata is not implemented for ${targetId}")
+        }
+    }
+}
+
+releaseOptimization {
+    targetJdk(javaToolchains, target.java as int)
+    inputJar.set(tasks.named('jar', Jar).flatMap { it.archiveFile })
+    outputJar.set(layout.buildDirectory.file("libs/${base.archivesName.get()}-${project.version}.jar"))
+    mappingFile.set(layout.buildDirectory.file("mapping/${base.archivesName.get()}-${project.version}.map"))
+    rulesFile.set(new File(repositoryRoot, 'build-config/proguard-release.pro'))
+    libraryJars.from(providers.provider {
+        def embedded = sharedProjects.collect { it.layout.buildDirectory.get().asFile.canonicalPath + File.separator }
+        sourceSets.main.compileClasspath.files.findAll { file ->
+            !embedded.any { file.canonicalPath.startsWith(it) }
+        }
+    })
+}
+tasks.named('optimizeReleaseJar') { dependsOn tasks.named('jar', Jar) }
+
+tasks.named('processResources') {
+    if (!usesTextureFormat) {
+        from(new File(repositoryRoot, 'src/main/resources')) {
+            include 'assets/cbbg/shaders/include/dither.glsl'
+            include 'assets/cbbg/lang/*.json'
+        }
+    }
+    def properties = [version: project.version, minecraft_version: target.minecraft,
+                      loader_version: target.dependencies.loader, java_version: target.java,
+                      renderer_family: target.renderer,
+                      shader_import: target.renderer == 'blaze-gpu-format' ? '#moj_import' : '#include']
+    inputs.properties(properties)
+    filesMatching('fabric.mod.json') { expand(properties) }
+    if (usesTextureFormat) {
+        filesMatching('fabric.mod.json') {
+            filter { line -> line.replace('afl:prePrePreLaunch', 'preLaunch')
+                    .replace('>=21', ">=${properties.java_version}")
+                    .replace('>=0.18.2', ">=${properties.loader_version}") }
+        }
+    }
+    if (target.renderer == 'blaze-gpu-format') {
+        filesMatching('assets/cbbg/shaders/core/cbbg_dither.fsh') {
+            filter { line -> line.replace('#include <', "${properties.shader_import} <") }
+        }
+    }
+}
+
+apply from: new File(repositoryRoot, 'build-config/source-inventory.gradle')
+
+tasks.named('sourcesJar') {
+    dependsOn tasks.named('sourceInventory')
+}
+
+// Minecraft 26.x uses published names in production; these artifacts need no remap.
+// Keep local candidate testing separate from the distribution readiness gate.
+def parityCandidateFile = layout.buildDirectory.file(
+        "libs/${base.archivesName.get()}-${project.version}-parity-candidate.jar")
+def parityCandidateJar = tasks.register('parityCandidateJar') {
+    dependsOn tasks.named('optimizeReleaseJar')
+    inputs.file(releaseOptimization.outputJar)
+    outputs.file(parityCandidateFile)
+    doLast {
+        def destination = parityCandidateFile.get().asFile
+        destination.parentFile.mkdirs()
+        java.nio.file.Files.copy(releaseOptimization.outputJar.get().asFile.toPath(),
+                destination.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+    }
+}
+def parityDriverJar = tasks.register('parityDriverJar', Jar) {
+    archiveClassifier = 'parity-driver'
+    from sourceSets.gametest.output
+}
+
+// Startup-state and slow maximum-size fixtures run independently of the ordinary suite.
+if (target.renderer == 'renderpearl') {
+    [earlyStartup: ['EarlyStartupGameTest'],
+     irisRestart: ['IrisRestartGameTest'],
+     sulkan: ['SulkanGameTest'],
+     sulkanRestart: ['SulkanRestartGameTest'],
+     sulkanExternal: ['SulkanExternalGameTest'],
+     sulkanExternalRestart: ['SulkanExternalRestartGameTest'],
+     maximumNoiseCache: ['Rgba8ReadbackGameTest', 'MaximumNoiseCacheGameTest'],
+     worldPixels: ['Rgba8ReadbackGameTest', 'WorldPixelsGameTest'],
+     worldControl: ['Rgba8ReadbackGameTest', 'WorldControlGameTest'],
+     debugOverlay: ['Rgba8ReadbackGameTest', 'DebugOverlayGameTest'],
+     irisDebug: ['Rgba8ReadbackGameTest', 'IrisGameTest'],
+     shaderFailure: ['Rgba8ReadbackGameTest', 'ShaderFailureGameTest', 'PresentationGameTest'],
+     dsaBenchmark: ['Rgba8ReadbackGameTest', 'DitherPassGameTest', 'PresentationGameTest',
+                    'DsaBenchmarkGameTest']].each { fixture, entrypoints ->
+        def fixtureMetadata = tasks.register("${fixture}Metadata") {
+            dependsOn tasks.named('processGametestResources')
+            def source = layout.buildDirectory.file('resources/gametest/fabric.mod.json')
+            def destination = layout.buildDirectory.file("${fixture}/fabric.mod.json")
+            inputs.file(source)
+            inputs.property('entrypoints', entrypoints)
+            outputs.file(destination)
+            doLast {
+                def metadata = new JsonSlurper().parse(source.get().asFile)
+                metadata.entrypoints['fabric-client-gametest'] =
+                        entrypoints.collect { "com.qb20nh.cbbg.gametest.${it}".toString() }
+                if (fixture == 'earlyStartup') {
+                    metadata.entrypoints.remove('preLaunch')
+                    metadata.mixins = ['cbbg.early-startup-test.mixins.json']
+                }
+                if (fixture == 'dsaBenchmark') {
+                    metadata.entrypoints.client = ['com.qb20nh.cbbg.gametest.DsaBenchmarkSettings']
+                }
+                destination.get().asFile.parentFile.mkdirs()
+                destination.get().asFile.text = groovy.json.JsonOutput.prettyPrint(
+                        groovy.json.JsonOutput.toJson(metadata))
+            }
+        }
+        tasks.register("${fixture}DriverJar", Jar) {
+            archiveClassifier = [earlyStartup: 'early-startup-driver',
+                                 irisRestart: 'iris-restart-driver',
+                                 sulkan: 'sulkan-driver',
+                                 sulkanRestart: 'sulkan-restart-driver',
+                                 sulkanExternal: 'sulkan-external-driver',
+                                 sulkanExternalRestart: 'sulkan-external-restart-driver',
+                                 maximumNoiseCache: 'maximum-noise-cache-driver',
+                                 worldPixels: 'world-pixels-driver',
+                                 worldControl: 'world-control-driver',
+                                 debugOverlay: 'debug-overlay-driver',
+                                 irisDebug: 'iris-debug-driver',
+                                 shaderFailure: 'shader-failure-driver',
+                                 dsaBenchmark: 'dsa-benchmark-driver'][fixture]
+            from(sourceSets.gametest.output) { exclude 'fabric.mod.json' }
+            from(fixtureMetadata)
+        }
+    }
+}
+
+tasks.named('checkPackages', cbbg.gradle.CheckPackages) {
+    dependsOn tasks.named('optimizeReleaseJar')
+    artifact.set(releaseOptimization.outputJar)
+    mapping.set(releaseOptimization.mappingFile)
+    sources.set(tasks.named('sourcesJar', Jar).flatMap { it.archiveFile })
+    javaVersion.set(target.java as int)
+    coreSources.set(new File(repositoryRoot, 'core/src/main/java'))
+}
+tasks.register('verifyCandidatePackaging') { dependsOn tasks.named('checkPackages') }
+tasks.named('check') { dependsOn tasks.named('checkPackages') }
+tasks.named('assemble') { dependsOn tasks.named('optimizeReleaseJar') }
+tasks.register('prepareParityRuntime') {
+    dependsOn parityCandidateJar, parityDriverJar, tasks.named('verifyCandidatePackaging')
+}
+
+tasks.register('ciCheck') {
+    group = 'verification'
+    description = 'Run unit tests and package production and test jars without launching Minecraft.'
+    dependsOn tasks.named('check'), project(':core').tasks.named('check'), tasks.named('verifyCandidatePackaging')
+    dependsOn tasks.withType(Jar).matching { it.name.endsWith('DriverJar') }
+}
+
+tasks.register('candidateBuildOutputs') {
+    dependsOn tasks.named('ciCheck')
+    def destination = layout.buildDirectory.file('candidate-build-outputs.json')
+    outputs.file(destination)
+    outputs.upToDateWhen { false }
+    doLast {
+        def root = repositoryRoot.canonicalFile.toPath()
+        def reference = { File file ->
+            def path = file.canonicalFile.toPath()
+            if (!path.startsWith(root) || !file.isFile()) {
+                throw new GradleException('Missing or invalid candidate output: ' + file.name)
+            }
+            [path: root.relativize(path).toString().replace('\\', '/'),
+             sha256: java.security.MessageDigest.getInstance('SHA-256').digest(file.bytes).encodeHex().toString(),
+             filename: file.name]
+        }
+        def gitOutput = { List<String> arguments ->
+            providers.exec {
+                workingDir repositoryRoot
+                commandLine(['git'] + arguments)
+            }.standardOutput.asText.get().trim()
+        }
+        def drivers = new TreeMap<String, Map>()
+        tasks.withType(Jar).matching {
+            it.name.endsWith('DriverJar') &&
+                    (targetId == '26.3-fabric' ? it.name.startsWith('processed') : !it.name.startsWith('processed'))
+        }.each { driver ->
+            def suite = (driver == parityDriverJar.get() || driver.name == 'processedDriverJar') ? 'ordinary' :
+                    driver.archiveClassifier.get().replaceFirst(/^processed-/, '').replaceFirst(/-driver$/, '')
+            if (drivers.containsKey(suite)) throw new GradleException('Duplicate driver suite: ' + suite)
+            drivers[suite] = reference(driver.archiveFile.get().asFile)
+        }
+        def artifact = reference(releaseOptimization.outputJar.get().asFile)
+        def output = [schema: 2, target: targetId, version: project.version.toString(),
+                      source_commit: gitOutput(['rev-parse', 'HEAD']),
+                      source_dirty: !gitOutput(['status', '--porcelain', '--untracked-files=all',
+                                               '--', '.', ':(top,exclude)docs/**']).isEmpty(),
+                      artifact: artifact,
+                      mapping: reference(releaseOptimization.mappingFile.get().asFile),
+                      processing: [tool: 'proguard', version: cbbg.gradle.ProguardMapping.VERSION],
+                      sources: reference(tasks.named('sourcesJar', Jar).get().archiveFile.get().asFile),
+                      source_inventory: reference(layout.buildDirectory.file('source-inventory.json').get().asFile),
+                      drivers: drivers]
+        destination.get().asFile.text = groovy.json.JsonOutput.prettyPrint(
+                groovy.json.JsonOutput.toJson(output)) + '\n'
+    }
+}
+
+tasks.register('dev', Sync) {
+    group = 'build'
+    description = 'Check and package local development jars without release readiness claims.'
+    dependsOn tasks.named('check'), tasks.named('verifyCandidatePackaging')
+    into layout.buildDirectory.dir('dev')
+    from(tasks.named('jar', Jar).flatMap { it.archiveFile }) {
+        rename { "${base.archivesName.get()}-${project.version}-dev.jar" }
+    }
+    from(tasks.named('sourcesJar').flatMap { it.archiveFile }) {
+        rename { "${base.archivesName.get()}-${project.version}-dev-sources.jar" }
+    }
+}
+
+if (usesTextureFormat) {
+    tasks.named('processGametestResources') {
+        from(new File(repositoryRoot, 'renderers/modern/src/gametest/resources')) {
+            include 'cbbg-iris-fixture/**'
+        }
+    }
+}

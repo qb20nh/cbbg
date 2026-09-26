@@ -1,0 +1,45 @@
+// One dependency list supplies compilation, binary packaging and source packaging.
+sharedProjects.each { shared ->
+    evaluationDependsOn(shared.path)
+    dependencies.add('implementation', shared)
+}
+def privateGson = project(':core')
+def privateGsonTask = privateGson.tasks.named('privateGsonJar')
+def sharedRepositoryRoot = privateGson.projectDir.parentFile
+def gsonLicense = new File(sharedRepositoryRoot, 'build-config/licenses/Apache-2.0.txt')
+def gsonNotice = new File(sharedRepositoryRoot, 'build-config/licenses/Gson-2.2.4.txt')
+plugins.withId('net.fabricmc.fabric-loom') {
+    def modFiles = files(sourceSets.main.output,
+            sharedProjects.collect { it.sourceSets.main.output },
+            sharedProjects.collect { it.tasks.named('jar') },
+            privateGson.privateGsonArchive)
+    loom.mods.maybeCreate('cbbg').modFiles.from(modFiles)
+    tasks.withType(Test).configureEach {
+        dependsOn privateGsonTask
+        doFirst { systemProperty 'fabric.classPathGroups', modFiles.asPath }
+    }
+}
+tasks.named('checkPackages') {
+    sharedSources.from(sharedProjects.collect { it.sourceSets.main.java.srcDirs })
+}
+tasks.withType(Jar).configureEach {
+    if (name == 'jar') {
+        from(sharedProjects.collect { it.sourceSets.main.output })
+        dependsOn privateGsonTask
+        from({ zipTree(privateGson.privateGsonArchive.get().asFile) }) {
+            exclude 'META-INF/**'
+        }
+        from(gsonLicense) { into 'META-INF/licenses/gson-2.2.4' }
+        from(gsonNotice) { into 'META-INF/licenses/gson-2.2.4' }
+    } else if (name == 'sourcesJar') {
+        from(sharedProjects.collect { it.sourceSets.main.allSource })
+        dependsOn privateGsonTask
+        from(privateGson.privateGsonSourceArchive) { into 'third-party/gson-2.2.4' }
+        from(gsonLicense) { into 'third-party/gson-2.2.4' }
+        from(gsonNotice) { into 'third-party/gson-2.2.4' }
+        from(new File(sharedRepositoryRoot, 'build-config/private-gson.map')) {
+            into 'third-party/gson-2.2.4'
+        }
+        from(privateGson.privateGsonMapping) { into 'third-party/gson-2.2.4' }
+    }
+}

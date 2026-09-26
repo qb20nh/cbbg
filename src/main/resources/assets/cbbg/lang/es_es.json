@@ -62,6 +62,7 @@
   "cbbg.config.size.label": "Tamaño",
   "cbbg.config.status.disabled_render_error": "⚠ cbbg desactivado por error de renderizado (ver registro)",
   "cbbg.config.status.iris_active": "⚠ Iris activo: cbbg forzado a desactivado",
+  "cbbg.config.status.shader_active": "⚠ %s activo: cbbg forzado a desactivado",
   "cbbg.config.status.mode_disabled": "cbbg está desactivado (habilita el modo para editar la configuración)",
   "cbbg.config.status.no_float_formats": "⚠ Sin soporte RGBA16F/32F: atascado en RGBA8",
   "cbbg.config.strength.label": "Intensidad",

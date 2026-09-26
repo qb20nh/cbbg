@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "id": "cbbg-renderer-test",
+  "version": "1.0.0",
+  "name": "CBBG RenderPearl tests",
+  "environment": "client",
+  "mixins": ["cbbg.scenario-progress.mixins.json"],
+  "entrypoints": {
+    "preLaunch": ["com.qb20nh.cbbg.gametest.TestNoiseSettings"],
+    "fabric-client-gametest": [
+      "com.qb20nh.cbbg.gametest.SulkanSetupGameTest",
+      "com.qb20nh.cbbg.gametest.WindowResizeGameTest",
+      "com.qb20nh.cbbg.gametest.Rgba8ReadbackGameTest",
+      "com.qb20nh.cbbg.gametest.WorldPixelsGameTest",
+      "com.qb20nh.cbbg.gametest.DebugOverlayGameTest",
+      "com.qb20nh.cbbg.gametest.ShaderFailureGameTest",
+      "com.qb20nh.cbbg.gametest.FloatPrecisionGameTest",
+      "com.qb20nh.cbbg.gametest.FloatAttachmentsGameTest",
+      "com.qb20nh.cbbg.gametest.MainTargetGameTest",
+      "com.qb20nh.cbbg.gametest.DitherPassGameTest",
+      "com.qb20nh.cbbg.gametest.PresentationGameTest",
+      "com.qb20nh.cbbg.gametest.MenuBlurGameTest",
+      "com.qb20nh.cbbg.gametest.PersistentBlurGameTest",
+      "com.qb20nh.cbbg.gametest.CommandsGameTest",
+      "com.qb20nh.cbbg.gametest.NotificationsGameTest",
+      "com.qb20nh.cbbg.gametest.NoiseCacheGameTest",
+      "com.qb20nh.cbbg.gametest.NoiseCancellationGameTest",
+      "com.qb20nh.cbbg.gametest.MenuStrengthGameTest",
+      "com.qb20nh.cbbg.gametest.CbbgConfigScreenGameTest",
+      "com.qb20nh.cbbg.gametest.LocalesGameTest",
+      "com.qb20nh.cbbg.gametest.ModMenuGameTest",
+      "com.qb20nh.cbbg.gametest.IrisGameTest",
+      "com.qb20nh.cbbg.gametest.MainTargetsGameTest",
+      "com.qb20nh.cbbg.gametest.RenderScaleGameTest",
+      "com.qb20nh.cbbg.gametest.ImmediatelyFastGameTest",
+      "com.qb20nh.cbbg.gametest.OptionalModsGameTest",
+      "com.qb20nh.cbbg.gametest.SulkanGameTest"
+    ]
+  },
+  "depends": {
+    "cbbg": "*",
+    "fabricloader": ">=0.19.5",
+    "minecraft": "26.3",
+    "fabric-client-gametest-api-v1": "*"
+  }
+}

@@ -62,6 +62,7 @@
   "cbbg.config.size.label": "大小",
   "cbbg.config.status.disabled_render_error": "⚠ cbbg 因渲染錯誤已停用（詳見記錄）",
   "cbbg.config.status.iris_active": "⚠ Iris 已啟用：cbbg 被強制關閉",
+  "cbbg.config.status.shader_active": "⚠ %s 已啟用：cbbg 被強制關閉",
   "cbbg.config.status.mode_disabled": "cbbg 已停用（啟用模式後可編輯設定）",
   "cbbg.config.status.no_float_formats": "⚠ 不支援 RGBA16F/32F：將停留在 RGBA8",
   "cbbg.config.strength.label": "強度",
