@@ -54,7 +54,8 @@ jobs:
           path: .release-source
           persist-credentials: false
 
-      - uses: actions/setup-java@v5.1.0
+      - name: Set up build Java 25
+        uses: actions/setup-java@v5.1.0
         with:
           java-version: '25'
           distribution: temurin

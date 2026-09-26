@@ -20,7 +20,8 @@ jobs:
       - uses: actions/checkout@v6.0.1
         with:
           fetch-depth: 0
-      - uses: actions/setup-java@v5.1.0
+      - name: Set up build Java 25
+        uses: actions/setup-java@v5.1.0
         with:
           java-version: '25'
           distribution: temurin
@@ -55,13 +56,13 @@ jobs:
         java: [8, 17, 21, 25]
     steps:
       - uses: actions/checkout@v6.0.1
-      - name: Install test runtime
+      - name: Set up test runtime Java ${{ matrix.java }}
         id: test-java
         uses: actions/setup-java@v5.1.0
         with:
           java-version: ${{ matrix.java }}
           distribution: temurin
-      - name: Install build JDK
+      - name: Set up build Java 25
         uses: actions/setup-java@v5.1.0
         with:
           java-version: '25'
@@ -95,11 +96,13 @@ jobs:
       matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
     steps:
       - uses: actions/checkout@v6.0.1
-      - uses: actions/setup-java@v5.1.0
+      - name: Set up target Java ${{ matrix.java }}
+        uses: actions/setup-java@v5.1.0
         with:
           java-version: ${{ matrix.java }}
           distribution: temurin
-      - uses: actions/setup-java@v5.1.0
+      - name: Set up build Java 25
+        uses: actions/setup-java@v5.1.0
         with:
           java-version: '25'
           distribution: temurin
@@ -131,11 +134,13 @@ jobs:
       matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
     steps:
       - uses: actions/checkout@v6.0.1
-      - uses: actions/setup-java@v5.1.0
+      - name: Set up target Java ${{ matrix.java }}
+        uses: actions/setup-java@v5.1.0
         with:
           java-version: ${{ matrix.java }}
           distribution: temurin
-      - uses: actions/setup-java@v5.1.0
+      - name: Set up build Java 25
+        uses: actions/setup-java@v5.1.0
         with:
           java-version: '25'
           distribution: temurin
