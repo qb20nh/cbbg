@@ -177,10 +177,13 @@ sourceSets.gametest.java.source(sharedClientTests)
 if (targetId == '26.3-fabric') {
     def processedSharedTests = objects.sourceDirectorySet('processedSharedTests', 'Shared processed-compatible tests')
     processedSharedTests.srcDir(new File(repositoryRoot, 'renderers/renderpearl/src/gametest/java'))
+    processedSharedTests.srcDir(new File(repositoryRoot, 'renderers/modern/src/gametest/java'))
     processedSharedTests.srcDir(new File(repositoryRoot, 'core/src/testSupport/java'))
     processedSharedTests.include 'com/qb20nh/cbbg/gametest/mixin/ScenarioProgressMixin.java',
             'com/qb20nh/cbbg/reference/DitherReference.java',
             'com/qb20nh/cbbg/gametest/FloatPrecisionGameTest.java',
+            'com/qb20nh/cbbg/gametest/IrisFixture.java',
+            'com/qb20nh/cbbg/gametest/RenderScaleTestAccess.java',
             'com/qb20nh/cbbg/gametest/WindowResizeGameTest.java'
 
     // Select resolved external artifacts, including Loom's Minecraft jar, without
@@ -199,34 +202,41 @@ if (targetId == '26.3-fabric') {
         dependsOn tasks.named('optimizeReleaseJar')
     }
     tasks.named('processProcessedGametestResources') {
+        from(new File(repositoryRoot, 'renderers/modern/src/gametest/resources')) {
+            include 'cbbg-iris-fixture/**'
+        }
         from(new File(repositoryRoot, 'renderers/renderpearl/src/gametest/resources')) {
-            include 'cbbg-world-goldens/**'
+            include 'cbbg-world-goldens/**', 'sulkan-fixture/**'
         }
     }
     tasks.register('processedDriverJar', Jar) {
         archiveClassifier = 'processed-driver'
         from sourceSets.processedGametest.output
     }
-    def maximumMetadata = tasks.register('processedMaximumNoiseCacheMetadata') {
-        dependsOn tasks.named('processProcessedGametestResources')
-        def source = layout.buildDirectory.file('resources/processedGametest/fabric.mod.json')
-        def destination = layout.buildDirectory.file('processedMaximumNoiseCache/fabric.mod.json')
-        def entrypoint = 'com.qb20nh.cbbg.gametest.ReleaseMaximumNoiseCacheGameTest'
-        inputs.file(source)
-        inputs.property('entrypoint', entrypoint)
-        outputs.file(destination)
-        doLast {
-            def metadata = new JsonSlurper().parse(source.get().asFile)
-            metadata.entrypoints['fabric-client-gametest'] = [entrypoint]
-            destination.get().asFile.parentFile.mkdirs()
-            destination.get().asFile.text = groovy.json.JsonOutput.prettyPrint(
-                    groovy.json.JsonOutput.toJson(metadata))
+    [MaximumNoiseCache: 'maximum-noise-cache', WorldControl: 'world-control', IrisRestart: 'iris-restart',
+     Sulkan: 'sulkan', SulkanRestart: 'sulkan-restart',
+     SulkanExternal: 'sulkan-external', SulkanExternalRestart: 'sulkan-external-restart'].each { suite, classifier ->
+        def suiteMetadata = tasks.register("processed${suite}Metadata") {
+            dependsOn tasks.named('processProcessedGametestResources')
+            def source = layout.buildDirectory.file('resources/processedGametest/fabric.mod.json')
+            def destination = layout.buildDirectory.file("processed${suite}/fabric.mod.json")
+            def entrypoint = "com.qb20nh.cbbg.gametest.Release${suite}GameTest".toString()
+            inputs.file(source)
+            inputs.property('entrypoint', entrypoint)
+            outputs.file(destination)
+            doLast {
+                def metadata = new JsonSlurper().parse(source.get().asFile)
+                metadata.entrypoints['fabric-client-gametest'] = [entrypoint]
+                destination.get().asFile.parentFile.mkdirs()
+                destination.get().asFile.text = groovy.json.JsonOutput.prettyPrint(
+                        groovy.json.JsonOutput.toJson(metadata))
+            }
         }
-    }
-    tasks.register('processedMaximumNoiseCacheDriverJar', Jar) {
-        archiveClassifier = 'processed-maximum-noise-cache-driver'
-        from(sourceSets.processedGametest.output) { exclude 'fabric.mod.json' }
-        from(maximumMetadata)
+        tasks.register("processed${suite}DriverJar", Jar) {
+            archiveClassifier = "processed-${classifier}-driver"
+            from(sourceSets.processedGametest.output) { exclude 'fabric.mod.json' }
+            from(suiteMetadata)
+        }
     }
     tasks.register('prepareProcessedRuntime') {
         dependsOn tasks.named('optimizeReleaseJar'), tasks.named('processedDriverJar'),

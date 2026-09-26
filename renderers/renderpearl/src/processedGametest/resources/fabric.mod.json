@@ -7,6 +7,7 @@
   "mixins": ["cbbg.processed-test.mixins.json"],
   "entrypoints": {
     "fabric-client-gametest": [
+      "com.qb20nh.cbbg.gametest.ReleaseSulkanSetupGameTest",
       "com.qb20nh.cbbg.gametest.ReleaseLifecycleGameTest",
       "com.qb20nh.cbbg.gametest.ReleaseReadbackGameTest",
       "com.qb20nh.cbbg.gametest.ReleaseDitherGameTest",
@@ -24,7 +25,11 @@
       "com.qb20nh.cbbg.gametest.FloatPrecisionGameTest",
       "com.qb20nh.cbbg.gametest.WindowResizeGameTest",
       "com.qb20nh.cbbg.gametest.ReleaseFramebufferGameTest",
-      "com.qb20nh.cbbg.gametest.ReleaseAllocationGameTest"
+      "com.qb20nh.cbbg.gametest.ReleaseAllocationGameTest",
+      "com.qb20nh.cbbg.gametest.ReleaseImmediatelyFastGameTest",
+      "com.qb20nh.cbbg.gametest.ReleaseIrisGameTest",
+      "com.qb20nh.cbbg.gametest.ReleaseRenderScaleGameTest",
+      "com.qb20nh.cbbg.gametest.ReleaseSulkanGameTest"
     ]
   },
   "depends": {

@@ -30,9 +30,17 @@ public final class ReleaseWorldPixelsGameTest implements FabricClientGameTest {
     }
 
     static void runScene(ClientGameTestContext context, boolean disabledControl) {
-        JsonObject original = ReleaseClient.settings();
         boolean hidden = context.computeOnClient(client -> client.gui.hud.isHidden());
         try (var world = context.worldBuilder().create()) {
+            String mode = context.computeOnClient(client -> {
+                var match = java.util.regex.Pattern.compile("user=(ENABLED|DISABLED|DEMO)")
+                        .matcher(String.join("\n", ReleaseDebugState.read(client)));
+                if (!match.find()) throw new AssertionError("Cannot read current user mode");
+                return match.group(1).toLowerCase(java.util.Locale.ROOT);
+            });
+            // Persist defaults before saving settings from a standalone, minimal startup config.
+            ReleaseClient.command(context, "mode set " + mode);
+            JsonObject original = ReleaseClient.settings();
             try {
                 var server = world.getServer();
                 server.runCommand("gamemode spectator @a");

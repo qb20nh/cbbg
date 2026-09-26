@@ -20,8 +20,11 @@ ROOT = Path(__file__).resolve().parents[1]
 
 RESTART_DRIVERS = {
     ('opengl', 'com.qb20nh.cbbg.gametest.IrisRestartGameTest'): 'iris',
+    ('opengl', 'com.qb20nh.cbbg.gametest.ReleaseIrisRestartGameTest'): 'iris',
     ('vulkan', 'com.qb20nh.cbbg.gametest.SulkanRestartGameTest'): 'sulkan',
+    ('vulkan', 'com.qb20nh.cbbg.gametest.ReleaseSulkanRestartGameTest'): 'sulkan',
     ('vulkan', 'com.qb20nh.cbbg.gametest.SulkanExternalRestartGameTest'): 'sulkan',
+    ('vulkan', 'com.qb20nh.cbbg.gametest.ReleaseSulkanExternalRestartGameTest'): 'sulkan',
 }
 
 

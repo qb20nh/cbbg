@@ -42,6 +42,14 @@ final class ReleaseClient {
         if (!version.contains("mc26.3")) {
             throw new AssertionError("Unexpected CBBG version: " + version);
         }
+        List<String> requestedMods = List.of(System.getProperty("cbbg.test.compat", "none").split("\\+"));
+        for (String id : List.of("sodium", "sulkan", "iris", "chatpatches", "immediatelyfast")) {
+            boolean expected = requestedMods.contains(id) || id.equals("sodium")
+                    && (requestedMods.contains("iris") || requestedMods.contains("sulkan"));
+            if (FabricLoader.getInstance().isModLoaded(id) != expected) {
+                throw new AssertionError(id + " presence does not match the requested fixture");
+            }
+        }
         context.runOnClient(client -> {
             var info = RenderSystem.getDevice().getDeviceInfo();
             LoggerFactory.getLogger("cbbg-test").info("Readback backend={} GPU={} driver={}",
