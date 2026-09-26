@@ -426,7 +426,7 @@ class ReleaseChecks {
         Map curseforge = record.curseforge
         Map values = [target: record.targets[0], java: specification.java.toString(),
                       artifact: artifact.absolutePath, cf_project_id: curseforge.project_id,
-                      cf_game_versions: curseforge.version_labels.join(','),
+                      cf_game_versions: curseforge.game_versions?.join(',') ?: '',
                       cf_display_name: curseforge.display_name,
                       cf_release_type: curseforge.release_type,
                       cf_relations: curseforge.relations, cf_changelog: curseforge.changelog]

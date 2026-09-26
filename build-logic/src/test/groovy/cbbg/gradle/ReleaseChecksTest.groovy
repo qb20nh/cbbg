@@ -292,7 +292,30 @@ class ReleaseChecksTest {
         assertEquals([fixture.target.id], metadata.records[0].targets)
         assertTrue(output.isFile())
         assertTrue(github.text.contains('target=' + fixture.target.id))
+        assertTrue(github.text.readLines().contains('cf_game_versions='))
         assertFalse(commands.any { it.contains('PATCH') })
+    }
+
+    @Test
+    void curseforgeUploadOutputUsesResolvedVersionIds() {
+        Map fixture = CandidateFixture.create(directory)
+        Map metadata = Publication.metadata(fixture.file, fixture.root, 'Release notes')
+        Closure fetch = { String url, Map headers ->
+            if (url.endsWith('/versions')) {
+                return [[id: 101, name: '26.3', gameVersionTypeID: 10],
+                        [id: 202, name: 'Java 25', gameVersionTypeID: 11],
+                        [id: 303, name: 'Fabric', gameVersionTypeID: 12],
+                        [id: 404, name: 'Client', gameVersionTypeID: 13]]
+            }
+            if (url.endsWith('/version-types')) {
+                return [[id: 10, name: 'Minecraft 26.3'], [id: 13, name: 'Environment']]
+            }
+            throw new AssertionError('Unexpected lookup: ' + url)
+        }
+        Map resolved = Publication.resolve(metadata, 'curseforge', fetch, 'fixture')
+        String output = ReleaseChecks.githubValues(resolved.records[0], fixture.target,
+                new File(fixture.root, fixture.record.artifact.path))
+        assertTrue(output.readLines().contains('cf_game_versions=101,202,303,404'))
     }
 
     @Test
