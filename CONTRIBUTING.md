@@ -8,7 +8,7 @@ This repo is a client-side fabric mod for Minecraft that reduces visible color b
 
 ### Prerequisites
 
-- JDK 21+
+- JDK 25 for the Minecraft 26.2 line (older maintenance branches retain their own Java requirements)
 - Git
 
 ### Build
@@ -90,11 +90,12 @@ The tagged commit must be contained in either:
 
 This prevents accidental releases from random branches.
 
-### Release procedure
+### Release procedure (maintainers only)
 
 1. Ensure you’re on the branch you intend to release from (`main` or `mc<minecraft_version>`).
 2. Update `CHANGELOG.md`:
    - Move entries from `## [Unreleased]` into a new `## [X.Y.Z] - YYYY-MM-DD` section.
+   - When reusing a mod version for another Minecraft line, use `## [X.Y.Z+mc<MINECRAFT_VERSION>] - YYYY-MM-DD`. Release notes prefer this exact artifact version before falling back to the legacy version-only section.
 3. Bump `gradle.properties`:
    - Update `mod_version=...`
    - Ensure `minecraft_version=...` matches the branch line.
@@ -125,8 +126,15 @@ git push origin "vX.Y.Z+mc<MINECRAFT_VERSION>"
   - Enforces branch gating.
   - Builds and uploads the JARs to the GitHub Release.
 - **Publishing**: [`.github/workflows/publish.yml`](.github/workflows/publish.yml) runs after `Release` and publishes the exact GitHub Release artifacts (Modrinth/CurseForge).
+  - The publishing JDK and CurseForge Java label come from the tagged source's `fabric.mod.json`.
+  - Python validation lives in `.github/scripts/release.py`. The publisher checks out these tools from its own workflow revision so older release tags remain supported.
+  - Downloaded JAR metadata and class-file Java requirements are checked before uploading.
+  - Manual publishing requires an explicit existing release tag; it never selects another Minecraft line's latest release implicitly.
+  - Manual runs default to `dry_run`: validate the immutable release and packaged metadata, make authenticated CurseForge GET requests, resolve destination labels, and execute Minotaur with `debugMode=true` without uploading. This verifies CurseForge read authentication, not project upload permission. Disable `dry_run` to publish.
+  - Client GameTests run with and without RenderScale before a new GitHub Release is created. Sodium checks remain deferred.
+  - Stable releases and prereleases must be immutable. Publish a new prerelease tag instead of replacing an existing prerelease's assets.
 
-## Adding a new Minecraft maintenance line (future)
+## ~~Adding a new Minecraft maintenance line (future)~~
 
 When adding support for a new Minecraft version while keeping older lines maintained:
 
@@ -137,6 +145,9 @@ When adding support for a new Minecraft version while keeping older lines mainta
 3. Ensure the release workflows exist on the branch:
    - cherry-pick the relevant workflow commits from `main` into the new branch
 4. Release using the canonical tag format `v<mod_version>+mc<minecraft_version>`.
+
+> [!IMPORTANT]
+> We’re restructuring the repository to support multiple Minecraft versions and mod loaders on a single branch. Please discuss your plans with the maintainers before starting a backport or a port to a newer version.
 
 ## Troubleshooting releases
 

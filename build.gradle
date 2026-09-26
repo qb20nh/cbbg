@@ -1,5 +1,5 @@
 plugins {
-	id 'fabric-loom' version "${loom_version}"
+	id 'net.fabricmc.fabric-loom'
 	id 'maven-publish'
 	id 'jacoco'
 	id 'com.modrinth.minotaur' version '2.+'
@@ -30,6 +30,10 @@ repositories {
 	// See https://docs.gradle.org/current/userguide/declaring_repositories.html
 	// for more information about repositories.
 	maven { url = "https://maven.florianmichael.de/releases" }
+	maven {
+		url = "https://api.modrinth.com/maven"
+		content { includeGroup "maven.modrinth" }
+	}
     maven {
         name = "Terraformers"
         url = "https://maven.terraformersmc.com/"
@@ -39,16 +43,13 @@ repositories {
 dependencies {
 	// To change the versions see the gradle.properties file
 	minecraft "com.mojang:minecraft:${project.minecraft_version}"
-	mappings loom.officialMojangMappings()
-	modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
-
-	// Fabric API. This is technically optional, but you probably want it anyway.
-	modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
-	modImplementation "de.florianmichael:AsmFabricLoader:2.0.1"
+	implementation "net.fabricmc:fabric-loader:${project.loader_version}"
+	implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
+	implementation "de.florianmichael:AsmFabricLoader:2.0.1"
 	include "de.florianmichael:AsmFabricLoader:2.0.1"
 
-    modCompileOnly "com.terraformersmc:modmenu:${project.modmenu_version}"
-    modLocalRuntime "com.terraformersmc:modmenu:${project.modmenu_version}"
+    implementation "com.terraformersmc:modmenu:${project.modmenu_version}"
+    localRuntime "com.terraformersmc:modmenu:${project.modmenu_version}"
 
 	// Unit tests (JUnit 5 via Fabric Loader JUnit)
 	testImplementation "net.fabricmc:fabric-loader-junit:${project.loader_version}"
@@ -67,6 +68,14 @@ fabricApi {
 	}
 }
 
+// Opt-in integration dependencies, excluded from the published mod.
+if (providers.gradleProperty("testRenderScale").isPresent()) {
+	dependencies {
+		gametestRuntimeOnly "maven.modrinth:renderscale:EJ7KZw6k"
+		gametestRuntimeOnly "maven.modrinth:cloth-config:Nv3xnWXd"
+	}
+}
+
 processResources {
 	inputs.property "version", project.version
 	inputs.property "minecraft_version", project.minecraft_version
@@ -80,7 +89,7 @@ processResources {
 }
 
 tasks.withType(JavaCompile).configureEach {
-	it.options.release = 21
+	it.options.release = 25
 }
 
 test {
@@ -112,17 +121,14 @@ java {
 	// If you remove this line, sources will not be generated.
 	withSourcesJar()
 
-	sourceCompatibility = JavaVersion.VERSION_21
-	targetCompatibility = JavaVersion.VERSION_21
+	sourceCompatibility = JavaVersion.VERSION_25
+	targetCompatibility = JavaVersion.VERSION_25
 }
 
 jar {
 	inputs.property "archivesName", project.base.archivesName
 
-	// Unobfuscated (Mojang-named) jar for the *_unobfuscated runtime.
-	// The default Fabric distribution jar is produced by `remapJar`.
 	archiveVersion = artifactVersion
-	archiveClassifier = "unobf"
 
 	from("LICENSE") {
 		rename { "${it}_${inputs.properties.archivesName}"}
@@ -131,17 +137,7 @@ jar {
 
 }
 
-// Standard Fabric jar (intermediary/remapped) for normal, obfuscated Minecraft runtime.
-tasks.named("remapJar") {
-	archiveVersion = artifactVersion
-	archiveClassifier = ""
-}
-
 tasks.named("sourcesJar") {
-	archiveVersion = artifactVersion
-}
-
-tasks.named("remapSourcesJar") {
 	archiveVersion = artifactVersion
 }
 
@@ -175,7 +171,7 @@ tasks.register("devJar") {
 	// Clean any previously generated dev jars before writing the new timestamped one.
 	dependsOn tasks.named("cleanDevJars")
 
-	def inJar = tasks.named("remapJar").flatMap { it.archiveFile }
+	def inJar = tasks.named("jar").flatMap { it.archiveFile }
 	inputs.file(inJar)
 	outputs.file(devJarOut)
 
@@ -195,7 +191,7 @@ tasks.register("devSourcesJar") {
 	// Clean any previously generated dev jars before writing the new timestamped one.
 	dependsOn tasks.named("cleanDevJars")
 
-	def inSourcesJar = tasks.named("remapSourcesJar").flatMap { it.archiveFile }
+	def inSourcesJar = tasks.named("sourcesJar").flatMap { it.archiveFile }
 	inputs.file(inSourcesJar)
 	outputs.file(devSourcesJarOut)
 
@@ -276,9 +272,9 @@ modrinth {
 		}
 		additionalFiles = additional
 	} else {
-		uploadFile = tasks.named("remapJar")
+		uploadFile = tasks.named("jar")
 		additionalFiles = [
-			tasks.named("remapSourcesJar")
+			tasks.named("sourcesJar")
 		]
 	}
 

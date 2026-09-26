@@ -1,5 +1,6 @@
 package com.qb20nh.cbbg.mixin;
 
+import com.mojang.blaze3d.GpuFormat;
 import com.mojang.blaze3d.GpuOutOfMemoryException;
 import com.mojang.blaze3d.opengl.GlStateManager;
 import com.mojang.blaze3d.opengl.GlTexture;
@@ -7,7 +8,6 @@ import com.mojang.blaze3d.pipeline.MainTarget;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.systems.GpuDevice;
 import com.mojang.blaze3d.textures.GpuTexture;
-import com.mojang.blaze3d.textures.TextureFormat;
 import com.qb20nh.cbbg.Cbbg;
 import com.qb20nh.cbbg.CbbgClient;
 import com.qb20nh.cbbg.compat.renderscale.RenderScaleCompat;
@@ -18,27 +18,30 @@ import com.qb20nh.cbbg.render.MainTargetFormatSupport;
 import com.qb20nh.cbbg.render.MenuBlurGuard;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Supplier;
-import org.jspecify.annotations.NonNull;
+
+import org.jspecify.annotations.Nullable;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL30;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Redirect;
 
 @Mixin(RenderTarget.class)
 public abstract class RenderTargetCreateBuffersMixin {
 
+    @Unique
     private static final AtomicBoolean loggedRenderScaleFormatFailure = new AtomicBoolean(false);
+    @Unique
     private static final AtomicBoolean loggedMenuBlurFormatFailure = new AtomicBoolean(false);
+    @Unique
     private static final AtomicBoolean loggedMenuBlurAllocInfo = new AtomicBoolean(false);
 
     @Redirect(method = "createBuffers", at = @At(value = "INVOKE",
-            target = "Lcom/mojang/blaze3d/systems/GpuDevice;createTexture(Ljava/util/function/Supplier;ILcom/mojang/blaze3d/textures/TextureFormat;IIII)Lcom/mojang/blaze3d/textures/GpuTexture;"))
-    private GpuTexture cbbg$createBuffers$createTexture(GpuDevice device, Supplier<String> label,
-            int usage, @NonNull TextureFormat format, int width, int height, int depthOrLayers,
-            int mipLevels) {
+            target = "Lcom/mojang/blaze3d/systems/GpuDevice;createTexture(Ljava/util/function/Supplier;ILcom/mojang/blaze3d/GpuFormat;IIII)Lcom/mojang/blaze3d/textures/GpuTexture;"))
+    private GpuTexture cbbg$createBuffers$createTexture(GpuDevice device, @Nullable Supplier<String> label, @GpuTexture.Usage int usage, GpuFormat format, int width, int height, int depthOrLayers, int mipLevels) {
         // cbbg only upgrades RGBA8 color targets, and only while active.
-        if (format != TextureFormat.RGBA8 || !CbbgClient.isEnabled()) {
+        if (format != GpuFormat.RGBA8_UNORM || !CbbgClient.isEnabled()) {
             return device.createTexture(label, usage, format, width, height, depthOrLayers,
                     mipLevels);
         }

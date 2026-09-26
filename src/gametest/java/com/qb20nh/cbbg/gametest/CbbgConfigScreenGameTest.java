@@ -44,7 +44,7 @@ public class CbbgConfigScreenGameTest implements FabricClientGameTest {
         setKnownBaselineConfig();
 
         try {
-            context.setScreen(() -> new CbbgConfigScreen(null));
+            context.setScreen(() -> com.terraformersmc.modmenu.ModMenu.getConfigScreen("cbbg", null));
             context.waitForScreen(CbbgConfigScreen.class);
             context.waitTick();
             context.takeScreenshot("cbbg-config-screen-open");
@@ -53,12 +53,21 @@ public class CbbgConfigScreenGameTest implements FabricClientGameTest {
             // This avoids coordinate-space ambiguity across platforms/scales while still exercising
             // the UI code paths.
             context.runOnClient(client -> {
-                ScreenWidgets w = ScreenWidgets.from(client.screen);
+                ScreenWidgets w = ScreenWidgets.from(client.gui.screen());
+                for (String invalid : new String[] {"abc", "1-2", "-", "9223372036854775808"}) {
+                    w.seed.setValue(invalid);
+                    assertEquals(false, w.generate.active, "invalid seed disables generation");
+                    assertEquals(0L, CbbgConfig.get().stbnSeed(), "invalid seed preserves config");
+                }
+                w.seed.setValue("-123");
+                assertEquals(true, w.generate.active, "valid seed enables generation");
+                assertEquals(-123L, CbbgConfig.get().stbnSeed(), "negative seed");
+                w.seed.insertText("abc");
+                assertEquals(false, w.generate.active, "invalid pasted seed disables generation");
+                w.seed.setValue("");
+                assertEquals(true, w.generate.active, "empty seed defaults to zero");
+                assertEquals(0L, CbbgConfig.get().stbnSeed(), "empty seed");
                 MouseButtonInfo click = new MouseButtonInfo(GLFW.GLFW_MOUSE_BUTTON_LEFT, 0);
-
-                // Mode: ENABLED -> DISABLED
-                w.mode.onClick(new MouseButtonEvent(centerX(w.mode), centerY(w.mode), click),
-                        false);
 
                 // Pixel format: RGBA16F -> RGBA32F
                 w.format.onClick(new MouseButtonEvent(centerX(w.format), centerY(w.format), click),
@@ -91,7 +100,7 @@ public class CbbgConfigScreenGameTest implements FabricClientGameTest {
             context.waitForScreen(CbbgConfigScreen.class);
 
             context.runOnClient(client -> {
-                ScreenWidgets w = ScreenWidgets.from(client.screen);
+                ScreenWidgets w = ScreenWidgets.from(client.gui.screen());
                 MouseButtonInfo click = new MouseButtonInfo(GLFW.GLFW_MOUSE_BUTTON_LEFT, 0);
 
                 // Notifications: true -> false
@@ -101,18 +110,22 @@ public class CbbgConfigScreenGameTest implements FabricClientGameTest {
                 w.notifyToast.onClick(
                         new MouseButtonEvent(centerX(w.notifyToast), centerY(w.notifyToast), click),
                         false);
+
+                // Disable only after editing: reopening a disabled screen locks these controls.
+                w.mode.onClick(new MouseButtonEvent(centerX(w.mode), centerY(w.mode), click),
+                        false);
             });
             context.takeScreenshot("cbbg-config-screen-after");
 
             // Done button closes screen
             context.runOnClient(client -> {
-                ScreenWidgets w = ScreenWidgets.from(client.screen);
+                ScreenWidgets w = ScreenWidgets.from(client.gui.screen());
                 MouseButtonInfo click = new MouseButtonInfo(GLFW.GLFW_MOUSE_BUTTON_LEFT, 0);
                 w.done.onClick(new MouseButtonEvent(centerX(w.done), centerY(w.done), click),
                         false);
             });
             context.waitFor(
-                    client -> client.screen == null || client.screen instanceof TitleScreen);
+                    client -> client.gui.screen() == null || client.gui.screen() instanceof TitleScreen);
 
             assertConfigUpdated();
         } finally {

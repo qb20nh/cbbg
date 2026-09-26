@@ -1,16 +1,17 @@
 package com.qb20nh.cbbg.mixin;
 
+import com.mojang.blaze3d.GpuFormat;
 import com.mojang.blaze3d.GpuOutOfMemoryException;
 import com.mojang.blaze3d.pipeline.MainTarget;
 import com.mojang.blaze3d.systems.GpuDevice;
 import com.mojang.blaze3d.textures.GpuTexture;
-import com.mojang.blaze3d.textures.TextureFormat;
 import com.qb20nh.cbbg.CbbgClient;
 import com.qb20nh.cbbg.config.CbbgConfig;
 import com.qb20nh.cbbg.render.GlFormatOverride;
 import com.qb20nh.cbbg.render.MainTargetFormatSupport;
 import java.util.function.Supplier;
-import org.jspecify.annotations.NonNull;
+
+import org.jspecify.annotations.Nullable;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Redirect;
@@ -19,10 +20,10 @@ import org.spongepowered.asm.mixin.injection.Redirect;
 public abstract class MainTargetMixin {
 
     @Redirect(method = "allocateColorAttachment", at = @At(value = "INVOKE",
-            target = "Lcom/mojang/blaze3d/systems/GpuDevice;createTexture(Ljava/util/function/Supplier;ILcom/mojang/blaze3d/textures/TextureFormat;IIII)Lcom/mojang/blaze3d/textures/GpuTexture;"))
-    private GpuTexture cbbg$allocateColorAttachment(GpuDevice device, Supplier<String> label,
-            int usage, @NonNull TextureFormat format, int width, int height, int depthOrLayers,
-            int mipLevels) {
+            target = "Lcom/mojang/blaze3d/systems/GpuDevice;createTexture(Ljava/util/function/Supplier;ILcom/mojang/blaze3d/GpuFormat;IIII)Lcom/mojang/blaze3d/textures/GpuTexture;"))
+    private GpuTexture cbbg$allocateColorAttachment(GpuDevice device, @Nullable Supplier<String> label,
+                                                    @GpuTexture.Usage int usage, GpuFormat format, int width, int height, int depthOrLayers,
+                                                    int mipLevels) {
         if (!CbbgClient.isEnabled()) {
             return device.createTexture(label, usage, format, width, height, depthOrLayers,
                     mipLevels);

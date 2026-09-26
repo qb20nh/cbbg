@@ -1,6 +1,5 @@
 package com.qb20nh.cbbg.mixin;
 
-import com.mojang.blaze3d.opengl.GlCommandEncoder;
 import com.mojang.blaze3d.opengl.GlStateManager;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.textures.GpuTexture;
@@ -17,20 +16,21 @@ import org.jspecify.annotations.Nullable;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL30;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-@Mixin(GlCommandEncoder.class)
+@Mixin(targets = {"com/mojang/blaze3d/opengl/GlCommandEncoder"})
 public abstract class GlCommandEncoderMixin {
 
-    private static final ThreadLocal<Integer> PRESENT_DEPTH = ThreadLocal.withInitial(() -> 0);
-    private static final AtomicBoolean loggedOnce = new AtomicBoolean(false);
-    private static volatile CbbgConfig.Mode lastMode = null;
-    private static volatile CbbgConfig.PixelFormat lastPixelFormat = null;
+    @Unique private static final ThreadLocal<Integer> PRESENT_DEPTH = ThreadLocal.withInitial(() -> 0);
+    @Unique private static final AtomicBoolean loggedOnce = new AtomicBoolean(false);
+    @Unique private static volatile CbbgConfig.Mode lastMode = null;
+    @Unique private static volatile CbbgConfig.PixelFormat lastPixelFormat = null;
 
     @Inject(method = "presentTexture", at = @At("HEAD"), cancellable = true)
-    private void cbbg$presentTexture(GpuTextureView textureView, CallbackInfo ci) {
+    private void cbbg$presentTexture(GpuTextureView textureView, int swapchainWidth, int swapchainHeight, CallbackInfo ci) {
         // Prevent recursion when cbbg itself calls presentTexture for its dither
         // output.
         if (PRESENT_DEPTH.get() > 0) {
@@ -45,7 +45,7 @@ public abstract class GlCommandEncoderMixin {
 
         Minecraft mc = Minecraft.getInstance();
         // Only intercept presenting the *main* render target.
-        GpuTextureView main = mc.getMainRenderTarget().getColorTextureView();
+        GpuTextureView main = mc.gameRenderer.mainRenderTarget().getColorTextureView();
         if (main == null || main != textureView) {
             return;
         }
@@ -70,6 +70,7 @@ public abstract class GlCommandEncoderMixin {
         }
     }
 
+    @Unique
     private static void handleModeTransition(CbbgConfig.Mode modeNow) {
         CbbgConfig.Mode prev = lastMode;
         if (prev == null) {
@@ -101,10 +102,11 @@ public abstract class GlCommandEncoderMixin {
         RenderSystem.queueFencedTask(() -> {
             Minecraft mc = Minecraft.getInstance();
             // Recreate the main target so it matches the current enabled state.
-            mc.getMainRenderTarget().resize(mc.getWindow().getWidth(), mc.getWindow().getHeight());
+            mc.gameRenderer.mainRenderTarget().resize(mc.getWindow().getWidth(), mc.getWindow().getHeight());
         });
     }
 
+    @Unique
     private static void handlePixelFormatTransition(CbbgConfig.Mode modeNow) {
         CbbgConfig.PixelFormat fmtNow = CbbgConfig.get().pixelFormat();
         CbbgConfig.PixelFormat prev = lastPixelFormat;
@@ -131,10 +133,11 @@ public abstract class GlCommandEncoderMixin {
         // Recreate targets on the next frame boundary so we don't destroy textures mid-present.
         RenderSystem.queueFencedTask(() -> {
             Minecraft mc = Minecraft.getInstance();
-            mc.getMainRenderTarget().resize(mc.getWindow().getWidth(), mc.getWindow().getHeight());
+            mc.gameRenderer.mainRenderTarget().resize(mc.getWindow().getWidth(), mc.getWindow().getHeight());
         });
     }
 
+    @Unique
     private static void logVerificationOnce(GpuTextureView mainView) {
         if (!loggedOnce.compareAndSet(false, true)) {
             return;
@@ -145,7 +148,7 @@ public abstract class GlCommandEncoderMixin {
             Integer lightmapInternal = null;
             lightmapInternal = swallowExceptions(() -> {
                 GpuTextureView lightmap =
-                        Minecraft.getInstance().gameRenderer.lightTexture().getTextureView();
+                        Minecraft.getInstance().gameRenderer.lightmap();
                 return getTextureInternalFormat(lightmap.texture());
             });
 
@@ -177,6 +180,7 @@ public abstract class GlCommandEncoderMixin {
         }
     }
 
+    @Unique
     private static int getTextureInternalFormat(GpuTexture texture) {
         // Read GL internal format from the currently allocated texture storage.
         // This is the actual verification that our RGBA16F override is taking effect.
@@ -192,6 +196,7 @@ public abstract class GlCommandEncoderMixin {
         }
     }
 
+    @Unique
     @Nullable
     private static <T> T swallowExceptions(java.util.concurrent.Callable<T> action) {
         try {

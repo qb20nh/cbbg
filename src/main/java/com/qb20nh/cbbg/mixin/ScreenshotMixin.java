@@ -12,6 +12,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.Screenshot;
 import org.jspecify.annotations.NonNull;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
@@ -21,6 +22,7 @@ public abstract class ScreenshotMixin {
 
     private ScreenshotMixin() {}
 
+    @Unique
     private static final ThreadLocal<Integer> CAPTURE_DEPTH = ThreadLocal.withInitial(() -> 0);
 
     @Inject(method = "takeScreenshot(Lcom/mojang/blaze3d/pipeline/RenderTarget;ILjava/util/function/Consumer;)V",
@@ -34,7 +36,7 @@ public abstract class ScreenshotMixin {
             return;
         }
 
-        if (target != Minecraft.getInstance().getMainRenderTarget()) {
+        if (target != Minecraft.getInstance().gameRenderer.mainRenderTarget()) {
             return;
         }
 

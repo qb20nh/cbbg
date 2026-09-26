@@ -22,10 +22,10 @@ jobs:
 
     steps:
     - uses: actions/checkout@v6.0.1
-    - name: Set up JDK 21
+    - name: Set up JDK 25
       uses: actions/setup-java@v5.1.0
       with:
-        java-version: '21'
+        java-version: '25'
         distribution: 'temurin'
 
     # Cache Fabric Loom's project-local cache (Minecraft jars, remapped artifacts, etc).
@@ -52,7 +52,45 @@ jobs:
     - name: Build with Gradle Wrapper
       run: ./gradlew build
 
+    - name: Test release validation
+      run: python3 -m unittest discover -s .github/tests -v
+
+  client-tests:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        profile: [baseline, renderscale]
+    steps:
+      - uses: actions/checkout@v6.0.1
+      - uses: actions/setup-java@v5.1.0
+        with:
+          java-version: '25'
+          distribution: temurin
+      - uses: gradle/actions/setup-gradle@v5.0.0
+      - name: Install headless display
+        run: sudo apt-get update && sudo apt-get install -y xvfb libgl1-mesa-dri libglx-mesa0
+      - name: Run client integration tests
+        env:
+          PROFILE: ${{ matrix.profile }}
+          LIBGL_ALWAYS_SOFTWARE: 'true'
+          ALSOFT_DRIVERS: 'null'
+        run: |
+          args=()
+          if [[ "${PROFILE}" == renderscale ]]; then args+=(-PtestRenderScale); fi
+          xvfb-run -a ./gradlew runClientGameTest "${args[@]}"
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: client-tests-${{ matrix.profile }}
+          path: |
+            build/run/clientGameTest/logs/
+            build/run/clientGameTest/screenshots/
+
   dependency-submission:
+    if: github.event_name == 'push'
 
     runs-on: ubuntu-latest
     permissions:
@@ -60,10 +98,10 @@ jobs:
 
     steps:
     - uses: actions/checkout@v6.0.1
-    - name: Set up JDK 21
+    - name: Set up JDK 25
       uses: actions/setup-java@v5.1.0
       with:
-        java-version: '21'
+        java-version: '25'
         distribution: 'temurin'
 
     - *cache_loom

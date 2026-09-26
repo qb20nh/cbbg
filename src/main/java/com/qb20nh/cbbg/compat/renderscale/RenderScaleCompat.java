@@ -82,7 +82,7 @@ public final class RenderScaleCompat {
                 return;
             }
             try {
-                Class<?> common = Class.forName("dev.zelo.renderscale.CommonClass");
+                Class<?> common = Class.forName("dev.zelo.renderscale.RenderScale");
                 Class<?> config = Class.forName("dev.zelo.renderscale.config.RenderScaleConfig");
                 commonGetConfig = common.getMethod("getConfig");
                 configGetScale = config.getMethod("getScale");
