@@ -207,6 +207,27 @@ if (targetId == '26.3-fabric') {
         archiveClassifier = 'processed-driver'
         from sourceSets.processedGametest.output
     }
+    def maximumMetadata = tasks.register('processedMaximumNoiseCacheMetadata') {
+        dependsOn tasks.named('processProcessedGametestResources')
+        def source = layout.buildDirectory.file('resources/processedGametest/fabric.mod.json')
+        def destination = layout.buildDirectory.file('processedMaximumNoiseCache/fabric.mod.json')
+        def entrypoint = 'com.qb20nh.cbbg.gametest.ReleaseMaximumNoiseCacheGameTest'
+        inputs.file(source)
+        inputs.property('entrypoint', entrypoint)
+        outputs.file(destination)
+        doLast {
+            def metadata = new JsonSlurper().parse(source.get().asFile)
+            metadata.entrypoints['fabric-client-gametest'] = [entrypoint]
+            destination.get().asFile.parentFile.mkdirs()
+            destination.get().asFile.text = groovy.json.JsonOutput.prettyPrint(
+                    groovy.json.JsonOutput.toJson(metadata))
+        }
+    }
+    tasks.register('processedMaximumNoiseCacheDriverJar', Jar) {
+        archiveClassifier = 'processed-maximum-noise-cache-driver'
+        from(sourceSets.processedGametest.output) { exclude 'fabric.mod.json' }
+        from(maximumMetadata)
+    }
     tasks.register('prepareProcessedRuntime') {
         dependsOn tasks.named('optimizeReleaseJar'), tasks.named('processedDriverJar'),
                 tasks.named('checkPackages')
@@ -398,7 +419,7 @@ tasks.register('candidateBuildOutputs') {
             }.standardOutput.asText.get().trim()
         }
         def drivers = new TreeMap<String, Map>()
-        tasks.withType(Jar).matching { it.name.endsWith('DriverJar') && it.name != 'processedDriverJar' }.each { driver ->
+        tasks.withType(Jar).matching { it.name.endsWith('DriverJar') && !it.name.startsWith('processed') }.each { driver ->
             def suite = driver == parityDriverJar.get() ? 'ordinary' :
                     driver.archiveClassifier.get().replaceFirst(/-driver$/, '')
             if (drivers.containsKey(suite)) throw new GradleException('Duplicate driver suite: ' + suite)

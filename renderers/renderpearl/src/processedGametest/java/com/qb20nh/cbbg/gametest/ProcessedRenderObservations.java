@@ -8,6 +8,7 @@ import java.util.Collections;
 import java.util.Set;
 import java.util.WeakHashMap;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Consumer;
 
 /** Observes Minecraft's actual CBBG draw calls without depending on mod internals. */
 public final class ProcessedRenderObservations {
@@ -19,6 +20,8 @@ public final class ProcessedRenderObservations {
     private static GpuTextureView lastDitherOutput;
     private static GpuTextureView lastDitherNoise;
     private static long ditherSelections;
+    private static Consumer<GpuTextureView> noiseObserver;
+    private static long observedDraws;
 
     private ProcessedRenderObservations() {}
 
@@ -63,6 +66,20 @@ public final class ProcessedRenderObservations {
 
     public static long ditherSelections() {
         return ditherSelections;
+    }
+
+    /** Installed and cleared on the render thread; observes completed presentation frames. */
+    public static void setNoiseObserver(Consumer<GpuTextureView> observer) {
+        noiseObserver = observer;
+        observedDraws = DRAWS.get();
+    }
+
+    public static void afterFrame() {
+        long draws = DRAWS.get();
+        if (noiseObserver != null && draws != observedDraws) {
+            observedDraws = draws;
+            noiseObserver.accept(lastDitherNoise);
+        }
     }
 
     public static void recordDraw() {

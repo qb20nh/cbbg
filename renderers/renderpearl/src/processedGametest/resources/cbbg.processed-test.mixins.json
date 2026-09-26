@@ -2,6 +2,6 @@
   "required": true,
   "package": "com.qb20nh.cbbg.gametest.mixin",
   "compatibilityLevel": "JAVA_25",
-  "client": ["ScenarioProgressMixin", "ProcessedPipelineCacheMixin", "ProcessedRenderPassMixin"],
+  "client": ["ScenarioProgressMixin", "ProcessedPipelineCacheMixin", "ProcessedRenderPassMixin", "ProcessedFrameMixin"],
   "injectors": {"defaultRequire": 1}
 }
