@@ -4,7 +4,6 @@ import org.gradle.api.file.ConfigurableFileCollection
 import org.gradle.api.file.Directory
 import org.gradle.api.file.RegularFileProperty
 import org.gradle.api.model.ObjectFactory
-import org.gradle.api.GradleException
 import org.gradle.api.Project
 import org.gradle.api.provider.Provider
 import org.gradle.jvm.toolchain.JavaLanguageVersion
@@ -42,27 +41,7 @@ class ReleaseOptimization {
     }
 
     void targetJdk(Provider<Directory> targetHome) {
-        Project owner = project
-        def runtimeJar = owner.tasks.register('exportReleaseJdkLibraries', ExportJdkLibraries) {
-            runtimeHome.set(targetHome)
-            modulesFile.set(targetHome.map { it.file('lib/modules') })
-            fileSystemJar.set(targetHome.map { it.file('lib/jrt-fs.jar') })
-            outputJar.set(owner.layout.buildDirectory.file('intermediates/proguard/jdk-runtime.jar'))
-        }
-        jdkLibraries.from(targetHome.map { installation ->
-            File home = installation.asFile
-            File jmods = new File(home, 'jmods')
-            if (jmods.isDirectory()) {
-                def modules = jmods.listFiles().findAll { it.name.endsWith('.jmod') }.sort()
-                if (!modules.isEmpty()) return owner.files(modules)
-            }
-            File rtJar = new File(home, 'jre/lib/rt.jar')
-            if (!rtJar.isFile()) rtJar = new File(home, 'lib/rt.jar')
-            if (rtJar.isFile()) return owner.files(rtJar)
-            if (new File(home, 'lib/modules').isFile() && new File(home, 'lib/jrt-fs.jar').isFile()) {
-                return owner.files(runtimeJar.flatMap { it.outputJar })
-            }
-            throw new GradleException('Missing Java runtime libraries for ' + home)
-        })
+        jdkLibraries.from(JdkLibraries.select(project, targetHome,
+                'exportReleaseJdkLibraries', 'intermediates/proguard/jdk-runtime.jar'))
     }
 }

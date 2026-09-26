@@ -23,20 +23,21 @@ class PrivateGsonPlugin implements Plugin<Project> {
         def mapping = new File(project.projectDir.parentFile, 'build-config/private-gson.map')
         def output = project.layout.buildDirectory.file('private-gson/gson-stream.jar')
         def fullMapping = project.layout.buildDirectory.file('private-gson/mapping.txt')
-        def javaBase = toolchains.launcherFor { spec ->
+        def targetHome = project.objects.directoryProperty()
+        targetHome.convention(toolchains.launcherFor { spec ->
             spec.languageVersion.set(JavaLanguageVersion.of(25))
-        }.map { launcher -> new File(launcher.metadata.installationPath.asFile, 'jmods/java.base.jmod') }
-        def javaSql = toolchains.launcherFor { spec ->
-            spec.languageVersion.set(JavaLanguageVersion.of(25))
-        }.map { launcher -> new File(launcher.metadata.installationPath.asFile, 'jmods/java.sql.jmod') }
+        }.map { it.metadata.installationPath })
+        project.extensions.extraProperties.set('privateGsonJdkHome', targetHome)
+        def jdkLibraries = project.files(JdkLibraries.select(project, targetHome,
+                'exportPrivateGsonJdkLibraries', 'intermediates/proguard/private-gson-jdk-runtime.jar',
+                ['java.base', 'java.sql']))
         def task = project.tasks.register('privateGsonJar', ProGuardTask) {
             group = 'build'
             description = 'Shrink and relocate the Gson streaming API before compiling core.'
             inputs.files(gson)
             inputs.file(rules)
             inputs.file(mapping)
-            inputs.file(javaBase)
-            inputs.file(javaSql)
+            inputs.files(jdkLibraries)
             outputs.file(output)
             outputs.file(fullMapping)
             doFirst {
@@ -44,8 +45,13 @@ class PrivateGsonPlugin implements Plugin<Project> {
                 archive.parentFile.mkdirs()
                 injars(gson.singleFile)
                 outjars(archive)
-                libraryjars(javaBase.get(), jarfilter: '!**.jar', filter: '!module-info.class')
-                libraryjars(javaSql.get(), jarfilter: '!**.jar', filter: '!module-info.class')
+                jdkLibraries.files.sort().each { library ->
+                    if (library.name.endsWith('.jmod')) {
+                        libraryjars(library, jarfilter: '!**.jar', filter: '!module-info.class')
+                    } else {
+                        libraryjars(library)
+                    }
+                }
                 configuration(rules)
                 applymapping(mapping)
                 printmapping(fullMapping.get().asFile)
