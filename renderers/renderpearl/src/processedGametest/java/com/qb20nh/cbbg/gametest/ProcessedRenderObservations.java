@@ -15,13 +15,14 @@ public final class ProcessedRenderObservations {
     private static final Set<CompiledRenderPipeline> PIPELINES = Collections.synchronizedSet(
             Collections.newSetFromMap(new WeakHashMap<>()));
     private static final AtomicLong DRAWS = new AtomicLong();
+    private static final AtomicLong PRESENTATIONS = new AtomicLong();
     private static final AtomicLong FIRST_DRAW = new AtomicLong();
     private static CompiledRenderPipeline selectedPipeline;
     private static GpuTextureView lastDitherOutput;
     private static GpuTextureView lastDitherNoise;
     private static long ditherSelections;
     private static Consumer<GpuTextureView> noiseObserver;
-    private static long observedDraws;
+    private static long observedPresentations;
 
     private ProcessedRenderObservations() {}
 
@@ -71,15 +72,25 @@ public final class ProcessedRenderObservations {
     /** Installed and cleared on the render thread; observes completed presentation frames. */
     public static void setNoiseObserver(Consumer<GpuTextureView> observer) {
         noiseObserver = observer;
-        observedDraws = DRAWS.get();
+        observedPresentations = PRESENTATIONS.get();
     }
 
     public static void afterFrame() {
-        long draws = DRAWS.get();
-        if (noiseObserver != null && draws != observedDraws) {
-            observedDraws = draws;
+        long presentations = PRESENTATIONS.get();
+        if (noiseObserver != null && presentations != observedPresentations) {
+            observedPresentations = presentations;
             noiseObserver.accept(lastDitherNoise);
         }
+    }
+
+    public static void recordPresentation(GpuTextureView texture) {
+        if (texture != null && texture == lastDitherOutput && !texture.texture().isClosed()) {
+            PRESENTATIONS.incrementAndGet();
+        }
+    }
+
+    public static long presentations() {
+        return PRESENTATIONS.get();
     }
 
     public static void recordDraw() {

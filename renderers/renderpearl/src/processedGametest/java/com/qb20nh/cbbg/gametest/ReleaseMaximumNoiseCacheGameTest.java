@@ -193,12 +193,12 @@ public final class ReleaseMaximumNoiseCacheGameTest implements FabricClientGameT
                             || noise.getWidth(0) != SIZE || noise.getHeight(0) != SIZE) {
                         throw new AssertionError("Maximum-size GPU presentation fell back");
                     }
-                    long draws = ProcessedRenderObservations.draws();
+                    long presentations = ProcessedRenderObservations.presentations();
                     CompletableFuture<int[]> pixels = readNoise(noise);
-                    if (ProcessedRenderObservations.draws() != draws || debugFrame(client) != frame) {
+                    if (ProcessedRenderObservations.presentations() != presentations || debugFrame(client) != frame) {
                         throw new AssertionError("Maximum-size noise probe advanced the temporal sequence");
                     }
-                    samples.add(new Sample(draws, frame, pixels));
+                    samples.add(new Sample(presentations, frame, pixels));
                 } catch (Throwable problem) {
                     failure.completeExceptionally(problem);
                 }
@@ -213,7 +213,7 @@ public final class ReleaseMaximumNoiseCacheGameTest implements FabricClientGameT
         Sample previous = null;
         for (int i = 0; i < samples.size(); i++) {
             Sample next = samples.get(i);
-            if (previous != null && (next.draws() != previous.draws() + 1
+            if (previous != null && (next.presentations() != previous.presentations() + 1
                     || next.frame() != (previous.frame() + 1) % DEPTH)) {
                 throw new AssertionError("Maximum-size actual presentations skipped or repeated a noise frame");
             }
@@ -303,5 +303,5 @@ public final class ReleaseMaximumNoiseCacheGameTest implements FabricClientGameT
         }
     }
 
-    private record Sample(long draws, int frame, CompletableFuture<int[]> pixels) {}
+    private record Sample(long presentations, int frame, CompletableFuture<int[]> pixels) {}
 }

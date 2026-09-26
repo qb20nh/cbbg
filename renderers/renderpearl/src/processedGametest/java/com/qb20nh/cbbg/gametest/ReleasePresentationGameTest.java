@@ -60,29 +60,29 @@ public final class ReleasePresentationGameTest implements FabricClientGameTest {
                 ReleaseClient.awaitFormat(context, GpuFormat.RGBA32_FLOAT);
                 context.waitFor(client -> ready(client), WAIT_TICKS);
 
-                long before = ProcessedRenderObservations.draws();
-                ReleaseClient.awaitDrawAfter(context, before);
+                long before = ProcessedRenderObservations.presentations();
+                context.waitFor(client -> ProcessedRenderObservations.presentations() > before, WAIT_TICKS);
                 Sample first = sample(context, "presentation-gpu-noise.png");
                 assertNoise(first);
                 Set<Integer> seen = new HashSet<>();
                 seen.add(first.frame());
                 Sample last = first;
-                long elapsedDraws = 0;
-                for (int attempt = 0; attempt < 24 && (elapsedDraws < DEPTH || seen.size() < 2); attempt++) {
-                    long count = last.draws();
-                    ReleaseClient.awaitDrawAfter(context, count);
+                long elapsedPresentations = 0;
+                for (int attempt = 0; attempt < 24 && (elapsedPresentations < DEPTH || seen.size() < 2); attempt++) {
+                    long count = last.presentations();
+                    context.waitFor(client -> ProcessedRenderObservations.presentations() > count, WAIT_TICKS);
                     Sample next = sample(context, null);
                     assertNoise(next);
-                    long delta = next.draws() - last.draws();
+                    long delta = next.presentations() - last.presentations();
                     if (delta <= 0 || next.frame() != (last.frame() + delta) % DEPTH) {
-                        throw new AssertionError("Normal presentation did not rotate STBN by its draw count: "
-                                + last.frame() + " -> " + next.frame() + " over " + delta + " draws");
+                        throw new AssertionError("Normal presentation did not rotate STBN by its presentation count: "
+                                + last.frame() + " -> " + next.frame() + " over " + delta + " presentations");
                     }
-                    elapsedDraws += delta;
+                    elapsedPresentations += delta;
                     seen.add(next.frame());
                     last = next;
                 }
-                if (elapsedDraws < DEPTH || seen.size() < 2) {
+                if (elapsedPresentations < DEPTH || seen.size() < 2) {
                     throw new AssertionError("Did not observe distinct noise frames across a full temporal cycle");
                 }
 
@@ -143,12 +143,12 @@ public final class ReleasePresentationGameTest implements FabricClientGameTest {
             if (frame < 0 || noise == null || noise.texture().isClosed()) {
                 throw new AssertionError("No live bound noise for presentation sample");
             }
-            long draws = ProcessedRenderObservations.draws();
+            long presentations = ProcessedRenderObservations.presentations();
             CompletableFuture<int[]> pixels = readNoise(noise, evidenceName);
-            if (ProcessedRenderObservations.draws() != draws || debugFrame(client) != frame) {
+            if (ProcessedRenderObservations.presentations() != presentations || debugFrame(client) != frame) {
                 throw new AssertionError("Noise probe advanced the presentation sequence");
             }
-            return new Sample(draws, frame, pixels);
+            return new Sample(presentations, frame, pixels);
         });
         context.waitFor(client -> sample.pixels().isDone(), 200);
         sample.pixels().join();
@@ -224,10 +224,12 @@ public final class ReleasePresentationGameTest implements FabricClientGameTest {
             var main = client.gameRenderer.mainRenderTarget();
             int frame = debugFrame(client);
             long draws = ProcessedRenderObservations.draws();
+            long presentations = ProcessedRenderObservations.presentations();
             RenderSystem.getDevice().createCommandEncoder().clearColorTexture(main.getColorTexture(), SOURCE);
             CompletableFuture<int[]> first = screenshot(main, prefix + "-1.png");
             CompletableFuture<int[]> second = screenshot(main, prefix + "-2.png");
-            if (debugFrame(client) != frame || ProcessedRenderObservations.draws() != draws + 2) {
+            if (debugFrame(client) != frame || ProcessedRenderObservations.draws() != draws + 2
+                    || ProcessedRenderObservations.presentations() != presentations) {
                 throw new AssertionError("Vanilla screenshots advanced the temporal sequence");
             }
             GpuTextureView noise = ProcessedRenderObservations.lastDitherNoise();
@@ -235,7 +237,8 @@ public final class ReleasePresentationGameTest implements FabricClientGameTest {
                 throw new AssertionError("Vanilla screenshot did not bind live noise");
             }
             CompletableFuture<int[]> noisePixels = readNoise(noise, null);
-            if (debugFrame(client) != frame || ProcessedRenderObservations.draws() != draws + 2) {
+            if (debugFrame(client) != frame || ProcessedRenderObservations.draws() != draws + 2
+                    || ProcessedRenderObservations.presentations() != presentations) {
                 throw new AssertionError("Noise readback advanced the temporal sequence");
             }
             return new Pair(main.width, main.height, frame, first, second, noisePixels);
@@ -385,7 +388,7 @@ public final class ReleasePresentationGameTest implements FabricClientGameTest {
         context.waitFor(client -> ReleaseClient.settings().equals(previous), WAIT_TICKS);
     }
 
-    private record Sample(long draws, int frame, CompletableFuture<int[]> pixels) {}
+    private record Sample(long presentations, int frame, CompletableFuture<int[]> pixels) {}
     private record Pair(int width, int height, int frame, CompletableFuture<int[]> first,
             CompletableFuture<int[]> second, CompletableFuture<int[]> noise) {}
 }
