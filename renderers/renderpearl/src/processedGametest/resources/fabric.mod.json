@@ -14,6 +14,7 @@
       "com.qb20nh.cbbg.gametest.ReleasePresentationGameTest",
       "com.qb20nh.cbbg.gametest.ReleaseShaderFailureGameTest",
       "com.qb20nh.cbbg.gametest.ReleaseDebugOverlayGameTest",
+      "com.qb20nh.cbbg.gametest.ReleaseMenuBlurGameTest",
       "com.qb20nh.cbbg.gametest.FloatPrecisionGameTest",
       "com.qb20nh.cbbg.gametest.WindowResizeGameTest",
       "com.qb20nh.cbbg.gametest.ReleaseFramebufferGameTest"
