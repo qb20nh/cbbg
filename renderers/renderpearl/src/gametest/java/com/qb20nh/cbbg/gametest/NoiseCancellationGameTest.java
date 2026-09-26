@@ -29,6 +29,9 @@ public final class NoiseCancellationGameTest implements FabricClientGameTest {
     CompletableFuture<STBNGenerator.@Nullable STBNFields> old = null;
     try {
       assertForcedImagesReplaceCache(original.stbnSeed());
+      assertChangedReloadReplacesPendingRequest(context, original.mode());
+      context.runOnClient(client -> CbbgConfig.setMode(CbbgConfig.Mode.DISABLED));
+      context.waitTicks(3);
       old = STBNGenerator.generateAsync(64, 64, 32, 913725L);
       Thread worker = null;
       long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
@@ -62,9 +65,55 @@ public final class NoiseCancellationGameTest implements FabricClientGameTest {
       throw new AssertionError("Noise cancellation failed", failure);
     } finally {
       if (old != null) old.cancel(true);
-      context.runOnClient(client -> CbbgConfig.setMode(original.mode()));
+      context.runOnClient(
+          client -> {
+            CbbgConfig.setStbnSize(original.stbnSize());
+            CbbgConfig.setStbnDepth(original.stbnDepth());
+            CbbgConfig.setStbnSeed(original.stbnSeed());
+            CbbgConfig.setMode(original.mode());
+            DitherController.resetAfterToggle();
+            DitherController.reloadStbn(false);
+          });
     }
     context.waitFor(client -> DitherController.isReady(), 600);
+  }
+
+  // Matching settings keep the same request; changed settings need a new one.
+  @SuppressWarnings("ReferenceEquality")
+  private static void assertChangedReloadReplacesPendingRequest(
+      ClientGameTestContext context, CbbgConfig.Mode mode) {
+    context.runOnClient(
+        client -> {
+          CbbgConfig.setMode(mode);
+          CbbgConfig.setStbnSize(32);
+          CbbgConfig.setStbnDepth(4);
+          CbbgConfig.setStbnSeed(913727L);
+          DitherController.reloadStbn(false);
+          CompletableFuture<?> initial = pendingRequest();
+          DitherController.reloadStbn(false);
+          if (pendingRequest() != initial) {
+            throw new AssertionError("Matching reload replaced the pending request");
+          }
+          CbbgConfig.setStbnSize(16);
+          CbbgConfig.setStbnDepth(8);
+          CbbgConfig.setStbnSeed(913728L);
+          DitherController.reloadStbn(false);
+          if (pendingRequest() == initial) {
+            throw new AssertionError("Changed reload kept the previous request");
+          }
+        });
+    context.waitFor(
+        client -> DitherController.isReady() && DitherController.getStbnFrames() == 8, 600);
+  }
+
+  private static CompletableFuture<?> pendingRequest() {
+    try {
+      var field = DitherController.class.getDeclaredField("loading");
+      field.setAccessible(true);
+      return (CompletableFuture<?>) Objects.requireNonNull(field.get(null));
+    } catch (ReflectiveOperationException failure) {
+      throw new LinkageError("Cannot read pending noise request", failure);
+    }
   }
 
   private static void assertForcedImagesReplaceCache(long seed) throws Exception {
