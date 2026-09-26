@@ -21,9 +21,12 @@ import java.util.concurrent.CompletableFuture;
 import java.util.regex.Pattern;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
+import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Screenshot;
+import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.renderer.RenderPipelines;
+import net.minecraft.network.chat.Component;
 import org.joml.Vector4f;
 
 /** Checks live presentation and screenshot noise from the processed, packaged mod. */
@@ -83,7 +86,7 @@ public final class ReleasePresentationGameTest implements FabricClientGameTest {
                     throw new AssertionError("Did not observe distinct noise frames across a full temporal cycle");
                 }
 
-                screenshotPair(context, false);
+                screenshotPair(context, false, 2, "enabled");
                 GpuTextureView active = context.computeOnClient(client -> {
                     GpuTextureView noise = ProcessedRenderObservations.lastDitherNoise();
                     if (noise == null || noise.texture().isClosed()) {
@@ -101,7 +104,10 @@ public final class ReleasePresentationGameTest implements FabricClientGameTest {
                 ReleaseClient.awaitFormat(context, GpuFormat.RGBA32_FLOAT);
                 ReleaseClient.awaitDrawAfter(context, stopped);
                 context.waitFor(client -> ready(client), WAIT_TICKS);
-                screenshotPair(context, true);
+                screenshotPair(context, true, 2, "demo");
+                if (FabricLoader.getInstance().isModLoaded("modmenu")) {
+                    checkMenuStrength(context);
+                }
             } finally {
                 restore(context, previous);
             }
@@ -209,9 +215,11 @@ public final class ReleasePresentationGameTest implements FabricClientGameTest {
         }
     }
 
-    private static void screenshotPair(ClientGameTestContext context, boolean demo) {
+    private static void screenshotPair(ClientGameTestContext context, boolean demo, float strength,
+            String scenario) {
         String prefix = "presentation-" + System.getProperty("cbbg.test.backend")
-                + (demo ? "-demo" : "-enabled");
+                + "-" + scenario;
+        float configuredStrength = ReleaseClient.settings().get("strength").getAsFloat();
         var pair = context.computeOnClient(client -> {
             var main = client.gameRenderer.mainRenderTarget();
             int frame = debugFrame(client);
@@ -242,6 +250,7 @@ public final class ReleasePresentationGameTest implements FabricClientGameTest {
             throw new AssertionError("Consecutive vanilla screenshots used different noise");
         }
         int changed = 0;
+        int boosted = 0;
         for (int y = 0; y < pair.height(); y++) {
             int gpuY = pair.height() - 1 - y;
             for (int x = 0; x < pair.width(); x++) {
@@ -249,11 +258,14 @@ public final class ReleasePresentationGameTest implements FabricClientGameTest {
                 int noiseY = DitherReference.noiseCoordinate(gpuY, 1, SIZE);
                 int noisePixel = noise[(SIZE - 1 - noiseY) * SIZE + noiseX];
                 int expected = 0xff000000;
+                int configured = 0xff000000;
                 for (int channel = 0; channel < 3; channel++) {
                     int shift = channel * 8;
                     int value = DitherReference.channel(127.25 / 255,
-                            noisePixel >>> shift & 255, 2, x, pair.width(), demo);
+                            noisePixel >>> shift & 255, strength, x, pair.width(), demo);
                     expected |= value << shift;
+                    configured |= DitherReference.channel(127.25 / 255,
+                            noisePixel >>> shift & 255, configuredStrength, x, pair.width(), demo) << shift;
                 }
                 int actual = first[y * pair.width() + x];
                 if (actual != expected) {
@@ -262,9 +274,53 @@ public final class ReleasePresentationGameTest implements FabricClientGameTest {
                             + Integer.toHexString(expected) + " actual=" + Integer.toHexString(actual));
                 }
                 if (actual != 0xff7f7f7f) changed++;
+                if (expected != configured) boosted++;
             }
         }
         if (changed == 0) throw new AssertionError("Live screenshot omitted the dither effect");
+        if (strength != configuredStrength && boosted == 0) {
+            throw new AssertionError("Fixture did not distinguish menu strength from configured strength");
+        }
+    }
+
+    private static void checkMenuStrength(ClientGameTestContext context) {
+        float originalStrength = ReleaseClient.settings().get("strength").getAsFloat();
+        String originalMode = ReleaseClient.settings().get("mode").getAsString();
+        int originalBlur = context.computeOnClient(client -> client.options.getMenuBackgroundBlurriness());
+        Screen originalScreen = context.computeOnClient(client -> client.gui.screen());
+        Screen mods = ReleaseSettingsUi.mods(context, originalScreen);
+        Screen menu = context.computeOnClient(client -> new Screen(Component.literal("Menu strength test")) {});
+        Screen inGameUi = context.computeOnClient(client -> new Screen(Component.literal("In-game UI strength test")) {
+            @Override
+            public boolean isInGameUi() { return true; }
+        });
+        try {
+            ReleaseClient.command(context, "mode set enabled");
+            ReleaseClient.awaitDrawAfter(context, ProcessedRenderObservations.draws());
+            Screen[] screens = {menu, menu, inGameUi, null, menu};
+            int[] blur = {5, 0, 5, 5, 10};
+            float[] base = {1, 1, 1, 1, 4};
+            float[] expected = {2, 1, 1, 1, 4};
+            for (int i = 0; i < screens.length; i++) {
+                ReleaseSettingsUi.open(context, mods);
+                ReleaseSettingsUi.setStrength(context, base[i]);
+                Screen screen = screens[i];
+                int radius = blur[i];
+                context.runOnClient(client -> {
+                    client.options.menuBackgroundBlurriness().set(radius);
+                    client.gui.setScreen(screen);
+                });
+                screenshotPair(context, false, expected[i], "menu-" + i);
+            }
+        } finally {
+            ReleaseSettingsUi.open(context, mods);
+            ReleaseSettingsUi.setStrength(context, originalStrength);
+            context.runOnClient(client -> {
+                client.options.menuBackgroundBlurriness().set(originalBlur);
+                client.gui.setScreen(originalScreen);
+            });
+            ReleaseClient.command(context, "mode set " + originalMode);
+        }
     }
 
     private static CompletableFuture<int[]> screenshot(com.mojang.blaze3d.pipeline.RenderTarget target,

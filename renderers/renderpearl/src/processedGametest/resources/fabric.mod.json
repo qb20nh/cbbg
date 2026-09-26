@@ -18,6 +18,8 @@
       "com.qb20nh.cbbg.gametest.ReleasePersistentBlurGameTest",
       "com.qb20nh.cbbg.gametest.ReleaseCommandsGameTest",
       "com.qb20nh.cbbg.gametest.ReleaseNoiseCacheGameTest",
+      "com.qb20nh.cbbg.gametest.ReleaseSettingsGameTest",
+      "com.qb20nh.cbbg.gametest.ReleaseNotificationsGameTest",
       "com.qb20nh.cbbg.gametest.FloatPrecisionGameTest",
       "com.qb20nh.cbbg.gametest.WindowResizeGameTest",
       "com.qb20nh.cbbg.gametest.ReleaseFramebufferGameTest"
