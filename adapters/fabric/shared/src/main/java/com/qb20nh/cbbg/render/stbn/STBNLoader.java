@@ -2,7 +2,6 @@ package com.qb20nh.cbbg.render.stbn;
 
 import com.mojang.blaze3d.platform.NativeImage;
 import com.qb20nh.cbbg.Cbbg;
-import com.qb20nh.cbbg.config.CbbgConfig;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -22,9 +21,8 @@ public class STBNLoader {
   private static final String IMAGE_BASE_FMT = STBNCache.IMAGE_BASE_FMT;
 
   public static NativeImage @Nullable [] loadOrGenerate(
-      int width, int height, int frames, STBNGenerator.@Nullable STBNFields fields) {
+      int width, int height, int frames, long seed, STBNGenerator.@Nullable STBNFields fields) {
     // 1. Try Cache
-    long seed = fields == null ? CbbgConfig.get().stbnSeed() : fields.seed();
     if (fields == null) {
       NativeImage[] cached = loadFromCache(width, height, frames, seed);
       if (cached.length == frames) {
@@ -37,7 +35,7 @@ public class STBNLoader {
     if (fields != null) {
       NativeImage[] generated = generateFramesFromFields(fields, width, height, frames);
       Cbbg.LOGGER.info("STBN Images generated from math fields.");
-      saveToCache(generated, width, height, frames, seed);
+      saveToCache(generated, width, height, frames, fields.seed());
       return generated;
     }
 

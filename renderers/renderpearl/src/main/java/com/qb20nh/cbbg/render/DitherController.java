@@ -68,7 +68,7 @@ public final class DitherController {
             .<NativeImage @Nullable []>thenApplyAsync(
                 fields ->
                     STBNLoader.loadOrGenerate(
-                        requested.size, requested.size, requested.depth, fields));
+                        requested.size, requested.size, requested.depth, requested.seed, fields));
     loading = generation;
     GenerationNotifications.follow(generation);
   }

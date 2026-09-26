@@ -124,14 +124,14 @@ public final class NoiseCancellationGameTest implements FabricClientGameTest {
       throw new AssertionError("Forced noise fixture requires an unused cache");
     }
     try {
-      int[] stale = readFixture(new STBNGenerator.STBNFields(new double[4], new double[4], seed));
+      int[] stale = readFixture(new STBNGenerator.STBNFields(new double[4], new double[4], seed), seed);
       if (!STBNCache.isCacheValid(2, 2, 1, seed)) {
         throw new AssertionError("Forced noise fixture did not create a valid cache");
       }
       var fields =
           Objects.requireNonNull(
               STBNGenerator.generateAsync(2, 2, 1, seed, true).get(10, TimeUnit.SECONDS));
-      int[] fresh = readFixture(fields);
+      int[] fresh = readFixture(fields, seed);
       for (int i = 0; i < fresh.length; i++) {
         if (fresh[i] != STBNGenerator.calculatePixelColor(fields.uField()[i], fields.vField()[i])) {
           throw new AssertionError("Forced loading reused cached pixels");
@@ -142,7 +142,8 @@ public final class NoiseCancellationGameTest implements FabricClientGameTest {
       }
       byte[] hashes = Files.readAllBytes(manifest);
       var modified = Files.getLastModifiedTime(image);
-      if (!Arrays.equals(fresh, readFixture(null))
+      CbbgConfig.setStbnSeed(seed + 1);
+      if (!Arrays.equals(fresh, readFixture(null, seed))
           || !Arrays.equals(hashes, Files.readAllBytes(manifest))
           || !modified.equals(Files.getLastModifiedTime(image))) {
         throw new AssertionError("Normal loading did not reuse regenerated cache");
@@ -153,8 +154,8 @@ public final class NoiseCancellationGameTest implements FabricClientGameTest {
     }
   }
 
-  private static int[] readFixture(STBNGenerator.@Nullable STBNFields fields) {
-    NativeImage[] images = Objects.requireNonNull(STBNLoader.loadOrGenerate(2, 2, 1, fields));
+  private static int[] readFixture(STBNGenerator.@Nullable STBNFields fields, long seed) {
+    NativeImage[] images = Objects.requireNonNull(STBNLoader.loadOrGenerate(2, 2, 1, seed, fields));
     try {
       return new int[] {
         images[0].getPixel(0, 0), images[0].getPixel(1, 0),

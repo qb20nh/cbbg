@@ -76,7 +76,7 @@ public final class NoiseCacheGameTest implements FabricClientGameTest {
     if ((fields == null) != warm) {
       throw new AssertionError("Expected " + (warm ? "cached" : "generated") + " noise fields");
     }
-    NativeImage[] images = STBNLoader.loadOrGenerate(SIZE, SIZE, DEPTH, fields);
+    NativeImage[] images = STBNLoader.loadOrGenerate(SIZE, SIZE, DEPTH, seed, fields);
     if (images == null) {
       throw new AssertionError("Noise loader produced no images");
     }
