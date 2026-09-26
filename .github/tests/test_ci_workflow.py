@@ -29,6 +29,14 @@ class CiWorkflowTest(unittest.TestCase):
         self.assertIn("unittest discover -s scripts/tests", command)
         self.assertIn("unittest discover -s .github/tests", command)
 
+    def test_java_quality_checks_are_required(self):
+        self.assertIn("spotlessCheck", script("Check Java formatting", WORKFLOW))
+        self.assertIn("-p core --no-daemon check", script("Check core quality", WORKFLOW))
+        workflow = WORKFLOW.read_text()
+        self.assertIn("if: matrix.java == 25", workflow)
+        self.assertIn("core/*/build/reports/", workflow)
+        self.assertIn("build/reports/", workflow)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -25,6 +25,8 @@ jobs:
           java-version: '25'
           distribution: temurin
       - uses: gradle/actions/setup-gradle@v5.0.0
+      - name: Check Java formatting
+        run: ./gradlew --no-daemon spotlessCheck
       - name: Select catalog targets
         id: targets
         env:
@@ -73,6 +75,16 @@ jobs:
           ./gradlew -p core test --no-daemon
           "-PtestJava=$TEST_JAVA"
           "-Dorg.gradle.java.installations.paths=$TEST_JAVA_HOME"
+      - name: Check core quality
+        if: matrix.java == 25
+        run: ./gradlew -p core --no-daemon check
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: core-checks-java-${{ matrix.java }}
+          path: |
+            core/build/reports/
+            core/*/build/reports/
 
   build:
     needs: plan
@@ -104,7 +116,9 @@ jobs:
           name: checks-${{ matrix.id }}
           path: |
             build/targets/${{ matrix.id }}/reports/
-            core/build/reports/tests/
+            build/reports/
+            core/build/reports/
+            core/*/build/reports/
 
   dependency-submission:
     if: github.event_name == 'push' && needs.plan.outputs.build == 'true'
