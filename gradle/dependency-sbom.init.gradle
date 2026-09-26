@@ -1,0 +1,33 @@
+import org.cyclonedx.gradle.CyclonedxPlugin
+import org.cyclonedx.gradle.CyclonedxDirectTask
+import org.cyclonedx.gradle.CyclonedxAggregateTask
+
+initscript {
+    repositories {
+        mavenCentral()
+        gradlePluginPortal()
+    }
+    dependencies {
+        classpath 'org.cyclonedx:cyclonedx-gradle-plugin:3.4.1'
+    }
+}
+
+gradle.rootProject { root ->
+    root.pluginManager.apply(CyclonedxPlugin)
+    root.allprojects { project ->
+        project.tasks.named('cyclonedxDirectBom', CyclonedxDirectTask) {
+            includeLicenseText = false
+            includeBuildEnvironment = true
+            includeConfigs = [
+                'classpath', '.*Classpath', '.*[Aa]nnotationProcessor',
+                'errorprone', 'pmd', 'cpd', 'privateGsonInput', 'include'
+            ]
+        }
+    }
+    root.tasks.named('cyclonedxBom', CyclonedxAggregateTask) {
+        jsonOutput = root.layout.file(root.providers.provider {
+            new File(root.providers.gradleProperty('securitySbom').get())
+        })
+        xmlOutput.convention((org.gradle.api.file.RegularFile) null)
+    }
+}

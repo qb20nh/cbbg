@@ -11,6 +11,9 @@ plugins {
 
 layout.buildDirectory = file('../../build/publishing')
 
+// Dependency reporting resolves publishing plugins without requiring a release candidate.
+if (gradle.startParameter.taskNames == ['cyclonedxBom']) return
+
 def requiredFile = { String property ->
     def value = providers.gradleProperty(property).orNull
     if (!value) throw new GradleException('Missing -P' + property)
