@@ -6,7 +6,7 @@ import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL21;
 import org.lwjgl.opengl.GL30;
 
-public class CbbgGlNamesTest {
+class CbbgGlNamesTest {
 
     @Test
     void knownConstants_haveStableNames() {

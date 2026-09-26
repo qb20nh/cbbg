@@ -3,7 +3,7 @@ package com.qb20nh.cbbg.compat.renderscale;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
-public class RenderScaleCompatTest {
+class RenderScaleCompatTest {
 
     @Test
     void whenRenderScaleNotLoaded_helpersAreNoOps() {

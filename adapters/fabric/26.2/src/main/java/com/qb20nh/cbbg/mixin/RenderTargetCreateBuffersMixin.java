@@ -58,8 +58,10 @@ public abstract class RenderTargetCreateBuffersMixin {
         // chains allocate internal targets as TextureTarget(null, ...), which get labels like
         // "FBO N". We only upgrade those vanilla internal targets while the menu blur chain is
         // executing, to avoid accidentally changing mod-owned RenderTargets.
+        String menuBlurLabel = !isMainTarget && MenuBlurGuard.isActive() && label != null
+                ? label.get() : null;
         boolean isMenuBlurPostChainInternal =
-                !isMainTarget && MenuBlurGuard.isActive() && label.get().startsWith("FBO ");
+                menuBlurLabel != null && menuBlurLabel.startsWith("FBO ");
 
         // RenderScale renders the world into its own intermediate TextureTarget labelled
         // "RenderScale", then blits into the true main target. If that intermediate target stays
@@ -121,7 +123,7 @@ public abstract class RenderTargetCreateBuffersMixin {
                 // adjustment for blurred gradients".
                 Cbbg.LOGGER.info(
                         "cbbg menu blur alloc: label=\"{}\" requested={} effective={} internal={}",
-                        label.get(), requested.getSerializedName(), effective.getSerializedName(),
+                        menuBlurLabel, requested.getSerializedName(), effective.getSerializedName(),
                         texture instanceof GlTexture
                                 ? CbbgGlNames.glInternalName(getTextureInternalFormat(texture))
                                 : texture.getFormat());

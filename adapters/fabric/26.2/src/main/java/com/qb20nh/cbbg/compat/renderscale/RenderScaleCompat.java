@@ -3,6 +3,7 @@ package com.qb20nh.cbbg.compat.renderscale;
 import java.lang.reflect.Method;
 import java.util.function.Supplier;
 import net.fabricmc.loader.api.FabricLoader;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Lightweight compatibility helpers for the RenderScale mod.
@@ -30,8 +31,8 @@ public final class RenderScaleCompat {
         return RENDER_SCALE_LOADED;
     }
 
-    public static boolean isRenderScaleColorTextureLabel(Supplier<String> label) {
-        if (!RENDER_SCALE_LOADED) {
+    public static boolean isRenderScaleColorTextureLabel(@Nullable Supplier<String> label) {
+        if (!RENDER_SCALE_LOADED || label == null) {
             return false;
         }
         return RENDER_SCALE_COLOR_LABEL.equals(label.get());

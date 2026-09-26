@@ -5,7 +5,7 @@ import java.security.NoSuchAlgorithmException;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
-public class STBNCacheTest {
+class STBNCacheTest {
 
     @Test
     void calculateSHA256_matchesKnownVectors() throws NoSuchAlgorithmException {

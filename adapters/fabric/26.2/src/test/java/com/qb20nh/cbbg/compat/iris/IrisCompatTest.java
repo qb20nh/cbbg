@@ -3,7 +3,7 @@ package com.qb20nh.cbbg.compat.iris;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
-public class IrisCompatTest {
+class IrisCompatTest {
 
     @Test
     void isShaderPackActive_falseWhenIrisNotLoaded() {

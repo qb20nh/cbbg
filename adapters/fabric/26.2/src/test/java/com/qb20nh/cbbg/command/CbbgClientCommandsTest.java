@@ -6,7 +6,7 @@ import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
-public class CbbgClientCommandsTest {
+class CbbgClientCommandsTest {
 
     @Test
     void commandTree_canBeRegisteredWithoutExecutingHandlers() throws Exception {

@@ -96,9 +96,9 @@ class LauncherFailureTests(unittest.TestCase):
             (self.game / 'config/cbbg.json').write_text('{"strength": 1}')
             raise subprocess.TimeoutExpired(command, 240)
         self.run.side_effect = client
-        with patch.object(sys, 'argv', sys.argv + ['--cbbg-config', str(settings)]):
-            with self.assertRaises(subprocess.TimeoutExpired):
-                launcher.main()
+        with (patch.object(sys, 'argv', sys.argv + ['--cbbg-config', str(settings)]),
+              self.assertRaises(subprocess.TimeoutExpired)):
+            launcher.main()
         receipt = self.receipt()
         retained = self.game / 'evidence/initial-cbbg.json'
         self.assertEqual(retained.read_bytes(), settings.read_bytes())
@@ -109,20 +109,20 @@ class LauncherFailureTests(unittest.TestCase):
         settings = self.root / 'settings.json'
         for value in ('{', '[]', 'null'):
             settings.write_text(value)
-            with self.subTest(value=value), patch.object(sys, 'argv',
-                    sys.argv + ['--cbbg-config', str(settings)]):
-                with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
-                    launcher.main()
+            with (self.subTest(value=value), patch.object(sys, 'argv',
+                    sys.argv + ['--cbbg-config', str(settings)]),
+                  redirect_stderr(io.StringIO()), self.assertRaises(SystemExit)):
+                launcher.main()
             self.run.assert_not_called()
             self.assertFalse(self.game.exists())
 
     def test_restart_cannot_replace_initial_config(self):
         settings = self.root / 'settings.json'
         settings.write_text('{"strength": 2}')
-        with patch.object(sys, 'argv', sys.argv + ['--cbbg-config', str(settings),
-                                                 '--restart-phase', 'verify']):
-            with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
-                launcher.main()
+        with (patch.object(sys, 'argv', sys.argv + ['--cbbg-config', str(settings),
+                                                 '--restart-phase', 'verify']),
+              redirect_stderr(io.StringIO()), self.assertRaises(SystemExit)):
+            launcher.main()
         self.run.assert_not_called()
         self.assertFalse(self.game.exists())
 
@@ -244,9 +244,9 @@ class LauncherFailureTests(unittest.TestCase):
         self.assertFalse(self.game.exists())
 
     def test_dsa_selector_rejects_an_ordinary_driver(self):
-        with patch.object(sys, 'argv', sys.argv + ['--dsa-mode', 'emulated']):
-            with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as failure:
-                launcher.main()
+        with (patch.object(sys, 'argv', sys.argv + ['--dsa-mode', 'emulated']),
+              redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as failure):
+            launcher.main()
         self.assertEqual(failure.exception.code, 2)
         self.run.assert_not_called()
         self.assertFalse(self.game.exists())
@@ -336,9 +336,9 @@ class LauncherFailureTests(unittest.TestCase):
     def test_sulkan_restart_rejects_changed_shader_settings(self):
         self.prepare_restart('sulkan')
         (self.game / 'config/sulkan-shaders.json').write_text('{"enabled":false}')
-        with patch.object(sys, 'argv', sys.argv + ['--restart-phase', 'verify']):
-            with self.assertRaisesRegex(ValueError, 'persisted state changed'):
-                launcher.main()
+        with (patch.object(sys, 'argv', sys.argv + ['--restart-phase', 'verify']),
+              self.assertRaisesRegex(ValueError, 'persisted state changed')):
+            launcher.main()
         self.assertEqual(self.run.call_count, 1)
 
     def test_sulkan_restart_rejects_opengl_before_launch(self):
@@ -347,9 +347,9 @@ class LauncherFailureTests(unittest.TestCase):
                 'id': 'cbbg-renderer-test',
                 'entrypoints': {'fabric-client-gametest': [
                     'com.qb20nh.cbbg.gametest.SulkanRestartGameTest']}}))
-        with patch.object(sys, 'argv', sys.argv + ['--restart-phase', 'prepare']):
-            with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
-                launcher.main()
+        with (patch.object(sys, 'argv', sys.argv + ['--restart-phase', 'prepare']),
+              redirect_stderr(io.StringIO()), self.assertRaises(SystemExit)):
+            launcher.main()
         self.run.assert_not_called()
         self.assertFalse(self.game.exists())
 
@@ -365,42 +365,42 @@ class LauncherFailureTests(unittest.TestCase):
     def test_external_sulkan_restart_rejects_changed_shader(self):
         self.prepare_restart('sulkan', external=True)
         (self.game / 'shaders/cbbg-native-test/color.fsh').write_text('different shader')
-        with patch.object(sys, 'argv', sys.argv + ['--restart-phase', 'verify']):
-            with self.assertRaisesRegex(ValueError, 'persisted state changed'):
-                launcher.main()
+        with (patch.object(sys, 'argv', sys.argv + ['--restart-phase', 'verify']),
+              self.assertRaisesRegex(ValueError, 'persisted state changed')):
+            launcher.main()
         self.assertEqual(self.run.call_count, 1)
 
     def test_external_sulkan_restart_rejects_missing_shader(self):
         self.prepare_restart('sulkan', external=True)
         (self.game / 'shaders/cbbg-native-test/color.fsh').unlink()
-        with patch.object(sys, 'argv', sys.argv + ['--restart-phase', 'verify']):
-            with self.assertRaisesRegex(ValueError, 'restart pack is missing'):
-                launcher.main()
+        with (patch.object(sys, 'argv', sys.argv + ['--restart-phase', 'verify']),
+              self.assertRaisesRegex(ValueError, 'restart pack is missing')):
+            launcher.main()
         self.assertEqual(self.run.call_count, 1)
 
     def test_restart_rejects_changed_settings_without_launch(self):
         self.prepare_restart()
         (self.game / 'config/cbbg.json').write_text('{"mode":"DISABLED"}')
-        with patch.object(sys, 'argv', sys.argv + ['--restart-phase', 'verify']):
-            with self.assertRaisesRegex(ValueError, 'persisted state changed'):
-                launcher.main()
+        with (patch.object(sys, 'argv', sys.argv + ['--restart-phase', 'verify']),
+              self.assertRaisesRegex(ValueError, 'persisted state changed')):
+            launcher.main()
         self.assertEqual(self.run.call_count, 1)
         self.assertFalse((self.game / 'verify-probe.json').exists())
 
     def test_restart_rejects_changed_installed_jar(self):
         self.prepare_restart()
         (self.game / 'mods/candidate.jar').write_bytes(b'changed')
-        with patch.object(sys, 'argv', sys.argv + ['--restart-phase', 'verify']):
-            with self.assertRaisesRegex(ValueError, 'installed artifact changed'):
-                launcher.main()
+        with (patch.object(sys, 'argv', sys.argv + ['--restart-phase', 'verify']),
+              self.assertRaisesRegex(ValueError, 'installed artifact changed')):
+            launcher.main()
         self.assertEqual(self.run.call_count, 1)
 
     def test_restart_rejects_changed_prepare_evidence(self):
         self.prepare_restart()
         (self.game / 'evidence-prepare/scenarios.tsv').write_text('altered')
-        with patch.object(sys, 'argv', sys.argv + ['--restart-phase', 'verify']):
-            with self.assertRaisesRegex(ValueError, 'prepare evidence changed'):
-                launcher.main()
+        with (patch.object(sys, 'argv', sys.argv + ['--restart-phase', 'verify']),
+              self.assertRaisesRegex(ValueError, 'prepare evidence changed')):
+            launcher.main()
         self.assertEqual(self.run.call_count, 1)
 
     def test_restart_verify_cannot_overwrite_previous_attempt(self):

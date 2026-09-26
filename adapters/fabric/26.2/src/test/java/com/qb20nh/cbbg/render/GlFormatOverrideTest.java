@@ -7,7 +7,7 @@ import java.util.concurrent.Future;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
-public class GlFormatOverrideTest {
+class GlFormatOverrideTest {
 
     @Test
     void mainTargetColor_pushPopBehavesLikeDepthCounter() {

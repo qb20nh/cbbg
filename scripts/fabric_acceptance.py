@@ -80,7 +80,9 @@ def required_runs(target, contract, root=ROOT, metadata_path=None):
 def verify_results(index_path, target, contract_path, driver_hashes, *, metadata_path=None, **inputs):
     index_path = Path(index_path)
     required = required_runs(target, read_json(contract_path), metadata_path=metadata_path)
-    key = lambda run: (run['suite'], run['profile'], run['backend'])
+    def key(run):
+        return run['suite'], run['profile'], run['backend']
+
     expected = unique_by(required, key, 'required run')
     supplied = unique_by(read_json(index_path), key, 'run result')
     if supplied.keys() != expected.keys():

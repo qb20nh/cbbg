@@ -191,7 +191,9 @@ class ParityEvidenceTest(unittest.TestCase):
     def test_shared_bytes_allow_separate_paths_but_need_independent_receipts(self):
         self.add_shared_quilt_target((self.root / "artifact").read_bytes())
         self.assertEqual(6, self.check())
-        next(self.receipts.glob("quilt-*.json")).unlink()
+        receipts = sorted(self.receipts.glob("quilt-*.json"))
+        self.assertTrue(receipts, "Shared Quilt target must create receipts")
+        receipts[0].unlink()
         with self.assertRaisesRegex(EvidenceError, "coverage mismatch"):
             self.check()
 

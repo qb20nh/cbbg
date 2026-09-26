@@ -5,7 +5,7 @@ import net.minecraft.client.gui.screens.Screen;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
-public class CbbgModMenuApiTest {
+class CbbgModMenuApiTest {
 
     @Test
     void configScreenFactory_isProvided() {

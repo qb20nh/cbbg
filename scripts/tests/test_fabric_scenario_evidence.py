@@ -147,9 +147,9 @@ class FabricScenarioEvidenceTests(unittest.TestCase):
         log = 'Readback backend=Vulkan GPU=Fixture driver=1.4\n'
         for text, backend in [('', 'vulkan'), (log, 'opengl'),
                               (log + log.replace('1.4', '1.3'), 'vulkan')]:
-            with self.subTest(text=text, backend=backend):
-                with self.assertRaises(ValueError):
-                    graphics_identity(text, backend)
+            with (self.subTest(text=text, backend=backend),
+                  self.assertRaises(ValueError)):
+                graphics_identity(text, backend)
 
     def setUp(self):
         self.expected = ["example.First", "example.Second"]

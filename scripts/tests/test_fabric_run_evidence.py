@@ -16,6 +16,7 @@ from parity_evidence import digest
 
 class FabricRunEvidenceTest(unittest.TestCase):
     def setUp(self):
+        self.restart = False
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name)
@@ -65,7 +66,7 @@ class FabricRunEvidenceTest(unittest.TestCase):
         self.receipt.write_text(json.dumps(self.report))
 
     def verify(self):
-        verifier = verify_restart if getattr(self, 'restart', False) else verify_run
+        verifier = verify_restart if self.restart else verify_run
         return verifier(self.receipt, self.target, source_commit='a' * 40,
                           candidate_sha256=self.report['artifacts']['candidate.jar'],
                           driver_sha256=self.report['artifacts']['driver.jar'],

@@ -14,7 +14,7 @@ import net.minecraft.network.chat.contents.TranslatableContents;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
-public class CbbgConfigScreenTest {
+class CbbgConfigScreenTest {
 
         @Test
         void seedInput_acceptsSignedLongsAndEmptyDefault() {

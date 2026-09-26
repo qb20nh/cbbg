@@ -3,7 +3,7 @@ package com.qb20nh.cbbg.debug;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
-public class CbbgDebugStateTest {
+class CbbgDebugStateTest {
 
     @Test
     void clear_resetsAllValues() {

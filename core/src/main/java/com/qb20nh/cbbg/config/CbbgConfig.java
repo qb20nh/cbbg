@@ -196,7 +196,7 @@ public final class CbbgConfig {
 
         try (BufferedReader reader = Files.newBufferedReader(path, StandardCharsets.UTF_8)) {
             return read(reader);
-        } catch (ParseFailure e) {
+        } catch (ParseFailureException e) {
             warning.accept("Failed to parse " + path + " (resetting to defaults).", e);
             CbbgConfig cfg = new CbbgConfig(Mode.ENABLED);
             save(path, cfg, warning);
@@ -250,11 +250,11 @@ public final class CbbgConfig {
             try {
                 json.peek();
             } catch (EOFException e) {
-                throw new EmptyDocument(e);
+                throw new EmptyDocumentException(e);
             }
             if (json.peek() == JsonToken.NULL) {
                 json.nextNull();
-                throw new EmptyDocument(null);
+                throw new EmptyDocumentException(null);
             }
 
             Mode mode = null;
@@ -313,14 +313,14 @@ public final class CbbgConfig {
             // Gson checks for trailing content with lenient mode restored to false.
             json.setLenient(false);
             if (json.peek() != JsonToken.END_DOCUMENT) {
-                throw new TrailingContent();
+                throw new TrailingContentException();
             }
             return new CbbgConfig(mode, pixelFormat, stbnSize, stbnDepth, stbnSeed, strength,
                     notifyChat, notifyToast);
-        } catch (EmptyDocument | TrailingContent e) {
+        } catch (EmptyDocumentException | TrailingContentException e) {
             throw e;
         } catch (IOException | IllegalStateException e) {
-            throw new ParseFailure(e);
+            throw new ParseFailureException(e);
         }
     }
 
@@ -328,7 +328,7 @@ public final class CbbgConfig {
         try {
             return json.nextInt();
         } catch (NumberFormatException e) {
-            throw new ParseFailure(e);
+            throw new ParseFailureException(e);
         }
     }
 
@@ -336,7 +336,7 @@ public final class CbbgConfig {
         try {
             return json.nextLong();
         } catch (NumberFormatException e) {
-            throw new ParseFailure(e);
+            throw new ParseFailureException(e);
         }
     }
 
@@ -361,15 +361,15 @@ public final class CbbgConfig {
         return null;
     }
 
-    private static final class ParseFailure extends RuntimeException {
-        ParseFailure(Throwable cause) { super(cause); }
+    private static final class ParseFailureException extends RuntimeException {
+        ParseFailureException(Throwable cause) { super(cause); }
     }
 
-    private static final class EmptyDocument extends RuntimeException {
-        EmptyDocument(Throwable cause) { super(cause); }
+    private static final class EmptyDocumentException extends RuntimeException {
+        EmptyDocumentException(Throwable cause) { super(cause); }
     }
 
-    private static final class TrailingContent extends RuntimeException {}
+    private static final class TrailingContentException extends RuntimeException {}
 
     public Mode mode() { return mode; }
     public PixelFormat pixelFormat() { return pixelFormat; }

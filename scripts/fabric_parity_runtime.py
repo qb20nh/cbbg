@@ -120,7 +120,7 @@ def main():
         try:
             if not isinstance(json.loads(initial_config), dict):
                 parser.error('Initial CBBG config must be a JSON object')
-        except (ValueError, UnicodeError):
+        except ValueError:
             parser.error('Initial CBBG config must be a JSON object')
     target = select_targets(load_catalog(), args.target)[0]
     if args.backend not in target['compatibilityProfiles'].get(args.compat, []):
@@ -147,11 +147,11 @@ def main():
     if args.dsa_mode and (args.backend != 'opengl'
                          or 'com.qb20nh.cbbg.gametest.DsaBenchmarkGameTest' not in expected):
         parser.error('DSA selection requires the OpenGL benchmark driver')
-    if args.startup_mode or STARTUP_DRIVER in expected or args.startup_cache:
-        if (expected != [STARTUP_DRIVER] or not args.startup_mode or args.restart_phase
+    if ((args.startup_mode or STARTUP_DRIVER in expected or args.startup_cache)
+            and (expected != [STARTUP_DRIVER] or not args.startup_mode or args.restart_phase
                 or initial_config is None or args.compat != 'none'
-                or (args.startup_mode == 'cold') != (args.startup_cache is None)):
-            parser.error('Startup requires its dedicated driver, initial config and matching cache input')
+                or (args.startup_mode == 'cold') != (args.startup_cache is None))):
+        parser.error('Startup requires its dedicated driver, initial config and matching cache input')
     restart_shader = None
     if args.restart_phase:
         restart_shader = RESTART_DRIVERS.get((args.backend, expected[0])) if len(expected) == 1 else None
@@ -214,9 +214,8 @@ def main():
                'sourceHead': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT,
                                                      text=True).strip(),
                'sourceDirty': source_dirty(ROOT),
-               'artifacts': {}}
-    receipt['restartPhase'] = args.restart_phase
-    receipt['startupMode'] = args.startup_mode
+               'artifacts': {}, 'restartPhase': args.restart_phase,
+               'startupMode': args.startup_mode}
     if args.restart_phase == 'verify':
         previous_path = game / 'prepare-probe.json'
         previous = json.loads(previous_path.read_text())
@@ -263,7 +262,7 @@ def main():
         verify_gametest_api(target, mods / 'fabric-gametest-api.jar', dependency_lock)
         with log_path.open('w') as log:
             result = subprocess.run(command, cwd=game, env=environment, stdout=log,
-                                    stderr=subprocess.STDOUT, timeout=args.timeout)
+                                    stderr=subprocess.STDOUT, timeout=args.timeout, check=False)
         receipt['exitCode'] = result.returncode
         log_text = log_path.read_text()
         scenarios = validate_scenarios(expected,
