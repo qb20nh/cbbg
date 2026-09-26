@@ -4,8 +4,8 @@ import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 
 public final class ReleaseSulkanExternalRestartGameTest implements FabricClientGameTest {
-    @Override
-    public void runTest(ClientGameTestContext context) {
-        ReleaseSulkanRestartGameTest.run(context, "cbbg-native-test");
-    }
+  @Override
+  public void runTest(ClientGameTestContext context) {
+    ReleaseSulkanRestartGameTest.run(context, "cbbg-native-test");
+  }
 }

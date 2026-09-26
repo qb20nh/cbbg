@@ -15,37 +15,54 @@ import net.minecraft.network.chat.Component;
 
 /** Check Sulkan's startup state before enabling CBBG for the ordinary scenarios. */
 public final class SulkanSetupGameTest implements FabricClientGameTest {
-    @Override
-    public void runTest(ClientGameTestContext context) {
-        if (!FabricLoader.getInstance().isModLoaded("sulkan")) return;
-        boolean vulkan = context.computeOnClient(client -> "vulkan".equalsIgnoreCase(
-                RenderSystem.getDevice().getDeviceInfo().backendName()));
-        if (!vulkan) {
-            context.waitFor(client -> client.gui.screen() instanceof ConfirmScreen
-                    && client.gui.screen().getTitle().equals(Component.translatable("sulkan.backend.title")), 200);
-            context.clickScreenButton("sulkan.backend.continue");
-            context.waitFor(client -> client.gui.screen() instanceof TitleScreen, 200);
-        }
-        CbbgConfig.Mode saved = context.computeOnClient(client -> CbbgConfig.get().mode());
-        context.runOnClient(client -> {
-            if (SulkanCompat.isShaderPackActive() != vulkan) {
-                throw new AssertionError("Unexpected Sulkan state in a fresh game directory");
-            }
-            if (SulkanCompat.isShaderPackActive()
-                    && CbbgClient.getEffectiveMode() != CbbgConfig.Mode.DISABLED) {
-                throw new AssertionError("CBBG is active during Sulkan startup");
-            }
-        });
-        CompletableFuture<?> reload = context.computeOnClient(client ->
-                (CompletableFuture<?>) SulkanGameTest.invoke("applySelection",
-                        new Class<?>[] {Minecraft.class, boolean.class, String.class},
-                        client, false, "__builtin__"));
-        SulkanGameTest.await(context, reload);
-        context.waitFor(client -> !SulkanCompat.isShaderPackActive(), 600);
-        context.runOnClient(client -> {
-            if (CbbgConfig.get().mode() != saved || CbbgClient.getEffectiveMode() != saved) {
-                throw new AssertionError("CBBG did not retain its mode after Sulkan startup");
-            }
-        });
+  @Override
+  public void runTest(ClientGameTestContext context) {
+    if (!FabricLoader.getInstance().isModLoaded("sulkan")) return;
+    boolean vulkan =
+        context.computeOnClient(
+            client ->
+                "vulkan".equalsIgnoreCase(RenderSystem.getDevice().getDeviceInfo().backendName()));
+    if (!vulkan) {
+      context.waitFor(
+          client ->
+              client.gui.screen() instanceof ConfirmScreen
+                  && client
+                      .gui
+                      .screen()
+                      .getTitle()
+                      .equals(Component.translatable("sulkan.backend.title")),
+          200);
+      context.clickScreenButton("sulkan.backend.continue");
+      context.waitFor(client -> client.gui.screen() instanceof TitleScreen, 200);
     }
+    CbbgConfig.Mode saved = context.computeOnClient(client -> CbbgConfig.get().mode());
+    context.runOnClient(
+        client -> {
+          if (SulkanCompat.isShaderPackActive() != vulkan) {
+            throw new AssertionError("Unexpected Sulkan state in a fresh game directory");
+          }
+          if (SulkanCompat.isShaderPackActive()
+              && CbbgClient.getEffectiveMode() != CbbgConfig.Mode.DISABLED) {
+            throw new AssertionError("CBBG is active during Sulkan startup");
+          }
+        });
+    CompletableFuture<?> reload =
+        context.computeOnClient(
+            client ->
+                (CompletableFuture<?>)
+                    SulkanGameTest.invoke(
+                        "applySelection",
+                        new Class<?>[] {Minecraft.class, boolean.class, String.class},
+                        client,
+                        false,
+                        "__builtin__"));
+    SulkanGameTest.await(context, reload);
+    context.waitFor(client -> !SulkanCompat.isShaderPackActive(), 600);
+    context.runOnClient(
+        client -> {
+          if (CbbgConfig.get().mode() != saved || CbbgClient.getEffectiveMode() != saved) {
+            throw new AssertionError("CBBG did not retain its mode after Sulkan startup");
+          }
+        });
+  }
 }

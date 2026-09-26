@@ -16,34 +16,36 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 @Mixin(GlConst.class)
 public abstract class GlConstMixin {
 
-    private GlConstMixin() {}
+  private GlConstMixin() {}
 
-    @Unique private static final int GL_RGBA16F = GL30.GL_RGBA16F;
-    @Unique private static final int GL_RGBA32F = GL30.GL_RGBA32F;
+  @Unique private static final int GL_RGBA16F = GL30.GL_RGBA16F;
+  @Unique private static final int GL_RGBA32F = GL30.GL_RGBA32F;
 
-    @Inject(method = "toGlInternalId", at = @At("HEAD"), cancellable = true)
-    private static void cbbg$toGlInternalId(GpuFormat gpuFormat, CallbackInfoReturnable<Integer> cir) {
-        // 1. Explicit override (takes precedence)
-        Integer forced = GlFormatOverride.getForcedFormat();
-        if (forced != null) {
-            cir.setReturnValue(forced);
-            return;
-        }
-
-        // 2. Main target override (legacy behavior check)
-        if (!CbbgClient.isEnabled() || !GlFormatOverride.isMainTargetColor()) {
-            return;
-        }
-
-        if (gpuFormat == GpuFormat.RGBA8_UNORM) {
-            CbbgConfig.PixelFormat fmt = MainTargetFormatSupport.getEffective(CbbgConfig.get().pixelFormat());
-            switch (fmt) {
-                case RGBA16F -> cir.setReturnValue(GL_RGBA16F);
-                case RGBA32F -> cir.setReturnValue(GL_RGBA32F);
-                case RGBA8 -> {
-                    // Vanilla path (no override)
-                }
-            }
-        }
+  @Inject(method = "toGlInternalId", at = @At("HEAD"), cancellable = true)
+  private static void cbbg$toGlInternalId(
+      GpuFormat gpuFormat, CallbackInfoReturnable<Integer> cir) {
+    // 1. Explicit override (takes precedence)
+    Integer forced = GlFormatOverride.getForcedFormat();
+    if (forced != null) {
+      cir.setReturnValue(forced);
+      return;
     }
+
+    // 2. Main target override (legacy behavior check)
+    if (!CbbgClient.isEnabled() || !GlFormatOverride.isMainTargetColor()) {
+      return;
+    }
+
+    if (gpuFormat == GpuFormat.RGBA8_UNORM) {
+      CbbgConfig.PixelFormat fmt =
+          MainTargetFormatSupport.getEffective(CbbgConfig.get().pixelFormat());
+      switch (fmt) {
+        case RGBA16F -> cir.setReturnValue(GL_RGBA16F);
+        case RGBA32F -> cir.setReturnValue(GL_RGBA32F);
+        case RGBA8 -> {
+          // Vanilla path (no override)
+        }
+      }
+    }
+  }
 }

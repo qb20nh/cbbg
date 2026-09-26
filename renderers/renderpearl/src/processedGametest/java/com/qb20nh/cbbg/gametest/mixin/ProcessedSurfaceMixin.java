@@ -11,8 +11,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(FrontendGpuSurface.class)
 public class ProcessedSurfaceMixin {
-    @Inject(method = "blitFromTexture", at = @At("RETURN"))
-    private void cbbgTestPresent(CommandEncoder encoder, GpuTextureView texture, CallbackInfo ci) {
-        ProcessedRenderObservations.recordPresentation(texture);
-    }
+  @Inject(method = "blitFromTexture", at = @At("RETURN"))
+  private void cbbgTestPresent(CommandEncoder encoder, GpuTextureView texture, CallbackInfo ci) {
+    ProcessedRenderObservations.recordPresentation(texture);
+  }
 }

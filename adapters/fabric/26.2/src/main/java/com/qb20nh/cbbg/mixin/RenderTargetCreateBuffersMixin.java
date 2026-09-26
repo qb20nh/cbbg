@@ -18,7 +18,6 @@ import com.qb20nh.cbbg.render.MainTargetFormatSupport;
 import com.qb20nh.cbbg.render.MenuBlurGuard;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Supplier;
-
 import org.jspecify.annotations.Nullable;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL30;
@@ -30,194 +29,211 @@ import org.spongepowered.asm.mixin.injection.Redirect;
 @Mixin(RenderTarget.class)
 public abstract class RenderTargetCreateBuffersMixin {
 
-    @Unique
-    private static final AtomicBoolean loggedRenderScaleFormatFailure = new AtomicBoolean(false);
-    @Unique
-    private static final AtomicBoolean loggedMenuBlurFormatFailure = new AtomicBoolean(false);
-    @Unique
-    private static final AtomicBoolean loggedMenuBlurAllocInfo = new AtomicBoolean(false);
+  @Unique
+  private static final AtomicBoolean loggedRenderScaleFormatFailure = new AtomicBoolean(false);
 
-    @Redirect(method = "createBuffers", at = @At(value = "INVOKE",
-            target = "Lcom/mojang/blaze3d/systems/GpuDevice;createTexture(Ljava/util/function/Supplier;ILcom/mojang/blaze3d/GpuFormat;IIII)Lcom/mojang/blaze3d/textures/GpuTexture;"))
-    private GpuTexture cbbg$createBuffers$createTexture(GpuDevice device, @Nullable Supplier<String> label, @GpuTexture.Usage int usage, GpuFormat format, int width, int height, int depthOrLayers, int mipLevels) {
-        // cbbg only upgrades RGBA8 color targets, and only while active.
-        if (format != GpuFormat.RGBA8_UNORM || !CbbgClient.isEnabled()) {
-            return device.createTexture(label, usage, format, width, height, depthOrLayers,
-                    mipLevels);
-        }
+  @Unique private static final AtomicBoolean loggedMenuBlurFormatFailure = new AtomicBoolean(false);
+  @Unique private static final AtomicBoolean loggedMenuBlurAllocInfo = new AtomicBoolean(false);
 
-        // MainTarget can be resized via the base RenderTarget.resize() path, which calls
-        // createBuffers(). Ensure the main color attachment stays float even after resizes.
-        // This method is merged into RenderTarget at runtime. An instanceof here is folded to
-        // false by release optimization before Mixin merges the class.
-        boolean isMainTarget = MainTarget.class.isInstance(this);
+  @Redirect(
+      method = "createBuffers",
+      at =
+          @At(
+              value = "INVOKE",
+              target =
+                  "Lcom/mojang/blaze3d/systems/GpuDevice;createTexture(Ljava/util/function/Supplier;ILcom/mojang/blaze3d/GpuFormat;IIII)Lcom/mojang/blaze3d/textures/GpuTexture;"))
+  private GpuTexture cbbg$createBuffers$createTexture(
+      GpuDevice device,
+      @Nullable Supplier<String> label,
+      @GpuTexture.Usage int usage,
+      GpuFormat format,
+      int width,
+      int height,
+      int depthOrLayers,
+      int mipLevels) {
+    // cbbg only upgrades RGBA8 color targets, and only while active.
+    if (format != GpuFormat.RGBA8_UNORM || !CbbgClient.isEnabled()) {
+      return device.createTexture(label, usage, format, width, height, depthOrLayers, mipLevels);
+    }
 
-        // --- ImmediatelyFast compat: do not remove ---
-        // Rationale: ImmediatelyFast (and many other mods) define their own custom RenderTargets
-        // with explicit labels (e.g. "ImmediatelyFast Sign Atlas FBO"). Vanilla post-processing
-        // chains allocate internal targets as TextureTarget(null, ...), which get labels like
-        // "FBO N". We only upgrade those vanilla internal targets while the menu blur chain is
-        // executing, to avoid accidentally changing mod-owned RenderTargets.
-        String menuBlurLabel = !isMainTarget && MenuBlurGuard.isActive() && label != null
-                ? label.get() : null;
-        boolean isMenuBlurPostChainInternal =
-                menuBlurLabel != null && menuBlurLabel.startsWith("FBO ");
+    // MainTarget can be resized via the base RenderTarget.resize() path, which calls
+    // createBuffers(). Ensure the main color attachment stays float even after resizes.
+    // This method is merged into RenderTarget at runtime. An instanceof here is folded to
+    // false by release optimization before Mixin merges the class.
+    boolean isMainTarget = MainTarget.class.isInstance(this);
 
-        // RenderScale renders the world into its own intermediate TextureTarget labelled
-        // "RenderScale", then blits into the true main target. If that intermediate target stays
-        // RGBA8, skybox/lighting precision is lost before cbbg's final dither.
-        boolean isRenderScaleColor =
-                !isMainTarget && RenderScaleCompat.isRenderScaleColorTextureLabel(label);
+    // --- ImmediatelyFast compat: do not remove ---
+    // Rationale: ImmediatelyFast (and many other mods) define their own custom RenderTargets
+    // with explicit labels (e.g. "ImmediatelyFast Sign Atlas FBO"). Vanilla post-processing
+    // chains allocate internal targets as TextureTarget(null, ...), which get labels like
+    // "FBO N". We only upgrade those vanilla internal targets while the menu blur chain is
+    // executing, to avoid accidentally changing mod-owned RenderTargets.
+    String menuBlurLabel =
+        !isMainTarget && MenuBlurGuard.isActive() && label != null ? label.get() : null;
+    boolean isMenuBlurPostChainInternal = menuBlurLabel != null && menuBlurLabel.startsWith("FBO ");
 
-        if (!isMainTarget && !isRenderScaleColor && !isMenuBlurPostChainInternal) {
-            return device.createTexture(label, usage, format, width, height, depthOrLayers,
-                    mipLevels);
-        }
+    // RenderScale renders the world into its own intermediate TextureTarget labelled
+    // "RenderScale", then blits into the true main target. If that intermediate target stays
+    // RGBA8, skybox/lighting precision is lost before cbbg's final dither.
+    boolean isRenderScaleColor =
+        !isMainTarget && RenderScaleCompat.isRenderScaleColorTextureLabel(label);
 
-        CbbgConfig.PixelFormat requested = CbbgConfig.get().pixelFormat();
-        CbbgConfig.PixelFormat effective =
-                isMenuBlurPostChainInternal ? MenuBlurGuard.getActiveFormat()
-                        : MainTargetFormatSupport.getEffective(requested);
-        if (effective == null) {
-            effective = MainTargetFormatSupport.getEffective(requested);
-        }
-        if (effective == CbbgConfig.PixelFormat.RGBA8) {
-            return device.createTexture(label, usage, format, width, height, depthOrLayers,
-                    mipLevels);
-        }
+    if (!isMainTarget && !isRenderScaleColor && !isMenuBlurPostChainInternal) {
+      return device.createTexture(label, usage, format, width, height, depthOrLayers, mipLevels);
+    }
 
-        GpuTexture texture = null;
-        GpuOutOfMemoryException oom = null;
-        Exception failure = null;
-        boolean isOpenGl = MainTargetFormatSupport.isOpenGl();
+    CbbgConfig.PixelFormat requested = CbbgConfig.get().pixelFormat();
+    CbbgConfig.PixelFormat effective =
+        isMenuBlurPostChainInternal
+            ? MenuBlurGuard.getActiveFormat()
+            : MainTargetFormatSupport.getEffective(requested);
+    if (effective == null) {
+      effective = MainTargetFormatSupport.getEffective(requested);
+    }
+    if (effective == CbbgConfig.PixelFormat.RGBA8) {
+      return device.createTexture(label, usage, format, width, height, depthOrLayers, mipLevels);
+    }
 
-        if (isOpenGl) {
-            if (isMainTarget) {
-                GlFormatOverride.pushMainTargetColor();
-            } else {
-                GlFormatOverride.pushFormat(toGlInternalFormat(effective));
-            }
-        }
-        try {
-            texture = device.createTexture(label, usage,
-                    isOpenGl ? format : MainTargetFormatSupport.toGpuFormat(effective), width, height, depthOrLayers,
-                    mipLevels);
-        } catch (GpuOutOfMemoryException e) {
-            oom = e;
-        } catch (Exception e) {
-            failure = e;
-        } finally {
-            if (isOpenGl) {
-                if (isMainTarget) {
-                    GlFormatOverride.popMainTargetColor();
-                } else {
-                    GlFormatOverride.popFormat();
-                }
-            }
-        }
+    GpuTexture texture = null;
+    GpuOutOfMemoryException oom = null;
+    Exception failure = null;
+    boolean isOpenGl = MainTargetFormatSupport.isOpenGl();
 
-        if (oom == null && failure == null) {
-            if (isMenuBlurPostChainInternal && loggedMenuBlurAllocInfo.compareAndSet(false, true)) {
-                // Diagnostic only: confirm the blur post-chain internal target is actually float.
-                // This helps distinguish "blur re-quantizes to RGBA8" from "dither strength needs
-                // adjustment for blurred gradients".
-                Cbbg.LOGGER.info(
-                        "cbbg menu blur alloc: label=\"{}\" requested={} effective={} internal={}",
-                        menuBlurLabel, requested.getSerializedName(), effective.getSerializedName(),
-                        texture instanceof GlTexture
-                                ? CbbgGlNames.glInternalName(getTextureInternalFormat(texture))
-                                : texture.getFormat());
-            }
-            return texture;
-        }
-
+    if (isOpenGl) {
+      if (isMainTarget) {
+        GlFormatOverride.pushMainTargetColor();
+      } else {
+        GlFormatOverride.pushFormat(toGlInternalFormat(effective));
+      }
+    }
+    try {
+      texture =
+          device.createTexture(
+              label,
+              usage,
+              isOpenGl ? format : MainTargetFormatSupport.toGpuFormat(effective),
+              width,
+              height,
+              depthOrLayers,
+              mipLevels);
+    } catch (GpuOutOfMemoryException e) {
+      oom = e;
+    } catch (Exception e) {
+      failure = e;
+    } finally {
+      if (isOpenGl) {
         if (isMainTarget) {
-            MainTargetFormatSupport.disable(effective, oom != null ? oom : failure);
-        } else if (isRenderScaleColor) {
-            if (loggedRenderScaleFormatFailure.compareAndSet(false, true)) {
-                Cbbg.LOGGER.warn(
-                        "RenderScale detected: failed to allocate float intermediate target; falling back to RGBA8 for RenderScale targets.",
-                        oom != null ? oom : failure);
-            }
-        } else if (isMenuBlurPostChainInternal) {
-            if (loggedMenuBlurFormatFailure.compareAndSet(false, true)) {
-                Cbbg.LOGGER.warn(
-                        "Menu blur: failed to allocate float intermediate target; falling back to RGBA8 for blur targets.",
-                        oom != null ? oom : failure);
-            }
+          GlFormatOverride.popMainTargetColor();
+        } else {
+          GlFormatOverride.popFormat();
         }
-
-        // Retry once with the next-best effective format (e.g. 32F -> 16F). For the main target we
-        // also update the session-wide support state; for RenderScale / menu blur we best-effort
-        // downgrade without changing global support state.
-        CbbgConfig.PixelFormat fallback =
-                isMainTarget ? MainTargetFormatSupport.getEffective(requested)
-                        : nonMainFallback(effective);
-        if (fallback == CbbgConfig.PixelFormat.RGBA8) {
-            return device.createTexture(label, usage, format, width, height, depthOrLayers,
-                    mipLevels);
-        }
-
-        if (isOpenGl) {
-            if (isMainTarget) {
-                GlFormatOverride.pushMainTargetColor();
-            } else {
-                GlFormatOverride.pushFormat(toGlInternalFormat(fallback));
-            }
-        }
-        try {
-            return device.createTexture(label, usage,
-                    isOpenGl ? format : MainTargetFormatSupport.toGpuFormat(fallback), width, height, depthOrLayers,
-                    mipLevels);
-        } catch (GpuOutOfMemoryException e) {
-            if (isMainTarget) {
-                MainTargetFormatSupport.disable(fallback, e);
-                throw e;
-            }
-            return device.createTexture(label, usage, format, width, height, depthOrLayers,
-                    mipLevels);
-        } catch (Exception e) {
-            if (isMainTarget) {
-                MainTargetFormatSupport.disable(fallback, e);
-            }
-            return device.createTexture(label, usage, format, width, height, depthOrLayers,
-                    mipLevels);
-        } finally {
-            if (isOpenGl) {
-                if (isMainTarget) {
-                    GlFormatOverride.popMainTargetColor();
-                } else {
-                    GlFormatOverride.popFormat();
-                }
-            }
-        }
+      }
     }
 
-    private static CbbgConfig.PixelFormat nonMainFallback(CbbgConfig.PixelFormat effective) {
-        if (effective == CbbgConfig.PixelFormat.RGBA32F) {
-            // Best-effort: try 16F if 32F allocation failed (even if 32F is supported).
-            return MainTargetFormatSupport.getEffective(CbbgConfig.PixelFormat.RGBA16F);
-        }
-        return CbbgConfig.PixelFormat.RGBA8;
+    if (oom == null && failure == null) {
+      if (isMenuBlurPostChainInternal && loggedMenuBlurAllocInfo.compareAndSet(false, true)) {
+        // Diagnostic only: confirm the blur post-chain internal target is actually float.
+        // This helps distinguish "blur re-quantizes to RGBA8" from "dither strength needs
+        // adjustment for blurred gradients".
+        Cbbg.LOGGER.info(
+            "cbbg menu blur alloc: label=\"{}\" requested={} effective={} internal={}",
+            menuBlurLabel,
+            requested.getSerializedName(),
+            effective.getSerializedName(),
+            texture instanceof GlTexture
+                ? CbbgGlNames.glInternalName(getTextureInternalFormat(texture))
+                : texture.getFormat());
+      }
+      return texture;
     }
 
-    private static int toGlInternalFormat(CbbgConfig.PixelFormat format) {
-        return switch (format) {
-            case RGBA16F -> GL30.GL_RGBA16F;
-            case RGBA32F -> GL30.GL_RGBA32F;
-            case RGBA8 -> throw new IllegalArgumentException("RGBA8 does not require override");
-        };
+    if (isMainTarget) {
+      MainTargetFormatSupport.disable(effective, oom != null ? oom : failure);
+    } else if (isRenderScaleColor) {
+      if (loggedRenderScaleFormatFailure.compareAndSet(false, true)) {
+        Cbbg.LOGGER.warn(
+            "RenderScale detected: failed to allocate float intermediate target; falling back to RGBA8 for RenderScale targets.",
+            oom != null ? oom : failure);
+      }
+    } else if (isMenuBlurPostChainInternal) {
+      if (loggedMenuBlurFormatFailure.compareAndSet(false, true)) {
+        Cbbg.LOGGER.warn(
+            "Menu blur: failed to allocate float intermediate target; falling back to RGBA8 for blur targets.",
+            oom != null ? oom : failure);
+      }
     }
 
-    private static int getTextureInternalFormat(GpuTexture texture) {
-        int prev = GlStateManager._getInteger(GL11.GL_TEXTURE_BINDING_2D);
-        try {
-            int id = ((GlTexture) texture).glId();
-            GL11.glBindTexture(GL11.GL_TEXTURE_2D, id);
-            return GL11.glGetTexLevelParameteri(GL11.GL_TEXTURE_2D, 0,
-                    GL11.GL_TEXTURE_INTERNAL_FORMAT);
-        } finally {
-            GL11.glBindTexture(GL11.GL_TEXTURE_2D, prev);
-        }
+    // Retry once with the next-best effective format (e.g. 32F -> 16F). For the main target we
+    // also update the session-wide support state; for RenderScale / menu blur we best-effort
+    // downgrade without changing global support state.
+    CbbgConfig.PixelFormat fallback =
+        isMainTarget ? MainTargetFormatSupport.getEffective(requested) : nonMainFallback(effective);
+    if (fallback == CbbgConfig.PixelFormat.RGBA8) {
+      return device.createTexture(label, usage, format, width, height, depthOrLayers, mipLevels);
     }
+
+    if (isOpenGl) {
+      if (isMainTarget) {
+        GlFormatOverride.pushMainTargetColor();
+      } else {
+        GlFormatOverride.pushFormat(toGlInternalFormat(fallback));
+      }
+    }
+    try {
+      return device.createTexture(
+          label,
+          usage,
+          isOpenGl ? format : MainTargetFormatSupport.toGpuFormat(fallback),
+          width,
+          height,
+          depthOrLayers,
+          mipLevels);
+    } catch (GpuOutOfMemoryException e) {
+      if (isMainTarget) {
+        MainTargetFormatSupport.disable(fallback, e);
+        throw e;
+      }
+      return device.createTexture(label, usage, format, width, height, depthOrLayers, mipLevels);
+    } catch (Exception e) {
+      if (isMainTarget) {
+        MainTargetFormatSupport.disable(fallback, e);
+      }
+      return device.createTexture(label, usage, format, width, height, depthOrLayers, mipLevels);
+    } finally {
+      if (isOpenGl) {
+        if (isMainTarget) {
+          GlFormatOverride.popMainTargetColor();
+        } else {
+          GlFormatOverride.popFormat();
+        }
+      }
+    }
+  }
+
+  private static CbbgConfig.PixelFormat nonMainFallback(CbbgConfig.PixelFormat effective) {
+    if (effective == CbbgConfig.PixelFormat.RGBA32F) {
+      // Best-effort: try 16F if 32F allocation failed (even if 32F is supported).
+      return MainTargetFormatSupport.getEffective(CbbgConfig.PixelFormat.RGBA16F);
+    }
+    return CbbgConfig.PixelFormat.RGBA8;
+  }
+
+  private static int toGlInternalFormat(CbbgConfig.PixelFormat format) {
+    return switch (format) {
+      case RGBA16F -> GL30.GL_RGBA16F;
+      case RGBA32F -> GL30.GL_RGBA32F;
+      case RGBA8 -> throw new IllegalArgumentException("RGBA8 does not require override");
+    };
+  }
+
+  private static int getTextureInternalFormat(GpuTexture texture) {
+    int prev = GlStateManager._getInteger(GL11.GL_TEXTURE_BINDING_2D);
+    try {
+      int id = ((GlTexture) texture).glId();
+      GL11.glBindTexture(GL11.GL_TEXTURE_2D, id);
+      return GL11.glGetTexLevelParameteri(GL11.GL_TEXTURE_2D, 0, GL11.GL_TEXTURE_INTERNAL_FORMAT);
+    } finally {
+      GL11.glBindTexture(GL11.GL_TEXTURE_2D, prev);
+    }
+  }
 }

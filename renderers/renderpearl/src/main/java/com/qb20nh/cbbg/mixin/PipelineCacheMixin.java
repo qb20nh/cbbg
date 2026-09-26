@@ -12,15 +12,15 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(PipelineCache.class)
 public abstract class PipelineCacheMixin {
-    @Inject(method = "insert", at = @At("HEAD"))
-    private void cbbg$rememberInserted(RenderPipeline pipeline, CompiledRenderPipeline compiled,
-            CallbackInfo ci) {
-        FloatPipelines.remember(pipeline, compiled);
-    }
+  @Inject(method = "insert", at = @At("HEAD"))
+  private void cbbg$rememberInserted(
+      RenderPipeline pipeline, CompiledRenderPipeline compiled, CallbackInfo ci) {
+    FloatPipelines.remember(pipeline, compiled);
+  }
 
-    @Inject(method = "get", at = @At("RETURN"))
-    private void cbbg$rememberResolved(RenderPipeline pipeline,
-            CallbackInfoReturnable<CompiledRenderPipeline> cir) {
-        FloatPipelines.remember(pipeline, cir.getReturnValue());
-    }
+  @Inject(method = "get", at = @At("RETURN"))
+  private void cbbg$rememberResolved(
+      RenderPipeline pipeline, CallbackInfoReturnable<CompiledRenderPipeline> cir) {
+    FloatPipelines.remember(pipeline, cir.getReturnValue());
+  }
 }

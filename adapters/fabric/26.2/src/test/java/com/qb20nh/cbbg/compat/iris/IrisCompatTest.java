@@ -5,9 +5,9 @@ import org.junit.jupiter.api.Test;
 
 class IrisCompatTest {
 
-    @Test
-    void isShaderPackActive_falseWhenIrisNotLoaded() {
-        // In unit test runtime we do not load Iris, so this should be a safe, deterministic path.
-        Assertions.assertFalse(IrisCompat.isShaderPackActive());
-    }
+  @Test
+  void isShaderPackActive_falseWhenIrisNotLoaded() {
+    // In unit test runtime we do not load Iris, so this should be a safe, deterministic path.
+    Assertions.assertFalse(IrisCompat.isShaderPackActive());
+  }
 }

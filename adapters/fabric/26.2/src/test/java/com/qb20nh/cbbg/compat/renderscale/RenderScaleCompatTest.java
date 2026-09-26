@@ -5,11 +5,11 @@ import org.junit.jupiter.api.Test;
 
 class RenderScaleCompatTest {
 
-    @Test
-    void whenRenderScaleNotLoaded_helpersAreNoOps() {
-        Assertions.assertFalse(RenderScaleCompat.isLoaded());
-        Assertions.assertFalse(
-                RenderScaleCompat.isRenderScaleColorTextureLabel(() -> "RenderScale / Color"));
-        Assertions.assertEquals(1.0F, RenderScaleCompat.getDitherCoordScale(), 0.0F);
-    }
+  @Test
+  void whenRenderScaleNotLoaded_helpersAreNoOps() {
+    Assertions.assertFalse(RenderScaleCompat.isLoaded());
+    Assertions.assertFalse(
+        RenderScaleCompat.isRenderScaleColorTextureLabel(() -> "RenderScale / Color"));
+    Assertions.assertEquals(1.0F, RenderScaleCompat.getDitherCoordScale(), 0.0F);
+  }
 }

@@ -16,51 +16,49 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(GameRenderer.class)
 public abstract class GameRendererMixin {
 
-    private static final ThreadLocal<Boolean> DID_PUSH = ThreadLocal.withInitial(() -> false);
+  private static final ThreadLocal<Boolean> DID_PUSH = ThreadLocal.withInitial(() -> false);
 
-    @Shadow
-    @Final
-    private CrossFrameResourcePool resourcePool;
+  @Shadow @Final private CrossFrameResourcePool resourcePool;
 
-    @Inject(method = "processBlurEffect", at = @At("HEAD"))
-    private void cbbg$processBlurEffect$begin(CallbackInfo ci) {
-        final CbbgConfig.PixelFormat desired = desiredMenuBlurFormat();
+  @Inject(method = "processBlurEffect", at = @At("HEAD"))
+  private void cbbg$processBlurEffect$begin(CallbackInfo ci) {
+    final CbbgConfig.PixelFormat desired = desiredMenuBlurFormat();
 
-        if (MenuBlurGuard.updateLastBlurFormat(desired)) {
-            // --- ImmediatelyFast compat: do not remove ---
-            // Rationale: Minecraft caches post-chain internal targets (including menu blur targets)
-            // in this CrossFrameResourcePool. cbbg upgrades only the blur chain's internal targets
-            // to float formats. Clearing here ensures cached RGBA8 (or float) targets are not
-            // reused
-            // across cbbg toggles / pixel-format changes.
-            this.resourcePool.clear();
-        }
-
-        // Only enable the guard when cbbg is active and a float format is actually in use.
-        if (!CbbgClient.isEnabled() || desired == CbbgConfig.PixelFormat.RGBA8) {
-            DID_PUSH.set(false);
-            return;
-        }
-
-        MenuBlurGuard.push(desired);
-        DID_PUSH.set(true);
+    if (MenuBlurGuard.updateLastBlurFormat(desired)) {
+      // --- ImmediatelyFast compat: do not remove ---
+      // Rationale: Minecraft caches post-chain internal targets (including menu blur targets)
+      // in this CrossFrameResourcePool. cbbg upgrades only the blur chain's internal targets
+      // to float formats. Clearing here ensures cached RGBA8 (or float) targets are not
+      // reused
+      // across cbbg toggles / pixel-format changes.
+      this.resourcePool.clear();
     }
 
-    @Inject(method = "processBlurEffect", at = @At("RETURN"))
-    private void cbbg$processBlurEffect$end(CallbackInfo ci) {
-        try {
-            if (Boolean.TRUE.equals(DID_PUSH.get())) {
-                MenuBlurGuard.pop();
-            }
-        } finally {
-            DID_PUSH.remove();
-        }
+    // Only enable the guard when cbbg is active and a float format is actually in use.
+    if (!CbbgClient.isEnabled() || desired == CbbgConfig.PixelFormat.RGBA8) {
+      DID_PUSH.set(false);
+      return;
     }
 
-    private static CbbgConfig.PixelFormat desiredMenuBlurFormat() {
-        if (!CbbgClient.isEnabled()) {
-            return CbbgConfig.PixelFormat.RGBA8;
-        }
-        return MainTargetFormatSupport.getEffective(CbbgConfig.get().pixelFormat());
+    MenuBlurGuard.push(desired);
+    DID_PUSH.set(true);
+  }
+
+  @Inject(method = "processBlurEffect", at = @At("RETURN"))
+  private void cbbg$processBlurEffect$end(CallbackInfo ci) {
+    try {
+      if (Boolean.TRUE.equals(DID_PUSH.get())) {
+        MenuBlurGuard.pop();
+      }
+    } finally {
+      DID_PUSH.remove();
     }
+  }
+
+  private static CbbgConfig.PixelFormat desiredMenuBlurFormat() {
+    if (!CbbgClient.isEnabled()) {
+      return CbbgConfig.PixelFormat.RGBA8;
+    }
+    return MainTargetFormatSupport.getEffective(CbbgConfig.get().pixelFormat());
+  }
 }

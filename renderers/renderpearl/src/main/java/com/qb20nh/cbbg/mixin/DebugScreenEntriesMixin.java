@@ -20,25 +20,25 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(DebugScreenEntries.class)
 public abstract class DebugScreenEntriesMixin {
-    @Shadow @Final @Mutable
-    private static Map<DebugScreenProfile, Map<Identifier, DebugScreenEntryStatus>> PROFILES;
+  @Shadow @Final @Mutable
+  private static Map<DebugScreenProfile, Map<Identifier, DebugScreenEntryStatus>> PROFILES;
 
-    @Shadow
-    private static Identifier register(Identifier id, DebugScreenEntry entry) {
-        throw new AssertionError();
-    }
+  @Shadow
+  private static Identifier register(Identifier id, DebugScreenEntry entry) {
+    throw new AssertionError();
+  }
 
-    @Inject(method = "<clinit>", at = @At("TAIL"))
-    private static void cbbg$register(CallbackInfo ci) {
-        Identifier id = Identifier.fromNamespaceAndPath(Cbbg.MOD_ID, "cbbg");
-        register(id, new CbbgDebugEntry());
-        Map<DebugScreenProfile, Map<Identifier, DebugScreenEntryStatus>> updated =
-                new EnumMap<>(DebugScreenProfile.class);
-        for (var entry : PROFILES.entrySet()) {
-            Map<Identifier, DebugScreenEntryStatus> status = new HashMap<>(entry.getValue());
-            status.put(id, DebugScreenEntryStatus.IN_OVERLAY);
-            updated.put(entry.getKey(), Map.copyOf(status));
-        }
-        PROFILES = Map.copyOf(updated);
+  @Inject(method = "<clinit>", at = @At("TAIL"))
+  private static void cbbg$register(CallbackInfo ci) {
+    Identifier id = Identifier.fromNamespaceAndPath(Cbbg.MOD_ID, "cbbg");
+    register(id, new CbbgDebugEntry());
+    Map<DebugScreenProfile, Map<Identifier, DebugScreenEntryStatus>> updated =
+        new EnumMap<>(DebugScreenProfile.class);
+    for (var entry : PROFILES.entrySet()) {
+      Map<Identifier, DebugScreenEntryStatus> status = new HashMap<>(entry.getValue());
+      status.put(id, DebugScreenEntryStatus.IN_OVERLAY);
+      updated.put(entry.getKey(), Map.copyOf(status));
     }
+    PROFILES = Map.copyOf(updated);
+  }
 }

@@ -8,22 +8,22 @@ import java.util.WeakHashMap;
 
 /** Keeps all live main-target allocations in sync with the active precision policy. */
 public final class MainTargets {
-    private static final Set<MainTarget> TARGETS = Collections.newSetFromMap(new WeakHashMap<>());
+  private static final Set<MainTarget> TARGETS = Collections.newSetFromMap(new WeakHashMap<>());
 
-    private MainTargets() {}
+  private MainTargets() {}
 
-    public static void track(MainTarget target) {
-        RenderSystem.assertOnRenderThread();
-        TARGETS.add(target);
+  public static void track(MainTarget target) {
+    RenderSystem.assertOnRenderThread();
+    TARGETS.add(target);
+  }
+
+  public static void refreshFormats() {
+    RenderSystem.assertOnRenderThread();
+    for (MainTarget target : TARGETS.toArray(MainTarget[]::new)) {
+      var color = target.getColorTexture();
+      if (color != null && !color.isClosed()) {
+        target.resize(target.width, target.height);
+      }
     }
-
-    public static void refreshFormats() {
-        RenderSystem.assertOnRenderThread();
-        for (MainTarget target : TARGETS.toArray(MainTarget[]::new)) {
-            var color = target.getColorTexture();
-            if (color != null && !color.isClosed()) {
-                target.resize(target.width, target.height);
-            }
-        }
-    }
+  }
 }

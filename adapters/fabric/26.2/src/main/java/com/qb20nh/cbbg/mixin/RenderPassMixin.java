@@ -16,12 +16,13 @@ import org.spongepowered.asm.mixin.injection.ModifyVariable;
 
 @Mixin(RenderPass.class)
 public abstract class RenderPassMixin {
-    @Shadow @Final
-    private List<RenderPassDescriptor.Attachment<Optional<Vector4fc>>> colorAttachments;
+  @Shadow @Final
+  private List<RenderPassDescriptor.Attachment<Optional<Vector4fc>>> colorAttachments;
 
-    @ModifyVariable(method = "setPipeline", at = @At("HEAD"), argsOnly = true)
-    private RenderPipeline cbbg$matchFloatAttachments(RenderPipeline pipeline) {
-        return MainTargetFormatSupport.isOpenGl() ? pipeline
-                : FloatPipelines.forAttachments(pipeline, colorAttachments);
-    }
+  @ModifyVariable(method = "setPipeline", at = @At("HEAD"), argsOnly = true)
+  private RenderPipeline cbbg$matchFloatAttachments(RenderPipeline pipeline) {
+    return MainTargetFormatSupport.isOpenGl()
+        ? pipeline
+        : FloatPipelines.forAttachments(pipeline, colorAttachments);
+  }
 }

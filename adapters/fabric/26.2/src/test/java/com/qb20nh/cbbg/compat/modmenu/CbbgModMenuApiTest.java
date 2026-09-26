@@ -7,10 +7,10 @@ import org.junit.jupiter.api.Test;
 
 class CbbgModMenuApiTest {
 
-    @Test
-    void configScreenFactory_isProvided() {
-        CbbgModMenuApi api = new CbbgModMenuApi();
-        ConfigScreenFactory<Screen> factory = api.getModConfigScreenFactory();
-        Assertions.assertNotNull(factory);
-    }
+  @Test
+  void configScreenFactory_isProvided() {
+    CbbgModMenuApi api = new CbbgModMenuApi();
+    ConfigScreenFactory<Screen> factory = api.getModConfigScreenFactory();
+    Assertions.assertNotNull(factory);
+  }
 }

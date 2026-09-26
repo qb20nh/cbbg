@@ -5,11 +5,16 @@ import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallba
 import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource;
 
 public final class CommandPlatform {
-    private CommandPlatform() {}
+  private CommandPlatform() {}
 
-    public static void register(Runnable resetAfterToggle, Consumer<Boolean> reloadStbn) {
-        ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) ->
-                CbbgClientCommands.registerCommands(dispatcher, resetAfterToggle, reloadStbn,
-                        FabricClientCommandSource::sendFeedback, FabricClientCommandSource::sendError));
-    }
+  public static void register(Runnable resetAfterToggle, Consumer<Boolean> reloadStbn) {
+    ClientCommandRegistrationCallback.EVENT.register(
+        (dispatcher, registryAccess) ->
+            CbbgClientCommands.registerCommands(
+                dispatcher,
+                resetAfterToggle,
+                reloadStbn,
+                FabricClientCommandSource::sendFeedback,
+                FabricClientCommandSource::sendError));
+  }
 }

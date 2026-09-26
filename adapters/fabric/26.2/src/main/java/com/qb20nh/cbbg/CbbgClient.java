@@ -5,89 +5,90 @@ import com.qb20nh.cbbg.compat.iris.IrisCompat;
 import com.qb20nh.cbbg.config.CbbgConfig;
 import com.qb20nh.cbbg.render.CbbgDither;
 import net.fabricmc.api.ClientModInitializer;
-import net.minecraft.client.Minecraft;
-import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
-
+import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
 import net.minecraft.ChatFormatting;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 
 public final class CbbgClient implements ClientModInitializer {
 
-    /**
-     * Main runtime gate for all cbbg rendering changes.
-     *
-     * <p>
-     * Must be {@code false} when an Iris shaderpack is active to avoid conflicts.
-     */
-    public static boolean isEnabled() {
-        return getEffectiveMode().isActive();
+  /**
+   * Main runtime gate for all cbbg rendering changes.
+   *
+   * <p>Must be {@code false} when an Iris shaderpack is active to avoid conflicts.
+   */
+  public static boolean isEnabled() {
+    return getEffectiveMode().isActive();
+  }
+
+  public static CbbgConfig.Mode getUserMode() {
+    return CbbgConfig.get().mode();
+  }
+
+  public static CbbgConfig.Mode getEffectiveMode() {
+    // Iris shaderpacks must take full control of the pipeline.
+    if (IrisCompat.isShaderPackActive()) {
+      return CbbgConfig.Mode.DISABLED;
     }
+    return CbbgConfig.get().mode();
+  }
 
-    public static CbbgConfig.Mode getUserMode() {
-        return CbbgConfig.get().mode();
-    }
+  public static boolean isDemoMode() {
+    return getEffectiveMode() == CbbgConfig.Mode.DEMO;
+  }
 
-    public static CbbgConfig.Mode getEffectiveMode() {
-        // Iris shaderpacks must take full control of the pipeline.
-        if (IrisCompat.isShaderPackActive()) {
-            return CbbgConfig.Mode.DISABLED;
-        }
-        return CbbgConfig.get().mode();
-    }
+  public static void renderDemoLabels(GuiGraphicsExtractor context) {
+    Minecraft mc = Minecraft.getInstance();
 
-    public static boolean isDemoMode() {
-        return getEffectiveMode() == CbbgConfig.Mode.DEMO;
-    }
+    int w = mc.getWindow().getGuiScaledWidth();
+    int centerX = w / 2;
+    int y = 6;
+    int pad = 6;
 
-    public static void renderDemoLabels(GuiGraphicsExtractor context) {
-        Minecraft mc = Minecraft.getInstance();
+    Component left = Component.translatable("cbbg.hud.demo.left");
+    Component right = Component.translatable("cbbg.hud.demo.right");
 
-        int w = mc.getWindow().getGuiScaledWidth();
-        int centerX = w / 2;
-        int y = 6;
-        int pad = 6;
+    int leftW = mc.font.width(left);
+    int white = 0xFFFFFFFF; // ARGB: required in 1.21.x (0xRRGGBB is fully transparent)
+    context.text(mc.font, left, centerX - pad - leftW, y, white, true);
+    context.text(mc.font, right, centerX + pad, y, white, true);
+  }
 
-        Component left = Component.translatable("cbbg.hud.demo.left");
-        Component right = Component.translatable("cbbg.hud.demo.right");
+  @Override
+  public void onInitializeClient() {
+    CbbgEarlyInit.configureSettings();
+    // Ensure config is loaded early.
+    CbbgConfig.get();
 
-        int leftW = mc.font.width(left);
-        int white = 0xFFFFFFFF; // ARGB: required in 1.21.x (0xRRGGBB is fully transparent)
-        context.text(mc.font, left, centerX - pad - leftW, y, white, true);
-        context.text(mc.font, right, centerX + pad, y, white, true);
-    }
-
-    @Override
-    public void onInitializeClient() {
-        CbbgEarlyInit.configureSettings();
-        // Ensure config is loaded early.
-        CbbgConfig.get();
-
-        // Register HUD element
-        HudElementRegistry.addLast(Identifier.fromNamespaceAndPath(Cbbg.MOD_ID, "hud_overlay"),
-                (context, _) -> {
-                    if (!isDemoMode()) {
-                        return;
-                    }
-                    renderDemoLabels(context);
-                });
-
-        CbbgClientCommands.register();
-
-        // Ensure generation progress is checked even if not rendering
-        ClientTickEvents.END_CLIENT_TICK.register(_ -> CbbgDither.ensureStbnLoaded());
-
-        // Notify if generation is still ongoing when joining a world
-        ClientPlayConnectionEvents.JOIN.register((_, _, client) -> {
-            if (CbbgDither.isGenerating()) {
-                client.showDebugChat(Component.translatable("cbbg.chat.stbn.generating")
-                        .withStyle(ChatFormatting.YELLOW));
-            }
+    // Register HUD element
+    HudElementRegistry.addLast(
+        Identifier.fromNamespaceAndPath(Cbbg.MOD_ID, "hud_overlay"),
+        (context, _) -> {
+          if (!isDemoMode()) {
+            return;
+          }
+          renderDemoLabels(context);
         });
 
-        Cbbg.LOGGER.info("cbbg loaded");
-    }
+    CbbgClientCommands.register();
+
+    // Ensure generation progress is checked even if not rendering
+    ClientTickEvents.END_CLIENT_TICK.register(_ -> CbbgDither.ensureStbnLoaded());
+
+    // Notify if generation is still ongoing when joining a world
+    ClientPlayConnectionEvents.JOIN.register(
+        (_, _, client) -> {
+          if (CbbgDither.isGenerating()) {
+            client.showDebugChat(
+                Component.translatable("cbbg.chat.stbn.generating")
+                    .withStyle(ChatFormatting.YELLOW));
+          }
+        });
+
+    Cbbg.LOGGER.info("cbbg loaded");
+  }
 }

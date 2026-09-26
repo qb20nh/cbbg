@@ -12,13 +12,15 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(PipelineCache.class)
 public class EarlyPipelineCacheMixin {
-    @Inject(method = "insert", at = @At("HEAD"))
-    private void cbbgTestInsert(RenderPipeline source, CompiledRenderPipeline compiled, CallbackInfo ci) {
-        EarlyStartupGameTest.remember(source, compiled);
-    }
+  @Inject(method = "insert", at = @At("HEAD"))
+  private void cbbgTestInsert(
+      RenderPipeline source, CompiledRenderPipeline compiled, CallbackInfo ci) {
+    EarlyStartupGameTest.remember(source, compiled);
+  }
 
-    @Inject(method = "get", at = @At("RETURN"))
-    private void cbbgTestGet(RenderPipeline source, CallbackInfoReturnable<CompiledRenderPipeline> cir) {
-        EarlyStartupGameTest.remember(source, cir.getReturnValue());
-    }
+  @Inject(method = "get", at = @At("RETURN"))
+  private void cbbgTestGet(
+      RenderPipeline source, CallbackInfoReturnable<CompiledRenderPipeline> cir) {
+    EarlyStartupGameTest.remember(source, cir.getReturnValue());
+  }
 }
