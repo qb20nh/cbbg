@@ -21,7 +21,7 @@ public final class FloatAttachments {
   public static GpuTexture createMainOrOriginal(
       boolean mainTarget,
       GpuDevice device,
-      Supplier<String> label,
+      @Nullable Supplier<String> label,
       int usage,
       GpuFormat original,
       int width,
@@ -37,17 +37,19 @@ public final class FloatAttachments {
     }
     if (!mainTarget
         && MenuBlurScope.format() != null
-        && original == MenuBlurScope.format()
-        && label.get().startsWith("FBO ")) {
-      return create(
-          device,
-          label,
-          usage,
-          original == GpuFormat.RGBA32_FLOAT ? PixelFormat.RGBA32F : PixelFormat.RGBA16F,
-          width,
-          height,
-          depthOrLayers,
-          mipLevels);
+        && original == MenuBlurScope.format()) {
+      String name = label == null ? null : label.get();
+      if (name != null && name.startsWith("FBO ")) {
+        return create(
+            device,
+            label,
+            usage,
+            original == GpuFormat.RGBA32_FLOAT ? PixelFormat.RGBA32F : PixelFormat.RGBA16F,
+            width,
+            height,
+            depthOrLayers,
+            mipLevels);
+      }
     }
     return device.createTexture(label, usage, original, width, height, depthOrLayers, mipLevels);
   }
@@ -56,7 +58,7 @@ public final class FloatAttachments {
   @SuppressWarnings("ReferenceEquality")
   public static GpuTexture create(
       GpuDevice device,
-      Supplier<String> label,
+      @Nullable Supplier<String> label,
       int usage,
       PixelFormat requested,
       int width,
@@ -80,7 +82,7 @@ public final class FloatAttachments {
             LoggerFactory.getLogger("cbbg")
                 .warn(
                     "Could not allocate {} as {}; trying lower precision",
-                    label.get(),
+                    label == null ? null : label.get(),
                     format,
                     failure);
             return false;
