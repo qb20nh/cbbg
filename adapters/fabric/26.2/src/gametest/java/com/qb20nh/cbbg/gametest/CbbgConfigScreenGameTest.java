@@ -4,6 +4,7 @@ import com.qb20nh.cbbg.config.CbbgConfig;
 import com.qb20nh.cbbg.config.gui.CbbgConfigScreen;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.TestInput;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
@@ -19,6 +20,7 @@ import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.input.MouseButtonInfo;
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.NullMarked;
 import org.lwjgl.glfw.GLFW;
 
 /**
@@ -28,6 +30,7 @@ import org.lwjgl.glfw.GLFW;
  * interactions (clicks, slider adjustments, text input) - assert config updates - ensure we can
  * close the screen
  */
+@NullMarked
 public class CbbgConfigScreenGameTest implements FabricClientGameTest {
 
   private static final int WINDOW_WIDTH = 854;
@@ -53,7 +56,7 @@ public class CbbgConfigScreenGameTest implements FabricClientGameTest {
       // the UI code paths.
       context.runOnClient(
           client -> {
-            ScreenWidgets w = ScreenWidgets.from(client.gui.screen());
+            ScreenWidgets w = ScreenWidgets.from(Objects.requireNonNull(client.gui.screen()));
             for (String invalid : new String[] {"abc", "1-2", "-", "9223372036854775808"}) {
               w.seed.setValue(invalid);
               assertEquals(false, w.generate.active, "invalid seed disables generation");
@@ -97,7 +100,7 @@ public class CbbgConfigScreenGameTest implements FabricClientGameTest {
 
       context.runOnClient(
           client -> {
-            ScreenWidgets w = ScreenWidgets.from(client.gui.screen());
+            ScreenWidgets w = ScreenWidgets.from(Objects.requireNonNull(client.gui.screen()));
             MouseButtonInfo click = new MouseButtonInfo(GLFW.GLFW_MOUSE_BUTTON_LEFT, 0);
 
             // Notifications: true -> false
@@ -114,7 +117,7 @@ public class CbbgConfigScreenGameTest implements FabricClientGameTest {
       // Done button closes screen
       context.runOnClient(
           client -> {
-            ScreenWidgets w = ScreenWidgets.from(client.gui.screen());
+            ScreenWidgets w = ScreenWidgets.from(Objects.requireNonNull(client.gui.screen()));
             MouseButtonInfo click = new MouseButtonInfo(GLFW.GLFW_MOUSE_BUTTON_LEFT, 0);
             w.done.onClick(new MouseButtonEvent(centerX(w.done), centerY(w.done), click), false);
           });

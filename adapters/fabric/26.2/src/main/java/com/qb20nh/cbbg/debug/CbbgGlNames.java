@@ -1,9 +1,11 @@
 package com.qb20nh.cbbg.debug;
 
+import org.jspecify.annotations.NullMarked;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL21;
 import org.lwjgl.opengl.GL30;
 
+@NullMarked
 public final class CbbgGlNames {
   private static final String HEX_FORMAT = "0x%04X";
 

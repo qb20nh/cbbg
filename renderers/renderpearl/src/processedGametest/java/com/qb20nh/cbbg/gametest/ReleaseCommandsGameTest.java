@@ -5,31 +5,22 @@ import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.mojang.renderpearl.api.GpuFormat;
 import com.mojang.renderpearl.api.textures.GpuTexture;
 import com.mojang.renderpearl.api.textures.GpuTextureView;
-import java.lang.reflect.Proxy;
 import java.util.Locale;
+import java.util.Objects;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommands;
 import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
+import org.jspecify.annotations.NullMarked;
 
+@NullMarked
 public final class ReleaseCommandsGameTest implements FabricClientGameTest {
   private static final int WAIT_TICKS = 600;
 
   @Override
   public void runTest(ClientGameTestContext context) {
     JsonObject original = ReleaseClient.settings().deepCopy();
-    FabricClientCommandSource source =
-        (FabricClientCommandSource)
-            Proxy.newProxyInstance(
-                FabricClientCommandSource.class.getClassLoader(),
-                new Class<?>[] {FabricClientCommandSource.class},
-                (proxy, method, args) -> {
-                  if (method.getName().equals("sendFeedback")
-                      || method.getName().equals("sendError")) {
-                    return null;
-                  }
-                  throw new AssertionError("Unexpected command source call: " + method);
-                });
+    FabricClientCommandSource source = ReleaseClient.silentCommandSource();
 
     try (var world = context.worldBuilder().create()) {
       world.getConnection().waitForChunksRender();
@@ -79,7 +70,7 @@ public final class ReleaseCommandsGameTest implements FabricClientGameTest {
         long beforeGeneration =
             context.computeOnClient(
                 client -> {
-                  if (!oldColor.isClosed()) {
+                  if (!Objects.requireNonNull(oldColor).isClosed()) {
                     throw new AssertionError(
                         "Format replacement retained the old color attachment");
                   }

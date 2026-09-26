@@ -4,10 +4,12 @@ import com.qb20nh.cbbg.config.CbbgConfig;
 import com.qb20nh.cbbg.platform.LoaderPlatform;
 import java.nio.file.Path;
 import java.security.NoSuchAlgorithmException;
+import org.jspecify.annotations.NullMarked;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /** Platform paths and diagnostics for the shared cache implementation. */
+@NullMarked
 public final class STBNCache {
   private static final Logger LOGGER = LoggerFactory.getLogger("cbbg-cache");
   public static final Path CACHE_DIR = LoaderPlatform.gameDirectory().resolve(".cbbg");

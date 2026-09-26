@@ -11,13 +11,16 @@ import com.qb20nh.cbbg.CbbgClient;
 import com.qb20nh.cbbg.render.MenuBlurScope;
 import net.minecraft.client.renderer.PostChain;
 import net.minecraft.resources.Identifier;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 
 @Mixin(PostChain.class)
+@NullMarked
 public abstract class PostChainMixin {
-  @Unique private GpuFormat cbbg$lastBlurFormat;
+  @Unique private @Nullable GpuFormat cbbg$lastBlurFormat;
 
   @WrapMethod(method = "process")
   private void cbbg$blurScope(

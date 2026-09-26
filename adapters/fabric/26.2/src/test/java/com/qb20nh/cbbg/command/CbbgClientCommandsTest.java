@@ -3,9 +3,11 @@ package com.qb20nh.cbbg.command;
 import com.mojang.brigadier.CommandDispatcher;
 import java.lang.reflect.Method;
 import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource;
+import org.jspecify.annotations.NullMarked;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+@NullMarked
 class CbbgClientCommandsTest {
 
   @Test

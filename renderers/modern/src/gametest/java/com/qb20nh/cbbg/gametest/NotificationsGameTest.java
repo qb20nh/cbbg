@@ -5,6 +5,7 @@ import com.qb20nh.cbbg.render.DitherController;
 import com.qb20nh.cbbg.render.GenerationNotifications;
 import java.lang.reflect.Field;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
@@ -14,13 +15,16 @@ import net.minecraft.client.gui.components.toasts.SystemToast;
 import net.minecraft.client.multiplayer.chat.GuiMessage;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.FormattedCharSequence;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
+@NullMarked
 public final class NotificationsGameTest implements FabricClientGameTest {
   @Override
   public void runTest(ClientGameTestContext context) {
     CbbgConfig original = CbbgConfig.get();
     context.waitFor(client -> DitherController.isReady(), 600);
-    CompletableFuture<Void> joining = new CompletableFuture<>();
+    CompletableFuture<@Nullable Void> joining = new CompletableFuture<>();
     try {
       context.runOnClient(
           client -> {
@@ -45,7 +49,7 @@ public final class NotificationsGameTest implements FabricClientGameTest {
                   CbbgConfig.setNotifyChat(chat);
                   CbbgConfig.setNotifyToast(toast);
                   clear(client);
-                  var future = new CompletableFuture<Void>();
+                  var future = new CompletableFuture<@Nullable Void>();
                   GenerationNotifications.started(future);
                   checkMessages(client, chat ? 1 : 0);
                   checkToast(client, toast ? "generating" : null);
@@ -59,7 +63,7 @@ public final class NotificationsGameTest implements FabricClientGameTest {
               CbbgConfig.setNotifyChat(true);
               CbbgConfig.setNotifyToast(true);
               clear(client);
-              var failed = new CompletableFuture<Void>();
+              var failed = new CompletableFuture<@Nullable Void>();
               GenerationNotifications.started(failed);
               failed.completeExceptionally(new IllegalStateException("Injected failure"));
               GenerationNotifications.tick();
@@ -67,8 +71,8 @@ public final class NotificationsGameTest implements FabricClientGameTest {
               checkToast(client, "generating"); // Never claim success after failure.
 
               clear(client);
-              var old = new CompletableFuture<Void>();
-              var replacement = new CompletableFuture<Void>();
+              var old = new CompletableFuture<@Nullable Void>();
+              var replacement = new CompletableFuture<@Nullable Void>();
               GenerationNotifications.started(old);
               GenerationNotifications.follow(replacement);
               old.complete(null);
@@ -79,13 +83,13 @@ public final class NotificationsGameTest implements FabricClientGameTest {
               checkMessages(client, 2);
 
               clear(client);
-              var cancelled = new CompletableFuture<Void>();
+              var cancelled = new CompletableFuture<@Nullable Void>();
               GenerationNotifications.started(cancelled);
               cancelled.cancel(false);
               GenerationNotifications.tick();
               checkMessages(client, 1);
               clear(client);
-              var closed = new CompletableFuture<Void>();
+              var closed = new CompletableFuture<@Nullable Void>();
               GenerationNotifications.started(closed);
               GenerationNotifications.close();
               closed.complete(null);
@@ -138,7 +142,9 @@ public final class NotificationsGameTest implements FabricClientGameTest {
   @SuppressWarnings("unchecked")
   private static List<String> generationMessages(Minecraft client) {
     List<GuiMessage> messages =
-        (List<GuiMessage>) field(ChatComponent.class, "allMessages", client.gui.hud.getChat());
+        (List<GuiMessage>)
+            Objects.requireNonNull(
+                field(ChatComponent.class, "allMessages", client.gui.hud.getChat()));
     return messages.stream()
         .map(message -> message.content().getString())
         .filter(
@@ -149,7 +155,7 @@ public final class NotificationsGameTest implements FabricClientGameTest {
   }
 
   @SuppressWarnings("unchecked")
-  private static void checkToast(Minecraft client, String state) {
+  private static void checkToast(Minecraft client, @Nullable String state) {
     SystemToast toast =
         client
             .gui
@@ -165,7 +171,8 @@ public final class NotificationsGameTest implements FabricClientGameTest {
       throw new AssertionError("Missing generation toast");
     }
     List<FormattedCharSequence> lines =
-        (List<FormattedCharSequence>) field(SystemToast.class, "messageLines", toast);
+        (List<FormattedCharSequence>)
+            Objects.requireNonNull(field(SystemToast.class, "messageLines", toast));
     StringBuilder text = new StringBuilder();
     for (FormattedCharSequence line : lines) {
       line.accept(
@@ -180,13 +187,13 @@ public final class NotificationsGameTest implements FabricClientGameTest {
     }
   }
 
-  private static Object field(Class<?> owner, String name, Object instance) {
+  private static @Nullable Object field(Class<?> owner, String name, Object instance) {
     try {
       Field field = owner.getDeclaredField(name);
       field.setAccessible(true);
       return field.get(instance);
     } catch (ReflectiveOperationException failure) {
-      throw new AssertionError("Could not inspect notification UI", failure);
+      throw new LinkageError("Could not inspect notification UI", failure);
     }
   }
 }

@@ -8,18 +8,22 @@ import com.qb20nh.cbbg.render.Rgba8Readback;
 import java.util.function.Consumer;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Screenshot;
+import org.jspecify.annotations.NullMarked;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(Screenshot.class)
+@NullMarked
 public abstract class ScreenshotMixin {
   @Inject(
       method =
           "takeScreenshot(Lcom/mojang/blaze3d/pipeline/RenderTarget;ILjava/util/function/Consumer;)V",
       at = @At("HEAD"),
       cancellable = true)
+  // Only the actual main render target uses the presentation screenshot path.
+  @SuppressWarnings("ReferenceEquality")
   private static void cbbg$convertFloatScreenshot(
       RenderTarget target, int downscale, Consumer<NativeImage> callback, CallbackInfo ci) {
     if (target == Minecraft.getInstance().gameRenderer.mainRenderTarget()

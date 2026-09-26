@@ -14,8 +14,10 @@ import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.CycleButton;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.network.chat.Component;
+import org.jspecify.annotations.NullMarked;
 
 /** Shared settings controls; each screen supplies rendering and navigation. */
+@NullMarked
 final class CbbgConfigWidgets {
   static long parseSeed(String text) {
     if (text == null || text.isEmpty()) {
@@ -381,7 +383,7 @@ final class CbbgConfigWidgets {
     private final IntConsumer setter;
     private final Component label;
 
-    public PowerOfTwoSlider(
+    private PowerOfTwoSlider(
         int x,
         int y,
         int width,
@@ -435,7 +437,7 @@ final class CbbgConfigWidgets {
     private final DoubleConsumer setter;
     private final Component label;
 
-    public FloatSlider(
+    private FloatSlider(
         int x,
         int y,
         int width,

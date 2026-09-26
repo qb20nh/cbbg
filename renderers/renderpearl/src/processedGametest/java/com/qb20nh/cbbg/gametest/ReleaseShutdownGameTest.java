@@ -5,18 +5,22 @@ import com.mojang.renderpearl.api.textures.GpuTextureView;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.LoggerFactory;
 
 /** Leaves live packaged CBBG resources for the real Minecraft.close lifecycle. */
+@NullMarked
 public final class ReleaseShutdownGameTest implements FabricClientGameTest {
-  private static String kind;
-  private static GpuTextureView noise;
-  private static GpuTextureView output;
-  private static List<Thread> workers;
-  private static ReleaseGeneratingShutdownGameTest.GenerationObserver generation;
+  private static @Nullable String kind;
+  private static @Nullable GpuTextureView noise;
+  private static @Nullable GpuTextureView output;
+  private static @Nullable List<Thread> workers;
+  private static ReleaseGeneratingShutdownGameTest.@Nullable GenerationObserver generation;
 
   @Override
   public void runTest(ClientGameTestContext context) {
@@ -58,7 +62,7 @@ public final class ReleaseShutdownGameTest implements FabricClientGameTest {
   }
 
   static void armGenerating(ReleaseGeneratingShutdownGameTest.GenerationObserver observer) {
-    if (observer.worker == null || !observer.worker.isAlive() || observer.completions != 0) {
+    if (observer.worker == null || !observer.worker.isAlive() || observer.completions.get() != 0) {
       throw new AssertionError("Shutdown job is no longer active");
     }
     workers = workerThreads();
@@ -85,25 +89,32 @@ public final class ReleaseShutdownGameTest implements FabricClientGameTest {
     boolean workerTerminated = false;
     Throwable failure = null;
     try {
-      resourcesClosed =
-          generation != null
-              || noise.isClosed()
-                  && noise.texture().isClosed()
-                  && output.isClosed()
-                  && output.texture().isClosed();
+      if (generation != null) {
+        resourcesClosed = true;
+      } else {
+        GpuTextureView liveNoise = Objects.requireNonNull(noise);
+        GpuTextureView liveOutput = Objects.requireNonNull(output);
+        resourcesClosed =
+            liveNoise.isClosed()
+                && liveNoise.texture().isClosed()
+                && liveOutput.isClosed()
+                && liveOutput.texture().isClosed();
+      }
+      List<Thread> observedWorkers = Objects.requireNonNull(workers);
       long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
-      for (Thread worker : workers) {
+      for (Thread worker : observedWorkers) {
         long remaining = deadline - System.nanoTime();
         if (worker.isAlive() && remaining > 0) {
           TimeUnit.NANOSECONDS.timedJoin(worker, remaining);
         }
       }
-      workerTerminated = workers.stream().noneMatch(Thread::isAlive) && workerThreads().isEmpty();
+      workerTerminated =
+          observedWorkers.stream().noneMatch(Thread::isAlive) && workerThreads().isEmpty();
       if (!resourcesClosed) throw new AssertionError("CBBG GPU resources survived its close hook");
       if (!workerTerminated)
         throw new AssertionError("CBBG worker survived shutdown for 10 seconds");
       if (generation != null) {
-        if (generation.completions != 0) {
+        if (generation.completions.get() != 0) {
           throw new AssertionError("Shutdown job completed before cancellation");
         }
         ReleaseGeneratingShutdownGameTest.assertNoJobOutput();
@@ -115,7 +126,7 @@ public final class ReleaseShutdownGameTest implements FabricClientGameTest {
       evidence.addProperty("resourcesClosed", resourcesClosed);
       evidence.addProperty("workerTerminated", workerTerminated);
       evidence.addProperty(
-          "generationCompleted", generation != null && generation.completions != 0);
+          "generationCompleted", generation != null && generation.completions.get() != 0);
       if (failure != null) evidence.addProperty("failure", failure.toString());
       if (generation != null) generation.close();
     }

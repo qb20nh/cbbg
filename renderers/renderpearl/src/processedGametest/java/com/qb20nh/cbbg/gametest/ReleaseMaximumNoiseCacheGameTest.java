@@ -3,10 +3,7 @@ package com.qb20nh.cbbg.gametest;
 import com.google.gson.JsonObject;
 import com.mojang.blaze3d.pipeline.TextureTarget;
 import com.mojang.blaze3d.platform.NativeImage;
-import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.renderpearl.api.GpuFormat;
-import com.mojang.renderpearl.api.commands.RenderPass;
-import com.mojang.renderpearl.api.textures.FilterMode;
 import com.mojang.renderpearl.api.textures.GpuTextureView;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -15,8 +12,7 @@ import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HexFormat;
-import java.util.Locale;
-import java.util.Optional;
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.regex.Pattern;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
@@ -24,9 +20,11 @@ import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Screenshot;
-import net.minecraft.client.renderer.RenderPipelines;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
 /** Dedicated slow test of the maximum cache and actual packaged GPU presentations. */
+@NullMarked
 public final class ReleaseMaximumNoiseCacheGameTest implements FabricClientGameTest {
   private static final int SIZE = 256;
   private static final int DEPTH = 128;
@@ -54,22 +52,22 @@ public final class ReleaseMaximumNoiseCacheGameTest implements FabricClientGameT
       ReleaseClient.command(context, "mode set " + modeMatch.group(1));
       JsonObject original = ReleaseClient.settings().deepCopy();
       try {
-        disable(context);
+        ReleaseClient.disableNoise(context);
         for (int z = -1; z < DEPTH; z++) {
           if (Files.exists(path(z))) {
             throw new AssertionError("Maximum-size fixture requires a cold cache: " + path(z));
           }
         }
-        setting(context, "size", SIZE);
-        setting(context, "depth", DEPTH);
-        setting(context, "seed", SEED);
+        ReleaseClient.noiseSetting(context, "size", SIZE);
+        ReleaseClient.noiseSetting(context, "depth", DEPTH);
+        ReleaseClient.noiseSetting(context, "seed", SEED);
         long coldLog = Files.size(log());
         enable(context, GENERATION_WAIT_TICKS);
         int[][] pixels = readCache();
         if (!logSince(coldLog).contains(GENERATING)) {
           throw new AssertionError("Cold maximum-size load did not report math generation");
         }
-        disable(context);
+        ReleaseClient.disableNoise(context);
         byte[] manifest = Files.readAllBytes(path(-1));
         FileTime[] modified = new FileTime[DEPTH + 1];
         for (int z = -1; z < DEPTH; z++) {
@@ -92,41 +90,14 @@ public final class ReleaseMaximumNoiseCacheGameTest implements FabricClientGameT
           }
         }
         assertCycle(context, pixels);
-        disable(context);
+        ReleaseClient.disableNoise(context);
       } catch (Exception failure) {
         throw new AssertionError("Packaged maximum-size noise cache lifecycle failed", failure);
       } finally {
-        disable(context);
-        setting(context, "size", original.get("stbnSize").getAsLong());
-        setting(context, "depth", original.get("stbnDepth").getAsLong());
-        setting(context, "seed", original.get("stbnSeed").getAsLong());
-        String mode = original.get("mode").getAsString();
-        ReleaseClient.command(context, "mode set " + mode.toLowerCase(Locale.ROOT));
-        context.waitFor(client -> original.equals(ReleaseClient.settings()), WAIT_TICKS);
-        if (!mode.equalsIgnoreCase("disabled")) awaitNoise(context, null, GENERATION_WAIT_TICKS);
+        if (ReleaseClient.restoreNoiseSettings(context, original))
+          awaitNoise(context, null, GENERATION_WAIT_TICKS);
       }
     }
-  }
-
-  private static void setting(ClientGameTestContext context, String name, long value) {
-    ReleaseClient.command(context, "stbn " + name + " " + value);
-    String key = "stbn" + Character.toUpperCase(name.charAt(0)) + name.substring(1);
-    context.waitFor(client -> ReleaseClient.settings().get(key).getAsLong() == value, WAIT_TICKS);
-  }
-
-  private static void disable(ClientGameTestContext context) {
-    GpuTextureView noise =
-        context.computeOnClient(client -> ProcessedRenderObservations.lastDitherNoise());
-    GpuTextureView output =
-        context.computeOnClient(client -> ProcessedRenderObservations.lastDitherOutput());
-    ReleaseClient.command(context, "mode set disabled");
-    context.waitFor(
-        client ->
-            "disabled".equalsIgnoreCase(ReleaseClient.settings().get("mode").getAsString())
-                && (noise == null || noise.texture().isClosed())
-                && (output == null || output.texture().isClosed()),
-        WAIT_TICKS);
-    ReleaseClient.assertNoDraws(context);
   }
 
   private static void enable(ClientGameTestContext context, int timeout) {
@@ -139,7 +110,10 @@ public final class ReleaseMaximumNoiseCacheGameTest implements FabricClientGameT
     awaitNoise(context, old, timeout);
   }
 
-  private static void awaitNoise(ClientGameTestContext context, GpuTextureView old, int timeout) {
+  // A new noise view must replace the previous GPU resource.
+  @SuppressWarnings("ReferenceEquality")
+  private static void awaitNoise(
+      ClientGameTestContext context, @Nullable GpuTextureView old, int timeout) {
     long before = ProcessedRenderObservations.draws();
     context.waitFor(
         client -> {
@@ -166,11 +140,11 @@ public final class ReleaseMaximumNoiseCacheGameTest implements FabricClientGameT
     byte[] pixel = new byte[4];
     for (int z = 0; z < DEPTH; z++) {
       byte[] png = Files.readAllBytes(path(z));
-      String[] entry = manifest.get(z + 1).trim().split("\\s+");
+      String[] entry = manifest.get(z + 1).trim().split("\\s+", 0);
       String hash = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(png));
       if (entry.length != 2
           || !entry[0].equals(hash)
-          || !entry[1].equals(path(z).getFileName().toString())) {
+          || !entry[1].equals(Objects.requireNonNull(path(z).getFileName()).toString())) {
         throw new AssertionError("Incorrect maximum-size PNG hash for frame " + z);
       }
       try (var input = new java.io.ByteArrayInputStream(png);
@@ -199,7 +173,7 @@ public final class ReleaseMaximumNoiseCacheGameTest implements FabricClientGameT
 
   private static void assertCycle(ClientGameTestContext context, int[][] expected) {
     var samples = new ArrayList<Sample>();
-    CompletableFuture<Void> failure = new CompletableFuture<>();
+    CompletableFuture<@Nullable Void> failure = new CompletableFuture<>();
     try {
       context.runOnClient(
           client ->
@@ -278,8 +252,8 @@ public final class ReleaseMaximumNoiseCacheGameTest implements FabricClientGameT
     for (String line : ReleaseDebugState.read(client)) {
       var match = FRAME.matcher(line);
       if (match.find()) {
-        int frame = Integer.parseInt(match.group(1));
-        if (Integer.parseInt(match.group(2)) != DEPTH || frame >= DEPTH) {
+        int frame = Integer.parseInt(Objects.requireNonNull(match.group(1)));
+        if (Integer.parseInt(Objects.requireNonNull(match.group(2))) != DEPTH || frame >= DEPTH) {
           throw new AssertionError("Unexpected maximum-size debug state: " + line);
         }
         return frame;
@@ -293,19 +267,7 @@ public final class ReleaseMaximumNoiseCacheGameTest implements FabricClientGameT
     TextureTarget target =
         new TextureTarget("CBBG maximum noise probe", SIZE, SIZE, GpuFormat.RGBA8_UNORM, null);
     try {
-      try (RenderPass pass =
-          RenderSystem.getDevice()
-              .createCommandEncoder()
-              .createRenderPass(
-                  () -> "CBBG maximum noise probe",
-                  target.getColorTextureView(),
-                  Optional.empty())) {
-        pass.setPipeline(RenderSystem.getCompiledPipeline(RenderPipelines.TRACY_BLIT));
-        RenderSystem.bindDefaultUniforms(pass);
-        pass.setUniform(
-            "InSampler", noise, RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST));
-        pass.draw(3, 1, 0, 0);
-      }
+      ReleaseClient.blitNoise(target, noise, "CBBG maximum noise probe");
       Screenshot.takeScreenshot(
           target,
           1,

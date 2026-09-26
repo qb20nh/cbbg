@@ -4,7 +4,9 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.util.Objects;
 import net.fabricmc.fabric.impl.client.gametest.FabricClientGameTestRunner;
+import org.jspecify.annotations.NullMarked;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -12,6 +14,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /** Records completion only after Fabric's per-test cleanup assertions succeed. */
 @Mixin(value = FabricClientGameTestRunner.class, remap = false)
+@NullMarked
 public abstract class ScenarioProgressMixin {
   @Inject(method = "setupInitialGameTestState", at = @At("HEAD"))
   private static void cbbg$started(CallbackInfo ci) {
@@ -32,7 +35,7 @@ public abstract class ScenarioProgressMixin {
         FabricClientGameTestRunner.currentlyRunningGameTest.getEntrypoint().getClass().getName();
     Path output = Path.of(directory, "scenarios.tsv");
     try {
-      Files.createDirectories(output.getParent());
+      Files.createDirectories(Objects.requireNonNull(output.getParent()));
       Files.writeString(
           output, state + "\t" + name + "\n", StandardOpenOption.CREATE, StandardOpenOption.APPEND);
     } catch (IOException error) {

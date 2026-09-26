@@ -10,6 +10,7 @@ import com.qb20nh.cbbg.reference.DitherReference;
 import java.nio.ByteOrder;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -17,8 +18,11 @@ import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.Screenshot;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
 /** Real world pixels versus a CPU oracle and a checked-in, version-specific scene baseline. */
+@NullMarked
 public final class ReleaseWorldPixelsGameTest implements FabricClientGameTest {
   private static final int NOISE_SIZE = 16;
   private static final int NOISE_DEPTH = 8;
@@ -39,7 +43,7 @@ public final class ReleaseWorldPixelsGameTest implements FabricClientGameTest {
                     java.util.regex.Pattern.compile("user=(ENABLED|DISABLED|DEMO)")
                         .matcher(String.join("\n", ReleaseDebugState.read(client)));
                 if (!match.find()) throw new AssertionError("Cannot read current user mode");
-                return match.group(1).toLowerCase(java.util.Locale.ROOT);
+                return Objects.requireNonNull(match.group(1)).toLowerCase(java.util.Locale.ROOT);
               });
       // Persist defaults before saving settings from a standalone, minimal startup config.
       ReleaseClient.command(context, "mode set " + mode);
@@ -120,7 +124,7 @@ public final class ReleaseWorldPixelsGameTest implements FabricClientGameTest {
   }
 
   private static void captureDisabled(ClientGameTestContext context) {
-    CompletableFuture<Void> result = new CompletableFuture<>();
+    CompletableFuture<@Nullable Void> result = new CompletableFuture<>();
     context.runOnClient(
         client -> {
           if (!"DISABLED".equals(ReleaseClient.settings().get("mode").getAsString())) {
@@ -131,7 +135,9 @@ public final class ReleaseWorldPixelsGameTest implements FabricClientGameTest {
               image -> {
                 try (image) {
                   Path directory =
-                      Path.of(System.getProperty("cbbg.test.evidence"), "world-disabled");
+                      Path.of(
+                          Objects.requireNonNull(System.getProperty("cbbg.test.evidence")),
+                          "world-disabled");
                   Files.createDirectories(directory);
                   image.writeToFile(directory.resolve("actual.png"));
                   result.complete(null);
@@ -153,143 +159,138 @@ public final class ReleaseWorldPixelsGameTest implements FabricClientGameTest {
         demo ? "DEMO" : "ENABLED", "RGBA32F", NOISE_SIZE, NOISE_DEPTH, NOISE_SEED);
     CompletableFuture<float[]> source = new CompletableFuture<>();
     CompletableFuture<int[]> actual = new CompletableFuture<>();
-    CompletableFuture<Void> result = new CompletableFuture<>();
-    context.runOnClient(
-        client -> {
-          try {
-            Path noisePath =
-                ReleaseClient.cache()
-                    .resolve(
-                        "stbn_" + NOISE_SIZE + "x" + NOISE_SIZE + "x" + NOISE_DEPTH + "_0.png");
-            NativeImage noiseImage;
-            try (var input = Files.newInputStream(noisePath)) {
-              noiseImage = NativeImage.read(input);
-            }
-            int[] noise;
-            int tileSize;
-            GpuTexture noiseTexture;
-            GpuTextureView noiseView;
-            try (noiseImage) {
-              noise = noiseImage.getPixels();
-              tileSize = noiseImage.getWidth();
-              if (tileSize != NOISE_SIZE || noiseImage.getHeight() != NOISE_SIZE) {
-                throw new AssertionError("Generated noise frame dimensions changed");
-              }
-              var device = RenderSystem.getDevice();
-              noiseTexture =
-                  device.createTexture(
-                      "CBBG world reference noise",
-                      5,
-                      GpuFormat.RGBA8_UNORM,
-                      tileSize,
-                      tileSize,
-                      1,
-                      1);
+    CompletableFuture<@Nullable Void> result =
+        context.computeOnClient(
+            client -> {
               try {
-                device.createCommandEncoder().writeToTexture(noiseTexture, noiseImage);
-                noiseView = device.createTextureView(noiseTexture);
-              } catch (Throwable failure) {
-                noiseTexture.close();
-                throw failure;
-              }
-            }
-            AtomicBoolean noiseClosed = new AtomicBoolean();
-            Runnable closeNoise =
-                () -> {
-                  if (noiseClosed.compareAndSet(false, true)) {
-                    try {
-                      noiseView.close();
-                    } finally {
-                      noiseTexture.close();
-                    }
+                Path noisePath =
+                    ReleaseClient.cache()
+                        .resolve(
+                            "stbn_" + NOISE_SIZE + "x" + NOISE_SIZE + "x" + NOISE_DEPTH + "_0.png");
+                NativeImage noiseImage;
+                try (var input = Files.newInputStream(noisePath)) {
+                  noiseImage = NativeImage.read(input);
+                }
+                int[] noise;
+                int tileSize;
+                GpuTexture noiseTexture;
+                GpuTextureView noiseView;
+                try (noiseImage) {
+                  noise = noiseImage.getPixels();
+                  tileSize = noiseImage.getWidth();
+                  if (tileSize != NOISE_SIZE || noiseImage.getHeight() != NOISE_SIZE) {
+                    throw new AssertionError("Generated noise frame dimensions changed");
                   }
-                };
-            try {
-              var main = client.gameRenderer.mainRenderTarget();
-              int width = main.width;
-              int height = main.height;
-              Path directory =
-                  Path.of(
-                      System.getProperty("cbbg.test.evidence"),
-                      "world-pixels",
-                      demo ? "demo" : "enabled");
-              Files.createDirectories(directory);
-              Files.copy(
-                  noisePath,
-                  directory.resolve("noise.png"),
-                  java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-              var buffer =
-                  RenderSystem.getDevice()
-                      .createBuffer(() -> "CBBG world float readback", 9, width * height * 16);
-              try {
-                RenderSystem.getDevice()
-                    .createCommandEncoder()
-                    .copyTextureToBuffer(
-                        main.getColorTexture(),
-                        buffer,
-                        0,
-                        () -> {
-                          try (var mapped = buffer.map(true, false)) {
-                            var bytes = mapped.data().order(ByteOrder.nativeOrder());
-                            float[] values = new float[width * height * 4];
-                            bytes.asFloatBuffer().get(values);
-                            byte[] retained = new byte[values.length * 4];
-                            bytes.get(retained);
-                            Files.write(directory.resolve("source-rgba32f.bin"), retained);
-                            source.complete(values);
-                          } catch (Throwable failure) {
-                            source.completeExceptionally(failure);
-                          } finally {
-                            buffer.close();
-                          }
-                        },
-                        0);
-              } catch (Throwable failure) {
-                buffer.close();
-                throw failure;
-              }
-              try (var scope = ProcessedDitherInputs.overrideNoise(noiseView)) {
-                Screenshot.takeScreenshot(
-                    main,
-                    image -> {
-                      try (image) {
-                        if (image.getWidth() != width || image.getHeight() != height) {
-                          throw new AssertionError("World screenshot dimensions changed");
-                        }
-                        image.writeToFile(directory.resolve("actual.png"));
-                        int[] pixels = image.getPixels();
-                        closeNoise.run();
-                        actual.complete(pixels);
-                      } catch (Throwable failure) {
+                  var device = RenderSystem.getDevice();
+                  noiseTexture =
+                      device.createTexture(
+                          "CBBG world reference noise",
+                          5,
+                          GpuFormat.RGBA8_UNORM,
+                          tileSize,
+                          tileSize,
+                          1,
+                          1);
+                  try {
+                    device.createCommandEncoder().writeToTexture(noiseTexture, noiseImage);
+                    noiseView = device.createTextureView(noiseTexture);
+                  } catch (Throwable failure) {
+                    noiseTexture.close();
+                    throw failure;
+                  }
+                }
+                AtomicBoolean noiseClosed = new AtomicBoolean();
+                Runnable closeNoise =
+                    () -> {
+                      if (noiseClosed.compareAndSet(false, true)) {
                         try {
-                          closeNoise.run();
-                        } catch (Throwable closeFailure) {
-                          failure.addSuppressed(closeFailure);
+                          noiseView.close();
+                        } finally {
+                          noiseTexture.close();
                         }
-                        actual.completeExceptionally(failure);
                       }
-                    });
-              }
-              source
-                  .thenCombine(
+                    };
+                try {
+                  var main = client.gameRenderer.mainRenderTarget();
+                  int width = main.width;
+                  int height = main.height;
+                  Path directory =
+                      Path.of(
+                          Objects.requireNonNull(System.getProperty("cbbg.test.evidence")),
+                          "world-pixels",
+                          demo ? "demo" : "enabled");
+                  Files.createDirectories(directory);
+                  Files.copy(
+                      noisePath,
+                      directory.resolve("noise.png"),
+                      java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                  var buffer =
+                      RenderSystem.getDevice()
+                          .createBuffer(
+                              () -> "CBBG world float readback", 9, (long) width * height * 16);
+                  try {
+                    RenderSystem.getDevice()
+                        .createCommandEncoder()
+                        .copyTextureToBuffer(
+                            Objects.requireNonNull(main.getColorTexture()),
+                            buffer,
+                            0,
+                            () -> {
+                              try (var mapped = buffer.map(true, false)) {
+                                var bytes = mapped.data().order(ByteOrder.nativeOrder());
+                                float[] values = new float[width * height * 4];
+                                bytes.asFloatBuffer().get(values);
+                                byte[] retained = new byte[values.length * 4];
+                                bytes.get(retained);
+                                Files.write(directory.resolve("source-rgba32f.bin"), retained);
+                                source.complete(values);
+                              } catch (Throwable failure) {
+                                source.completeExceptionally(failure);
+                              } finally {
+                                buffer.close();
+                              }
+                            },
+                            0);
+                  } catch (Throwable failure) {
+                    buffer.close();
+                    throw failure;
+                  }
+                  try (var _ = ProcessedDitherInputs.overrideNoise(noiseView)) {
+                    Screenshot.takeScreenshot(
+                        main,
+                        image -> {
+                          try (image) {
+                            if (image.getWidth() != width || image.getHeight() != height) {
+                              throw new AssertionError("World screenshot dimensions changed");
+                            }
+                            image.writeToFile(directory.resolve("actual.png"));
+                            int[] pixels = image.getPixels();
+                            closeNoise.run();
+                            actual.complete(pixels);
+                          } catch (Throwable failure) {
+                            try {
+                              closeNoise.run();
+                            } catch (Throwable closeFailure) {
+                              failure.addSuppressed(closeFailure);
+                            }
+                            actual.completeExceptionally(failure);
+                          }
+                        });
+                  }
+                  return source.<int[], @Nullable Void>thenCombine(
                       actual,
                       (floats, pixels) -> {
                         compare(directory, width, height, tileSize, noise, floats, pixels, demo);
                         return null;
-                      })
-                  .whenComplete(
-                      (unused, failure) -> {
-                        if (failure == null) result.complete(null);
-                        else result.completeExceptionally(failure);
                       });
-            } catch (Throwable failure) {
-              closeNoise.run();
-              throw failure;
-            }
-          } catch (Throwable failure) {
-            result.completeExceptionally(failure);
-          }
-        });
+                } catch (Throwable failure) {
+                  closeNoise.run();
+                  throw failure;
+                }
+              } catch (Throwable failure) {
+                return CompletableFuture.failedFuture(failure);
+              }
+            });
     context.waitFor(client -> result.isDone(), 200);
     result.join();
   }

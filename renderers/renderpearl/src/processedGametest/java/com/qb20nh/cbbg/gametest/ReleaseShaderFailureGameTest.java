@@ -13,6 +13,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
@@ -20,8 +21,11 @@ import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.minecraft.client.Screenshot;
 import net.minecraft.resources.Identifier;
 import org.joml.Vector4f;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
 /** Exercises a real packaged shader failure through Minecraft's screenshot path. */
+@NullMarked
 public final class ReleaseShaderFailureGameTest implements FabricClientGameTest {
   private static final int WAIT_TICKS = 600;
   private static final int RED = 0xffff0000;
@@ -43,12 +47,12 @@ public final class ReleaseShaderFailureGameTest implements FabricClientGameTest 
         ReleaseClient.awaitDrawAfter(context, beforeEnable);
         String settingsBeforeFailure = settingsJson();
 
-        CompletableFuture<Void> healthyCapture = new CompletableFuture<>();
+        CompletableFuture<@Nullable Void> healthyCapture = new CompletableFuture<>();
         Healthy healthy =
             context.computeOnClient(
                 client -> {
                   var main = client.gameRenderer.mainRenderTarget();
-                  GpuTexture input = main.getColorTexture();
+                  GpuTexture input = Objects.requireNonNull(main.getColorTexture());
                   RenderSystem.getDevice()
                       .createCommandEncoder()
                       .clearColorTexture(input, new Vector4f(1, 0, 0, 1));
@@ -77,7 +81,7 @@ public final class ReleaseShaderFailureGameTest implements FabricClientGameTest 
                 });
         await(context, healthyCapture);
 
-        CompletableFuture<Void> fallbackCapture = new CompletableFuture<>();
+        CompletableFuture<@Nullable Void> fallbackCapture = new CompletableFuture<>();
         context.runOnClient(
             client -> failShader(client, healthy, settingsBeforeFailure, fallbackCapture));
         await(context, fallbackCapture);
@@ -116,26 +120,30 @@ public final class ReleaseShaderFailureGameTest implements FabricClientGameTest 
     }
   }
 
+  // Exact input texture identity verifies preservation through shader failure.
+  @SuppressWarnings("ReferenceEquality")
   private static void failShader(
       net.minecraft.client.Minecraft client,
       Healthy healthy,
       String settingsBeforeFailure,
-      CompletableFuture<Void> fallbackCapture) {
+      CompletableFuture<@Nullable Void> fallbackCapture) {
     var main = client.gameRenderer.mainRenderTarget();
     if (main.getColorTexture() != healthy.input) {
       throw new AssertionError("Main screenshot input changed before shader failure");
     }
     PipelineCache fallback =
-        (PipelineCache) field(RenderSystem.class, null, "fallbackPipelineCache");
+        (PipelineCache)
+            Objects.requireNonNull(field(RenderSystem.class, null, "fallbackPipelineCache"));
     PipelineCache current = (PipelineCache) field(RenderSystem.class, null, "currentPipelineCache");
     ShaderSource borrowed =
         (ShaderSource)
-            field(PipelineCache.class, current == null ? fallback : current, "shaderSource");
+            Objects.requireNonNull(
+                field(PipelineCache.class, current == null ? fallback : current, "shaderSource"));
     AtomicInteger attempts = new AtomicInteger();
     ShaderSource invalid =
         new ShaderSource() {
           @Override
-          public String getShader(Identifier id, ShaderType type) {
+          public @Nullable String getShader(Identifier id, ShaderType type) {
             String shader = borrowed.getShader(id, type);
             if (id.equals(Identifier.fromNamespaceAndPath("cbbg", "core/cbbg_dither"))) {
               if (shader == null) throw new AssertionError("Original dither shader is missing");
@@ -146,7 +154,7 @@ public final class ReleaseShaderFailureGameTest implements FabricClientGameTest 
           }
 
           @Override
-          public CachedIncludeSource getInclude(Identifier id) {
+          public @Nullable CachedIncludeSource getInclude(Identifier id) {
             return borrowed.getInclude(id);
           }
 
@@ -179,7 +187,10 @@ public final class ReleaseShaderFailureGameTest implements FabricClientGameTest 
                   }
                 }
               }
-              Path evidence = Path.of(System.getProperty("cbbg.test.evidence"), "shader-failure");
+              Path evidence =
+                  Path.of(
+                      Objects.requireNonNull(System.getProperty("cbbg.test.evidence")),
+                      "shader-failure");
               Files.createDirectories(evidence);
               image.writeToFile(evidence.resolve("fallback.png"));
               fallbackCapture.complete(null);
@@ -200,7 +211,9 @@ public final class ReleaseShaderFailureGameTest implements FabricClientGameTest 
         throw new AssertionError("Shader failure lost state, input, or owned resources: " + lines);
       }
       try {
-        Path evidence = Path.of(System.getProperty("cbbg.test.evidence"), "shader-failure");
+        Path evidence =
+            Path.of(
+                Objects.requireNonNull(System.getProperty("cbbg.test.evidence")), "shader-failure");
         Files.createDirectories(evidence);
         Files.writeString(
             evidence.resolve("state.txt"),
@@ -221,7 +234,8 @@ public final class ReleaseShaderFailureGameTest implements FabricClientGameTest 
     }
   }
 
-  private static void await(ClientGameTestContext context, CompletableFuture<Void> capture) {
+  private static void await(
+      ClientGameTestContext context, CompletableFuture<@Nullable Void> capture) {
     context.waitFor(client -> capture.isDone(), 200);
     capture.join();
   }
@@ -234,13 +248,13 @@ public final class ReleaseShaderFailureGameTest implements FabricClientGameTest 
     }
   }
 
-  private static Object field(Class<?> owner, Object instance, String name) {
+  private static @Nullable Object field(Class<?> owner, @Nullable Object instance, String name) {
     try {
       Field field = owner.getDeclaredField(name);
       field.setAccessible(true);
       return field.get(instance);
     } catch (ReflectiveOperationException failure) {
-      throw new AssertionError("Cannot inspect " + name, failure);
+      throw new LinkageError("Cannot inspect " + name, failure);
     }
   }
 
@@ -250,7 +264,7 @@ public final class ReleaseShaderFailureGameTest implements FabricClientGameTest 
       field.setAccessible(true);
       field.set(null, cache);
     } catch (ReflectiveOperationException failure) {
-      throw new AssertionError("Cannot replace the test fallback cache", failure);
+      throw new LinkageError("Cannot replace the test fallback cache", failure);
     }
   }
 

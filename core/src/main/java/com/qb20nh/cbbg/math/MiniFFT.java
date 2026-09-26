@@ -1,6 +1,9 @@
 package com.qb20nh.cbbg.math;
 
+import org.jspecify.annotations.NullMarked;
+
 /** Minimal Cooley-Tukey FFT implementation for power-of-two sizes. */
+@NullMarked
 public class MiniFFT {
 
   private MiniFFT() {}

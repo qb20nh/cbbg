@@ -11,14 +11,17 @@ import java.lang.management.ManagementFactory;
 import java.lang.management.MemoryType;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Objects;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import org.joml.Vector4f;
+import org.jspecify.annotations.NullMarked;
 import org.lwjgl.opengl.GL11C;
 import org.lwjgl.opengl.GL15C;
 import org.lwjgl.opengl.GL33C;
 
 /** Batched presentation microbenchmark, not a world FPS benchmark. */
+@NullMarked
 public final class DsaBenchmarkGameTest implements FabricClientGameTest {
   private static final int WARMUP = 128;
   private static final int SAMPLES = 30;
@@ -29,7 +32,7 @@ public final class DsaBenchmarkGameTest implements FabricClientGameTest {
     context.waitFor(client -> DitherController.isReady() && client.gui.overlay() == null, 600);
     context.runOnClient(
         client -> {
-          String mode = System.getProperty("cbbg.test.dsa", "auto");
+          String mode = Objects.requireNonNull(System.getProperty("cbbg.test.dsa", "auto"));
           var info = RenderSystem.getDevice().getDeviceInfo();
           boolean selected = info.underlyingExtensions().contains("GL_ARB_direct_state_access");
           if (!info.backendName().equalsIgnoreCase("opengl") || selected != mode.equals("auto")) {
@@ -63,7 +66,8 @@ public final class DsaBenchmarkGameTest implements FabricClientGameTest {
                   .sum());
           try {
             Files.writeString(
-                Path.of(System.getProperty("cbbg.test.evidence")).resolve("dsa-benchmark.json"),
+                Path.of(Objects.requireNonNull(System.getProperty("cbbg.test.evidence")))
+                    .resolve("dsa-benchmark.json"),
                 report.toString() + "\n");
           } catch (java.io.IOException failure) {
             throw new AssertionError("Could not write benchmark evidence", failure);
@@ -77,11 +81,23 @@ public final class DsaBenchmarkGameTest implements FabricClientGameTest {
     int startQuery = GL15C.glGenQueries();
     int endQuery = GL15C.glGenQueries();
     var texture = source.getColorTexture();
-    try {
+    class BenchmarkResources implements AutoCloseable {
+      @Override
+      public void close() {
+        GL11C.glFinish();
+        GL15C.glDeleteQueries(startQuery);
+        GL15C.glDeleteQueries(endQuery);
+        source.destroyBuffers();
+        if (!Objects.requireNonNull(texture).isClosed())
+          throw new AssertionError("Benchmark source leaked");
+      }
+    }
+    try (var _ = new BenchmarkResources()) {
       RenderSystem.getDevice()
           .createCommandEncoder()
           .clearColorTexture(
-              texture, new Vector4f(127.25f / 255, 127.25f / 255, 127.25f / 255, 0.375f));
+              Objects.requireNonNull(texture),
+              new Vector4f(127.25f / 255, 127.25f / 255, 127.25f / 255, 0.375f));
       for (int i = 0; i < WARMUP; i++) present(source);
       JsonArray samples = new JsonArray();
       for (int sample = 0; sample < SAMPLES; sample++) {
@@ -105,18 +121,14 @@ public final class DsaBenchmarkGameTest implements FabricClientGameTest {
       workload.addProperty("sourceAndOutputTextureBytes", (long) width * height * 20);
       workload.add("measurements", samples);
       return workload;
-    } finally {
-      GL11C.glFinish();
-      GL15C.glDeleteQueries(startQuery);
-      GL15C.glDeleteQueries(endQuery);
-      source.destroyBuffers();
-      if (!texture.isClosed()) throw new AssertionError("Benchmark source leaked");
     }
   }
 
+  // Returning the original input view means the effect fell back.
+  @SuppressWarnings("ReferenceEquality")
   private static void present(TextureTarget source) {
     var input = source.getColorTextureView();
-    if (DitherController.present(input) == input)
+    if (DitherController.present(Objects.requireNonNull(input)) == input)
       throw new AssertionError("Benchmark effect fell back");
   }
 }

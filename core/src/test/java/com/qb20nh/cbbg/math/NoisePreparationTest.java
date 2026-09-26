@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
@@ -12,14 +13,17 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
 
+@NullMarked
 class NoisePreparationTest {
   @Test
   void startupAndRendererReuseTheSameJob() throws Exception {
     AtomicInteger checks = new AtomicInteger();
     try (NoisePreparation preparation = new NoisePreparation()) {
-      CompletableFuture<NoisePreparation.Fields> first =
+      CompletableFuture<NoisePreparation.@Nullable Fields> first =
           preparation.prepare(
               8,
               4,
@@ -32,26 +36,30 @@ class NoisePreparationTest {
               });
       ExecutorService callers = Executors.newFixedThreadPool(4);
       try {
-        List<Future<CompletableFuture<NoisePreparation.Fields>>> requests = new ArrayList<>();
+        List<Future<Boolean>> requests = new ArrayList<>();
         for (int i = 0; i < 12; i++) {
           requests.add(
               callers.submit(
-                  () ->
-                      preparation.prepare(
-                          8,
-                          4,
-                          2,
-                          42,
-                          false,
-                          () -> {
-                            fail("Duplicate cache check");
-                            return false;
-                          })));
+                  () -> {
+                    assertSame(
+                        first,
+                        preparation.prepare(
+                            8,
+                            4,
+                            2,
+                            42,
+                            false,
+                            () -> {
+                              fail("Duplicate cache check");
+                              return false;
+                            }));
+                    return true;
+                  }));
         }
-        for (Future<CompletableFuture<NoisePreparation.Fields>> request : requests) {
-          assertSame(first, request.get(5, TimeUnit.SECONDS));
+        for (Future<Boolean> request : requests) {
+          assertTrue(request.get(5, TimeUnit.SECONDS));
         }
-        NoisePreparation.Fields fields = first.get(5, TimeUnit.SECONDS);
+        NoisePreparation.Fields fields = Objects.requireNonNull(first.get(5, TimeUnit.SECONDS));
         assertArrayEquals(BlueNoise.generateScalarField(8, 4, 2, 42 * 31), fields.u());
         assertArrayEquals(BlueNoise.generateScalarField(8, 4, 2, 42 * 31 + 7), fields.v());
         assertSame(first, preparation.prepare(8, 4, 2, 42, false, () -> true));
@@ -65,10 +73,10 @@ class NoisePreparationTest {
   @Test
   void warmCacheSkipsMathAndForceRegenerates() throws Exception {
     try (NoisePreparation preparation = new NoisePreparation()) {
-      CompletableFuture<NoisePreparation.Fields> cached =
+      CompletableFuture<NoisePreparation.@Nullable Fields> cached =
           preparation.prepare(8, 4, 2, 0, false, () -> true);
       assertNull(cached.get(5, TimeUnit.SECONDS));
-      CompletableFuture<NoisePreparation.Fields> forced =
+      CompletableFuture<NoisePreparation.@Nullable Fields> forced =
           preparation.prepare(
               8,
               4,
@@ -89,7 +97,7 @@ class NoisePreparationTest {
     CountDownLatch started = new CountDownLatch(1);
     CountDownLatch interrupted = new CountDownLatch(1);
     try (NoisePreparation preparation = new NoisePreparation()) {
-      CompletableFuture<NoisePreparation.Fields> old =
+      CompletableFuture<NoisePreparation.@Nullable Fields> old =
           preparation.prepare(
               8,
               4,
@@ -107,7 +115,7 @@ class NoisePreparationTest {
                 return false;
               });
       assertTrue(started.await(5, TimeUnit.SECONDS));
-      CompletableFuture<NoisePreparation.Fields> next =
+      CompletableFuture<NoisePreparation.@Nullable Fields> next =
           preparation.prepare(
               4,
               4,
@@ -123,14 +131,15 @@ class NoisePreparationTest {
       assertTrue(preparation.matches(4, 4, 2, 7));
       assertFalse(preparation.matches(8, 4, 2, 0));
       assertArrayEquals(
-          BlueNoise.generateScalarField(4, 4, 2, 7 * 31), next.get(5, TimeUnit.SECONDS).u());
+          BlueNoise.generateScalarField(4, 4, 2, 7 * 31),
+          Objects.requireNonNull(next.get(5, TimeUnit.SECONDS)).u());
     }
   }
 
   @Test
   void failuresRemainAvailableUntilExplicitRetry() throws Exception {
     try (NoisePreparation preparation = new NoisePreparation()) {
-      CompletableFuture<NoisePreparation.Fields> failed =
+      CompletableFuture<NoisePreparation.@Nullable Fields> failed =
           preparation.prepare(
               8,
               4,
@@ -142,7 +151,7 @@ class NoisePreparationTest {
               });
       ExecutionException failure =
           assertThrows(ExecutionException.class, () -> failed.get(5, TimeUnit.SECONDS));
-      assertEquals("cache unavailable", failure.getCause().getMessage());
+      assertEquals("cache unavailable", Objects.requireNonNull(failure.getCause()).getMessage());
       assertSame(failed, preparation.prepare(8, 4, 2, 0, false, () -> false));
       assertNotNull(preparation.prepare(8, 4, 2, 0, true, () -> false).get(5, TimeUnit.SECONDS));
     }

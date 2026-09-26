@@ -10,11 +10,14 @@ import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.builder.RequiredArgumentBuilder;
 import com.qb20nh.cbbg.config.CbbgConfig;
 import com.qb20nh.cbbg.platform.Text;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import net.minecraft.network.chat.Component;
+import org.jspecify.annotations.NullMarked;
 
+@NullMarked
 public final class CbbgClientCommands<S> {
 
   private static final String ARG_VALUE = "value";
@@ -129,7 +132,7 @@ public final class CbbgClientCommands<S> {
                                   }
                                 }
                                 if (mode == null) {
-                                  mode = CbbgConfig.Mode.valueOf(modeName.toUpperCase());
+                                  mode = CbbgConfig.Mode.valueOf(modeName.toUpperCase(Locale.ROOT));
                                 }
 
                                 CbbgConfig.setMode(mode);
@@ -180,7 +183,9 @@ public final class CbbgClientCommands<S> {
                                   }
                                 }
                                 if (fmt == null) {
-                                  fmt = CbbgConfig.PixelFormat.valueOf(fmtName.toUpperCase());
+                                  fmt =
+                                      CbbgConfig.PixelFormat.valueOf(
+                                          fmtName.toUpperCase(Locale.ROOT));
                                 }
                                 if (fmt == CbbgConfig.PixelFormat.RGBA8) {
                                   sendError(

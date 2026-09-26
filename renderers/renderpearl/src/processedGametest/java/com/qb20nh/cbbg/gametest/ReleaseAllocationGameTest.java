@@ -15,10 +15,13 @@ import java.lang.reflect.Proxy;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
+import org.jspecify.annotations.NullMarked;
 
 /** Exercises allocation through Minecraft's targets with the optimized mod installed. */
+@NullMarked
 public final class ReleaseAllocationGameTest implements FabricClientGameTest {
   @Override
   public void runTest(ClientGameTestContext context) {
@@ -64,19 +67,21 @@ public final class ReleaseAllocationGameTest implements FabricClientGameTest {
     try (AllocationDevice device = new AllocationDevice(rejected, false)) {
       try {
         if (resize) {
-          target.resize(3, 3);
+          Objects.requireNonNull(target).resize(3, 3);
         } else {
           target = new MainTarget(3, 3);
         }
         if (!device.attempts.equals(order.subList(0, rejected + 1))
-            || target.getColorTexture().getFormat() != order.get(rejected)
+            || Objects.requireNonNull(target.getColorTexture()).getFormat() != order.get(rejected)
             || target.getColorTexture().isClosed()
             || device.textures.size() != 2
             || device.views.size() != 2) {
           throw new AssertionError(
               "Wrong allocation fallback or redundant allocation: " + device.attempts);
         }
-        if (resize && (!previousColor.isClosed() || !previousDepth.isClosed())) {
+        if (resize
+            && (!Objects.requireNonNull(previousColor).isClosed()
+                || !Objects.requireNonNull(previousDepth).isClosed())) {
           throw new AssertionError("Resize retained previous attachments");
         }
       } finally {
@@ -86,6 +91,8 @@ public final class ReleaseAllocationGameTest implements FabricClientGameTest {
     }
   }
 
+  // Exact exception and texture identities verify allocation failure and cleanup.
+  @SuppressWarnings("ReferenceEquality")
   private static void checkTerminalFailure(List<GpuFormat> order, boolean resize) {
     MainTarget target = resize ? new MainTarget(2, 2) : null;
     GpuTexture previousColor = target == null ? null : target.getColorTexture();
@@ -94,7 +101,7 @@ public final class ReleaseAllocationGameTest implements FabricClientGameTest {
       try {
         RuntimeException terminal = null;
         try {
-          if (resize) target.resize(3, 3);
+          if (resize) Objects.requireNonNull(target).resize(3, 3);
           else target = new MainTarget(3, 3);
         } catch (RuntimeException failure) {
           terminal = failure;
@@ -130,7 +137,9 @@ public final class ReleaseAllocationGameTest implements FabricClientGameTest {
           throw new AssertionError(
               "Constructor retry failed to close its previous depth attachment");
         }
-        if (resize && (!previousColor.isClosed() || !previousDepth.isClosed())) {
+        if (resize
+            && (!Objects.requireNonNull(previousColor).isClosed()
+                || !Objects.requireNonNull(previousDepth).isClosed())) {
           throw new AssertionError("Failed resize retained previous attachments");
         }
       } finally {
@@ -143,6 +152,8 @@ public final class ReleaseAllocationGameTest implements FabricClientGameTest {
     }
   }
 
+  // Exact texture identity verifies successful replacement after depth failure.
+  @SuppressWarnings("ReferenceEquality")
   private static void checkDimensionCleanup(GpuFormat expected) {
     MainTarget target = null;
     try (AllocationDevice device = new AllocationDevice(0, true)) {
@@ -171,8 +182,9 @@ public final class ReleaseAllocationGameTest implements FabricClientGameTest {
         GpuTexture previous = target.getColorTexture();
         target.resize(4, 4);
         if (!device.attempts.equals(List.of(GpuFormat.RGBA8_UNORM, GpuFormat.RGBA8_UNORM))
-            || !previous.isClosed()
-            || target.getColorTexture().getFormat() != GpuFormat.RGBA8_UNORM) {
+            || !Objects.requireNonNull(previous).isClosed()
+            || Objects.requireNonNull(target.getColorTexture()).getFormat()
+                != GpuFormat.RGBA8_UNORM) {
           throw new AssertionError("Unrelated target named Main received float attachments");
         }
       } finally {
@@ -203,7 +215,7 @@ public final class ReleaseAllocationGameTest implements FabricClientGameTest {
                     new Class<?>[] {GpuDevice.class},
                     (ignored, method, args) -> {
                       if (method.getName().equals("createTexture")) {
-                        GpuFormat format = (GpuFormat) args[2];
+                        GpuFormat format = (GpuFormat) Objects.requireNonNull(args)[2];
                         if (format != GpuFormat.D32_FLOAT) {
                           attempts.add(format);
                           if (attempts.size() <= rejected) {
@@ -228,7 +240,7 @@ public final class ReleaseAllocationGameTest implements FabricClientGameTest {
                     });
         field.set(null, proxy);
       } catch (ReflectiveOperationException failure) {
-        throw new AssertionError("Cannot replace Minecraft GPU device for fixture", failure);
+        throw new LinkageError("Cannot replace Minecraft GPU device for fixture", failure);
       }
     }
 
@@ -246,15 +258,22 @@ public final class ReleaseAllocationGameTest implements FabricClientGameTest {
 
     @Override
     public void close() {
+      Throwable closeFailure = null;
       try {
         closeResources();
-      } finally {
-        try {
-          field.set(null, actual);
-        } catch (IllegalAccessException failure) {
-          throw new AssertionError("Cannot restore Minecraft GPU device", failure);
-        }
+      } catch (RuntimeException | Error failure) {
+        closeFailure = failure;
       }
+      try {
+        field.set(null, actual);
+      } catch (IllegalAccessException failure) {
+        LinkageError restoreFailure =
+            new LinkageError("Cannot restore Minecraft GPU device", failure);
+        if (closeFailure != null) restoreFailure.addSuppressed(closeFailure);
+        throw restoreFailure;
+      }
+      if (closeFailure instanceof RuntimeException failure) throw failure;
+      if (closeFailure instanceof Error failure) throw failure;
     }
   }
 }

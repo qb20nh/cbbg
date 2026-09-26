@@ -1,6 +1,7 @@
 package com.qb20nh.cbbg.gametest;
 
 import java.util.List;
+import java.util.Objects;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.minecraft.client.gui.components.AbstractSliderButton;
 import net.minecraft.client.gui.components.AbstractWidget;
@@ -11,8 +12,11 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.input.MouseButtonInfo;
 import net.minecraft.network.chat.Component;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
 /** Finds the packaged settings UI by its public, localized labels. */
+@NullMarked
 record ReleaseSettingsUi(
     CycleButton<?> mode,
     CycleButton<?> format,
@@ -24,7 +28,7 @@ record ReleaseSettingsUi(
     CycleButton<?> chat,
     CycleButton<?> toast,
     Button done) {
-  static Screen mods(ClientGameTestContext context, Screen parent) {
+  static Screen mods(ClientGameTestContext context, @Nullable Screen parent) {
     return Installed.mods(context, parent);
   }
 
@@ -41,7 +45,7 @@ record ReleaseSettingsUi(
   }
 
   private static final class Installed {
-    static Screen mods(ClientGameTestContext context, Screen parent) {
+    static Screen mods(ClientGameTestContext context, @Nullable Screen parent) {
       return context.computeOnClient(
           client -> new com.terraformersmc.modmenu.gui.ModsScreen(parent));
     }
@@ -62,7 +66,7 @@ record ReleaseSettingsUi(
     }
   }
 
-  static boolean isSettings(Screen screen) {
+  static boolean isSettings(@Nullable Screen screen) {
     return screen != null
         && screen
             .getTitle()
@@ -70,8 +74,9 @@ record ReleaseSettingsUi(
             .equals(Component.translatable("cbbg.config.title").getString());
   }
 
-  static ReleaseSettingsUi from(Screen screen) {
-    if (!isSettings(screen)) throw new AssertionError("Expected packaged CBBG settings screen");
+  static ReleaseSettingsUi from(@Nullable Screen screen) {
+    if (screen == null || !isSettings(screen))
+      throw new AssertionError("Expected packaged CBBG settings screen");
     return new ReleaseSettingsUi(
         find(screen, CycleButton.class, "cbbg.config.mode"),
         find(screen, CycleButton.class, "cbbg.config.format"),
@@ -90,7 +95,7 @@ record ReleaseSettingsUi(
     var matches =
         screen.children().stream()
             .filter(type::isInstance)
-            .map(type::cast)
+            .map(child -> Objects.requireNonNull(type.cast(child)))
             .filter(widget -> widget.getMessage().getString().contains(label))
             .toList();
     if (matches.size() != 1) throw new AssertionError("Expected one public widget for " + key);

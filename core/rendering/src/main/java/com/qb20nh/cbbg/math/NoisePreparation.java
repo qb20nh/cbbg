@@ -5,8 +5,11 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.function.BooleanSupplier;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
 /** CPU preparation shared by loader startup and renderer initialization. */
+@NullMarked
 public final class NoisePreparation implements AutoCloseable {
   public static final class Fields {
     private final double[] u;
@@ -37,12 +40,12 @@ public final class NoisePreparation implements AutoCloseable {
   private int height;
   private int depth;
   private long seed;
-  private CompletableFuture<Fields> result;
-  private Future<?> work;
+  private @Nullable CompletableFuture<@Nullable Fields> result;
+  private @Nullable Future<?> work;
 
-  public synchronized CompletableFuture<Fields> prepare(
+  public synchronized CompletableFuture<@Nullable Fields> prepare(
       int w, int h, int d, long value, boolean force, BooleanSupplier cacheValid) {
-    if (!force && matches(w, h, d, value) && !result.isCancelled()) {
+    if (!force && result != null && matches(w, h, d, value) && !result.isCancelled()) {
       return result;
     }
     boolean changedSeed = result != null && seed != value;
@@ -52,7 +55,7 @@ public final class NoisePreparation implements AutoCloseable {
     height = h;
     depth = d;
     seed = value;
-    CompletableFuture<Fields> next = new CompletableFuture<>();
+    CompletableFuture<@Nullable Fields> next = new CompletableFuture<>();
     result = next;
     work =
         executor.submit(
@@ -71,7 +74,7 @@ public final class NoisePreparation implements AutoCloseable {
                 next.completeExceptionally(failure);
               }
             });
-    return result;
+    return next;
   }
 
   public synchronized boolean matches(int w, int h, int d, long value) {

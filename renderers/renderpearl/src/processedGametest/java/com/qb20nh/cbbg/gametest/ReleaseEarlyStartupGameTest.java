@@ -7,8 +7,10 @@ import java.nio.file.Path;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.loader.api.FabricLoader;
+import org.jspecify.annotations.NullMarked;
 
 /** Retains startup timing and validates the packaged renderer's fixed startup cache. */
+@NullMarked
 public final class ReleaseEarlyStartupGameTest implements FabricClientGameTest {
   @Override
   public void runTest(ClientGameTestContext context) {

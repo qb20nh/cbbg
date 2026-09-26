@@ -6,6 +6,7 @@ import com.qb20nh.cbbg.compat.iris.IrisCompat;
 import com.qb20nh.cbbg.config.CbbgConfig;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
@@ -13,17 +14,22 @@ import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Screenshot;
 import net.minecraft.resources.Identifier;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
 /** Exercise ImmediatelyFast's actual atlas ownership, not just mod presence. */
+@NullMarked
 public final class ImmediatelyFastGameTest implements FabricClientGameTest {
   private static final String ATLAS =
       "net.raphimc.immediatelyfast.feature.sign_text_buffering.SignAtlasRenderTarget";
   private static final int TEST_ATLAS_ID = Integer.MAX_VALUE;
 
   @Override
+  // GPU ownership and recreation require checking the exact resource instances.
+  @SuppressWarnings("ReferenceEquality")
   public void runTest(ClientGameTestContext context) {
     boolean expected =
-        List.of(System.getProperty("cbbg.test.compat", "none").split("\\+"))
+        List.of(Objects.requireNonNull(System.getProperty("cbbg.test.compat", "none")).split("\\+"))
             .contains("immediatelyfast");
     if (FabricLoader.getInstance().isModLoaded("immediatelyfast") != expected) {
       throw new AssertionError("ImmediatelyFast presence differs from the requested fixture");
@@ -51,8 +57,8 @@ public final class ImmediatelyFastGameTest implements FabricClientGameTest {
               client -> {
                 if (atlas.getColorTexture() != color
                     || atlas.getDepthTexture() != depth
-                    || color.isClosed()
-                    || depth.isClosed()) {
+                    || Objects.requireNonNull(color).isClosed()
+                    || Objects.requireNonNull(depth).isClosed()) {
                   throw new AssertionError("CBBG replaced or closed ImmediatelyFast's atlas");
                 }
                 checkAtlas(client, atlas);
@@ -67,7 +73,8 @@ public final class ImmediatelyFastGameTest implements FabricClientGameTest {
           client -> {
             close(atlas);
             owned.remove(atlas);
-            if (!color.isClosed() || !depth.isClosed()) {
+            if (!Objects.requireNonNull(color).isClosed()
+                || !Objects.requireNonNull(depth).isClosed()) {
               throw new AssertionError("ImmediatelyFast atlas did not release its attachments");
             }
           });
@@ -90,6 +97,8 @@ public final class ImmediatelyFastGameTest implements FabricClientGameTest {
     }
   }
 
+  // GPU ownership and recreation require checking the exact resource instances.
+  @SuppressWarnings("ReferenceEquality")
   private static void checkShaderTransitions(ClientGameTestContext context, RenderTarget atlas) {
     IrisFixture.installPack();
     var color = context.computeOnClient(client -> atlas.getColorTexture());
@@ -100,7 +109,7 @@ public final class ImmediatelyFastGameTest implements FabricClientGameTest {
       for (boolean active : new boolean[] {true, false}) {
         context.runOnClient(
             client -> {
-              Object config = IrisFixture.iris("getIrisConfig");
+              Object config = Objects.requireNonNull(IrisFixture.iris("getIrisConfig"));
               IrisFixture.invoke(config, "setShaderPackName", String.class, "cbbg-parity");
               IrisFixture.invoke(config, "setShadersEnabled", boolean.class, active);
               IrisFixture.saveAndReload();
@@ -110,11 +119,11 @@ public final class ImmediatelyFastGameTest implements FabricClientGameTest {
             client -> {
               if (atlas.getColorTexture() != color
                   || atlas.getDepthTexture() != depth
-                  || color.isClosed()
-                  || depth.isClosed()) {
+                  || Objects.requireNonNull(color).isClosed()
+                  || Objects.requireNonNull(depth).isClosed()) {
                 throw new AssertionError("Shader transition invalidated ImmediatelyFast's atlas");
               }
-              if (active && (Boolean) IrisFixture.iris("isFallback")) {
+              if (active && (Boolean) Objects.requireNonNull(IrisFixture.iris("isFallback"))) {
                 throw new AssertionError("Iris fell back during the ImmediatelyFast fixture");
               }
               checkAtlas(client, atlas);
@@ -125,7 +134,10 @@ public final class ImmediatelyFastGameTest implements FabricClientGameTest {
       context.runOnClient(
           client -> {
             IrisFixture.invoke(
-                IrisFixture.iris("getIrisConfig"), "setShadersEnabled", boolean.class, false);
+                Objects.requireNonNull(IrisFixture.iris("getIrisConfig")),
+                "setShadersEnabled",
+                boolean.class,
+                false);
             IrisFixture.saveAndReload();
           });
     }
@@ -134,23 +146,28 @@ public final class ImmediatelyFastGameTest implements FabricClientGameTest {
   private static RenderTarget create(List<RenderTarget> owned) {
     try {
       RenderTarget atlas =
-          (RenderTarget) Class.forName(ATLAS).getConstructor(int.class).newInstance(TEST_ATLAS_ID);
+          Class.forName(ATLAS)
+              .asSubclass(RenderTarget.class)
+              .getConstructor(int.class)
+              .newInstance(TEST_ATLAS_ID);
       owned.add(atlas);
       return atlas;
     } catch (ReflectiveOperationException failure) {
-      throw new AssertionError("Cannot create the pinned ImmediatelyFast atlas", failure);
+      throw new LinkageError("Cannot create the pinned ImmediatelyFast atlas", failure);
     }
   }
 
+  // GPU ownership and recreation require checking the exact resource instances.
+  @SuppressWarnings("ReferenceEquality")
   private static void checkAtlas(Minecraft client, RenderTarget atlas) {
     try {
-      if (atlas.getColorTexture().getFormat() != GpuFormat.RGBA8_UNORM
-          || atlas.getDepthTexture().getFormat() != GpuFormat.D32_FLOAT) {
+      if (Objects.requireNonNull(atlas.getColorTexture()).getFormat() != GpuFormat.RGBA8_UNORM
+          || Objects.requireNonNull(atlas.getDepthTexture()).getFormat() != GpuFormat.D32_FLOAT) {
         throw new AssertionError("CBBG changed ImmediatelyFast's attachment formats");
       }
       var type = atlas.getClass();
       Identifier id = (Identifier) type.getMethod("getTextureId").invoke(atlas);
-      var registered = client.getTextureManager().getTexture(id);
+      var registered = client.getTextureManager().getTexture(Objects.requireNonNull(id));
       if (registered.getTexture() != atlas.getColorTexture()
           || registered.getTextureView() != atlas.getColorTextureView()) {
         throw new AssertionError("ImmediatelyFast texture registration retained stale attachments");
@@ -163,12 +180,12 @@ public final class ImmediatelyFastGameTest implements FabricClientGameTest {
         throw new AssertionError("ImmediatelyFast atlas slot allocation failed");
       }
     } catch (ReflectiveOperationException failure) {
-      throw new AssertionError("Cannot exercise the pinned ImmediatelyFast atlas", failure);
+      throw new LinkageError("Cannot exercise the pinned ImmediatelyFast atlas", failure);
     }
   }
 
   private static void checkClearReadback(ClientGameTestContext context, RenderTarget atlas) {
-    CompletableFuture<Void> complete = new CompletableFuture<>();
+    CompletableFuture<@Nullable Void> complete = new CompletableFuture<>();
     context.runOnClient(
         client ->
             Screenshot.takeScreenshot(

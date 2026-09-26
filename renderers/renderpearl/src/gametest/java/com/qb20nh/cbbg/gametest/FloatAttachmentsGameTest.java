@@ -12,9 +12,12 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Proxy;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
+import org.jspecify.annotations.NullMarked;
 
+@NullMarked
 public final class FloatAttachmentsGameTest implements FabricClientGameTest {
   @Override
   public void runTest(ClientGameTestContext context) {
@@ -23,7 +26,8 @@ public final class FloatAttachmentsGameTest implements FabricClientGameTest {
           TextureTarget namedLikeMain =
               new TextureTarget("Main", 2, 2, GpuFormat.RGBA8_UNORM, null);
           try {
-            if (namedLikeMain.getColorTexture().getFormat() != GpuFormat.RGBA8_UNORM) {
+            if (Objects.requireNonNull(namedLikeMain.getColorTexture()).getFormat()
+                != GpuFormat.RGBA8_UNORM) {
               throw new AssertionError("Upgraded a non-main target based on its label");
             }
           } finally {
@@ -40,7 +44,7 @@ public final class FloatAttachmentsGameTest implements FabricClientGameTest {
                         new Class<?>[] {GpuDevice.class},
                         (proxy, method, args) -> {
                           if (method.getName().equals("createTexture")) {
-                            attempts.add((GpuFormat) args[2]);
+                            attempts.add((GpuFormat) Objects.requireNonNull(args)[2]);
                             if (attempts.size() <= failures) {
                               throw new GpuOutOfMemoryException(
                                   "Injected allocation failure " + attempts.size());

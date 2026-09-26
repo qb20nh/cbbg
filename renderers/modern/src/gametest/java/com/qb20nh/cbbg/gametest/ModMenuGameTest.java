@@ -4,16 +4,20 @@ import com.qb20nh.cbbg.config.gui.CbbgConfigScreen;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.Objects;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.gui.screens.TitleScreen;
+import org.jspecify.annotations.NullMarked;
 
+@NullMarked
 public final class ModMenuGameTest implements FabricClientGameTest {
   @Override
   public void runTest(ClientGameTestContext context) {
     boolean expected =
-        java.util.List.of(System.getProperty("cbbg.test.compat", "none").split("\\+"))
+        java.util.List.of(
+                Objects.requireNonNull(System.getProperty("cbbg.test.compat", "none")).split("\\+"))
             .contains("modmenu");
     boolean installed = FabricLoader.getInstance().isModLoaded("modmenu");
     if (installed != expected) {
@@ -36,6 +40,8 @@ public final class ModMenuGameTest implements FabricClientGameTest {
 
   // Keep optional API types out of the class loaded by the no-Mod-Menu fixture.
   private static final class Installed {
+    // Screen navigation must retain the exact parent and child instances.
+    @SuppressWarnings("ReferenceEquality")
     static void run(ClientGameTestContext context) {
       var parent = context.computeOnClient(client -> new TitleScreen());
       var mods =
@@ -53,7 +59,7 @@ public final class ModMenuGameTest implements FabricClientGameTest {
       context.waitForScreen(CbbgConfigScreen.class);
       Path screenshot = context.takeScreenshot("cbbg-modmenu-config");
       try {
-        Path evidence = Path.of(System.getProperty("cbbg.test.evidence"));
+        Path evidence = Path.of(Objects.requireNonNull(System.getProperty("cbbg.test.evidence")));
         Files.createDirectories(evidence);
         Files.copy(
             screenshot,

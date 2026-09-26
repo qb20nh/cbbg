@@ -4,12 +4,17 @@ import com.mojang.blaze3d.pipeline.MainTarget;
 import com.mojang.blaze3d.pipeline.TextureTarget;
 import com.mojang.renderpearl.api.GpuFormat;
 import com.qb20nh.cbbg.config.CbbgConfig;
+import java.util.Objects;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
+import org.jspecify.annotations.NullMarked;
 import org.slf4j.LoggerFactory;
 
+@NullMarked
 public final class MainTargetsGameTest implements FabricClientGameTest {
   @Override
+  // GPU ownership and recreation require checking the exact resource instances.
+  @SuppressWarnings("ReferenceEquality")
   public void runTest(ClientGameTestContext context) {
     CbbgConfig original = CbbgConfig.get();
     LoggerFactory.getLogger("cbbg-test").info("MainTargets setup: disable");
@@ -57,8 +62,8 @@ public final class MainTargetsGameTest implements FabricClientGameTest {
                         : precision == CbbgConfig.PixelFormat.RGBA32F
                             ? GpuFormat.RGBA32_FLOAT
                             : GpuFormat.RGBA16_FLOAT;
-                if (live.getColorTexture().getFormat() != expected
-                    || !previous.isClosed()
+                if (Objects.requireNonNull(live.getColorTexture()).getFormat() != expected
+                    || !Objects.requireNonNull(previous).isClosed()
                     || live.width != 16
                     || live.height != 8) {
                   throw new AssertionError(
@@ -69,7 +74,7 @@ public final class MainTargetsGameTest implements FabricClientGameTest {
                 }
                 if (custom.getColorTexture() != customColor
                     || custom.getDepthTexture() != customDepth
-                    || customColor.getFormat() != GpuFormat.RGBA8_UNORM) {
+                    || Objects.requireNonNull(customColor).getFormat() != GpuFormat.RGBA8_UNORM) {
                   throw new AssertionError("Precision change mutated a mod-owned framebuffer");
                 }
               });
@@ -80,10 +85,12 @@ public final class MainTargetsGameTest implements FabricClientGameTest {
       context.runOnClient(
           client -> {
             custom.resize(19, 11);
-            if (!customColor.isClosed()
-                || !customDepth.isClosed()
-                || custom.getColorTexture().getFormat() != GpuFormat.RGBA8_UNORM
-                || custom.getDepthTexture().getFormat() != customDepth.getFormat()) {
+            if (!Objects.requireNonNull(customColor).isClosed()
+                || !Objects.requireNonNull(customDepth).isClosed()
+                || Objects.requireNonNull(custom.getColorTexture()).getFormat()
+                    != GpuFormat.RGBA8_UNORM
+                || Objects.requireNonNull(custom.getDepthTexture()).getFormat()
+                    != customDepth.getFormat()) {
               throw new AssertionError(
                   "Mod-owned framebuffer recreation changed attachment formats");
             }

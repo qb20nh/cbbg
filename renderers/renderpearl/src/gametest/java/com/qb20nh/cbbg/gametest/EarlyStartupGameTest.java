@@ -13,14 +13,17 @@ import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.util.Collections;
 import java.util.HexFormat;
+import java.util.Objects;
 import java.util.Set;
 import java.util.WeakHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.loader.api.FabricLoader;
+import org.jspecify.annotations.NullMarked;
 
 /** Tests the processed JAR through Minecraft commands, draws and cache files. */
+@NullMarked
 public final class EarlyStartupGameTest implements FabricClientGameTest {
   public static final AtomicLong firstDrawMillis = new AtomicLong();
   public static final AtomicLong draws = new AtomicLong();
@@ -102,7 +105,8 @@ public final class EarlyStartupGameTest implements FabricClientGameTest {
         command(context, "format set rgba32f");
         context.waitFor(
             client ->
-                client.gameRenderer.mainRenderTarget().getColorTexture().getFormat()
+                Objects.requireNonNull(client.gameRenderer.mainRenderTarget().getColorTexture())
+                        .getFormat()
                     == GpuFormat.RGBA32_FLOAT,
             600);
         long afterFormat = draws.get();
@@ -113,7 +117,8 @@ public final class EarlyStartupGameTest implements FabricClientGameTest {
                   new TextureTarget("External framebuffer", 16, 16, GpuFormat.RGBA8_UNORM, null);
               try {
                 external.resize(32, 24);
-                if (external.getColorTexture().getFormat() != GpuFormat.RGBA8_UNORM) {
+                if (Objects.requireNonNull(external.getColorTexture()).getFormat()
+                    != GpuFormat.RGBA8_UNORM) {
                   throw new AssertionError("CBBG changed an external framebuffer format");
                 }
               } finally {
@@ -131,7 +136,8 @@ public final class EarlyStartupGameTest implements FabricClientGameTest {
   }
 
   private static void command(ClientGameTestContext context, String suffix) {
-    context.runOnClient(client -> client.getConnection().sendCommand("cbbg " + suffix));
+    context.runOnClient(
+        client -> Objects.requireNonNull(client.getConnection()).sendCommand("cbbg " + suffix));
   }
 
   private static JsonObject readConfig(Path path) {
@@ -151,7 +157,7 @@ public final class EarlyStartupGameTest implements FabricClientGameTest {
       if (lines.size() != depth + 1 || !lines.getFirst().equals("# seed " + seed)) return false;
       MessageDigest digest = MessageDigest.getInstance("SHA-256");
       for (String line : lines.subList(1, lines.size())) {
-        String[] parts = line.trim().split("\\s+");
+        String[] parts = line.trim().split("\\s+", 0);
         if (parts.length != 2) return false;
         Path image = cache.resolve(parts[1]);
         if (!Files.isRegularFile(image)

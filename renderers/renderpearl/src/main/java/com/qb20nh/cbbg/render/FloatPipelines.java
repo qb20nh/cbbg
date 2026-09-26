@@ -11,8 +11,10 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.WeakHashMap;
 import org.joml.Vector4fc;
+import org.jspecify.annotations.NullMarked;
 
 /** Resolves float variants through Minecraft's cache, which owns their GPU lifetime. */
+@NullMarked
 public final class FloatPipelines {
   // Values never reference the compiled key, allowing retired shader caches to be collected.
   private static final Map<CompiledRenderPipeline, Source> SOURCES = new WeakHashMap<>();

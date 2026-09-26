@@ -9,14 +9,18 @@ import com.qb20nh.cbbg.render.DitherController;
 import java.nio.ByteOrder;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.Screenshot;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
 /** Real world pixels versus a CPU oracle and a checked-in, version-specific scene baseline. */
+@NullMarked
 public final class WorldPixelsGameTest implements FabricClientGameTest {
   @Override
   public void runTest(ClientGameTestContext context) {
@@ -49,7 +53,9 @@ public final class WorldPixelsGameTest implements FabricClientGameTest {
           client ->
               DitherController.isReady() != disabledControl
                   && client.gui.overlay() == null
-                  && client.gameRenderer.mainRenderTarget().getColorTexture().getFormat()
+                  && Objects.requireNonNull(
+                              client.gameRenderer.mainRenderTarget().getColorTexture())
+                          .getFormat()
                       == (disabledControl ? GpuFormat.RGBA8_UNORM : GpuFormat.RGBA32_FLOAT),
           600);
       context.waitTicks(20);
@@ -80,7 +86,7 @@ public final class WorldPixelsGameTest implements FabricClientGameTest {
   }
 
   private static void captureDisabled(ClientGameTestContext context) {
-    CompletableFuture<Void> result = new CompletableFuture<>();
+    CompletableFuture<@Nullable Void> result = new CompletableFuture<>();
     context.runOnClient(
         client -> {
           if (DitherController.isReady() || CbbgConfig.get().mode() != CbbgConfig.Mode.DISABLED) {
@@ -91,7 +97,9 @@ public final class WorldPixelsGameTest implements FabricClientGameTest {
               image -> {
                 try (image) {
                   Path directory =
-                      Path.of(System.getProperty("cbbg.test.evidence"), "world-disabled");
+                      Path.of(
+                          Objects.requireNonNull(System.getProperty("cbbg.test.evidence")),
+                          "world-disabled");
                   Files.createDirectories(directory);
                   image.writeToFile(directory.resolve("actual.png"));
                   result.complete(null);
@@ -107,7 +115,7 @@ public final class WorldPixelsGameTest implements FabricClientGameTest {
   private static void capture(ClientGameTestContext context, boolean demo) {
     CompletableFuture<float[]> source = new CompletableFuture<>();
     CompletableFuture<int[]> actual = new CompletableFuture<>();
-    CompletableFuture<Void> result = new CompletableFuture<>();
+    CompletableFuture<@Nullable Void> result = new CompletableFuture<>();
     context.runOnClient(
         client -> {
           try {
@@ -117,7 +125,8 @@ public final class WorldPixelsGameTest implements FabricClientGameTest {
             frameField.setInt(null, 0);
             var framesField = DitherController.class.getDeclaredField("frames");
             framesField.setAccessible(true);
-            NativeImage noiseImage = ((NativeImage[]) framesField.get(null))[0];
+            NativeImage noiseImage =
+                Objects.requireNonNull(((NativeImage[]) framesField.get(null)))[0];
             int[] noise = noiseImage.getPixels();
             int tileSize = noiseImage.getWidth();
             var main = client.gameRenderer.mainRenderTarget();
@@ -125,18 +134,18 @@ public final class WorldPixelsGameTest implements FabricClientGameTest {
             int height = main.height;
             Path directory =
                 Path.of(
-                    System.getProperty("cbbg.test.evidence"),
+                    Objects.requireNonNull(System.getProperty("cbbg.test.evidence")),
                     "world-pixels",
                     demo ? "demo" : "enabled");
             Files.createDirectories(directory);
             noiseImage.writeToFile(directory.resolve("noise.png"));
             var buffer =
                 RenderSystem.getDevice()
-                    .createBuffer(() -> "CBBG world float readback", 9, width * height * 16);
+                    .createBuffer(() -> "CBBG world float readback", 9, (long) width * height * 16);
             RenderSystem.getDevice()
                 .createCommandEncoder()
                 .copyTextureToBuffer(
-                    main.getColorTexture(),
+                    Objects.requireNonNull(main.getColorTexture()),
                     buffer,
                     0,
                     () -> {
@@ -169,16 +178,17 @@ public final class WorldPixelsGameTest implements FabricClientGameTest {
                   }
                 });
             source
-                .thenCombine(
+                .<int[], @Nullable Void>thenCombine(
                     actual,
                     (floats, pixels) -> {
                       compare(directory, width, height, tileSize, noise, floats, pixels, demo);
+                      result.complete(null);
                       return null;
                     })
-                .whenComplete(
-                    (unused, failure) -> {
-                      if (failure == null) result.complete(null);
-                      else result.completeExceptionally(failure);
+                .exceptionally(
+                    failure -> {
+                      result.completeExceptionally(failure);
+                      return null;
                     });
           } catch (Throwable failure) {
             result.completeExceptionally(failure);

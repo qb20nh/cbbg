@@ -9,8 +9,10 @@ import net.minecraft.client.gui.components.debug.DebugScreenEntry;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.chunk.LevelChunk;
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 
+@NullMarked
 public final class CbbgDebugEntry implements DebugScreenEntry {
   @Override
   public void display(

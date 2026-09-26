@@ -6,6 +6,7 @@ import com.qb20nh.cbbg.CbbgClient;
 import com.qb20nh.cbbg.config.CbbgConfig;
 import com.qb20nh.cbbg.render.GlFormatOverride;
 import com.qb20nh.cbbg.render.MainTargetFormatSupport;
+import org.jspecify.annotations.NullMarked;
 import org.lwjgl.opengl.GL30;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
@@ -14,6 +15,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(GlConst.class)
+@NullMarked
 public abstract class GlConstMixin {
 
   private GlConstMixin() {}

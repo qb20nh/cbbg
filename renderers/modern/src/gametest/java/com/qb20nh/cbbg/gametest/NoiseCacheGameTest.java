@@ -13,8 +13,10 @@ import java.util.Arrays;
 import java.util.concurrent.TimeUnit;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
+import org.jspecify.annotations.NullMarked;
 
 /** Exercises the asynchronous generator and Minecraft PNG codec in an isolated game directory. */
+@NullMarked
 public final class NoiseCacheGameTest implements FabricClientGameTest {
   private static final int SIZE = 16;
   private static final int DEPTH = 4;

@@ -1,6 +1,9 @@
 package com.qb20nh.cbbg;
 
+import org.jspecify.annotations.NullMarked;
+
 /** Escapes emitted by the canonical JSON-to-lang resource generator. */
+@NullMarked
 public final class LegacyLanguage {
   private LegacyLanguage() {}
 

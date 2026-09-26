@@ -6,6 +6,7 @@ import com.mojang.blaze3d.resource.GraphicsResourceAllocator;
 import com.mojang.renderpearl.api.GpuFormat;
 import com.mojang.serialization.JsonOps;
 import java.util.Map;
+import java.util.Objects;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.minecraft.client.Minecraft;
@@ -15,12 +16,17 @@ import net.minecraft.client.renderer.PostChainConfig;
 import net.minecraft.client.renderer.Projection;
 import net.minecraft.client.renderer.ProjectionMatrixBuffer;
 import net.minecraft.resources.Identifier;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
 /** Checks persistent targets in a resource-pack blur definition. */
+@NullMarked
 public final class ReleasePersistentBlurGameTest implements FabricClientGameTest {
   private static final Identifier SWAP = Identifier.withDefaultNamespace("swap");
 
   @Override
+  // Target identity verifies replacement on precision changes and reuse otherwise.
+  @SuppressWarnings("ReferenceEquality")
   public void runTest(ClientGameTestContext context) {
     var original = ReleaseClient.settings();
     try (var world = context.worldBuilder().create()) {
@@ -41,13 +47,14 @@ public final class ReleasePersistentBlurGameTest implements FabricClientGameTest
           ReleaseClient.awaitFormat(context, format);
           context.runOnClient(
               client -> {
-                Map<Identifier, RenderTarget> targets = field(chain, "persistentTargets");
-                RenderTarget previous = targets.get(SWAP);
+                Map<?, ?> targets =
+                    (Map<?, ?>) Objects.requireNonNull(field(chain, "persistentTargets"));
+                RenderTarget previous = (RenderTarget) targets.get(SWAP);
                 RenderTarget main = client.gameRenderer.mainRenderTarget();
                 chain.process(main, GraphicsResourceAllocator.UNPOOLED);
-                RenderTarget current = targets.get(SWAP);
+                RenderTarget current = (RenderTarget) targets.get(SWAP);
                 if (current == null
-                    || current.getColorTexture().getFormat() != format
+                    || Objects.requireNonNull(current.getColorTexture()).getFormat() != format
                     || current.width != main.width
                     || current.height != main.height) {
                   throw new AssertionError(
@@ -67,8 +74,9 @@ public final class ReleasePersistentBlurGameTest implements FabricClientGameTest
         try {
           context.runOnClient(
               client -> {
-                Map<Identifier, RenderTarget> targets = field(chain, "persistentTargets");
-                RenderTarget last = targets.get(SWAP);
+                Map<?, ?> targets =
+                    (Map<?, ?>) Objects.requireNonNull(field(chain, "persistentTargets"));
+                RenderTarget last = (RenderTarget) targets.get(SWAP);
                 chain.close();
                 if (!targets.isEmpty() || (last != null && last.getColorTexture() != null)) {
                   throw new AssertionError("Closing blur retained its persistent target");
@@ -99,21 +107,21 @@ public final class ReleasePersistentBlurGameTest implements FabricClientGameTest
           client.getTextureManager(),
           LevelTargetBundle.MAIN_TARGETS,
           id,
-          (Projection) field(vanilla, "projection"),
-          (ProjectionMatrixBuffer) field(vanilla, "projectionMatrixBuffer"));
+          (Projection) Objects.requireNonNull(field(vanilla, "projection")),
+          (ProjectionMatrixBuffer)
+              Objects.requireNonNull(field(vanilla, "projectionMatrixBuffer")));
     } catch (Exception failure) {
       throw new AssertionError("Could not load persistent blur fixture", failure);
     }
   }
 
-  @SuppressWarnings("unchecked")
-  private static <T> T field(Object object, String name) {
+  private static @Nullable Object field(Object object, String name) {
     try {
       var field = object.getClass().getDeclaredField(name);
       field.setAccessible(true);
-      return (T) field.get(object);
+      return field.get(object);
     } catch (ReflectiveOperationException failure) {
-      throw new AssertionError("Could not inspect Minecraft field " + name, failure);
+      throw new LinkageError("Could not inspect Minecraft field " + name, failure);
     }
   }
 }

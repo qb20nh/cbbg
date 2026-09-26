@@ -5,8 +5,6 @@ import com.mojang.blaze3d.pipeline.TextureTarget;
 import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.renderpearl.api.GpuFormat;
-import com.mojang.renderpearl.api.commands.RenderPass;
-import com.mojang.renderpearl.api.textures.FilterMode;
 import com.mojang.renderpearl.api.textures.GpuTextureView;
 import com.qb20nh.cbbg.reference.DitherReference;
 import java.io.IOException;
@@ -15,7 +13,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.Arrays;
 import java.util.HashSet;
-import java.util.Optional;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.regex.Pattern;
@@ -25,11 +23,13 @@ import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Screenshot;
 import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.network.chat.Component;
 import org.joml.Vector4f;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
 /** Checks live presentation and screenshot noise from the processed, packaged mod. */
+@NullMarked
 public final class ReleasePresentationGameTest implements FabricClientGameTest {
   private static final int SIZE = 16;
   private static final int DEPTH = 8;
@@ -104,7 +104,8 @@ public final class ReleasePresentationGameTest implements FabricClientGameTest {
                   if (noise == null || noise.texture().isClosed()) {
                     throw new AssertionError("Live noise was not bound before disable");
                   }
-                  client.getConnection().sendCommand("cbbg mode set disabled");
+                  Objects.requireNonNull(client.getConnection())
+                      .sendCommand("cbbg mode set disabled");
                   return noise;
                 });
         ReleaseClient.awaitFormat(context, GpuFormat.RGBA8_UNORM);
@@ -140,8 +141,8 @@ public final class ReleasePresentationGameTest implements FabricClientGameTest {
     for (String line : ReleaseDebugState.read(client)) {
       var match = FRAME.matcher(line);
       if (match.find()) {
-        int frame = Integer.parseInt(match.group(1));
-        int depth = Integer.parseInt(match.group(2));
+        int frame = Integer.parseInt(Objects.requireNonNull(match.group(1)));
+        int depth = Integer.parseInt(Objects.requireNonNull(match.group(2)));
         if (depth != DEPTH || frame < 0 || frame >= depth) {
           throw new AssertionError("Unexpected packaged STBN state: " + line);
         }
@@ -151,7 +152,7 @@ public final class ReleasePresentationGameTest implements FabricClientGameTest {
     return -1;
   }
 
-  private static Sample sample(ClientGameTestContext context, String evidenceName) {
+  private static Sample sample(ClientGameTestContext context, @Nullable String evidenceName) {
     Sample sample =
         context.computeOnClient(
             client -> {
@@ -173,22 +174,13 @@ public final class ReleasePresentationGameTest implements FabricClientGameTest {
     return sample;
   }
 
-  private static CompletableFuture<int[]> readNoise(GpuTextureView noise, String evidenceName) {
+  private static CompletableFuture<int[]> readNoise(
+      GpuTextureView noise, @Nullable String evidenceName) {
     CompletableFuture<int[]> pixels = new CompletableFuture<>();
     TextureTarget target =
         new TextureTarget("CBBG live noise probe", SIZE, SIZE, GpuFormat.RGBA8_UNORM, null);
     try {
-      try (RenderPass pass =
-          RenderSystem.getDevice()
-              .createCommandEncoder()
-              .createRenderPass(
-                  () -> "CBBG live noise probe", target.getColorTextureView(), Optional.empty())) {
-        pass.setPipeline(RenderSystem.getCompiledPipeline(RenderPipelines.TRACY_BLIT));
-        RenderSystem.bindDefaultUniforms(pass);
-        pass.setUniform(
-            "InSampler", noise, RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST));
-        pass.draw(3, 1, 0, 0);
-      }
+      ReleaseClient.blitNoise(target, noise, "CBBG live noise probe");
       Screenshot.takeScreenshot(
           target,
           1,
@@ -258,7 +250,7 @@ public final class ReleasePresentationGameTest implements FabricClientGameTest {
               long presentations = ProcessedRenderObservations.presentations();
               RenderSystem.getDevice()
                   .createCommandEncoder()
-                  .clearColorTexture(main.getColorTexture(), SOURCE);
+                  .clearColorTexture(Objects.requireNonNull(main.getColorTexture()), SOURCE);
               CompletableFuture<int[]> first = screenshot(main, prefix + "-1.png");
               CompletableFuture<int[]> second = screenshot(main, prefix + "-2.png");
               if (debugFrame(client) != frame
@@ -361,7 +353,7 @@ public final class ReleasePresentationGameTest implements FabricClientGameTest {
     try {
       ReleaseClient.command(context, "mode set enabled");
       ReleaseClient.awaitDrawAfter(context, ProcessedRenderObservations.draws());
-      Screen[] screens = {menu, menu, inGameUi, null, menu};
+      @Nullable Screen[] screens = {menu, menu, inGameUi, null, menu};
       int[] blur = {5, 0, 5, 5, 10};
       float[] base = {1, 1, 1, 1, 4};
       float[] expected = {2, 1, 1, 1, 4};
@@ -422,7 +414,9 @@ public final class ReleasePresentationGameTest implements FabricClientGameTest {
       }
       Path manifest = ReleaseClient.manifest(SIZE, DEPTH);
       Files.copy(
-          manifest, evidence.resolve(manifest.getFileName()), StandardCopyOption.REPLACE_EXISTING);
+          manifest,
+          evidence.resolve(Objects.requireNonNull(manifest.getFileName())),
+          StandardCopyOption.REPLACE_EXISTING);
     } catch (IOException failure) {
       throw new AssertionError("Could not retain generated noise evidence", failure);
     }

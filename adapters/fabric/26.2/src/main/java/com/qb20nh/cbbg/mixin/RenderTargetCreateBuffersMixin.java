@@ -16,8 +16,10 @@ import com.qb20nh.cbbg.debug.CbbgGlNames;
 import com.qb20nh.cbbg.render.GlFormatOverride;
 import com.qb20nh.cbbg.render.MainTargetFormatSupport;
 import com.qb20nh.cbbg.render.MenuBlurGuard;
+import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Supplier;
+import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL30;
@@ -27,6 +29,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Redirect;
 
 @Mixin(RenderTarget.class)
+@NullMarked
 public abstract class RenderTargetCreateBuffersMixin {
 
   @Unique
@@ -42,6 +45,8 @@ public abstract class RenderTargetCreateBuffersMixin {
               value = "INVOKE",
               target =
                   "Lcom/mojang/blaze3d/systems/GpuDevice;createTexture(Ljava/util/function/Supplier;ILcom/mojang/blaze3d/GpuFormat;IIII)Lcom/mojang/blaze3d/textures/GpuTexture;"))
+  // Mixin merges this receiver into RenderTarget, whose runtime instance may be MainTarget.
+  @SuppressWarnings("IsInstanceIncompatibleType")
   private GpuTexture cbbg$createBuffers$createTexture(
       GpuDevice device,
       @Nullable Supplier<String> label,
@@ -131,6 +136,7 @@ public abstract class RenderTargetCreateBuffersMixin {
     }
 
     if (oom == null && failure == null) {
+      GpuTexture allocated = Objects.requireNonNull(texture);
       if (isMenuBlurPostChainInternal && loggedMenuBlurAllocInfo.compareAndSet(false, true)) {
         // Diagnostic only: confirm the blur post-chain internal target is actually float.
         // This helps distinguish "blur re-quantizes to RGBA8" from "dither strength needs
@@ -140,11 +146,11 @@ public abstract class RenderTargetCreateBuffersMixin {
             menuBlurLabel,
             requested.getSerializedName(),
             effective.getSerializedName(),
-            texture instanceof GlTexture
-                ? CbbgGlNames.glInternalName(getTextureInternalFormat(texture))
-                : texture.getFormat());
+            allocated instanceof GlTexture
+                ? CbbgGlNames.glInternalName(getTextureInternalFormat(allocated))
+                : allocated.getFormat());
       }
-      return texture;
+      return allocated;
     }
 
     if (isMainTarget) {

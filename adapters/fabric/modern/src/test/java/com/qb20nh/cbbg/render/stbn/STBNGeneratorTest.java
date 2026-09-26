@@ -2,20 +2,46 @@ package com.qb20nh.cbbg.render.stbn;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
 
+@NullMarked
 class STBNGeneratorTest {
+  @Test
+  void fieldsPreserveArrayOwnershipAndValueContract() {
+    double[] u = {0.25, 0.5};
+    double[] v = {0.75, 1.0};
+    var defaults = new STBNGenerator.STBNFields(u, v);
+    var seeded = new STBNGenerator.STBNFields(u, v, 101L);
+    var equal = new STBNGenerator.STBNFields(u.clone(), v.clone(), 101L);
+
+    assertEquals(0L, defaults.seed());
+    assertEquals(101L, seeded.seed());
+    assertSame(u, defaults.uField());
+    assertSame(v, defaults.vField());
+    assertSame(u, seeded.uField());
+    assertSame(v, seeded.vField());
+    assertEquals(seeded, equal);
+    assertEquals(seeded.hashCode(), equal.hashCode());
+    assertNotEquals(seeded, new STBNGenerator.STBNFields(u, v, 102L));
+    assertNotEquals(defaults, seeded);
+    assertNotEquals(seeded, new STBNGenerator.STBNFields(new double[] {0.5}, v, 101L));
+    assertEquals("STBNFields{uField=[0.25, 0.5], vField=[0.75, 1.0]}", seeded.toString());
+  }
+
   @Test
   void firstMatchingRequestClaimsEarlyWorkOnlyOnce() throws Exception {
     CountDownLatch started = new CountDownLatch(1);
     CountDownLatch release = new CountDownLatch(1);
     AtomicInteger checks = new AtomicInteger();
     try {
-      CompletableFuture<STBNGenerator.STBNFields> early =
+      CompletableFuture<STBNGenerator.@Nullable STBNFields> early =
           STBNGenerator.prepareEarly(
               4,
               4,
@@ -27,7 +53,7 @@ class STBNGeneratorTest {
                 return await(release, null);
               });
       assertTrue(started.await(5, TimeUnit.SECONDS));
-      CompletableFuture<STBNGenerator.STBNFields> claimed =
+      CompletableFuture<STBNGenerator.@Nullable STBNFields> claimed =
           STBNGenerator.generateAsync(
               4,
               4,
@@ -39,7 +65,7 @@ class STBNGeneratorTest {
               });
       assertSame(claimed, STBNGenerator.get());
       release.countDown();
-      STBNGenerator.STBNFields fields = claimed.get(10, TimeUnit.SECONDS);
+      STBNGenerator.STBNFields fields = Objects.requireNonNull(claimed.get(10, TimeUnit.SECONDS));
       assertSame(fields, early.get(10, TimeUnit.SECONDS));
       assertEquals(101L, fields.seed());
       assertEquals(4 * 4 * 2, fields.uField().length);
@@ -57,7 +83,7 @@ class STBNGeneratorTest {
     CountDownLatch release = new CountDownLatch(1);
     AtomicInteger rechecks = new AtomicInteger();
     try {
-      CompletableFuture<STBNGenerator.STBNFields> early =
+      CompletableFuture<STBNGenerator.@Nullable STBNFields> early =
           STBNGenerator.prepareEarly(
               4,
               4,
@@ -69,7 +95,7 @@ class STBNGeneratorTest {
                 return true;
               });
       assertTrue(started.await(5, TimeUnit.SECONDS));
-      CompletableFuture<STBNGenerator.STBNFields> claimed =
+      CompletableFuture<STBNGenerator.@Nullable STBNFields> claimed =
           STBNGenerator.generateAsync(
               4,
               4,
@@ -81,7 +107,7 @@ class STBNGeneratorTest {
               });
       release.countDown();
       assertNull(early.get(10, TimeUnit.SECONDS));
-      assertEquals(102L, claimed.get(10, TimeUnit.SECONDS).seed());
+      assertEquals(102L, Objects.requireNonNull(claimed.get(10, TimeUnit.SECONDS)).seed());
       assertEquals(1, rechecks.get());
     } finally {
       release.countDown();
@@ -95,7 +121,7 @@ class STBNGeneratorTest {
     CountDownLatch interrupted = new CountDownLatch(1);
     AtomicInteger replacementChecks = new AtomicInteger();
     try {
-      CompletableFuture<STBNGenerator.STBNFields> early =
+      CompletableFuture<STBNGenerator.@Nullable STBNFields> early =
           STBNGenerator.prepareEarly(
               4,
               4,
@@ -107,7 +133,7 @@ class STBNGeneratorTest {
                 return false;
               });
       assertTrue(started.await(5, TimeUnit.SECONDS));
-      CompletableFuture<STBNGenerator.STBNFields> replacement =
+      CompletableFuture<STBNGenerator.@Nullable STBNFields> replacement =
           STBNGenerator.generateAsync(
               4,
               4,
@@ -133,7 +159,7 @@ class STBNGeneratorTest {
     CountDownLatch interrupted = new CountDownLatch(1);
     try {
       assertNull(STBNGenerator.prepareEarly(4, 4, 2, 105L, () -> true).get(10, TimeUnit.SECONDS));
-      CompletableFuture<STBNGenerator.STBNFields> claimed =
+      CompletableFuture<STBNGenerator.@Nullable STBNFields> claimed =
           STBNGenerator.generateAsync(
               4,
               4,
@@ -145,7 +171,7 @@ class STBNGeneratorTest {
                 return false;
               });
       assertTrue(rechecking.await(5, TimeUnit.SECONDS));
-      CompletableFuture<STBNGenerator.STBNFields> replacement =
+      CompletableFuture<STBNGenerator.@Nullable STBNFields> replacement =
           STBNGenerator.generateAsync(4, 4, 2, 106L, () -> true);
       assertTrue(interrupted.await(5, TimeUnit.SECONDS));
       assertTrue(claimed.isCancelled());
@@ -155,7 +181,7 @@ class STBNGeneratorTest {
     }
   }
 
-  private static boolean await(CountDownLatch release, CountDownLatch interrupted) {
+  private static boolean await(CountDownLatch release, @Nullable CountDownLatch interrupted) {
     try {
       release.await();
       return false;

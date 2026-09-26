@@ -9,6 +9,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.regex.Pattern;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
@@ -16,13 +17,17 @@ import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Screenshot;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
 /** Exercises shader suspension through the packaged mod's commands and debug entry. */
+@NullMarked
 public final class ReleaseIrisGameTest implements FabricClientGameTest {
   @Override
   public void runTest(ClientGameTestContext context) {
     boolean expected =
-        List.of(System.getProperty("cbbg.test.compat", "none").split("\\+")).contains("iris");
+        List.of(Objects.requireNonNull(System.getProperty("cbbg.test.compat", "none")).split("\\+"))
+            .contains("iris");
     if (FabricLoader.getInstance().isModLoaded("iris") != expected) {
       throw new AssertionError("Iris presence does not match the requested fixture");
     }
@@ -43,7 +48,11 @@ public final class ReleaseIrisGameTest implements FabricClientGameTest {
         ReleaseClient.awaitDrawAfter(context, ProcessedRenderObservations.draws());
         context.runOnClient(
             client -> {
-              invoke(iris("getIrisConfig"), "setShaderPackName", String.class, "cbbg-parity");
+              invoke(
+                  Objects.requireNonNull(iris("getIrisConfig")),
+                  "setShaderPackName",
+                  String.class,
+                  "cbbg-parity");
               setShaders(true);
             });
         context.waitFor(client -> active(), 600);
@@ -57,7 +66,7 @@ public final class ReleaseIrisGameTest implements FabricClientGameTest {
                 throw new AssertionError(
                     "Iris did not suspend CBBG without changing user settings");
               }
-              if ((Boolean) iris("isFallback")) {
+              if (Objects.requireNonNull((Boolean) iris("isFallback"))) {
                 throw new AssertionError(
                     "Iris fell back instead of rendering the fixture shaderpack");
               }
@@ -118,39 +127,36 @@ public final class ReleaseIrisGameTest implements FabricClientGameTest {
   static boolean active() {
     try {
       Class<?> api = Class.forName("net.irisshaders.iris.api.v0.IrisApi");
-      return (Boolean)
-          api.getMethod("isShaderPackInUse").invoke(api.getMethod("getInstance").invoke(null));
+      return Objects.requireNonNull(
+          (Boolean)
+              api.getMethod("isShaderPackInUse").invoke(api.getMethod("getInstance").invoke(null)));
     } catch (ReflectiveOperationException failure) {
-      throw new AssertionError("Cannot query Iris shaderpack state", cause(failure));
+      throw new LinkageError("Cannot query Iris shaderpack state", cause(failure));
     }
   }
 
   static void setShaders(boolean enabled) {
-    invoke(iris("getIrisConfig"), "setShadersEnabled", boolean.class, enabled);
+    invoke(
+        Objects.requireNonNull(iris("getIrisConfig")), "setShadersEnabled", boolean.class, enabled);
     saveAndReload();
   }
 
   static void captureShader(ClientGameTestContext context, String name) {
-    CompletableFuture<Void> capture = new CompletableFuture<>();
+    CompletableFuture<@Nullable Void> capture = new CompletableFuture<>();
     context.runOnClient(
         client ->
             Screenshot.takeScreenshot(
                 client.gameRenderer.mainRenderTarget(),
                 image -> {
                   try (image) {
-                    int magenta = 0;
-                    int total = 0;
-                    for (int y = image.getHeight() / 4; y < image.getHeight() * 3 / 4; y++) {
-                      for (int x = image.getWidth() / 4; x < image.getWidth() * 3 / 4; x++) {
-                        total++;
-                        if ((image.getPixel(x, y) & 0xffffff) == 0xff00ff) magenta++;
-                      }
-                    }
-                    if (total == 0 || magenta < total * 0.9) {
+                    var pixels =
+                        ReleaseClient.centerPixels(image, pixel -> (pixel & 0xffffff) == 0xff00ff);
+                    if (pixels.total() == 0 || pixels.matching() < pixels.total() * 0.9) {
                       throw new AssertionError(
                           "The fixture's final shader did not reach the screenshot");
                     }
-                    Path evidence = Path.of(System.getProperty("cbbg.test.evidence"));
+                    Path evidence =
+                        Path.of(Objects.requireNonNull(System.getProperty("cbbg.test.evidence")));
                     Files.createDirectories(evidence);
                     image.writeToFile(evidence.resolve(name + ".png"));
                     capture.complete(null);
@@ -171,9 +177,10 @@ public final class ReleaseIrisGameTest implements FabricClientGameTest {
     boolean frames =
         frame.find()
             && (active
-                ? frame.group(1).equals("0") && frame.group(2).equals("0")
-                : Integer.parseInt(frame.group(2)) == depth
-                    && Integer.parseInt(frame.group(1)) < depth);
+                ? Objects.requireNonNull(frame.group(1)).equals("0")
+                    && Objects.requireNonNull(frame.group(2)).equals("0")
+                : Integer.parseInt(Objects.requireNonNull(frame.group(2))) == depth
+                    && Integer.parseInt(Objects.requireNonNull(frame.group(1))) < depth);
     if (!output.contains("mode=" + effective + " (user=" + user + ")")
         || !output.contains("iris=" + (active ? 1 : 0))
         || !output.contains("dis=0")
@@ -182,7 +189,8 @@ public final class ReleaseIrisGameTest implements FabricClientGameTest {
       throw new AssertionError("Iris debug state differs from the render state: " + output);
     }
     try {
-      Path evidence = Path.of(System.getProperty("cbbg.test.evidence"), "debug");
+      Path evidence =
+          Path.of(Objects.requireNonNull(System.getProperty("cbbg.test.evidence")), "debug");
       Files.createDirectories(evidence);
       Files.writeString(evidence.resolve("iris-" + active + "-" + user + ".txt"), output + "\n");
     } catch (java.io.IOException failure) {

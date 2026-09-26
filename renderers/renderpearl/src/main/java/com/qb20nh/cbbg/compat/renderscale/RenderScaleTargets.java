@@ -3,11 +3,15 @@ package com.qb20nh.cbbg.compat.renderscale;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.qb20nh.cbbg.Cbbg;
+import org.jspecify.annotations.NullMarked;
 
 /** Closes RenderScale's owned targets before RenderPearl destroys the device. */
+@NullMarked
 public final class RenderScaleTargets {
   private RenderScaleTargets() {}
 
+  // Only owned targets may be destroyed; the borrowed client target is identified by identity.
+  @SuppressWarnings("ReferenceEquality")
   public static void close() {
     if (!RenderScaleCompat.isLoaded()) {
       return;

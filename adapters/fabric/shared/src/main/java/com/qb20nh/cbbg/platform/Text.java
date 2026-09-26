@@ -2,8 +2,10 @@ package com.qb20nh.cbbg.platform;
 
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
+import org.jspecify.annotations.NullMarked;
 
 /** Native text construction shared by commands, settings and notifications. */
+@NullMarked
 public final class Text {
   private Text() {}
 

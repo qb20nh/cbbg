@@ -3,18 +3,21 @@ package com.qb20nh.cbbg.render;
 import com.mojang.blaze3d.resource.RenderTargetDescriptor;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.renderpearl.api.GpuFormat;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
 /** Render-thread scope for vanilla blur's internal targets, including pooled allocations. */
+@NullMarked
 public final class MenuBlurScope {
-  private static GpuFormat format;
+  private static @Nullable GpuFormat format;
 
   private MenuBlurScope() {}
 
-  public static GpuFormat format() {
+  public static @Nullable GpuFormat format() {
     return format;
   }
 
-  public static void run(GpuFormat requested, Runnable action) {
+  public static void run(@Nullable GpuFormat requested, Runnable action) {
     RenderSystem.assertOnRenderThread();
     GpuFormat previous = format;
     format = requested;

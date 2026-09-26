@@ -7,14 +7,18 @@ import com.qb20nh.cbbg.config.CbbgConfig;
 import com.qb20nh.cbbg.render.DitherController;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Screenshot;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.LoggerFactory;
 
+@NullMarked
 public final class SulkanExternalGameTest implements FabricClientGameTest {
   @Override
   public void runTest(ClientGameTestContext context) {
@@ -68,12 +72,13 @@ public final class SulkanExternalGameTest implements FabricClientGameTest {
         context.computeOnClient(
             client ->
                 (CompletableFuture<?>)
-                    SulkanGameTest.invoke(
-                        "applySelection",
-                        new Class<?>[] {Minecraft.class, boolean.class, String.class},
-                        client,
-                        enabled,
-                        "cbbg-native-test"));
+                    Objects.requireNonNull(
+                        SulkanGameTest.invoke(
+                            "applySelection",
+                            new Class<?>[] {Minecraft.class, boolean.class, String.class},
+                            client,
+                            enabled,
+                            "cbbg-native-test")));
     SulkanGameTest.await(context, reload);
     context.waitFor(client -> client.gui.overlay() == null, 600);
     context.waitTicks(5);
@@ -97,7 +102,7 @@ public final class SulkanExternalGameTest implements FabricClientGameTest {
   }
 
   static void capture(ClientGameTestContext context, String name, boolean shader) {
-    CompletableFuture<Void> capture = new CompletableFuture<>();
+    CompletableFuture<@Nullable Void> capture = new CompletableFuture<>();
     context.runOnClient(
         client ->
             Screenshot.takeScreenshot(
@@ -119,7 +124,8 @@ public final class SulkanExternalGameTest implements FabricClientGameTest {
                     }
                     image.writeToFile(
                         Path.of(
-                            System.getProperty("cbbg.test.evidence"), "sulkan-" + name + ".png"));
+                            Objects.requireNonNull(System.getProperty("cbbg.test.evidence")),
+                            "sulkan-" + name + ".png"));
                     if ((magenta > total * 0.9) != shader) {
                       throw new AssertionError(
                           "External Sulkan pack screenshot does not match shader state");

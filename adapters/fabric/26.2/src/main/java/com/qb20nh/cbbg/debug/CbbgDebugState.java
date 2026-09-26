@@ -1,7 +1,9 @@
 package com.qb20nh.cbbg.debug;
 
+import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 
+@NullMarked
 public final class CbbgDebugState {
   private static volatile int mainInternalFormat = -1;
   private static volatile int lightmapInternalFormat = -1;

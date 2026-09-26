@@ -7,11 +7,14 @@ import com.qb20nh.cbbg.config.CbbgConfig.PixelFormat;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.Objects;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.network.chat.Component;
+import org.jspecify.annotations.NullMarked;
 
+@NullMarked
 public final class MainTargetGameTest implements FabricClientGameTest {
   @Override
   public void runTest(ClientGameTestContext context) {
@@ -27,10 +30,10 @@ public final class MainTargetGameTest implements FabricClientGameTest {
       recreate(context, Mode.ENABLED, PixelFormat.RGBA16F, GpuFormat.RGBA16_FLOAT);
       Path screenshot = context.takeScreenshot("cbbg-float-world");
       Path evidence =
-          Path.of(System.getProperty("cbbg.test.evidence"))
+          Path.of(Objects.requireNonNull(System.getProperty("cbbg.test.evidence")))
               .resolve("world-" + System.getProperty("cbbg.test.backend") + ".png");
       try {
-        Files.createDirectories(evidence.getParent());
+        Files.createDirectories(Objects.requireNonNull(evidence.getParent()));
         Files.copy(screenshot, evidence, StandardCopyOption.REPLACE_EXISTING);
         context.runOnClient(
             client -> {

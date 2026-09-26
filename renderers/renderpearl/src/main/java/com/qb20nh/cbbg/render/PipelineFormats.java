@@ -6,8 +6,10 @@ import com.mojang.renderpearl.api.pipeline.RenderPipeline;
 import com.mojang.renderpearl.api.vertex.VertexFormat;
 import java.util.Locale;
 import net.minecraft.resources.Identifier;
+import org.jspecify.annotations.NullMarked;
 
 /** Copies pipeline state while changing only a selected color attachment format. */
+@NullMarked
 public final class PipelineFormats extends RenderPipeline {
   private PipelineFormats(RenderPipeline source, int attachment, GpuFormat format) {
     super(

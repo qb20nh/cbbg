@@ -2,7 +2,9 @@ package com.qb20nh.cbbg.compat.sulkan;
 
 import com.qb20nh.cbbg.Cbbg;
 import com.qb20nh.cbbg.platform.LoaderPlatform;
+import org.jspecify.annotations.NullMarked;
 
+@NullMarked
 public final class SulkanCompat {
   private static final boolean LOADED = LoaderPlatform.isModLoaded("sulkan");
   private static boolean loggedFailure;

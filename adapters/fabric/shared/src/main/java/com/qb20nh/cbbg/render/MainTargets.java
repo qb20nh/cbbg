@@ -5,8 +5,10 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import java.util.Collections;
 import java.util.Set;
 import java.util.WeakHashMap;
+import org.jspecify.annotations.NullMarked;
 
 /** Keeps all live main-target allocations in sync with the active precision policy. */
+@NullMarked
 public final class MainTargets {
   private static final Set<MainTarget> TARGETS = Collections.newSetFromMap(new WeakHashMap<>());
 

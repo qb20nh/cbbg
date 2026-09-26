@@ -2,10 +2,13 @@ package com.qb20nh.cbbg.gametest;
 
 import com.mojang.renderpearl.api.buffers.GpuBufferSlice;
 import com.mojang.renderpearl.api.textures.GpuTextureView;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
 /** Test-only substitutions for inputs bound by the real dither render pass. */
+@NullMarked
 public final class ProcessedDitherInputs {
-  private static Scope current;
+  private static @Nullable Scope current;
 
   private ProcessedDitherInputs() {}
 
@@ -17,7 +20,10 @@ public final class ProcessedDitherInputs {
     return install(input, noise, info);
   }
 
-  private static Scope install(GpuTextureView input, GpuTextureView noise, GpuBufferSlice info) {
+  private static Scope install(
+      @Nullable GpuTextureView input,
+      @Nullable GpuTextureView noise,
+      @Nullable GpuBufferSlice info) {
     Scope scope = new Scope(current, input, noise, info);
     current = scope;
     return scope;
@@ -40,12 +46,16 @@ public final class ProcessedDitherInputs {
   }
 
   public static final class Scope implements AutoCloseable {
-    private final Scope previous;
-    private final GpuTextureView input;
-    private final GpuTextureView noise;
-    private final GpuBufferSlice info;
+    private final @Nullable Scope previous;
+    private final @Nullable GpuTextureView input;
+    private final @Nullable GpuTextureView noise;
+    private final @Nullable GpuBufferSlice info;
 
-    private Scope(Scope previous, GpuTextureView input, GpuTextureView noise, GpuBufferSlice info) {
+    private Scope(
+        @Nullable Scope previous,
+        @Nullable GpuTextureView input,
+        @Nullable GpuTextureView noise,
+        @Nullable GpuBufferSlice info) {
       this.previous = previous;
       this.input = input;
       this.noise = noise;

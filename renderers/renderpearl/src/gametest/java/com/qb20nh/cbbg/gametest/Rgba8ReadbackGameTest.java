@@ -15,17 +15,21 @@ import java.nio.ByteOrder;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.minecraft.client.renderer.RenderPipelines;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 import org.lwjgl.opengl.GL;
 import org.lwjgl.opengl.GL11C;
 import org.lwjgl.opengl.GL30C;
 import org.lwjgl.opengl.GL32C;
 import org.slf4j.LoggerFactory;
 
+@NullMarked
 public final class Rgba8ReadbackGameTest implements FabricClientGameTest {
   @Override
   public void runTest(ClientGameTestContext context) {
@@ -82,7 +86,8 @@ public final class Rgba8ReadbackGameTest implements FabricClientGameTest {
             observed.addProperty("computeShader", caps.OpenGL43 || caps.GL_ARB_compute_shader);
           }
           try {
-            Path directory = Path.of(System.getProperty("cbbg.test.evidence"));
+            Path directory =
+                Path.of(Objects.requireNonNull(System.getProperty("cbbg.test.evidence")));
             Files.createDirectories(directory);
             Files.writeString(
                 directory.resolve("graphics-context.json"), observed.toString() + "\n");
@@ -92,6 +97,8 @@ public final class Rgba8ReadbackGameTest implements FabricClientGameTest {
         });
   }
 
+  // Shader reload must replace the cached pipeline instance.
+  @SuppressWarnings("ReferenceEquality")
   private static void checkShaderReload(ClientGameTestContext context) {
     CompiledRenderPipeline variant =
         context.computeOnClient(
@@ -103,7 +110,8 @@ public final class Rgba8ReadbackGameTest implements FabricClientGameTest {
                 var attachments =
                     List.of(
                         new RenderPassDescriptor.Attachment<>(
-                            target.getColorTextureView(), Optional.<org.joml.Vector4fc>empty()));
+                            Objects.requireNonNull(target.getColorTextureView()),
+                            Optional.<org.joml.Vector4fc>empty()));
                 var first = FloatPipelines.forAttachments(original, attachments);
                 var second = FloatPipelines.forAttachments(original, attachments);
                 if (first == original || first != second || first.isClosed()) {
@@ -114,8 +122,7 @@ public final class Rgba8ReadbackGameTest implements FabricClientGameTest {
                 target.destroyBuffers();
               }
             });
-    CompletableFuture<Void> reload =
-        context.computeOnClient(client -> client.reloadResourcePacks());
+    CompletableFuture<?> reload = context.computeOnClient(client -> client.reloadResourcePacks());
     context.waitFor(client -> reload.isDone(), 600);
     reload.join();
     context.runOnClient(
@@ -128,7 +135,7 @@ public final class Rgba8ReadbackGameTest implements FabricClientGameTest {
 
   private static void checkReadback(
       ClientGameTestContext context, GpuFormat format, int downscaleFactor) {
-    CompletableFuture<Void> result = new CompletableFuture<>();
+    CompletableFuture<@Nullable Void> result = new CompletableFuture<>();
     context.runOnClient(
         client -> {
           TextureTarget source = new TextureTarget("CBBG float fixture", 2, 2, format, null);
@@ -149,13 +156,14 @@ public final class Rgba8ReadbackGameTest implements FabricClientGameTest {
             pixels.flip();
             RenderSystem.getDevice()
                 .createCommandEncoder()
-                .writeToTexture(source.getColorTexture(), pixels, 0, 0, 0, 0, 2, 2);
+                .writeToTexture(
+                    Objects.requireNonNull(source.getColorTexture()), pixels, 0, 0, 0, 0, 2, 2);
             try (RenderPass pass =
                 RenderSystem.getDevice()
                     .createCommandEncoder()
                     .createRenderPass(
                         () -> "CBBG float pipeline fixture",
-                        rendered.getColorTextureView(),
+                        Objects.requireNonNull(rendered.getColorTextureView()),
                         Optional.empty())) {
               // The production mixins must select the matching float variant.
               pass.setPipeline(RenderSystem.getCompiledPipeline(RenderPipelines.TRACY_BLIT));
@@ -193,7 +201,7 @@ public final class Rgba8ReadbackGameTest implements FabricClientGameTest {
                       }
                     }
                     var evidence =
-                        Path.of(System.getProperty("cbbg.test.evidence"))
+                        Path.of(Objects.requireNonNull(System.getProperty("cbbg.test.evidence")))
                             .resolve(
                                 "readback-"
                                     + System.getProperty("cbbg.test.backend")
@@ -202,7 +210,7 @@ public final class Rgba8ReadbackGameTest implements FabricClientGameTest {
                                     + "-"
                                     + downscaleFactor
                                     + ".png");
-                    Files.createDirectories(evidence.getParent());
+                    Files.createDirectories(Objects.requireNonNull(evidence.getParent()));
                     image.writeToFile(evidence);
                     result.complete(null);
                   } catch (Throwable failure) {

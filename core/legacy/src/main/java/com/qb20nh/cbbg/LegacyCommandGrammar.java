@@ -6,8 +6,11 @@ import com.qb20nh.cbbg.config.CbbgConfig.PixelFormat;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
 /** Client-only command grammar for games predating Brigadier. */
+@NullMarked
 public final class LegacyCommandGrammar {
   private LegacyCommandGrammar() {}
 
@@ -18,7 +21,7 @@ public final class LegacyCommandGrammar {
   }
 
   /** Null leaves completion to vanilla; an empty list claims an invalid CBBG argument. */
-  public static List<String> suggest(String message, boolean toast) {
+  public static @Nullable List<String> suggest(String message, boolean toast) {
     String[] args = message.split("\\s+", -1);
     if (!args[0].equals("/cbbg")) return null;
     List<String> candidates = new ArrayList<>();
@@ -41,7 +44,7 @@ public final class LegacyCommandGrammar {
           if (format != PixelFormat.RGBA8) candidates.add(format.getSerializedName());
         }
       } else if (args[1].equals("notification")
-          && (args[2].equals("chat") || args[2].equals("toast") && toast)) {
+          && (args[2].equals("chat") || (args[2].equals("toast") && toast))) {
         java.util.Collections.addAll(candidates, "true", "false");
       }
     }
@@ -54,7 +57,7 @@ public final class LegacyCommandGrammar {
       String message, boolean toast, Feedback feedback, Runnable regenerate, Runnable reload) {
     String[] args = message.trim().split("\\s+");
     if (!args[0].equals("/cbbg")) return false;
-    if (args.length == 1 || args.length == 2 && args[1].equals("help")) {
+    if (args.length == 1 || (args.length == 2 && args[1].equals("help"))) {
       for (String key :
           new String[] {
             "header", "mode", "mode_set", "format", "format_set", "stbn", "notification"

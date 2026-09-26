@@ -2,8 +2,10 @@ package com.qb20nh.cbbg.render;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
+import org.jspecify.annotations.NullMarked;
 import org.junit.jupiter.api.Test;
 
+@NullMarked
 class DitherStrengthTest {
   @Test
   void gameplayAndUnblurredScreensKeepTheConfiguredStrength() {

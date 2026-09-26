@@ -4,12 +4,17 @@ import com.google.gson.JsonObject;
 import com.mojang.blaze3d.pipeline.MainTarget;
 import com.mojang.blaze3d.pipeline.TextureTarget;
 import com.mojang.renderpearl.api.GpuFormat;
+import java.util.Objects;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
+import org.jspecify.annotations.NullMarked;
 
 /** Verifies float main targets and framebuffers owned by other mods. */
+@NullMarked
 public final class ReleaseFramebufferGameTest implements FabricClientGameTest {
   @Override
+  // GPU attachment identity detects replacement and preserves mod-owned resources.
+  @SuppressWarnings("ReferenceEquality")
   public void runTest(ClientGameTestContext context) {
     JsonObject original = ReleaseClient.settings();
     try (var world = context.worldBuilder().create()) {
@@ -41,11 +46,15 @@ public final class ReleaseFramebufferGameTest implements FabricClientGameTest {
                 mode.equals("disabled")
                     ? GpuFormat.RGBA8_UNORM
                     : precision.equals("rgba32f") ? GpuFormat.RGBA32_FLOAT : GpuFormat.RGBA16_FLOAT;
-            context.waitFor(client -> live.getColorTexture().getFormat() == expected, 600);
+            context.waitFor(
+                client -> Objects.requireNonNull(live.getColorTexture()).getFormat() == expected,
+                600);
             context.waitTicks(3);
             context.runOnClient(
                 client -> {
-                  if (!previous.isClosed() || live.width != 16 || live.height != 8) {
+                  if (!Objects.requireNonNull(previous).isClosed()
+                      || live.width != 16
+                      || live.height != 8) {
                     throw new AssertionError(
                         "Secondary main target retained its old attachment or changed size");
                   }
@@ -54,15 +63,15 @@ public final class ReleaseFramebufferGameTest implements FabricClientGameTest {
                   }
                   if (custom.getColorTexture() != customColor
                       || custom.getDepthTexture() != customDepth
-                      || customColor.getFormat() != GpuFormat.RGBA8_UNORM) {
+                      || Objects.requireNonNull(customColor).getFormat() != GpuFormat.RGBA8_UNORM) {
                     throw new AssertionError("Precision change modified a mod-owned framebuffer");
                   }
                   var main = client.gameRenderer.mainRenderTarget();
                   var old = main.getColorTexture();
                   main.resize(main.width, main.height);
-                  if (!old.isClosed()
+                  if (!Objects.requireNonNull(old).isClosed()
                       || main.getDepthTexture() == null
-                      || main.getColorTexture().getFormat() != expected) {
+                      || Objects.requireNonNull(main.getColorTexture()).getFormat() != expected) {
                     throw new AssertionError(
                         "Main target resize failed to retain the selected format");
                   }
@@ -72,10 +81,12 @@ public final class ReleaseFramebufferGameTest implements FabricClientGameTest {
         context.runOnClient(
             client -> {
               custom.resize(19, 11);
-              if (!customColor.isClosed()
-                  || !customDepth.isClosed()
-                  || custom.getColorTexture().getFormat() != GpuFormat.RGBA8_UNORM
-                  || custom.getDepthTexture().getFormat() != customDepth.getFormat()) {
+              if (!Objects.requireNonNull(customColor).isClosed()
+                  || !Objects.requireNonNull(customDepth).isClosed()
+                  || Objects.requireNonNull(custom.getColorTexture()).getFormat()
+                      != GpuFormat.RGBA8_UNORM
+                  || Objects.requireNonNull(custom.getDepthTexture()).getFormat()
+                      != customDepth.getFormat()) {
                 throw new AssertionError("Mod-owned framebuffer resize changed attachment formats");
               }
             });

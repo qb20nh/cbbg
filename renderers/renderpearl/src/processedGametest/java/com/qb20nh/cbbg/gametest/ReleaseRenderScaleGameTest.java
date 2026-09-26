@@ -19,6 +19,7 @@ import java.nio.ByteOrder;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
@@ -26,8 +27,11 @@ import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.Screenshot;
 import net.minecraft.client.renderer.RenderPipelines;
 import org.joml.Vector4f;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
 /** RenderScale precision and pixel-grid checks against the optimized release jar. */
+@NullMarked
 public final class ReleaseRenderScaleGameTest implements FabricClientGameTest {
   // Exactly representable in both float formats, independent of clear conversion rounding.
   private static final float SOURCE = 0.5f;
@@ -35,14 +39,17 @@ public final class ReleaseRenderScaleGameTest implements FabricClientGameTest {
   @Override
   public void runTest(ClientGameTestContext context) {
     boolean expected =
-        java.util.List.of(System.getProperty("cbbg.test.compat", "none").split("\\+"))
+        java.util.List.of(
+                Objects.requireNonNull(System.getProperty("cbbg.test.compat", "none")).split("\\+"))
             .contains("renderscale");
     if (FabricLoader.getInstance().isModLoaded("renderscale") != expected) {
       throw new AssertionError("RenderScale presence does not match the requested fixture");
     }
     if (!expected) return;
-    Object renderer = context.computeOnClient(client -> call(null, "getInstance"));
-    Object config = context.computeOnClient(client -> call(null, "getConfig"));
+    Object renderer =
+        context.computeOnClient(client -> Objects.requireNonNull(call(null, "getInstance")));
+    Object config =
+        context.computeOnClient(client -> Objects.requireNonNull(call(null, "getConfig")));
     JsonObject previous = ReleaseClient.settings();
     float strength = previous.get("strength").getAsFloat();
     if (!Float.isFinite(strength) || strength <= 0) {
@@ -133,7 +140,8 @@ public final class ReleaseRenderScaleGameTest implements FabricClientGameTest {
               for (String name : new String[] {"renderTarget", "fsrIntermediateTarget"}) {
                 RenderTarget target = (RenderTarget) field(renderer, name);
                 if (target == null
-                    || target.getColorTexture().getFormat() != GpuFormat.RGBA8_UNORM) {
+                    || Objects.requireNonNull(target.getColorTexture()).getFormat()
+                        != GpuFormat.RGBA8_UNORM) {
                   throw new AssertionError(
                       "Disabling retained a float RenderScale target: " + name);
                 }
@@ -187,24 +195,30 @@ public final class ReleaseRenderScaleGameTest implements FabricClientGameTest {
       GpuFormat format,
       float strength,
       String scenario) {
-    CompletableFuture<Void> precision = new CompletableFuture<>();
+    CompletableFuture<@Nullable Void> precision = new CompletableFuture<>();
     Sample sample =
         context.computeOnClient(
             client -> {
               if (dynamic) {
                 set(config, "targetFrameRate", 60);
-                call(field(renderer, "dynamicScale"), "reset", new Class<?>[] {double.class}, 0.5);
+                call(
+                    Objects.requireNonNull(field(renderer, "dynamicScale")),
+                    "reset",
+                    new Class<?>[] {double.class},
+                    0.5);
                 call(renderer, "resizeRenderTarget");
-                if (((Number) field(config, "scale")).floatValue() != 1) {
+                if (Objects.requireNonNull(((Number) field(config, "scale"))).floatValue() != 1) {
                   throw new AssertionError("Dynamic fixture lost its configured ceiling");
                 }
               }
-              RenderTarget scaled = (RenderTarget) field(renderer, "renderTarget");
+              RenderTarget scaled =
+                  (RenderTarget) Objects.requireNonNull(field(renderer, "renderTarget"));
               RenderTarget main = client.gameRenderer.mainRenderTarget();
-              if (main.getColorTexture().getFormat() != format
-                  || scaled.width != Math.max((int) (main.width * renderScale), 1)
+              if (Objects.requireNonNull(main.getColorTexture()).getFormat() != format
+                  || Objects.requireNonNull(scaled).width
+                      != Math.max((int) (main.width * renderScale), 1)
                   || scaled.height != Math.max((int) (main.height * renderScale), 1)
-                  || scaled.getColorTexture().getFormat() != format) {
+                  || Objects.requireNonNull(scaled.getColorTexture()).getFormat() != format) {
                 throw new AssertionError("RenderScale dimensions or precision are incorrect");
               }
               var device = RenderSystem.getDevice();
@@ -220,18 +234,18 @@ public final class ReleaseRenderScaleGameTest implements FabricClientGameTest {
                   Boolean.TRUE.equals(call(config, "getFilter"))
                       ? FilterMode.LINEAR
                       : FilterMode.NEAREST);
-              if (fsr
-                  && ((RenderTarget) field(renderer, "fsrIntermediateTarget"))
-                          .getColorTexture()
-                          .getFormat()
-                      != format) {
-                throw new AssertionError("FSR intermediate lost float precision");
+              if (fsr) {
+                RenderTarget intermediate =
+                    (RenderTarget) Objects.requireNonNull(field(renderer, "fsrIntermediateTarget"));
+                if (Objects.requireNonNull(intermediate.getColorTexture()).getFormat() != format) {
+                  throw new AssertionError("FSR intermediate lost float precision");
+                }
               }
               var buffer =
                   device.createBuffer(
                       () -> "Release RenderScale precision readback",
                       9,
-                      main.width * main.height * format.blockSize());
+                      (long) main.width * main.height * format.blockSize());
               encoder.copyTextureToBuffer(
                   main.getColorTexture(),
                   buffer,
@@ -303,7 +317,7 @@ public final class ReleaseRenderScaleGameTest implements FabricClientGameTest {
               .createCommandEncoder()
               .createRenderPass(
                   () -> "Release RenderScale noise readback",
-                  target.getColorTextureView(),
+                  Objects.requireNonNull(target.getColorTextureView()),
                   java.util.Optional.empty())) {
         pass.setPipeline(RenderSystem.getCompiledPipeline(RenderPipelines.TRACY_BLIT));
         RenderSystem.bindDefaultUniforms(pass);
@@ -412,7 +426,7 @@ public final class ReleaseRenderScaleGameTest implements FabricClientGameTest {
 
   private static Path evidence(String scenario, String kind) throws IOException {
     Path path =
-        Path.of(System.getProperty("cbbg.test.evidence"))
+        Path.of(Objects.requireNonNull(System.getProperty("cbbg.test.evidence")))
             .resolve(
                 "renderscale-"
                     + System.getProperty("cbbg.test.backend")
@@ -421,7 +435,7 @@ public final class ReleaseRenderScaleGameTest implements FabricClientGameTest {
                     + "-"
                     + kind
                     + ".png");
-    Files.createDirectories(path.getParent());
+    Files.createDirectories(Objects.requireNonNull(path.getParent()));
     return path;
   }
 

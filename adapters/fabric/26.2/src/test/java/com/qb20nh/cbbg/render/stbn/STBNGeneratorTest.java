@@ -1,10 +1,28 @@
 package com.qb20nh.cbbg.render.stbn;
 
 import java.util.concurrent.TimeUnit;
+import org.jspecify.annotations.NullMarked;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+@NullMarked
 public class STBNGeneratorTest {
+
+  @Test
+  void fieldsPreserveArrayOwnershipAndValueContract() {
+    double[] u = {0.25, 0.5};
+    double[] v = {0.75, 1.0};
+    var fields = new STBNGenerator.STBNFields(u, v);
+    var equal = new STBNGenerator.STBNFields(u.clone(), v.clone());
+
+    Assertions.assertSame(u, fields.uField());
+    Assertions.assertSame(v, fields.vField());
+    Assertions.assertEquals(fields, equal);
+    Assertions.assertEquals(fields.hashCode(), equal.hashCode());
+    Assertions.assertNotEquals(fields, new STBNGenerator.STBNFields(new double[] {0.5}, v));
+    Assertions.assertEquals(
+        "STBNFields{uField=[0.25, 0.5], vField=[0.75, 1.0]}", fields.toString());
+  }
 
   @Test
   void calculatePixelColor_alwaysReturnsOpaqueAndClampedChannels() {

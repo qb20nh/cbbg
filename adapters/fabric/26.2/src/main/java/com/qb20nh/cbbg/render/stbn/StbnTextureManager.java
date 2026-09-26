@@ -4,25 +4,28 @@ import com.mojang.blaze3d.GpuFormat;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.textures.GpuTexture;
 import com.mojang.blaze3d.textures.GpuTextureView;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Manages the lifecycle of the STBN noise texture, including GL format overrides and recreation on
  * configuration changes.
  */
+@NullMarked
 public class StbnTextureManager {
 
-  private GpuTexture texture;
-  private GpuTextureView view;
+  private @Nullable GpuTexture texture;
+  private @Nullable GpuTextureView view;
 
   // Track parameters to detect changes
   private int currentWidth = -1;
   private int currentHeight = -1;
 
-  public GpuTextureView getView() {
+  public @Nullable GpuTextureView getView() {
     return view;
   }
 
-  public GpuTexture getTexture() {
+  public @Nullable GpuTexture getTexture() {
     return texture;
   }
 

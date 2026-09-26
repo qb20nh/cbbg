@@ -7,7 +7,10 @@ import net.minecraft.client.gui.components.CycleButton;
 import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.StringUtil;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
+@NullMarked
 final class WidgetPlatform {
   private WidgetPlatform() {}
 
@@ -27,7 +30,7 @@ final class WidgetPlatform {
       int y,
       int width,
       int height,
-      Component tooltip) {
+      @Nullable Component tooltip) {
     Button.Builder builder = Button.builder(label, action).bounds(x, y, width, height);
     if (tooltip != null) builder.tooltip(Tooltip.create(tooltip));
     return builder.build();

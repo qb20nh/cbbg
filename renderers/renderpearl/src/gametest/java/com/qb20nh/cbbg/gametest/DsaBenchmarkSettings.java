@@ -1,12 +1,15 @@
 package com.qb20nh.cbbg.gametest;
 
+import java.util.Objects;
 import net.fabricmc.api.ClientModInitializer;
+import org.jspecify.annotations.NullMarked;
 
 /** Test-driver-only selection before the OpenGL device is created. */
+@NullMarked
 public final class DsaBenchmarkSettings implements ClientModInitializer {
   @Override
   public void onInitializeClient() {
-    String mode = System.getProperty("cbbg.test.dsa", "auto");
+    String mode = Objects.requireNonNull(System.getProperty("cbbg.test.dsa", "auto"));
     if (!"opengl".equals(System.getProperty("cbbg.test.backend"))
         || !(mode.equals("auto") || mode.equals("emulated"))) {
       throw new IllegalArgumentException("DSA benchmark requires OpenGL and a known selection");

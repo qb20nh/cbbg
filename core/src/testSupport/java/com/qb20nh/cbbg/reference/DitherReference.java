@@ -1,6 +1,9 @@
 package com.qb20nh.cbbg.reference;
 
+import org.jspecify.annotations.NullMarked;
+
 /** CPU pixel oracle. Coordinates use the framebuffer's bottom-left origin. */
+@NullMarked
 public final class DitherReference {
   private DitherReference() {}
 

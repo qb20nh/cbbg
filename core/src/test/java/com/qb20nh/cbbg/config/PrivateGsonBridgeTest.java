@@ -6,31 +6,38 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.qb20nh.cbbg.internal.gson.stream.JsonReader;
 import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.Reader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.security.CodeSource;
 import java.util.Arrays;
-import java.util.Scanner;
+import java.util.Objects;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import org.jspecify.annotations.NullMarked;
 import org.junit.jupiter.api.Test;
 
+@NullMarked
 class PrivateGsonBridgeTest {
   @Test
   void compatibilityBridgeConstructorsHaveNoEffects() throws Exception {
-    Path jar =
-        Paths.get(JsonReader.class.getProtectionDomain().getCodeSource().getLocation().toURI());
+    CodeSource source =
+        Objects.requireNonNull(JsonReader.class.getProtectionDomain().getCodeSource());
+    Path jar = Paths.get(Objects.requireNonNull(source.getLocation()).toURI());
     String bridgeName = JsonReader.class.getName() + "$1";
     String bridge = javap(jar, bridgeName);
     Matcher superclass = Pattern.compile("extends ([\\w.$]+) \\{").matcher(bridge);
     assertTrue(superclass.find(), bridge);
     assertFalse(bridge.contains("static {};"), bridge);
 
-    assertTrivialConstructor(bridge, bridgeName, superclass.group(1).replace('.', '/'));
-    String parent = javap(jar, superclass.group(1));
+    String superclassName = Objects.requireNonNull(superclass.group(1));
+    assertTrivialConstructor(bridge, bridgeName, superclassName.replace('.', '/'));
+    String parent = javap(jar, superclassName);
     assertFalse(parent.contains("static {};"), parent);
-    assertTrivialConstructor(parent, superclass.group(1), "java/lang/Object");
+    assertTrivialConstructor(parent, superclassName, "java/lang/Object");
   }
 
   private static void assertTrivialConstructor(
@@ -64,11 +71,15 @@ class PrivateGsonBridgeTest {
                 executable.toString(), "-classpath", jar.toString(), "-p", "-c", className)
             .redirectErrorStream(true)
             .start();
-    String output;
-    try (Scanner scanner =
-        new Scanner(process.getInputStream(), StandardCharsets.UTF_8.name()).useDelimiter("\\A")) {
-      output = scanner.hasNext() ? scanner.next() : "";
+    StringBuilder text = new StringBuilder();
+    try (Reader reader = new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8)) {
+      char[] buffer = new char[4096];
+      int count;
+      while ((count = reader.read(buffer)) != -1) {
+        text.append(buffer, 0, count);
+      }
     }
+    String output = text.toString();
     assertEquals(0, process.waitFor(), output);
     return output;
   }

@@ -2,9 +2,11 @@ package com.qb20nh.cbbg.render.stbn;
 
 import java.nio.charset.StandardCharsets;
 import java.security.NoSuchAlgorithmException;
+import org.jspecify.annotations.NullMarked;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+@NullMarked
 class STBNCacheTest {
 
   @Test

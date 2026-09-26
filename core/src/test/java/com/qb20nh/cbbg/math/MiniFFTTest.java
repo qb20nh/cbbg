@@ -1,8 +1,10 @@
 package com.qb20nh.cbbg.math;
 
+import org.jspecify.annotations.NullMarked;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+@NullMarked
 class MiniFFTTest {
 
   @Test

@@ -6,6 +6,7 @@ import com.qb20nh.cbbg.config.CbbgConfig;
 import com.qb20nh.cbbg.render.MainTargetFormatSupport;
 import com.qb20nh.cbbg.render.MenuBlurGuard;
 import net.minecraft.client.renderer.GameRenderer;
+import org.jspecify.annotations.NullMarked;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -14,6 +15,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(GameRenderer.class)
+@NullMarked
 public abstract class GameRendererMixin {
 
   private static final ThreadLocal<Boolean> DID_PUSH = ThreadLocal.withInitial(() -> false);

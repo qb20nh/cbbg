@@ -9,9 +9,12 @@ import com.qb20nh.cbbg.config.CbbgConfig.PixelFormat;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Supplier;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.LoggerFactory;
 
 /** Allocates a color attachment using the shared precision fallback policy. */
+@NullMarked
 public final class FloatAttachments {
   private FloatAttachments() {}
 
@@ -49,6 +52,8 @@ public final class FloatAttachments {
     return device.createTexture(label, usage, original, width, height, depthOrLayers, mipLevels);
   }
 
+  // Throwable rejects self-suppression, so compare exception instances.
+  @SuppressWarnings("ReferenceEquality")
   public static GpuTexture create(
       GpuDevice device,
       Supplier<String> label,
@@ -58,7 +63,7 @@ public final class FloatAttachments {
       int height,
       int depthOrLayers,
       int mipLevels) {
-    GpuTexture[] allocated = new GpuTexture[1];
+    @Nullable GpuTexture[] allocated = new GpuTexture[1];
     List<RuntimeException> failures = new ArrayList<>();
     // A successful probe is the actual attachment, avoiding a second allocation.
     FormatPolicy.effective(

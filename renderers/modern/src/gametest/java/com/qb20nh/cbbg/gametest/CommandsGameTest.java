@@ -5,11 +5,14 @@ import com.qb20nh.cbbg.config.CbbgConfig;
 import com.qb20nh.cbbg.render.DitherController;
 import com.qb20nh.cbbg.render.stbn.STBNCache;
 import java.lang.reflect.Proxy;
+import java.util.Objects;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommands;
 import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
+import org.jspecify.annotations.NullMarked;
 
+@NullMarked
 public final class CommandsGameTest implements FabricClientGameTest {
   @Override
   public void runTest(ClientGameTestContext context) {
@@ -66,10 +69,7 @@ public final class CommandsGameTest implements FabricClientGameTest {
       context.waitFor(client -> DitherController.isReady(), 600);
       context.runOnClient(
           client -> {
-            if (!client
-                .gameRenderer
-                .mainRenderTarget()
-                .getColorTexture()
+            if (!Objects.requireNonNull(client.gameRenderer.mainRenderTarget().getColorTexture())
                 .getFormat()
                 .name()
                 .equals("RGBA32_FLOAT")) {
@@ -81,10 +81,7 @@ public final class CommandsGameTest implements FabricClientGameTest {
       context.runOnClient(
           client -> {
             if (DitherController.isReady()
-                || !client
-                    .gameRenderer
-                    .mainRenderTarget()
-                    .getColorTexture()
+                || !Objects.requireNonNull(client.gameRenderer.mainRenderTarget().getColorTexture())
                     .getFormat()
                     .name()
                     .equals("RGBA8_UNORM")) {

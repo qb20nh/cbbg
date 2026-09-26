@@ -4,6 +4,7 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.Arrays;
+import java.util.Objects;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.DoubleConsumer;
@@ -11,9 +12,11 @@ import java.util.function.IntConsumer;
 import net.minecraft.client.gui.components.AbstractSliderButton;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.contents.TranslatableContents;
+import org.jspecify.annotations.NullMarked;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+@NullMarked
 class CbbgConfigScreenTest {
 
   @Test
@@ -101,7 +104,7 @@ class CbbgConfigScreenTest {
 
     // Message should include two decimals.
     Method getMessage = sliderClass.getMethod("getMessage");
-    Component msg = (Component) getMessage.invoke(slider);
+    Component msg = (Component) Objects.requireNonNull(getMessage.invoke(slider));
     Assertions.assertInstanceOf(TranslatableContents.class, msg.getContents());
     TranslatableContents contents = (TranslatableContents) msg.getContents();
     Assertions.assertEquals("cbbg.config.labeled_value", contents.getKey());

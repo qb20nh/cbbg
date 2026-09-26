@@ -2,8 +2,10 @@ package com.qb20nh.cbbg.math;
 
 import java.util.Arrays;
 import java.util.Random;
+import org.jspecify.annotations.NullMarked;
 
 /** Loader-independent STBN math. Pixel values use the existing ABGR byte layout. */
+@NullMarked
 public final class BlueNoise {
   private BlueNoise() {}
 

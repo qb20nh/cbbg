@@ -9,13 +9,16 @@ import com.qb20nh.cbbg.CbbgClient;
 import com.qb20nh.cbbg.config.CbbgConfig;
 import com.qb20nh.cbbg.render.GlFormatOverride;
 import com.qb20nh.cbbg.render.MainTargetFormatSupport;
+import java.util.Objects;
 import java.util.function.Supplier;
+import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Redirect;
 
 @Mixin(MainTarget.class)
+@NullMarked
 public abstract class MainTargetMixin {
 
   @Redirect(
@@ -69,7 +72,7 @@ public abstract class MainTargetMixin {
     }
 
     if (oom == null && failure == null) {
-      return texture;
+      return Objects.requireNonNull(texture);
     }
 
     MainTargetFormatSupport.disable(effective, oom != null ? oom : failure);

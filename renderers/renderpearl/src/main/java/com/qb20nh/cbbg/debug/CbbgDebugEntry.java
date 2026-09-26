@@ -12,11 +12,13 @@ import net.minecraft.client.gui.components.debug.DebugScreenEntry;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.chunk.LevelChunk;
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL21;
 import org.lwjgl.opengl.GL30;
 
+@NullMarked
 public final class CbbgDebugEntry implements DebugScreenEntry {
   @Override
   public void display(

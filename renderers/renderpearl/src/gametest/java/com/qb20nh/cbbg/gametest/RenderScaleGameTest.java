@@ -15,6 +15,7 @@ import com.qb20nh.cbbg.render.DitherController;
 import com.qb20nh.cbbg.render.DitherPass;
 import java.nio.ByteOrder;
 import java.util.Arrays;
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicReference;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
@@ -22,12 +23,16 @@ import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.Screenshot;
 import org.joml.Vector4f;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
+@NullMarked
 public final class RenderScaleGameTest implements FabricClientGameTest {
   @Override
   public void runTest(ClientGameTestContext context) {
     boolean expected =
-        java.util.List.of(System.getProperty("cbbg.test.compat", "none").split("\\+"))
+        java.util.List.of(
+                Objects.requireNonNull(System.getProperty("cbbg.test.compat", "none")).split("\\+"))
             .contains("renderscale");
     if (FabricLoader.getInstance().isModLoaded("renderscale") != expected
         || RenderScaleCompat.isLoaded() != expected) {
@@ -36,8 +41,10 @@ public final class RenderScaleGameTest implements FabricClientGameTest {
     if (!expected) {
       return;
     }
-    Object renderer = context.computeOnClient(client -> call(null, "getInstance"));
-    Object config = context.computeOnClient(client -> call(null, "getConfig"));
+    Object renderer =
+        context.computeOnClient(client -> Objects.requireNonNull(call(null, "getInstance")));
+    Object config =
+        context.computeOnClient(client -> Objects.requireNonNull(call(null, "getConfig")));
     CbbgConfig original = CbbgConfig.get();
     Object scale = field(config, "scale");
     Object fsr = field(config, "fsr");
@@ -86,7 +93,9 @@ public final class RenderScaleGameTest implements FabricClientGameTest {
           client -> {
             for (String name : new String[] {"renderTarget", "fsrIntermediateTarget"}) {
               RenderTarget target = (RenderTarget) field(renderer, name);
-              if (target == null || target.getColorTexture().getFormat() != GpuFormat.RGBA8_UNORM) {
+              if (target == null
+                  || Objects.requireNonNull(target.getColorTexture()).getFormat()
+                      != GpuFormat.RGBA8_UNORM) {
                 throw new AssertionError("Disabling retained a float RenderScale target: " + name);
               }
             }
@@ -132,20 +141,21 @@ public final class RenderScaleGameTest implements FabricClientGameTest {
       boolean fsr) {
     CompletableFuture<int[]> actual = new CompletableFuture<>();
     CompletableFuture<int[]> expected = new CompletableFuture<>();
-    CompletableFuture<Void> precision = new CompletableFuture<>();
-    AtomicReference<DitherPass> reference = new AtomicReference<>();
+    CompletableFuture<@Nullable Void> precision = new CompletableFuture<>();
+    AtomicReference<@Nullable DitherPass> reference = new AtomicReference<>();
     try {
       context.runOnClient(
           client -> {
             if (RenderScaleCompat.getDitherCoordScale() != coordinateScale) {
               throw new AssertionError("Incorrect RenderScale coordinate factor");
             }
-            RenderTarget scaled = (RenderTarget) field(renderer, "renderTarget");
+            RenderTarget scaled =
+                (RenderTarget) Objects.requireNonNull(field(renderer, "renderTarget"));
             RenderTarget main = client.gameRenderer.mainRenderTarget();
-            GpuFormat format = main.getColorTexture().getFormat();
+            GpuFormat format = Objects.requireNonNull(main.getColorTexture()).getFormat();
             if (scaled.width != Math.max((int) (main.width * renderScale), 1)
                 || scaled.height != Math.max((int) (main.height * renderScale), 1)
-                || scaled.getColorTexture().getFormat() != format) {
+                || Objects.requireNonNull(scaled.getColorTexture()).getFormat() != format) {
               throw new AssertionError("RenderScale dimensions or precision are incorrect");
             }
             var device = RenderSystem.getDevice();
@@ -158,12 +168,16 @@ public final class RenderScaleGameTest implements FabricClientGameTest {
                 new Class<?>[] {RenderTarget.class, RenderTarget.class, FilterMode.class},
                 scaled,
                 main,
-                Boolean.TRUE.equals(call(call(null, "getConfig"), "getFilter"))
+                Boolean.TRUE.equals(
+                        call(Objects.requireNonNull(call(null, "getConfig")), "getFilter"))
                     ? FilterMode.LINEAR
                     : FilterMode.NEAREST);
             if (fsr
-                && ((RenderTarget) field(renderer, "fsrIntermediateTarget"))
-                        .getColorTexture()
+                && Objects.requireNonNull(
+                            ((RenderTarget)
+                                    Objects.requireNonNull(
+                                        field(renderer, "fsrIntermediateTarget")))
+                                .getColorTexture())
                         .getFormat()
                     != format) {
               throw new AssertionError("FSR intermediate lost float precision");
@@ -172,7 +186,7 @@ public final class RenderScaleGameTest implements FabricClientGameTest {
                 device.createBuffer(
                     () -> "RenderScale precision readback",
                     9,
-                    main.width * main.height * format.blockSize());
+                    (long) main.width * main.height * format.blockSize());
             encoder.copyTextureToBuffer(
                 main.getColorTexture(),
                 buffer,
@@ -210,8 +224,9 @@ public final class RenderScaleGameTest implements FabricClientGameTest {
             reference.set(pass);
             capture(
                 pass.render(
-                    main.getColorTextureView(),
-                    (GpuTextureView) field(DitherController.class, "noiseView"),
+                    Objects.requireNonNull(main.getColorTextureView()),
+                    (GpuTextureView)
+                        Objects.requireNonNull(field(DitherController.class, "noiseView")),
                     1,
                     coordinateScale,
                     coordinateScale,
@@ -226,8 +241,9 @@ public final class RenderScaleGameTest implements FabricClientGameTest {
     } finally {
       context.runOnClient(
           client -> {
-            if (reference.get() != null) {
-              reference.get().close();
+            DitherPass current = reference.get();
+            if (current != null) {
+              current.close();
             }
           });
     }

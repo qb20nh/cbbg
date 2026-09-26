@@ -25,7 +25,9 @@ import com.qb20nh.cbbg.render.stbn.STBNLoader;
 import com.qb20nh.cbbg.render.stbn.StbnTextureManager;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
@@ -36,7 +38,10 @@ import net.minecraft.client.renderer.ShaderManager;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
+@NullMarked
 public final class CbbgDither {
 
   private static final String S_IN = "InSampler";
@@ -95,18 +100,19 @@ public final class CbbgDither {
   private static final AtomicBoolean loggedFailure = new AtomicBoolean(false);
   private static volatile boolean disabled = false;
 
-  private static NativeImage[] stbnFrames;
+  private static NativeImage @Nullable [] stbnFrames;
   private static final StbnTextureManager stbnManager = new StbnTextureManager();
   private static int stbnFrameIndex = 0;
-  private static volatile CompletableFuture<STBNGenerator.STBNFields> processedGeneration;
-  private static MappableRingBuffer ditherInfoUbo;
+  private static volatile @Nullable CompletableFuture<STBNGenerator.@Nullable STBNFields>
+      processedGeneration;
+  private static @Nullable MappableRingBuffer ditherInfoUbo;
 
   // Configurable state tracking
   private static boolean isGenerating = false;
   private static int currentWidth = 128;
   private static int currentHeight = 128;
 
-  private static TextureTarget ditherTarget;
+  private static @Nullable TextureTarget ditherTarget;
 
   private CbbgDither() {}
 
@@ -131,7 +137,7 @@ public final class CbbgDither {
     stbnFrames = null;
   }
 
-  private static void closeFrames(NativeImage[] frames) {
+  private static void closeFrames(NativeImage @Nullable [] frames) {
     if (frames == null) {
       return;
     }
@@ -170,15 +176,15 @@ public final class CbbgDither {
    * <p>This is used both for final presentation and for screenshots, so screenshots match the
    * dithered on-screen output.
    */
-  public static TextureTarget renderDitheredTarget(GpuTextureView input) {
+  public static @Nullable TextureTarget renderDitheredTarget(GpuTextureView input) {
     return renderToTarget(input, DITHER_PIPELINE, DITHER_SHADER, "cbbg dither");
   }
 
-  public static TextureTarget renderDemoTarget(GpuTextureView input) {
+  public static @Nullable TextureTarget renderDemoTarget(GpuTextureView input) {
     return renderToTarget(input, DEMO_PIPELINE, DEMO_SHADER, "cbbg demo");
   }
 
-  private static TextureTarget renderToTarget(
+  private static @Nullable TextureTarget renderToTarget(
       GpuTextureView input,
       @NonNull RenderPipeline pipeline,
       @NonNull Identifier fragmentShader,
@@ -206,7 +212,7 @@ public final class CbbgDither {
 
       ensureGpuTargets(width, height);
 
-      GpuTextureView ditherView = ditherTarget.getColorTextureView();
+      GpuTextureView ditherView = Objects.requireNonNull(ditherTarget).getColorTextureView();
       if (ditherView == null) {
         return null;
       }
@@ -245,6 +251,8 @@ public final class CbbgDither {
   }
 
   /**
+   * Presents the dithered main target when the effect is ready.
+   *
    * @return true if cbbg performed the blit/present itself (caller should cancel vanilla),
    *     otherwise false to fall back to vanilla.
    */
@@ -337,7 +345,8 @@ public final class CbbgDither {
 
   public static void initAsync() {
     CbbgConfig cfg = CbbgConfig.get();
-    STBNGenerator.generateAsync(cfg.stbnSize(), cfg.stbnSize(), cfg.stbnDepth(), cfg.stbnSeed());
+    STBNGenerator.generateAsync(cfg.stbnSize(), cfg.stbnSize(), cfg.stbnDepth(), cfg.stbnSeed())
+        .exceptionally(CbbgDither::observeGenerationFailure);
   }
 
   public static void reloadStbn(boolean force) {
@@ -350,7 +359,8 @@ public final class CbbgDither {
 
       // Start generation
       STBNGenerator.generateAsync(
-          cfg.stbnSize(), cfg.stbnSize(), cfg.stbnDepth(), cfg.stbnSeed(), true);
+              cfg.stbnSize(), cfg.stbnSize(), cfg.stbnDepth(), cfg.stbnSeed(), true)
+          .exceptionally(CbbgDither::observeGenerationFailure);
       isGenerating = true;
 
       // Notify
@@ -377,12 +387,25 @@ public final class CbbgDither {
     return isGenerating;
   }
 
+  private static STBNGenerator.@Nullable STBNFields observeGenerationFailure(Throwable failure) {
+    Throwable cause =
+        failure instanceof CompletionException && failure.getCause() != null
+            ? failure.getCause()
+            : failure;
+    if (!(cause instanceof CancellationException)) {
+      Cbbg.LOGGER.error("Failed to prepare STBN generation", cause);
+    }
+    return null;
+  }
+
+  // Future identity ensures each generation result is consumed only once.
+  @SuppressWarnings("ReferenceEquality")
   public static void ensureStbnLoaded() {
     CbbgConfig cfg = CbbgConfig.get();
     if (!STBNGenerator.matches(cfg.stbnSize(), cfg.stbnSize(), cfg.stbnDepth(), cfg.stbnSeed())) {
       initAsync();
     }
-    CompletableFuture<STBNGenerator.STBNFields> pendingGen = STBNGenerator.get();
+    CompletableFuture<STBNGenerator.@Nullable STBNFields> pendingGen = STBNGenerator.get();
     if (pendingGen != null
         && pendingGen.isDone()
         && !pendingGen.isCancelled()
@@ -399,7 +422,9 @@ public final class CbbgDither {
     }
   }
 
-  private static void onStbnGenerationComplete(STBNGenerator.STBNFields fields) {
+  // Array identity prevents closing the frames still owned by the active renderer.
+  @SuppressWarnings("ReferenceEquality")
+  private static void onStbnGenerationComplete(STBNGenerator.@Nullable STBNFields fields) {
     CbbgConfig cfg = CbbgConfig.get();
     NativeImage[] nextFrames =
         STBNLoader.loadOrGenerate(cfg.stbnSize(), cfg.stbnSize(), cfg.stbnDepth(), fields);

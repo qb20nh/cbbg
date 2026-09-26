@@ -9,6 +9,7 @@ import org.gradle.jvm.toolchain.JavaToolchainService
 
 class TargetsPlugin implements Plugin<Project> {
     void apply(Project project) {
+        project.pluginManager.apply('base')
         project.pluginManager.apply('jvm-toolchains')
         def catalog = TargetCatalog.read(project.file('targets.json'))
         def single = project.providers.gradleProperty('target')
@@ -31,10 +32,12 @@ class TargetsPlugin implements Plugin<Project> {
         List<String> options = []
         if (project.gradle.startParameter.rerunTasks) options.add('--rerun-tasks')
         if (!project.gradle.startParameter.buildCacheEnabled) options.add('--no-build-cache')
-        ['build', 'check', 'ciCheck', 'runClient', 'genSources', 'dev', 'compileJava',
+        ['build', 'check', 'ciCheck', 'qualityCheck', 'runClient', 'genSources', 'dev', 'compileJava',
          'checkPackages', 'optimizeReleaseJar', 'candidateBuildOutputs'].each { operation ->
-            def parent = project.tasks.register(operation) {
-                group = operation in ['check', 'ciCheck'] ? 'verification' : 'build'
+            def parent = project.tasks.names.contains(operation)
+                    ? project.tasks.named(operation) : project.tasks.register(operation)
+            parent.configure {
+                group = operation in ['check', 'ciCheck', 'qualityCheck'] ? 'verification' : 'build'
                 description = "Run ${operation} for the selected targets."
             }
             def targets = operation == 'runClient' ? selected : owners

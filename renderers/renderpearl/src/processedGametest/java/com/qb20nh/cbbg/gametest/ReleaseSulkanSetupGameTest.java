@@ -6,8 +6,10 @@ import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.gui.screens.ConfirmScreen;
 import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.network.chat.Component;
+import org.jspecify.annotations.NullMarked;
 
 /** Checks the unmodified startup gate before ordinary packaged-mod scenarios. */
+@NullMarked
 public final class ReleaseSulkanSetupGameTest implements FabricClientGameTest {
   @Override
   public void runTest(ClientGameTestContext context) {

@@ -8,11 +8,14 @@ import com.qb20nh.cbbg.render.stbn.STBNGenerator;
 import com.qb20nh.cbbg.render.stbn.STBNLoader;
 import java.security.MessageDigest;
 import java.util.HexFormat;
+import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
+import org.jspecify.annotations.NullMarked;
 
 /** Dedicated slow fixture: maximum-size images, PNG cache and GPU frame cycling. */
+@NullMarked
 public final class MaximumNoiseCacheGameTest implements FabricClientGameTest {
   private static final int SIZE = 256;
   private static final int DEPTH = 128;
@@ -21,6 +24,8 @@ public final class MaximumNoiseCacheGameTest implements FabricClientGameTest {
       "f366482ef363e7dd2d10cf46ab72f17d9ae6d901362c13a0eb45f8b93621d9d9";
 
   @Override
+  // Returning the original input view means the effect fell back.
+  @SuppressWarnings("ReferenceEquality")
   public void runTest(ClientGameTestContext context) {
     CbbgConfig original = CbbgConfig.get();
     context.waitFor(client -> DitherController.isReady(), 600);
@@ -36,14 +41,14 @@ public final class MaximumNoiseCacheGameTest implements FabricClientGameTest {
       }
       var fields = STBNGenerator.generateAsync(SIZE, SIZE, DEPTH, SEED).get(300, TimeUnit.SECONDS);
       if (fields == null) throw new AssertionError("Cold generation returned no fields");
-      assertImages(STBNLoader.loadOrGenerate(SIZE, SIZE, DEPTH, fields));
+      assertImages(Objects.requireNonNull(STBNLoader.loadOrGenerate(SIZE, SIZE, DEPTH, fields)));
       if (!STBNCache.isCacheValid(SIZE, SIZE, DEPTH, SEED)) {
         throw new AssertionError("Maximum-size PNG cache is incomplete");
       }
       if (STBNGenerator.generateAsync(SIZE, SIZE, DEPTH, SEED).get(30, TimeUnit.SECONDS) != null) {
         throw new AssertionError("Warm cache unexpectedly regenerated noise");
       }
-      assertImages(STBNLoader.loadOrGenerate(SIZE, SIZE, DEPTH, null));
+      assertImages(Objects.requireNonNull(STBNLoader.loadOrGenerate(SIZE, SIZE, DEPTH, null)));
       context.runOnClient(
           client -> {
             CbbgConfig.setStbnSize(SIZE);
@@ -58,7 +63,8 @@ public final class MaximumNoiseCacheGameTest implements FabricClientGameTest {
             boolean[] seen = new boolean[DEPTH];
             long before = DitherController.getPresentationCount();
             for (int frame = 0; frame < DEPTH; frame++) {
-              if (DitherController.present(input) == input || !DitherController.isReady()) {
+              if (DitherController.present(Objects.requireNonNull(input)) == input
+                  || !DitherController.isReady()) {
                 throw new AssertionError("Maximum-size GPU presentation fell back");
               }
               int index = DitherController.getCurrentStbnFrameIndex();

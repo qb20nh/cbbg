@@ -4,6 +4,7 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.renderpearl.api.GpuFormat;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Objects;
 import java.util.regex.Pattern;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
@@ -11,9 +12,11 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.debug.DebugScreenEntries;
 import net.minecraft.client.gui.components.debug.DebugScreenEntryStatus;
 import net.minecraft.resources.Identifier;
+import org.jspecify.annotations.NullMarked;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL30;
 
+@NullMarked
 public final class ReleaseDebugOverlayGameTest implements FabricClientGameTest {
   private static final Identifier ID = Identifier.fromNamespaceAndPath("cbbg", "cbbg");
   private static final Pattern NOISE = Pattern.compile("stbn=(\\d+)/(\\d+)");
@@ -47,7 +50,9 @@ public final class ReleaseDebugOverlayGameTest implements FabricClientGameTest {
               client -> {
                 String text = output(client);
                 String main =
-                    client.gameRenderer.mainRenderTarget().getColorTexture().getFormat().name();
+                    Objects.requireNonNull(client.gameRenderer.mainRenderTarget().getColorTexture())
+                        .getFormat()
+                        .name();
                 String lightmap = client.gameRenderer.levelLightmap().texture().getFormat().name();
                 String backend = RenderSystem.getDevice().getDeviceInfo().backendName();
                 checkFramebufferState(client, backend, text);
@@ -62,15 +67,18 @@ public final class ReleaseDebugOverlayGameTest implements FabricClientGameTest {
                     || !noise.find()) {
                   throw new AssertionError("Incorrect CBBG debug state: " + text);
                 }
-                int frame = Integer.parseInt(noise.group(1));
-                int count = Integer.parseInt(noise.group(2));
+                int frame = Integer.parseInt(Objects.requireNonNull(noise.group(1)));
+                int count = Integer.parseInt(Objects.requireNonNull(noise.group(2)));
                 if (mode.equals("DISABLED")
                     ? frame != 0 || count != 0
                     : count != depth || frame < 0 || frame >= count) {
                   throw new AssertionError("Incorrect debug noise sequence: " + text);
                 }
                 try {
-                  Path directory = Path.of(System.getProperty("cbbg.test.evidence"), "debug");
+                  Path directory =
+                      Path.of(
+                          Objects.requireNonNull(System.getProperty("cbbg.test.evidence")),
+                          "debug");
                   Files.createDirectories(directory);
                   Files.writeString(directory.resolve(mode + ".txt"), text + "\n");
                 } catch (java.io.IOException failure) {

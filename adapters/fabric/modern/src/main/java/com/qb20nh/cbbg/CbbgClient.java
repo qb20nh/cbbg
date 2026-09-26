@@ -13,7 +13,9 @@ import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
+import org.jspecify.annotations.NullMarked;
 
+@NullMarked
 public final class CbbgClient implements ClientModInitializer {
   public static CbbgConfig.Mode getEffectiveMode() {
     return areShadersActive() ? CbbgConfig.Mode.DISABLED : CbbgConfig.get().mode();

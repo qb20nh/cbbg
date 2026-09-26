@@ -8,6 +8,8 @@ import com.qb20nh.cbbg.config.CbbgConfig;
 import com.qb20nh.cbbg.render.CbbgDither;
 import com.qb20nh.cbbg.render.MainTargetFormatSupport;
 import net.minecraft.client.Minecraft;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
@@ -16,10 +18,11 @@ import org.spongepowered.asm.mixin.injection.ModifyArg;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(Minecraft.class)
+@NullMarked
 public abstract class MinecraftMixin {
 
-  @Unique private static CbbgConfig.Mode lastMode;
-  @Unique private static CbbgConfig.PixelFormat lastPixelFormat;
+  @Unique private static CbbgConfig.@Nullable Mode lastMode;
+  @Unique private static CbbgConfig.@Nullable PixelFormat lastPixelFormat;
 
   @Inject(method = "close", at = @At("HEAD"))
   private void cbbg$close(CallbackInfo ci) {
@@ -34,6 +37,8 @@ public abstract class MinecraftMixin {
               target =
                   "Lcom/mojang/blaze3d/systems/GpuSurface;blitFromTexture(Lcom/mojang/blaze3d/systems/CommandEncoder;Lcom/mojang/blaze3d/textures/GpuTextureView;)V"),
       index = 1)
+  // Texture identity limits presentation interception to Minecraft's main render target.
+  @SuppressWarnings("ReferenceEquality")
   private GpuTextureView cbbg$presentVulkan(GpuTextureView input) {
     if (MainTargetFormatSupport.isOpenGl()) {
       return input;

@@ -8,13 +8,17 @@ import com.qb20nh.cbbg.render.DitherController;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.Minecraft;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.LoggerFactory;
 
+@NullMarked
 public final class SulkanGameTest implements FabricClientGameTest {
   @Override
   public void runTest(ClientGameTestContext context) {
@@ -39,7 +43,9 @@ public final class SulkanGameTest implements FabricClientGameTest {
           });
       return;
     }
-    Object original = context.computeOnClient(client -> invoke("config", new Class<?>[0]));
+    Object original =
+        context.computeOnClient(
+            client -> Objects.requireNonNull(invoke("config", new Class<?>[0])));
     CbbgConfig config = CbbgConfig.get();
     context.runOnClient(
         client -> {
@@ -54,12 +60,13 @@ public final class SulkanGameTest implements FabricClientGameTest {
             context.computeOnClient(
                 client ->
                     (CompletableFuture<?>)
-                        invoke(
-                            "applySelection",
-                            new Class<?>[] {Minecraft.class, boolean.class, String.class},
-                            client,
-                            enabled,
-                            "__builtin__"));
+                        Objects.requireNonNull(
+                            invoke(
+                                "applySelection",
+                                new Class<?>[] {Minecraft.class, boolean.class, String.class},
+                                client,
+                                enabled,
+                                "__builtin__")));
         await(context, reload);
         boolean suspended = enabled && vulkan;
         context.waitFor(
@@ -77,10 +84,8 @@ public final class SulkanGameTest implements FabricClientGameTest {
               }
               if (suspended
                   && (DitherController.getStbnFrames() != 0
-                      || !client
-                          .gameRenderer
-                          .mainRenderTarget()
-                          .getColorTexture()
+                      || !Objects.requireNonNull(
+                              client.gameRenderer.mainRenderTarget().getColorTexture())
                           .getFormat()
                           .name()
                           .equals("RGBA8_UNORM"))) {
@@ -101,7 +106,9 @@ public final class SulkanGameTest implements FabricClientGameTest {
           Path image = context.takeScreenshot("sulkan-" + enabled);
           Files.copy(
               image,
-              Path.of(System.getProperty("cbbg.test.evidence"), "sulkan-" + enabled + ".png"),
+              Path.of(
+                  Objects.requireNonNull(System.getProperty("cbbg.test.evidence")),
+                  "sulkan-" + enabled + ".png"),
               StandardCopyOption.REPLACE_EXISTING);
         } catch (java.io.IOException failure) {
           throw new AssertionError("Could not save Sulkan screenshot", failure);
@@ -113,12 +120,15 @@ public final class SulkanGameTest implements FabricClientGameTest {
             context.computeOnClient(
                 client ->
                     (CompletableFuture<?>)
-                        invoke(
-                            "applyConfig",
-                            new Class<?>[] {Minecraft.class, original.getClass(), boolean.class},
-                            client,
-                            original,
-                            false));
+                        Objects.requireNonNull(
+                            invoke(
+                                "applyConfig",
+                                new Class<?>[] {
+                                  Minecraft.class, original.getClass(), boolean.class
+                                },
+                                client,
+                                original,
+                                false)));
         await(context, restore);
       } finally {
         context.runOnClient(
@@ -136,13 +146,13 @@ public final class SulkanGameTest implements FabricClientGameTest {
     future.join();
   }
 
-  static Object invoke(String name, Class<?>[] arguments, Object... values) {
+  static @Nullable Object invoke(String name, Class<?>[] arguments, Object... values) {
     try {
       return Class.forName("com.sulkan.shaders.runtime.ShaderRuntime")
           .getMethod(name, arguments)
           .invoke(null, values);
     } catch (ReflectiveOperationException failure) {
-      throw new AssertionError("Could not call Sulkan " + name, failure);
+      throw new LinkageError("Could not call Sulkan " + name, failure);
     }
   }
 }

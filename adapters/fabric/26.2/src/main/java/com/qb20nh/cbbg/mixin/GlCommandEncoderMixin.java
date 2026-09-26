@@ -12,6 +12,7 @@ import com.qb20nh.cbbg.debug.CbbgGlNames;
 import com.qb20nh.cbbg.render.CbbgDither;
 import java.util.concurrent.atomic.AtomicBoolean;
 import net.minecraft.client.Minecraft;
+import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL30;
@@ -22,16 +23,19 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(targets = {"com/mojang/blaze3d/opengl/GlCommandEncoder"})
+@NullMarked
 public abstract class GlCommandEncoderMixin {
 
   @Unique
   private static final ThreadLocal<Integer> PRESENT_DEPTH = ThreadLocal.withInitial(() -> 0);
 
   @Unique private static final AtomicBoolean loggedOnce = new AtomicBoolean(false);
-  @Unique private static volatile CbbgConfig.Mode lastMode = null;
-  @Unique private static volatile CbbgConfig.PixelFormat lastPixelFormat = null;
+  @Unique private static volatile CbbgConfig.@Nullable Mode lastMode = null;
+  @Unique private static volatile CbbgConfig.@Nullable PixelFormat lastPixelFormat = null;
 
   @Inject(method = "presentTexture", at = @At("HEAD"), cancellable = true)
+  // Texture identity limits interception to Minecraft's owned main render target.
+  @SuppressWarnings("ReferenceEquality")
   private void cbbg$presentTexture(
       GpuTextureView textureView, int swapchainWidth, int swapchainHeight, CallbackInfo ci) {
     // Prevent recursion when cbbg itself calls presentTexture for its dither
@@ -155,8 +159,7 @@ public abstract class GlCommandEncoderMixin {
 
     try {
       int mainInternal = getTextureInternalFormat(mainView.texture());
-      Integer lightmapInternal = null;
-      lightmapInternal =
+      Integer lightmapInternal =
           swallowExceptions(
               () -> {
                 GpuTextureView lightmap = Minecraft.getInstance().gameRenderer.lightmap();

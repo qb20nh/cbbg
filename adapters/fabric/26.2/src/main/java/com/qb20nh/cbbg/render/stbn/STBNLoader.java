@@ -9,7 +9,10 @@ import java.nio.file.Path;
 import java.security.NoSuchAlgorithmException;
 import java.util.*;
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
+@NullMarked
 public class STBNLoader {
 
   private STBNLoader() {}
@@ -18,8 +21,8 @@ public class STBNLoader {
   private static final String HASH_FILE_FMT = STBNCache.HASH_FILE_FMT;
   private static final String IMAGE_BASE_FMT = STBNCache.IMAGE_BASE_FMT;
 
-  public static NativeImage[] loadOrGenerate(
-      int width, int height, int frames, STBNGenerator.STBNFields fields) {
+  public static NativeImage @Nullable [] loadOrGenerate(
+      int width, int height, int frames, STBNGenerator.@Nullable STBNFields fields) {
     // 1. Try Cache
     if (fields == null) {
       NativeImage[] cached = loadFromCache(width, height, frames);
@@ -71,7 +74,7 @@ public class STBNLoader {
       Map<String, String> hashes = new HashMap<>();
       List<String> lines = Files.readAllLines(hashFile);
       for (String line : lines) {
-        String[] parts = line.trim().split("\\s+");
+        String[] parts = line.trim().split("\\s+", 0);
         if (parts.length >= 2) {
           hashes.put(parts[1], parts[0]);
         }
@@ -87,11 +90,12 @@ public class STBNLoader {
           return new NativeImage[0];
         }
 
-        images[z] = loadCachedFrame(w, h, d, z, expectedHash);
-        if (images[z] == null) {
+        NativeImage frame = loadCachedFrame(w, h, d, z, expectedHash);
+        if (frame == null) {
           cleanupImages(images, z);
           return new NativeImage[0];
         }
+        images[z] = frame;
       }
       return images;
     } catch (Exception e) {
@@ -100,7 +104,8 @@ public class STBNLoader {
     }
   }
 
-  private static NativeImage loadCachedFrame(int w, int h, int d, int z, String expectedHash)
+  private static @Nullable NativeImage loadCachedFrame(
+      int w, int h, int d, int z, String expectedHash)
       throws IOException, NoSuchAlgorithmException {
     String baseName = String.format(IMAGE_BASE_FMT, w, h, d, z);
     Path imageFile = CACHE_DIR.resolve(baseName + ".png");
@@ -175,7 +180,9 @@ public class STBNLoader {
             .filter(Files::isRegularFile)
             .forEach(
                 path -> {
-                  String name = path.getFileName().toString();
+                  Path fileName = path.getFileName();
+                  if (fileName == null) return;
+                  String name = fileName.toString();
                   // Check if it matches default pattern
                   if (name.equals(defaultHashFile)) {
                     return; // Keep default hash

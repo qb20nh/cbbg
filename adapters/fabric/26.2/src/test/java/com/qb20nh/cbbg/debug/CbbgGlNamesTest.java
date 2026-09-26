@@ -1,11 +1,13 @@
 package com.qb20nh.cbbg.debug;
 
+import org.jspecify.annotations.NullMarked;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL21;
 import org.lwjgl.opengl.GL30;
 
+@NullMarked
 class CbbgGlNamesTest {
 
   @Test

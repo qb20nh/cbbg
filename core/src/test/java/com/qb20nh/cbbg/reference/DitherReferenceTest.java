@@ -3,8 +3,10 @@ package com.qb20nh.cbbg.reference;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 
+import org.jspecify.annotations.NullMarked;
 import org.junit.jupiter.api.Test;
 
+@NullMarked
 class DitherReferenceTest {
   @Test
   void nonBoundaryChannelsDistinguishMissingAndDoubleApplication() {

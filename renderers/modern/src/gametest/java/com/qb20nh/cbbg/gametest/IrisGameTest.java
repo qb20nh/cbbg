@@ -9,17 +9,22 @@ import com.qb20nh.cbbg.config.CbbgConfig;
 import com.qb20nh.cbbg.render.DitherController;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.Screenshot;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
+@NullMarked
 public final class IrisGameTest implements FabricClientGameTest {
   @Override
   public void runTest(ClientGameTestContext context) {
     boolean expected =
-        java.util.List.of(System.getProperty("cbbg.test.compat", "none").split("\\+"))
+        java.util.List.of(
+                Objects.requireNonNull(System.getProperty("cbbg.test.compat", "none")).split("\\+"))
             .contains("iris");
     if (FabricLoader.getInstance().isModLoaded("iris") != expected) {
       throw new AssertionError("Iris presence does not match the requested fixture");
@@ -46,7 +51,7 @@ public final class IrisGameTest implements FabricClientGameTest {
       context.waitFor(client -> DitherController.isReady(), 600);
       context.runOnClient(
           client -> {
-            Object config = iris("getIrisConfig");
+            Object config = Objects.requireNonNull(iris("getIrisConfig"));
             invoke(config, "setShaderPackName", String.class, "cbbg-parity");
             invoke(config, "setShadersEnabled", boolean.class, true);
             saveAndReload();
@@ -55,17 +60,15 @@ public final class IrisGameTest implements FabricClientGameTest {
           client ->
               IrisCompat.isShaderPackActive()
                   && !DitherController.isReady()
-                  && client
-                      .gameRenderer
-                      .mainRenderTarget()
-                      .getColorTexture()
+                  && Objects.requireNonNull(
+                          client.gameRenderer.mainRenderTarget().getColorTexture())
                       .getFormat()
                       .name()
                       .equals("RGBA8_UNORM"),
           600);
       long stopped = context.computeOnClient(client -> DitherController.getPresentationCount());
       context.waitTicks(5);
-      CompletableFuture<Void> capture = new CompletableFuture<>();
+      CompletableFuture<@Nullable Void> capture = new CompletableFuture<>();
       context.runOnClient(
           client -> {
             if (CbbgConfig.get().mode() != CbbgConfig.Mode.ENABLED
@@ -73,7 +76,7 @@ public final class IrisGameTest implements FabricClientGameTest {
                 || DitherController.getPresentationCount() != stopped) {
               throw new AssertionError("Iris did not suspend CBBG without changing user settings");
             }
-            if ((Boolean) iris("isFallback")) {
+            if ((Boolean) Objects.requireNonNull(iris("isFallback"))) {
               throw new AssertionError(
                   "Iris fell back instead of rendering the fixture shaderpack");
             }
@@ -86,21 +89,10 @@ public final class IrisGameTest implements FabricClientGameTest {
                 client.gameRenderer.mainRenderTarget(),
                 image -> {
                   try (image) {
-                    int magenta = 0;
-                    int total = 0;
-                    for (int y = image.getHeight() / 4; y < image.getHeight() * 3 / 4; y++) {
-                      for (int x = image.getWidth() / 4; x < image.getWidth() * 3 / 4; x++) {
-                        total++;
-                        if ((image.getPixel(x, y) & 0xffffff) == 0xff00ff) {
-                          magenta++;
-                        }
-                      }
-                    }
-                    if (magenta < total * 0.9) {
-                      throw new AssertionError(
-                          "The fixture's final shader did not reach the screenshot");
-                    }
-                    Path evidence = Path.of(System.getProperty("cbbg.test.evidence"));
+                    assertFinalShader(
+                        image, "The fixture's final shader did not reach the screenshot");
+                    Path evidence =
+                        Path.of(Objects.requireNonNull(System.getProperty("cbbg.test.evidence")));
                     Files.createDirectories(evidence);
                     image.writeToFile(
                         evidence.resolve(
@@ -120,7 +112,11 @@ public final class IrisGameTest implements FabricClientGameTest {
       capture.join();
       context.runOnClient(
           client -> {
-            invoke(iris("getIrisConfig"), "setShadersEnabled", boolean.class, false);
+            invoke(
+                Objects.requireNonNull(iris("getIrisConfig")),
+                "setShadersEnabled",
+                boolean.class,
+                false);
             saveAndReload();
           });
       context.waitFor(
@@ -132,10 +128,7 @@ public final class IrisGameTest implements FabricClientGameTest {
       context.runOnClient(
           client -> {
             if (CbbgClient.getEffectiveMode() != CbbgConfig.Mode.DEMO
-                || !client
-                    .gameRenderer
-                    .mainRenderTarget()
-                    .getColorTexture()
+                || !Objects.requireNonNull(client.gameRenderer.mainRenderTarget().getColorTexture())
                     .getFormat()
                     .name()
                     .equals("RGBA16_FLOAT")) {
@@ -150,7 +143,11 @@ public final class IrisGameTest implements FabricClientGameTest {
     } finally {
       context.runOnClient(
           client -> {
-            invoke(iris("getIrisConfig"), "setShadersEnabled", boolean.class, false);
+            invoke(
+                Objects.requireNonNull(iris("getIrisConfig")),
+                "setShadersEnabled",
+                boolean.class,
+                false);
             saveAndReload();
             CbbgConfig.setMode(original.mode());
             CbbgConfig.setPixelFormat(original.pixelFormat());
@@ -175,7 +172,8 @@ public final class IrisGameTest implements FabricClientGameTest {
       throw new AssertionError("Iris debug state differs from the render state: " + output);
     }
     try {
-      Path evidence = Path.of(System.getProperty("cbbg.test.evidence"), "debug");
+      Path evidence =
+          Path.of(Objects.requireNonNull(System.getProperty("cbbg.test.evidence")), "debug");
       Files.createDirectories(evidence);
       Files.writeString(evidence.resolve("iris-" + active + "-" + user + ".txt"), output + "\n");
     } catch (java.io.IOException failure) {

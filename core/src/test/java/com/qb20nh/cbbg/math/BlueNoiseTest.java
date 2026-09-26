@@ -5,8 +5,10 @@ import static org.junit.jupiter.api.Assertions.*;
 import java.nio.ByteBuffer;
 import java.security.MessageDigest;
 import java.util.Arrays;
+import org.jspecify.annotations.NullMarked;
 import org.junit.jupiter.api.Test;
 
+@NullMarked
 class BlueNoiseTest {
   @Test
   void fieldsMatchThePrevious26_2Artifact() throws Exception {

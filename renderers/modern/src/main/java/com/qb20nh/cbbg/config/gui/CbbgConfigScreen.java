@@ -9,9 +9,12 @@ import net.minecraft.client.gui.screens.ConfirmScreen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
+@NullMarked
 public final class CbbgConfigScreen extends Screen {
-  private final Screen parent;
+  private final @Nullable Screen parent;
   private static final int CARD_WIDTH = CbbgConfigWidgets.CARD_WIDTH;
   private static final int CARD_HEIGHT = CbbgConfigWidgets.CARD_HEIGHT;
   private static final int CARD_BG_COLOR = CbbgConfigWidgets.CARD_BG_COLOR;
@@ -22,7 +25,7 @@ public final class CbbgConfigScreen extends Screen {
     context.outline(x1, y1, x2 - x1, y2 - y1, CARD_BORDER_COLOR);
   }
 
-  public CbbgConfigScreen(Screen parent) {
+  public CbbgConfigScreen(@Nullable Screen parent) {
     super(Component.translatable("cbbg.config.title"));
     this.parent = parent;
   }

@@ -12,6 +12,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Objects;
 import java.util.function.BiConsumer;
+import org.jspecify.annotations.Nullable;
 
 public final class CbbgConfig {
   private final Mode mode;
@@ -60,10 +61,10 @@ public final class CbbgConfig {
     }
   }
 
-  private static Path path;
-  private static BiConsumer<String, Throwable> warning;
+  private static @Nullable Path path;
+  private static @Nullable BiConsumer<String, Throwable> warning;
 
-  private static volatile CbbgConfig instance;
+  private static volatile @Nullable CbbgConfig instance;
 
   /** Called by the loader before any renderer or settings UI accesses the singleton. */
   public static synchronized void configure(Path configFile, BiConsumer<String, Throwable> logger) {
@@ -89,13 +90,13 @@ public final class CbbgConfig {
       if (path == null) {
         throw new IllegalStateException("The loader must configure CBBG before accessing settings");
       }
-      cfg = load(path, warning);
+      cfg = load(path, Objects.requireNonNull(warning));
       instance = cfg;
       return cfg;
     }
   }
 
-  public static synchronized void setMode(Mode mode) {
+  public static synchronized void setMode(@Nullable Mode mode) {
     if (mode == null) {
       return;
     }
@@ -114,7 +115,7 @@ public final class CbbgConfig {
     save(next);
   }
 
-  public static synchronized void setPixelFormat(PixelFormat format) {
+  public static synchronized void setPixelFormat(@Nullable PixelFormat format) {
     if (format == null) {
       return;
     }
@@ -230,8 +231,8 @@ public final class CbbgConfig {
   }
 
   public CbbgConfig(
-      Mode mode,
-      PixelFormat pixelFormat,
+      @Nullable Mode mode,
+      @Nullable PixelFormat pixelFormat,
       int stbnSize,
       int stbnDepth,
       long stbnSeed,
@@ -251,7 +252,7 @@ public final class CbbgConfig {
     this.notifyToast = notifyToast;
   }
 
-  public CbbgConfig(Mode mode) {
+  public CbbgConfig(@Nullable Mode mode) {
     this(mode, PixelFormat.RGBA16F, 128, 64, 0, 1.0f, true, true);
   }
 
@@ -276,12 +277,12 @@ public final class CbbgConfig {
   }
 
   private static void save(CbbgConfig cfg) {
-    save(path, cfg, warning);
+    save(Objects.requireNonNull(path), cfg, Objects.requireNonNull(warning));
   }
 
   static void save(Path path, CbbgConfig cfg, BiConsumer<String, Throwable> warning) {
     try {
-      Files.createDirectories(path.toAbsolutePath().getParent());
+      Files.createDirectories(Objects.requireNonNull(path.toAbsolutePath().getParent()));
       try (BufferedWriter writer = Files.newBufferedWriter(path, StandardCharsets.UTF_8)) {
         JsonWriter json = new JsonWriter(writer);
         json.setIndent("  ");
@@ -415,14 +416,14 @@ public final class CbbgConfig {
     return json.nextBoolean();
   }
 
-  private static Mode modeValue(String name) {
+  private static @Nullable Mode modeValue(String name) {
     for (Mode value : Mode.values()) {
       if (value.name().equals(name)) return value;
     }
     return null;
   }
 
-  private static PixelFormat pixelFormatValue(String name) {
+  private static @Nullable PixelFormat pixelFormatValue(String name) {
     for (PixelFormat value : PixelFormat.values()) {
       if (value.name().equals(name)) return value;
     }
@@ -436,7 +437,7 @@ public final class CbbgConfig {
   }
 
   private static final class EmptyDocumentException extends RuntimeException {
-    EmptyDocumentException(Throwable cause) {
+    EmptyDocumentException(@Nullable Throwable cause) {
       super(cause);
     }
   }
@@ -476,7 +477,7 @@ public final class CbbgConfig {
   }
 
   @Override
-  public boolean equals(Object other) {
+  public boolean equals(@Nullable Object other) {
     if (this == other) return true;
     if (!(other instanceof CbbgConfig)) return false;
     CbbgConfig that = (CbbgConfig) other;

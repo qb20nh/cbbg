@@ -18,9 +18,12 @@ import net.minecraft.client.gui.screens.ConfirmScreen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
+@NullMarked
 public final class CbbgConfigScreen extends Screen {
-  private final Screen parent;
+  private final @Nullable Screen parent;
   private static final int CARD_WIDTH = 260; // Slightly wider for sliders
   private static final int CARD_HEIGHT = 258; // Extra room for status lines / locking notice
   private static final int CARD_BG_COLOR = 0xCC000000; // 80% opacity black
@@ -43,7 +46,7 @@ public final class CbbgConfigScreen extends Screen {
     context.outline(x1, y1, x2 - x1, y2 - y1, CARD_BORDER_COLOR);
   }
 
-  public CbbgConfigScreen(Screen parent) {
+  public CbbgConfigScreen(@Nullable Screen parent) {
     super(Component.translatable("cbbg.config.title"));
     this.parent = parent;
   }
@@ -458,7 +461,7 @@ public final class CbbgConfigScreen extends Screen {
     private final IntConsumer setter;
     private final Component label;
 
-    public PowerOfTwoSlider(
+    private PowerOfTwoSlider(
         int x,
         int y,
         int width,
@@ -512,7 +515,7 @@ public final class CbbgConfigScreen extends Screen {
     private final DoubleConsumer setter;
     private final Component label;
 
-    public FloatSlider(
+    private FloatSlider(
         int x,
         int y,
         int width,

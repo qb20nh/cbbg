@@ -8,6 +8,7 @@ import com.qb20nh.cbbg.render.DitherController;
 import com.qb20nh.cbbg.render.DitherPass;
 import java.lang.reflect.Field;
 import java.util.Arrays;
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicReference;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
@@ -16,7 +17,10 @@ import net.minecraft.client.Screenshot;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import org.joml.Vector4f;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
+@NullMarked
 public final class MenuStrengthGameTest implements FabricClientGameTest {
   @Override
   public void runTest(ClientGameTestContext context) {
@@ -55,11 +59,15 @@ public final class MenuStrengthGameTest implements FabricClientGameTest {
   }
 
   private static void check(
-      ClientGameTestContext context, Screen screen, int blur, float base, float expectedStrength) {
+      ClientGameTestContext context,
+      @Nullable Screen screen,
+      int blur,
+      float base,
+      float expectedStrength) {
     CompletableFuture<int[]> actual = new CompletableFuture<>();
     CompletableFuture<int[]> expected = new CompletableFuture<>();
     CompletableFuture<int[]> unboosted = new CompletableFuture<>();
-    AtomicReference<DitherPass> pass = new AtomicReference<>();
+    AtomicReference<@Nullable DitherPass> pass = new AtomicReference<>();
     try {
       context.runOnClient(
           client -> {
@@ -70,17 +78,28 @@ public final class MenuStrengthGameTest implements FabricClientGameTest {
             RenderSystem.getDevice()
                 .createCommandEncoder()
                 .clearColorTexture(
-                    main.getColorTexture(),
+                    Objects.requireNonNull(main.getColorTexture()),
                     new Vector4f(127.25f / 255, 127.25f / 255, 127.25f / 255, 1));
             capture(main, actual); // Exercise the normal controller/screenshot route.
             DitherPass reference = new DitherPass();
             pass.set(reference);
             capture(
                 reference.render(
-                    main.getColorTextureView(), noiseView(), expectedStrength, 1, 1, false),
+                    Objects.requireNonNull(main.getColorTextureView()),
+                    noiseView(),
+                    expectedStrength,
+                    1,
+                    1,
+                    false),
                 expected);
             capture(
-                reference.render(main.getColorTextureView(), noiseView(), base, 1, 1, false),
+                reference.render(
+                    Objects.requireNonNull(main.getColorTextureView()),
+                    noiseView(),
+                    base,
+                    1,
+                    1,
+                    false),
                 unboosted);
           });
       context.waitFor(client -> actual.isDone() && expected.isDone() && unboosted.isDone(), 200);
@@ -93,8 +112,9 @@ public final class MenuStrengthGameTest implements FabricClientGameTest {
     } finally {
       context.runOnClient(
           client -> {
-            if (pass.get() != null) {
-              pass.get().close();
+            DitherPass current = pass.get();
+            if (current != null) {
+              current.close();
             }
           });
     }
@@ -104,9 +124,9 @@ public final class MenuStrengthGameTest implements FabricClientGameTest {
     try {
       Field field = DitherController.class.getDeclaredField("noiseView");
       field.setAccessible(true);
-      return (GpuTextureView) field.get(null);
+      return (GpuTextureView) Objects.requireNonNull(field.get(null));
     } catch (ReflectiveOperationException failure) {
-      throw new AssertionError("Could not inspect the current noise frame", failure);
+      throw new LinkageError("Could not inspect the current noise frame", failure);
     }
   }
 

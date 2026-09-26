@@ -1,6 +1,8 @@
 plugins {
     id 'java-library'
     id 'cbbg.private-gson'
+    id 'cbbg.quality'
+    id 'cbbg.formatting'
 }
 
 repositories {
@@ -29,6 +31,8 @@ dependencies {
 
 subprojects {
     apply plugin: 'java-library'
+    apply plugin: 'cbbg.quality'
+    repositories { mavenCentral() }
     java {
         sourceCompatibility = JavaVersion.VERSION_1_8
         targetCompatibility = JavaVersion.VERSION_1_8
@@ -39,6 +43,12 @@ subprojects {
 }
 
 sourceSets.test.java.srcDir 'src/testSupport/java'
+
+['check', 'qualityCheck'].each { operation ->
+    tasks.named(operation) {
+        dependsOn subprojects.collect { it.tasks.named(operation) }
+    }
+}
 
 test {
     useJUnitPlatform()

@@ -2,11 +2,14 @@ package com.qb20nh.cbbg.gametest;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.Screen;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
+@NullMarked
 final class ClientTestAccess {
   private ClientTestAccess() {}
 
-  static Screen screen(Minecraft client) {
+  static @Nullable Screen screen(Minecraft client) {
     return client.gui.screen();
   }
 

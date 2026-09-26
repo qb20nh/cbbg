@@ -9,10 +9,14 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+@NullMarked
 class CbbgConfigTest {
 
   @Test
@@ -210,7 +214,8 @@ class CbbgConfigTest {
 
   private static ReferenceResult legacyRead(String input) {
     try {
-      LegacyDiskModel model = LEGACY_GSON.fromJson(input, LegacyDiskModel.class);
+      LegacyDiskModel model =
+          Objects.requireNonNull(LEGACY_GSON.fromJson(input, LegacyDiskModel.class));
       return new ReferenceResult(
           new CbbgConfig(
               model.mode,
@@ -259,12 +264,12 @@ class CbbgConfigTest {
   }
 
   private static final class LegacyDiskModel {
-    CbbgConfig.Mode mode;
-    CbbgConfig.PixelFormat pixelFormat;
+    CbbgConfig.@Nullable Mode mode;
+    CbbgConfig.@Nullable PixelFormat pixelFormat;
     int stbnSize = 128;
     int stbnDepth = 64;
     long stbnSeed;
-    Float strength;
+    @Nullable Float strength;
     boolean notifyChat = true;
     boolean notifyToast = true;
   }

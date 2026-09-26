@@ -3,7 +3,9 @@ package com.qb20nh.cbbg.render;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.toasts.SystemToast;
 import net.minecraft.network.chat.Component;
+import org.jspecify.annotations.NullMarked;
 
+@NullMarked
 final class NotificationPlatform {
   private NotificationPlatform() {}
 

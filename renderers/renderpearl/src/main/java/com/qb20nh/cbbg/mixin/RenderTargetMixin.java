@@ -7,12 +7,16 @@ import com.mojang.renderpearl.api.device.GpuDevice;
 import com.mojang.renderpearl.api.textures.GpuTexture;
 import com.qb20nh.cbbg.render.FloatAttachments;
 import java.util.function.Supplier;
+import org.jspecify.annotations.NullMarked;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Redirect;
 
 @Mixin(RenderTarget.class)
+@NullMarked
 public abstract class RenderTargetMixin {
+  // Mixin supplies a RenderTarget receiver, which may be a MainTarget at runtime.
+  @SuppressWarnings("IsInstanceIncompatibleType")
   @Redirect(
       method = "createBuffers",
       at =

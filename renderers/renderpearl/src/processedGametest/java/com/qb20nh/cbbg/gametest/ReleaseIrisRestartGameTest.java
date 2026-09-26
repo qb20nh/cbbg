@@ -3,16 +3,20 @@ package com.qb20nh.cbbg.gametest;
 import static com.qb20nh.cbbg.gametest.IrisFixture.*;
 
 import com.mojang.renderpearl.api.GpuFormat;
+import java.util.Objects;
 import java.util.Optional;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
+import org.jspecify.annotations.NullMarked;
 
 /** Prepare and verify run in separate JVMs with the same game directory. */
+@NullMarked
 public final class ReleaseIrisRestartGameTest implements FabricClientGameTest {
   @Override
   public void runTest(ClientGameTestContext context) {
     String phase = System.getProperty("cbbg.test.restart");
-    if (!"prepare".equals(phase) && !"verify".equals(phase) && !"control".equals(phase)) {
+    if (phase == null
+        || (!"prepare".equals(phase) && !"verify".equals(phase) && !"control".equals(phase))) {
       throw new AssertionError("Restart test requires prepare, verify or disabled control phase");
     }
     ReleaseIrisGameTest.requireIris(context);
@@ -21,15 +25,20 @@ public final class ReleaseIrisRestartGameTest implements FabricClientGameTest {
       // Check startup preferences before any command or shader configuration change.
       context.runOnClient(
           client -> {
-            Object config = iris("getIrisConfig");
+            Object config = Objects.requireNonNull(iris("getIrisConfig"));
             try {
-              if (!(Boolean) config.getClass().getMethod("areShadersEnabled").invoke(config)
+              if (!Objects.requireNonNull(
+                      (Boolean)
+                          Objects.requireNonNull(config)
+                              .getClass()
+                              .getMethod("areShadersEnabled")
+                              .invoke(Objects.requireNonNull(config)))
                   || !Optional.of("cbbg-parity")
                       .equals(config.getClass().getMethod("getShaderPackName").invoke(config))) {
                 throw new AssertionError("Iris shader selection did not survive restart");
               }
             } catch (ReflectiveOperationException failure) {
-              throw new AssertionError("Could not inspect persisted Iris settings", failure);
+              throw new LinkageError("Could not inspect persisted Iris settings", failure);
             }
             var saved = ReleaseClient.settings();
             if (!saved.get("mode").getAsString().equals("ENABLED")
@@ -48,7 +57,11 @@ public final class ReleaseIrisRestartGameTest implements FabricClientGameTest {
         ReleaseClient.command(context, "format set rgba16f");
         context.runOnClient(
             client -> {
-              invoke(iris("getIrisConfig"), "setShaderPackName", String.class, "cbbg-parity");
+              invoke(
+                  Objects.requireNonNull(iris("getIrisConfig")),
+                  "setShaderPackName",
+                  String.class,
+                  "cbbg-parity");
               ReleaseIrisGameTest.setShaders(true);
             });
       }
@@ -58,7 +71,8 @@ public final class ReleaseIrisRestartGameTest implements FabricClientGameTest {
       context.waitTicks(5);
       context.runOnClient(
           client -> {
-            if ((Boolean) iris("isFallback") || ProcessedRenderObservations.draws() != stopped) {
+            if (Objects.requireNonNull((Boolean) iris("isFallback"))
+                || ProcessedRenderObservations.draws() != stopped) {
               throw new AssertionError("Restart shader did not suspend CBBG cleanly");
             }
             ReleaseIrisGameTest.checkDebug(

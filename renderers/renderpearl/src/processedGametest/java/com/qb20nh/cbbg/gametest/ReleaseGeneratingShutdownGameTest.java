@@ -3,6 +3,8 @@ package com.qb20nh.cbbg.gametest;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Objects;
+import java.util.concurrent.atomic.AtomicInteger;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import org.apache.logging.log4j.LogManager;
@@ -10,8 +12,11 @@ import org.apache.logging.log4j.core.LogEvent;
 import org.apache.logging.log4j.core.Logger;
 import org.apache.logging.log4j.core.appender.AbstractAppender;
 import org.apache.logging.log4j.core.config.Property;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
 /** Returns while real uncached STBN math is active; cancellation belongs to Minecraft.close. */
+@NullMarked
 public final class ReleaseGeneratingShutdownGameTest implements FabricClientGameTest {
   private static final String PREFIX = "stbn_128x128x128";
 
@@ -54,7 +59,8 @@ public final class ReleaseGeneratingShutdownGameTest implements FabricClientGame
     try (var files = Files.walk(cache)) {
       Path output =
           files
-              .filter(path -> path.getFileName().toString().startsWith(PREFIX))
+              .filter(
+                  path -> Objects.requireNonNull(path.getFileName()).toString().startsWith(PREFIX))
               .findFirst()
               .orElse(null);
       if (output != null)
@@ -66,8 +72,8 @@ public final class ReleaseGeneratingShutdownGameTest implements FabricClientGame
 
   static final class GenerationObserver extends AbstractAppender implements AutoCloseable {
     private final Logger logger = (Logger) LogManager.getLogger("cbbg-gen");
-    volatile Thread worker;
-    volatile int completions;
+    volatile @Nullable Thread worker;
+    final AtomicInteger completions = new AtomicInteger();
 
     GenerationObserver() {
       super("cbbg-release-generating-shutdown", null, null, false, Property.EMPTY_ARRAY);
@@ -82,13 +88,13 @@ public final class ReleaseGeneratingShutdownGameTest implements FabricClientGame
       if (message.startsWith("Starting Async STBN Math Generation (128x128x128)")) {
         worker = Thread.currentThread();
       } else if (worker != null && message.startsWith("STBN Math Complete in ")) {
-        completions++;
+        completions.incrementAndGet();
       }
     }
 
     boolean mathActive() {
       Thread thread = worker;
-      if (thread == null || completions != 0) return false;
+      if (thread == null || completions.get() != 0) return false;
       for (StackTraceElement frame : thread.getStackTrace()) {
         if (frame.getClassName().equals("java.util.TimSort")) return true;
       }

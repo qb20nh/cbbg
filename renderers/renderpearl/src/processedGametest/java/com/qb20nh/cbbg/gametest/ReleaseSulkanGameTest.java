@@ -7,14 +7,18 @@ import java.lang.reflect.InvocationTargetException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.regex.Pattern;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.Minecraft;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
 /** Uses Sulkan's public API and observations of the packaged CBBG mod. */
+@NullMarked
 public final class ReleaseSulkanGameTest implements FabricClientGameTest {
   @Override
   public void runTest(ClientGameTestContext context) {
@@ -28,7 +32,9 @@ public final class ReleaseSulkanGameTest implements FabricClientGameTest {
           });
       return;
     }
-    Object original = context.computeOnClient(client -> invoke("config", new Class<?>[0]));
+    Object original =
+        context.computeOnClient(
+            client -> Objects.requireNonNull(invoke("config", new Class<?>[0])));
     context.runOnClient(client -> checkGate(client, userMode(client), active()));
     try (var world = context.worldBuilder().create()) {
       world.getConnection().waitForChunksRender();
@@ -75,14 +81,14 @@ public final class ReleaseSulkanGameTest implements FabricClientGameTest {
 
   static boolean active() {
     return FabricLoader.getInstance().isModLoaded("sulkan")
-        && (Boolean) invoke("shadersEnabled", new Class<?>[0]);
+        && Objects.requireNonNull((Boolean) invoke("shadersEnabled", new Class<?>[0]));
   }
 
   static String userMode(Minecraft client) {
     String output = String.join("\n", ReleaseDebugState.read(client));
     var user = Pattern.compile("\\(user=(ENABLED|DISABLED|DEMO)\\)").matcher(output);
     if (!user.find()) throw new AssertionError("Missing user mode in debug entry: " + output);
-    return user.group(1);
+    return Objects.requireNonNull(user.group(1));
   }
 
   static void checkGate(Minecraft client, String user, boolean suspended) {
@@ -102,20 +108,25 @@ public final class ReleaseSulkanGameTest implements FabricClientGameTest {
     boolean frames =
         frame.find()
             && (stopped
-                ? frame.group(1).equals("0") && frame.group(2).equals("0")
-                : Integer.parseInt(frame.group(2))
+                ? Objects.requireNonNull(frame.group(1)).equals("0")
+                    && Objects.requireNonNull(frame.group(2)).equals("0")
+                : Integer.parseInt(Objects.requireNonNull(frame.group(2)))
                         == ReleaseClient.settings().get("stbnDepth").getAsInt()
-                    && Integer.parseInt(frame.group(1)) < Integer.parseInt(frame.group(2)));
+                    && Integer.parseInt(Objects.requireNonNull(frame.group(1)))
+                        < Integer.parseInt(Objects.requireNonNull(frame.group(2))));
     GpuFormat format = stopped ? GpuFormat.RGBA8_UNORM : savedFormat();
     JsonObject saved = ReleaseClient.settings();
     if ((saved.has("mode") && !saved.get("mode").getAsString().equals(user))
         || !frames
         || !output.contains("main=" + format.name())
-        || client.gameRenderer.mainRenderTarget().getColorTexture().getFormat() != format) {
+        || Objects.requireNonNull(client.gameRenderer.mainRenderTarget().getColorTexture())
+                .getFormat()
+            != format) {
       throw new AssertionError("Sulkan resources differ from the render state: " + output);
     }
     try {
-      Path evidence = Path.of(System.getProperty("cbbg.test.evidence"), "debug");
+      Path evidence =
+          Path.of(Objects.requireNonNull(System.getProperty("cbbg.test.evidence")), "debug");
       Files.createDirectories(evidence);
       Files.writeString(
           evidence.resolve("sulkan-" + suspended + "-" + user + ".txt"), output + "\n");
@@ -189,12 +200,13 @@ public final class ReleaseSulkanGameTest implements FabricClientGameTest {
         context.computeOnClient(
             client ->
                 (CompletableFuture<?>)
-                    invoke(
-                        "applySelection",
-                        new Class<?>[] {Minecraft.class, boolean.class, String.class},
-                        client,
-                        enabled,
-                        pack));
+                    Objects.requireNonNull(
+                        invoke(
+                            "applySelection",
+                            new Class<?>[] {Minecraft.class, boolean.class, String.class},
+                            client,
+                            enabled,
+                            pack)));
     await(context, reload);
     context.waitFor(client -> client.gui.overlay() == null, 600);
     context.waitTicks(5);
@@ -205,12 +217,13 @@ public final class ReleaseSulkanGameTest implements FabricClientGameTest {
         context.computeOnClient(
             client ->
                 (CompletableFuture<?>)
-                    invoke(
-                        "applyConfig",
-                        new Class<?>[] {Minecraft.class, original.getClass(), boolean.class},
-                        client,
-                        original,
-                        false));
+                    Objects.requireNonNull(
+                        invoke(
+                            "applyConfig",
+                            new Class<?>[] {Minecraft.class, original.getClass(), boolean.class},
+                            client,
+                            original,
+                            false)));
     await(context, restore);
     context.waitFor(client -> client.gui.overlay() == null, 600);
   }
@@ -220,7 +233,7 @@ public final class ReleaseSulkanGameTest implements FabricClientGameTest {
     future.join();
   }
 
-  static Object invoke(String name, Class<?>[] arguments, Object... values) {
+  static @Nullable Object invoke(String name, Class<?>[] arguments, Object... values) {
     try {
       return Class.forName("com.sulkan.shaders.runtime.ShaderRuntime")
           .getMethod(name, arguments)
@@ -228,7 +241,7 @@ public final class ReleaseSulkanGameTest implements FabricClientGameTest {
     } catch (ReflectiveOperationException failure) {
       Throwable cause =
           failure instanceof InvocationTargetException invocation ? invocation.getCause() : failure;
-      throw new AssertionError("Could not call Sulkan " + name, cause);
+      throw new LinkageError("Could not call Sulkan " + name, cause);
     }
   }
 }

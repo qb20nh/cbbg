@@ -5,10 +5,13 @@ import com.qb20nh.cbbg.platform.Text;
 import java.util.concurrent.CompletableFuture;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
 /** Client-thread notifications for explicitly requested noise generation. */
+@NullMarked
 public final class GenerationNotifications {
-  private static CompletableFuture<?> pending;
+  private static @Nullable CompletableFuture<?> pending;
 
   private GenerationNotifications() {}
 

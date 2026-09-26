@@ -1,6 +1,13 @@
 plugins {
     id 'cbbg.targets'
     id 'cbbg.release'
+    id 'cbbg.formatting'
+}
+
+repositories { mavenCentral() }
+
+['check', 'ciCheck', 'qualityCheck'].each { operation ->
+    tasks.named(operation) { dependsOn tasks.named('spotlessCheck') }
 }
 
 tasks.named('check') {

@@ -13,14 +13,18 @@ import com.mojang.renderpearl.api.pipeline.UniformType;
 import com.mojang.renderpearl.api.textures.FilterMode;
 import com.mojang.renderpearl.api.textures.GpuTextureView;
 import java.nio.ByteOrder;
+import java.util.Objects;
 import java.util.Optional;
 import net.minecraft.resources.Identifier;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
 /** Owns the RGBA8 output; Minecraft owns pipelines and transient uniform memory. */
+@NullMarked
 public final class DitherPass implements AutoCloseable {
   private static final RenderPipeline ENABLED = pipeline(false);
   private static final RenderPipeline DEMO = pipeline(true);
-  private TextureTarget output;
+  private @Nullable TextureTarget output;
 
   private static RenderPipeline pipeline(boolean demo) {
     var builder =
@@ -74,7 +78,9 @@ public final class DitherPass implements AutoCloseable {
                 GpuBuffer.USAGE_UNIFORM);
     try (RenderPass pass =
         encoder.createRenderPass(
-            () -> "CBBG dither", output.getColorTextureView(), Optional.empty())) {
+            () -> "CBBG dither",
+            Objects.requireNonNull(output.getColorTextureView()),
+            Optional.empty())) {
       pass.setPipeline(RenderSystem.getCompiledPipeline(demo ? DEMO : ENABLED));
       pass.setUniform(
           "InSampler", input, RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST));

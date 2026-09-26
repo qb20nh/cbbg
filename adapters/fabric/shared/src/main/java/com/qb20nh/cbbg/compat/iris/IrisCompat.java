@@ -3,7 +3,10 @@ package com.qb20nh.cbbg.compat.iris;
 import com.qb20nh.cbbg.Cbbg;
 import com.qb20nh.cbbg.platform.LoaderPlatform;
 import java.lang.reflect.Method;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
+@NullMarked
 public final class IrisCompat {
 
   private static final boolean IRIS_LOADED =
@@ -13,6 +16,8 @@ public final class IrisCompat {
   private IrisCompat() {}
 
   /**
+   * Reports whether Iris is loaded and a shaderpack is currently in use.
+   *
    * @return true if Iris is loaded and a shaderpack is currently in use.
    */
   public static boolean isShaderPackActive() {
@@ -44,7 +49,7 @@ public final class IrisCompat {
     return true;
   }
 
-  private static Object invokeStaticNoArgs(Class<?> clazz, String methodName) {
+  private static @Nullable Object invokeStaticNoArgs(Class<?> clazz, String methodName) {
     try {
       final Method m = clazz.getMethod(methodName);
       return m.invoke(null);
@@ -53,7 +58,7 @@ public final class IrisCompat {
     }
   }
 
-  private static Boolean invokeBooleanNoArgs(Object instance, String methodName) {
+  private static @Nullable Boolean invokeBooleanNoArgs(Object instance, String methodName) {
     try {
       final Method m = instance.getClass().getMethod(methodName);
       final Object result = m.invoke(instance);
@@ -63,7 +68,7 @@ public final class IrisCompat {
     }
   }
 
-  private static void logReflectionFailureOnce(Throwable t) {
+  private static void logReflectionFailureOnce(@Nullable Throwable t) {
     if (loggedReflectionFailure) {
       return;
     }

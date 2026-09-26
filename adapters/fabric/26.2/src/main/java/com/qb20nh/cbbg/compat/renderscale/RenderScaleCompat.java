@@ -1,8 +1,10 @@
 package com.qb20nh.cbbg.compat.renderscale;
 
 import java.lang.reflect.Method;
+import java.util.Objects;
 import java.util.function.Supplier;
 import net.fabricmc.loader.api.FabricLoader;
+import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -13,6 +15,7 @@ import org.jspecify.annotations.Nullable;
  * quantization, cbbg upgrades RenderScale's intermediate color target to a float internal format
  * when active.
  */
+@NullMarked
 public final class RenderScaleCompat {
 
   private static final boolean RENDER_SCALE_LOADED =
@@ -22,8 +25,8 @@ public final class RenderScaleCompat {
 
   private static volatile boolean scaleReflectionInitialized = false;
   private static volatile boolean scaleReflectionFailed = false;
-  private static volatile Method commonGetConfig;
-  private static volatile Method configGetScale;
+  private static volatile @Nullable Method commonGetConfig;
+  private static volatile @Nullable Method configGetScale;
 
   private RenderScaleCompat() {}
 
@@ -61,8 +64,8 @@ public final class RenderScaleCompat {
     }
 
     try {
-      Object cfg = commonGetConfig.invoke(null);
-      Object scale = configGetScale.invoke(cfg);
+      Object cfg = Objects.requireNonNull(commonGetConfig).invoke(null);
+      Object scale = Objects.requireNonNull(configGetScale).invoke(cfg);
       if (scale instanceof Number n) {
         return n.floatValue();
       }

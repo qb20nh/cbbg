@@ -15,6 +15,7 @@ import java.util.HexFormat;
 import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommands;
 import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
@@ -24,8 +25,11 @@ import org.apache.logging.log4j.core.LogEvent;
 import org.apache.logging.log4j.core.Logger;
 import org.apache.logging.log4j.core.appender.AbstractAppender;
 import org.apache.logging.log4j.core.config.Property;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
 /** Cancels actual packaged noise math through commands, without linking production classes. */
+@NullMarked
 public final class ReleaseNoiseCancellationGameTest implements FabricClientGameTest {
   private static final int WAIT_TICKS = 200;
   private static final long REPLACEMENT_SEED = 74123;
@@ -34,6 +38,8 @@ public final class ReleaseNoiseCancellationGameTest implements FabricClientGameT
       "4f953f23c7a2a7de8960caa4272090458b2ec986ceeea65796467a0c9109a076";
 
   @Override
+  // The exact replacement noise resource must survive stale completion.
+  @SuppressWarnings("ReferenceEquality")
   public void runTest(ClientGameTestContext context) {
     try (var world = context.worldBuilder().create()) {
       world.getConnection().waitForChunksRender();
@@ -68,7 +74,7 @@ public final class ReleaseNoiseCancellationGameTest implements FabricClientGameT
           long started = System.nanoTime();
           context.runOnClient(
               client -> {
-                if (observer.completions != 0) {
+                if (observer.completions.get() != 0) {
                   throw new AssertionError("Large job completed before cancellation");
                 }
                 configure(dispatcher, source, 16, 8, REPLACEMENT_SEED);
@@ -92,7 +98,7 @@ public final class ReleaseNoiseCancellationGameTest implements FabricClientGameT
               "ENABLED", original.get("pixelFormat").getAsString(), 16, 8, REPLACEMENT_SEED);
           assertReplacementPixels();
           if (!observer.workerIdle()
-              || observer.completions != 1
+              || observer.completions.get() != 1
               || observer.replacementWorker != observer.worker) {
             throw new AssertionError(
                 "Obsolete math completed or worker still runs after replacement");
@@ -168,7 +174,7 @@ public final class ReleaseNoiseCancellationGameTest implements FabricClientGameT
     for (int z = 0; z < 8; z++) {
       String name = "stbn_16x16x8_" + z + ".png";
       byte[] bytes = Files.readAllBytes(ReleaseClient.cache().resolve(name));
-      String[] entry = lines.get(z + 1).trim().split("\\s+");
+      String[] entry = lines.get(z + 1).trim().split("\\s+", 0);
       if (entry.length != 2 || !entry[1].equals(name) || !entry[0].equals(hash(bytes))) {
         throw new AssertionError("Replacement PNG manifest mismatch at frame " + z);
       }
@@ -192,10 +198,10 @@ public final class ReleaseNoiseCancellationGameTest implements FabricClientGameT
 
   private static final class GenerationObserver extends AbstractAppender implements AutoCloseable {
     private final Logger logger = (Logger) LogManager.getLogger("cbbg-gen");
-    private volatile Thread worker;
-    private volatile Thread replacementWorker;
+    private volatile @Nullable Thread worker;
+    private volatile @Nullable Thread replacementWorker;
     private volatile boolean replacementStarted;
-    private volatile int completions;
+    private final AtomicInteger completions = new AtomicInteger();
 
     private GenerationObserver() {
       super("cbbg-release-cancellation", null, null, false, Property.EMPTY_ARRAY);
@@ -208,20 +214,20 @@ public final class ReleaseNoiseCancellationGameTest implements FabricClientGameT
       if (!event.getThreadName().equals("cbbg-stbn")) return;
       String message = event.getMessage().getFormattedMessage();
       if (message.startsWith("Starting Async STBN Math Generation (64x64x32)")) {
-        completions = 0;
+        completions.set(0);
         worker = Thread.currentThread();
       } else if (worker != null
           && message.startsWith("Starting Async STBN Math Generation (16x16x8)")) {
         replacementWorker = Thread.currentThread();
         replacementStarted = true;
       } else if (worker != null && message.startsWith("STBN Math Complete in ")) {
-        completions++;
+        completions.incrementAndGet();
       }
     }
 
     private boolean largeMathActive() {
       Thread thread = worker;
-      if (thread == null || completions != 0 || replacementStarted) return false;
+      if (thread == null || completions.get() != 0 || replacementStarted) return false;
       for (StackTraceElement frame : thread.getStackTrace()) {
         if (frame.getClassName().equals("java.util.TimSort")) return true;
       }

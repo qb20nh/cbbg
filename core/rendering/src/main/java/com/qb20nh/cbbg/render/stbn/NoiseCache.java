@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.BiConsumer;
+import org.jspecify.annotations.Nullable;
 
 public final class NoiseCache {
   private final Path directory;
@@ -29,7 +30,7 @@ public final class NoiseCache {
     return validateCache(w, h, d, seed);
   }
 
-  private boolean validateCache(int w, int h, int d, Long seed) {
+  private boolean validateCache(int w, int h, int d, @Nullable Long seed) {
     try {
       if (!Files.exists(directory)) {
         return false;
@@ -44,7 +45,7 @@ public final class NoiseCache {
       List<String> lines = Files.readAllLines(hashFile);
       if (seed != null && !matchesSeed(lines, seed)) return false;
       for (String line : lines) {
-        String[] parts = line.trim().split("\\s+");
+        String[] parts = line.trim().split("\\s+", 0);
         if (parts.length >= 2) {
           hashes.put(parts[1], parts[0]);
         }

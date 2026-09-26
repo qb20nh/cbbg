@@ -4,10 +4,13 @@ import java.util.concurrent.CompletableFuture;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.minecraft.client.Screenshot;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 import org.lwjgl.sdl.SDLVideo;
 import org.lwjgl.system.MemoryStack;
 
 /** Also runnable without CBBG as a control for native surface resize failures. */
+@NullMarked
 public final class WindowResizeGameTest implements FabricClientGameTest {
   @Override
   public void runTest(ClientGameTestContext context) {
@@ -64,7 +67,7 @@ public final class WindowResizeGameTest implements FabricClientGameTest {
             },
             200);
         context.waitTicks(5);
-        CompletableFuture<Void> capture = new CompletableFuture<>();
+        CompletableFuture<@Nullable Void> capture = new CompletableFuture<>();
         context.runOnClient(
             client -> {
               int width = client.getWindow().getWidth();

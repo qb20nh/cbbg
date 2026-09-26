@@ -4,9 +4,12 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+@NullMarked
 class GlFormatOverrideTest {
 
   @Test
@@ -33,7 +36,8 @@ class GlFormatOverrideTest {
 
     ExecutorService exec = Executors.newSingleThreadExecutor();
     try {
-      Future<Integer> otherThreadValue = exec.submit(() -> GlFormatOverride.getForcedFormat());
+      Future<@Nullable Integer> otherThreadValue =
+          exec.submit(() -> GlFormatOverride.getForcedFormat());
       Assertions.assertNull(otherThreadValue.get(), "thread-local value must not leak");
     } finally {
       exec.shutdownNow();

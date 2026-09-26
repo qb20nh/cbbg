@@ -9,12 +9,16 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.Arrays;
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.minecraft.client.Screenshot;
 import org.joml.Vector4f;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
+@NullMarked
 public final class PresentationGameTest implements FabricClientGameTest {
   @Override
   public void runTest(ClientGameTestContext context) {
@@ -24,7 +28,7 @@ public final class PresentationGameTest implements FabricClientGameTest {
       context.waitFor(
           client -> DitherController.isReady() && DitherController.getPresentationCount() > initial,
           600);
-      CompletableFuture<Void> captured = new CompletableFuture<>();
+      CompletableFuture<@Nullable Void> captured = new CompletableFuture<>();
       CompletableFuture<int[]> actualPixels = new CompletableFuture<>();
       CompletableFuture<int[]> expectedPixels = new CompletableFuture<>();
       context.runOnClient(
@@ -35,7 +39,7 @@ public final class PresentationGameTest implements FabricClientGameTest {
             RenderSystem.getDevice()
                 .createCommandEncoder()
                 .clearColorTexture(
-                    main.getColorTexture(),
+                    Objects.requireNonNull(main.getColorTexture()),
                     new Vector4f(127.25f / 255, 127.25f / 255, 127.25f / 255, 0.375f));
             Screenshot.takeScreenshot(
                 main,
@@ -44,7 +48,8 @@ public final class PresentationGameTest implements FabricClientGameTest {
                     if (image.getWidth() != main.width || image.getHeight() != main.height) {
                       throw new AssertionError("Live screenshot has wrong dimensions");
                     }
-                    Path evidence = Path.of(System.getProperty("cbbg.test.evidence"));
+                    Path evidence =
+                        Path.of(Objects.requireNonNull(System.getProperty("cbbg.test.evidence")));
                     Files.createDirectories(evidence);
                     image.writeToFile(
                         evidence.resolve(
@@ -55,7 +60,8 @@ public final class PresentationGameTest implements FabricClientGameTest {
                     captured.completeExceptionally(failure);
                   }
                 });
-            var expected = DitherController.screenshot(main.getColorTextureView());
+            var expected =
+                DitherController.screenshot(Objects.requireNonNull(main.getColorTextureView()));
             if (expected == null) {
               throw new AssertionError("Expected live dithering to be ready");
             }
@@ -87,7 +93,9 @@ public final class PresentationGameTest implements FabricClientGameTest {
           context.computeOnClient(
               client -> {
                 if (DitherController.isReady()
-                    || client.gameRenderer.mainRenderTarget().getColorTexture().getFormat()
+                    || Objects.requireNonNull(
+                                client.gameRenderer.mainRenderTarget().getColorTexture())
+                            .getFormat()
                         != GpuFormat.RGBA8_UNORM) {
                   throw new AssertionError("Disabling did not release noise and restore RGBA8");
                 }
@@ -109,7 +117,7 @@ public final class PresentationGameTest implements FabricClientGameTest {
       }
       try {
         Path evidence =
-            Path.of(System.getProperty("cbbg.test.evidence"))
+            Path.of(Objects.requireNonNull(System.getProperty("cbbg.test.evidence")))
                 .resolve("noise-" + System.getProperty("cbbg.test.backend"));
         Files.createDirectories(evidence);
         for (int frame = 0; frame < 8; frame++) {

@@ -3,8 +3,10 @@ package com.qb20nh.cbbg;
 import net.fabricmc.loader.api.LanguageAdapter;
 import net.fabricmc.loader.api.LanguageAdapterException;
 import net.fabricmc.loader.api.ModContainer;
+import org.jspecify.annotations.NullMarked;
 
 /** Starts CPU preparation while Fabric constructs language adapters. */
+@NullMarked
 public final class CbbgLanguageAdapter implements LanguageAdapter {
   public CbbgLanguageAdapter() {
     CbbgEarlyInit.startPreparation();

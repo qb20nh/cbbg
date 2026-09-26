@@ -13,6 +13,7 @@ import java.lang.reflect.Proxy;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Objects;
 import java.util.concurrent.atomic.AtomicInteger;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
@@ -20,10 +21,15 @@ import net.minecraft.client.gui.components.debug.DebugScreenDisplayer;
 import net.minecraft.client.gui.components.debug.DebugScreenEntries;
 import net.minecraft.resources.Identifier;
 import org.joml.Vector4f;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
 /** Exercises actual shader compilation failure through a temporary, non-owning shader source. */
+@NullMarked
 public final class ShaderFailureGameTest implements FabricClientGameTest {
   @Override
+  // Shader failure must preserve the caller-owned input view.
+  @SuppressWarnings("ReferenceEquality")
   public void runTest(ClientGameTestContext context) {
     CbbgConfig original = CbbgConfig.get();
     context.waitFor(client -> DitherController.isReady() && client.gui.overlay() == null, 600);
@@ -35,27 +41,34 @@ public final class ShaderFailureGameTest implements FabricClientGameTest {
                 new TextureTarget("CBBG shader failure input", 8, 8, GpuFormat.RGBA32_FLOAT, null);
             device
                 .createCommandEncoder()
-                .clearColorTexture(source.getColorTexture(), new Vector4f(0.25f, 0.5f, 0.75f, 1));
+                .clearColorTexture(
+                    Objects.requireNonNull(source.getColorTexture()),
+                    new Vector4f(0.25f, 0.5f, 0.75f, 1));
             try {
-              var healthy = DitherController.screenshot(source.getColorTextureView());
+              var healthy =
+                  DitherController.screenshot(Objects.requireNonNull(source.getColorTextureView()));
               if (healthy == null)
                 throw new AssertionError("Healthy dither pipeline was unavailable");
               var oldOutput = healthy.getColorTexture();
-              var oldNoise = (GpuTexture) field(DitherController.class, null, "noise");
+              var oldNoise =
+                  (GpuTexture) Objects.requireNonNull(field(DitherController.class, null, "noise"));
               var fallback =
-                  (PipelineCache) field(RenderSystem.class, null, "fallbackPipelineCache");
+                  (PipelineCache)
+                      Objects.requireNonNull(
+                          field(RenderSystem.class, null, "fallbackPipelineCache"));
               var current = (PipelineCache) field(RenderSystem.class, null, "currentPipelineCache");
               var borrowed =
                   (ShaderSource)
-                      field(
-                          PipelineCache.class,
-                          current == null ? fallback : current,
-                          "shaderSource");
+                      Objects.requireNonNull(
+                          field(
+                              PipelineCache.class,
+                              current == null ? fallback : current,
+                              "shaderSource"));
               AtomicInteger attempts = new AtomicInteger();
               ShaderSource invalid =
                   new ShaderSource() {
                     @Override
-                    public String getShader(Identifier id, ShaderType type) {
+                    public @Nullable String getShader(Identifier id, ShaderType type) {
                       String shader = borrowed.getShader(id, type);
                       if (id.equals(Identifier.fromNamespaceAndPath("cbbg", "core/cbbg_dither"))) {
                         if (shader == null)
@@ -67,7 +80,7 @@ public final class ShaderFailureGameTest implements FabricClientGameTest {
                     }
 
                     @Override
-                    public CachedIncludeSource getInclude(Identifier id) {
+                    public @Nullable CachedIncludeSource getInclude(Identifier id) {
                       return borrowed.getInclude(id);
                     }
 
@@ -78,7 +91,9 @@ public final class ShaderFailureGameTest implements FabricClientGameTest {
               var previous = RenderSystem.setCurrentPipelineCache(broken);
               try {
                 replaceFallback(broken);
-                if (DitherController.screenshot(source.getColorTextureView()) != null) {
+                if (DitherController.screenshot(
+                        Objects.requireNonNull(source.getColorTextureView()))
+                    != null) {
                   throw new AssertionError("Broken shader did not trigger fallback");
                 }
               } finally {
@@ -91,12 +106,12 @@ public final class ShaderFailureGameTest implements FabricClientGameTest {
                   || DitherController.isReady()
                   || DitherController.getStbnFrames() != 0
                   || !oldNoise.isClosed()
-                  || !oldOutput.isClosed()
-                  || source.getColorTexture().isClosed()
+                  || !Objects.requireNonNull(oldOutput).isClosed()
+                  || Objects.requireNonNull(source.getColorTexture()).isClosed()
                   || !CbbgConfig.get().equals(original)) {
                 throw new AssertionError("Shader failure lost state or leaked owned resources");
               }
-              if (DitherController.present(source.getColorTextureView())
+              if (DitherController.present(Objects.requireNonNull(source.getColorTextureView()))
                   != source.getColorTextureView()) {
                 throw new AssertionError("Failed effect did not preserve the caller's input");
               }
@@ -109,16 +124,20 @@ public final class ShaderFailureGameTest implements FabricClientGameTest {
                           (proxy, method, args) -> {
                             if (!method.getName().equals("addLine"))
                               throw new AssertionError(method);
-                            lines.add((String) args[0]);
+                            lines.add((String) Objects.requireNonNull(args)[0]);
                             return null;
                           });
-              DebugScreenEntries.getEntry(Identifier.fromNamespaceAndPath("cbbg", "cbbg"))
+              Objects.requireNonNull(
+                      DebugScreenEntries.getEntry(Identifier.fromNamespaceAndPath("cbbg", "cbbg")))
                   .display(displayer, client.level, null, null);
               if (lines.stream().noneMatch(line -> line.contains("dis=1"))) {
                 throw new AssertionError("Debug overlay concealed shader failure");
               }
               try {
-                Path evidence = Path.of(System.getProperty("cbbg.test.evidence"), "shader-failure");
+                Path evidence =
+                    Path.of(
+                        Objects.requireNonNull(System.getProperty("cbbg.test.evidence")),
+                        "shader-failure");
                 Files.createDirectories(evidence);
                 Files.writeString(
                     evidence.resolve("state.txt"),
@@ -144,13 +163,13 @@ public final class ShaderFailureGameTest implements FabricClientGameTest {
     }
   }
 
-  private static Object field(Class<?> owner, Object instance, String name) {
+  private static @Nullable Object field(Class<?> owner, @Nullable Object instance, String name) {
     try {
       var field = owner.getDeclaredField(name);
       field.setAccessible(true);
       return field.get(instance);
     } catch (ReflectiveOperationException failure) {
-      throw new AssertionError("Cannot inspect " + name, failure);
+      throw new LinkageError("Cannot inspect " + name, failure);
     }
   }
 
@@ -161,7 +180,7 @@ public final class ShaderFailureGameTest implements FabricClientGameTest {
       field.setAccessible(true);
       field.set(null, cache);
     } catch (ReflectiveOperationException failure) {
-      throw new AssertionError("Cannot replace the test fallback cache", failure);
+      throw new LinkageError("Cannot replace the test fallback cache", failure);
     }
   }
 }

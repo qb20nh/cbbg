@@ -15,13 +15,17 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.minecraft.client.Screenshot;
 import org.joml.Vector4f;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
 /** Checks packaged screenshot dithering with deterministic pass inputs. */
+@NullMarked
 public final class ReleaseDitherGameTest implements FabricClientGameTest {
   private static final int WIDTH = 6;
   private static final int HEIGHT = 4;
@@ -64,13 +68,14 @@ public final class ReleaseDitherGameTest implements FabricClientGameTest {
                   if (view == null || view.texture().isClosed()) {
                     throw new AssertionError("Expected a live dither output before disabling");
                   }
-                  client.getConnection().sendCommand("cbbg mode set disabled");
+                  Objects.requireNonNull(client.getConnection())
+                      .sendCommand("cbbg mode set disabled");
                   return view;
                 });
         context.waitFor(client -> active.texture().isClosed(), WAIT_TICKS);
         ReleaseClient.assertNoDraws(context);
 
-        CompletableFuture<Void> reload =
+        CompletableFuture<?> reload =
             context.computeOnClient(client -> client.reloadResourcePacks());
         context.waitFor(client -> reload.isDone(), WAIT_TICKS);
         reload.join();
@@ -104,7 +109,7 @@ public final class ReleaseDitherGameTest implements FabricClientGameTest {
 
   private static void check(
       ClientGameTestContext context, Fixture fixture, boolean demo, float strength, float scale) {
-    CompletableFuture<Void> result = new CompletableFuture<>();
+    CompletableFuture<@Nullable Void> result = new CompletableFuture<>();
     context.runOnClient(
         client ->
             capture(
@@ -118,8 +123,8 @@ public final class ReleaseDitherGameTest implements FabricClientGameTest {
   }
 
   private static void checkResize(ClientGameTestContext context, Fixture fixture) {
-    CompletableFuture<Void> first = new CompletableFuture<>();
-    CompletableFuture<Void> second = new CompletableFuture<>();
+    CompletableFuture<@Nullable Void> first = new CompletableFuture<>();
+    CompletableFuture<@Nullable Void> second = new CompletableFuture<>();
     context.runOnClient(
         client -> {
           RenderTarget main = client.gameRenderer.mainRenderTarget();
@@ -152,8 +157,8 @@ public final class ReleaseDitherGameTest implements FabricClientGameTest {
       TextureTarget source,
       Fixture fixture,
       GpuBuffer info,
-      Expected expected,
-      CompletableFuture<Void> result) {
+      @Nullable Expected expected,
+      CompletableFuture<@Nullable Void> result) {
     int width = main.width;
     int height = main.height;
     long selections = ProcessedRenderObservations.ditherSelections();
@@ -164,7 +169,9 @@ public final class ReleaseDitherGameTest implements FabricClientGameTest {
       // pipeline, output target, and readback. Only three bound inputs change.
       try (var ignored =
           ProcessedDitherInputs.overrideAll(
-              source.getColorTextureView(), fixture.noiseView, info.slice())) {
+              Objects.requireNonNull(source.getColorTextureView()),
+              fixture.noiseView,
+              info.slice())) {
         Screenshot.takeScreenshot(
             main,
             1,
@@ -173,7 +180,7 @@ public final class ReleaseDitherGameTest implements FabricClientGameTest {
                 assertPixels(image, source.width, source.height, expected);
                 if (expected != null) {
                   Path path =
-                      Path.of(System.getProperty("cbbg.test.evidence"))
+                      Path.of(Objects.requireNonNull(System.getProperty("cbbg.test.evidence")))
                           .resolve(
                               "dither-"
                                   + System.getProperty("cbbg.test.backend")
@@ -184,7 +191,7 @@ public final class ReleaseDitherGameTest implements FabricClientGameTest {
                                   + "-"
                                   + expected.scale
                                   + ".png");
-                  Files.createDirectories(path.getParent());
+                  Files.createDirectories(Objects.requireNonNull(path.getParent()));
                   image.writeToFile(path);
                 }
                 result.complete(null);
@@ -209,7 +216,8 @@ public final class ReleaseDitherGameTest implements FabricClientGameTest {
     }
   }
 
-  private static void assertPixels(NativeImage image, int width, int height, Expected expected) {
+  private static void assertPixels(
+      NativeImage image, int width, int height, @Nullable Expected expected) {
     if (image.getWidth() != width || image.getHeight() != height) {
       throw new AssertionError("Unexpected dither screenshot dimensions");
     }
@@ -245,7 +253,8 @@ public final class ReleaseDitherGameTest implements FabricClientGameTest {
     }
   }
 
-  private static void await(ClientGameTestContext context, CompletableFuture<Void> result) {
+  private static void await(
+      ClientGameTestContext context, CompletableFuture<@Nullable Void> result) {
     context.waitFor(client -> result.isDone(), 200);
     result.join();
   }
@@ -265,8 +274,12 @@ public final class ReleaseDitherGameTest implements FabricClientGameTest {
           new TextureTarget("CBBG dither fixture", WIDTH, HEIGHT, GpuFormat.RGBA32_FLOAT, null);
       small = new TextureTarget("CBBG resize fixture", 3, 2, GpuFormat.RGBA32_FLOAT, null);
       var color = new Vector4f(127.25f / 255, 127.25f / 255, 127.25f / 255, 0.375f);
-      device.createCommandEncoder().clearColorTexture(source.getColorTexture(), color);
-      device.createCommandEncoder().clearColorTexture(small.getColorTexture(), color);
+      device
+          .createCommandEncoder()
+          .clearColorTexture(Objects.requireNonNull(source.getColorTexture()), color);
+      device
+          .createCommandEncoder()
+          .clearColorTexture(Objects.requireNonNull(small.getColorTexture()), color);
       noise = device.createTexture("CBBG test noise", 5, GpuFormat.RGBA8_UNORM, 2, 2, 1, 1);
       try (NativeImage pixels = new NativeImage(2, 2, false)) {
         for (int y = 0; y < 2; y++) {

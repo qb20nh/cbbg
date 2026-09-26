@@ -12,19 +12,24 @@ import com.qb20nh.cbbg.compat.renderscale.RenderScaleCompat;
 import com.qb20nh.cbbg.config.CbbgConfig;
 import com.qb20nh.cbbg.render.stbn.STBNGenerator;
 import com.qb20nh.cbbg.render.stbn.STBNLoader;
+import java.util.Objects;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
 import net.minecraft.client.Minecraft;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
 /** Render-thread owner of noise frames and the final presentation pass. */
+@NullMarked
 public final class DitherController {
   private static final DitherPass PASS = new DitherPass();
-  private static CbbgConfig previousSettings;
-  private static CbbgConfig.Mode previousMode;
-  private static NoiseKey key;
-  private static CompletableFuture<NativeImage[]> loading;
-  private static NativeImage[] frames;
-  private static GpuTexture noise;
-  private static GpuTextureView noiseView;
+  private static @Nullable CbbgConfig previousSettings;
+  private static CbbgConfig.@Nullable Mode previousMode;
+  private static @Nullable NoiseKey key;
+  private static @Nullable CompletableFuture<NativeImage @Nullable []> loading;
+  private static NativeImage @Nullable [] frames;
+  private static @Nullable GpuTexture noise;
+  private static @Nullable GpuTextureView noiseView;
   private static int nextFrame;
   private static int shownFrame;
   private static int uploadedFrame = -1;
@@ -50,20 +55,22 @@ public final class DitherController {
     }
     startLoading(CbbgConfig.get());
     if (force) {
-      GenerationNotifications.started(loading);
+      GenerationNotifications.started(Objects.requireNonNull(loading));
     }
   }
 
   private static void startLoading(CbbgConfig settings) {
-    key = new NoiseKey(settings.stbnSize(), settings.stbnDepth(), settings.stbnSeed());
-    NoiseKey requested = key;
-    loading =
-        STBNGenerator.generateAsync(key.size, key.size, key.depth, key.seed)
-            .thenApplyAsync(
+    NoiseKey requested =
+        new NoiseKey(settings.stbnSize(), settings.stbnDepth(), settings.stbnSeed());
+    key = requested;
+    CompletableFuture<NativeImage @Nullable []> generation =
+        STBNGenerator.generateAsync(requested.size, requested.size, requested.depth, requested.seed)
+            .<NativeImage @Nullable []>thenApplyAsync(
                 fields ->
                     STBNLoader.loadOrGenerate(
                         requested.size, requested.size, requested.depth, fields));
-    GenerationNotifications.follow(loading);
+    loading = generation;
+    GenerationNotifications.follow(generation);
   }
 
   public static void beginFrame() {
@@ -93,14 +100,14 @@ public final class DitherController {
 
   public static GpuTextureView present(GpuTextureView input) {
     TextureTarget rendered = render(input, true);
-    return rendered == null ? input : rendered.getColorTextureView();
+    return rendered == null ? input : Objects.requireNonNull(rendered.getColorTextureView());
   }
 
-  public static TextureTarget screenshot(GpuTextureView input) {
+  public static @Nullable TextureTarget screenshot(GpuTextureView input) {
     return render(input, false);
   }
 
-  private static TextureTarget render(GpuTextureView input, boolean advance) {
+  private static @Nullable TextureTarget render(GpuTextureView input, boolean advance) {
     if (failed || !CbbgClient.isEnabled() || Minecraft.getInstance().gui.overlay() != null) {
       return null;
     }
@@ -114,9 +121,11 @@ public final class DitherController {
         if (frames == null || frames.length == 0) {
           throw new IllegalStateException("Noise generation produced no frames");
         }
+        NoiseKey requested = Objects.requireNonNull(key);
         noise =
             RenderSystem.getDevice()
-                .createTexture("CBBG STBN", 5, GpuFormat.RGBA8_UNORM, key.size, key.size, 1, 1);
+                .createTexture(
+                    "CBBG STBN", 5, GpuFormat.RGBA8_UNORM, requested.size, requested.size, 1, 1);
         noiseView = RenderSystem.getDevice().createTextureView(noise);
       }
       if (frames == null || noiseView == null) {
@@ -124,7 +133,9 @@ public final class DitherController {
       }
       int index = advance ? nextFrame : shownFrame;
       if (uploadedFrame != index) {
-        RenderSystem.getDevice().createCommandEncoder().writeToTexture(noise, frames[index]);
+        RenderSystem.getDevice()
+            .createCommandEncoder()
+            .writeToTexture(Objects.requireNonNull(noise), frames[index]);
         uploadedFrame = index;
       }
       CbbgConfig settings = CbbgConfig.get();
@@ -195,7 +206,16 @@ public final class DitherController {
 
   private static void releaseNoise() {
     if (loading != null) {
-      loading.thenAccept(DitherController::closeImages);
+      loading
+          .thenAccept(DitherController::closeImages)
+          .exceptionally(
+              failure -> {
+                if (!(failure instanceof CancellationException)
+                    && !(failure.getCause() instanceof CancellationException)) {
+                  Cbbg.LOGGER.error("Pending STBN load or image disposal failed", failure);
+                }
+                return null;
+              });
       loading = null;
     }
     PASS.close();
@@ -215,7 +235,7 @@ public final class DitherController {
     uploadedFrame = -1;
   }
 
-  private static void closeImages(NativeImage[] images) {
+  private static void closeImages(NativeImage @Nullable [] images) {
     if (images != null) {
       for (NativeImage image : images) {
         image.close();

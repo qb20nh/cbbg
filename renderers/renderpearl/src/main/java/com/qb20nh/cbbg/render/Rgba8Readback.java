@@ -8,12 +8,15 @@ import com.mojang.renderpearl.api.GpuFormat;
 import com.mojang.renderpearl.api.commands.RenderPass;
 import com.mojang.renderpearl.api.textures.FilterMode;
 import com.mojang.renderpearl.api.textures.GpuTextureView;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Consumer;
 import net.minecraft.client.Screenshot;
 import net.minecraft.client.renderer.RenderPipelines;
+import org.jspecify.annotations.NullMarked;
 
 /** Converts float attachments before vanilla's packed RGBA8 screenshot readback. */
+@NullMarked
 public final class Rgba8Readback {
   private Rgba8Readback() {}
 
@@ -38,7 +41,7 @@ public final class Rgba8Readback {
               .createCommandEncoder()
               .createRenderPass(
                   () -> "CBBG screenshot conversion",
-                  output.getColorTextureView(),
+                  Objects.requireNonNull(output.getColorTextureView()),
                   Optional.empty())) {
         pass.setPipeline(RenderSystem.getCompiledPipeline(RenderPipelines.TRACY_BLIT));
         RenderSystem.bindDefaultUniforms(pass);

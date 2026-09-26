@@ -11,15 +11,21 @@ import com.mojang.renderpearl.api.GpuFormat;
 import com.qb20nh.cbbg.config.CbbgConfig;
 import com.qb20nh.cbbg.render.MenuBlurScope;
 import java.nio.ByteOrder;
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.minecraft.client.renderer.LevelTargetBundle;
 import net.minecraft.resources.Identifier;
 import org.joml.Vector4f;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
+@NullMarked
 public final class MenuBlurGameTest implements FabricClientGameTest {
   @Override
+  // GPU ownership and recreation require checking the exact resource instances.
+  @SuppressWarnings("ReferenceEquality")
   public void runTest(ClientGameTestContext context) {
     var pool = context.computeOnClient(client -> new CrossFrameResourcePool(3));
     try {
@@ -37,19 +43,20 @@ public final class MenuBlurGameTest implements FabricClientGameTest {
             var target = new TextureTarget("CBBG blur failure", 4, 4, GpuFormat.RGBA16_FLOAT, null);
             RuntimeException injected = new RuntimeException("Injected blur allocation failure");
             try {
-              chain.process(
-                  target,
-                  new GraphicsResourceAllocator() {
-                    @Override
-                    public <T> T acquire(ResourceDescriptor<T> descriptor) {
-                      throw injected;
-                    }
+              Objects.requireNonNull(chain)
+                  .process(
+                      target,
+                      new GraphicsResourceAllocator() {
+                        @Override
+                        public <T> T acquire(ResourceDescriptor<T> descriptor) {
+                          throw injected;
+                        }
 
-                    @Override
-                    public <T> void release(ResourceDescriptor<T> descriptor, T resource) {
-                      descriptor.free(resource);
-                    }
-                  });
+                        @Override
+                        public <T> void release(ResourceDescriptor<T> descriptor, T resource) {
+                          descriptor.free(resource);
+                        }
+                      });
               throw new AssertionError("Expected allocation failure");
             } catch (RuntimeException failure) {
               if (failure != injected) {
@@ -72,29 +79,33 @@ public final class MenuBlurGameTest implements FabricClientGameTest {
               RenderSystem.getDevice()
                   .createCommandEncoder()
                   .clearColorTexture(
-                      unrelated.getColorTexture(), new Vector4f(0.5f, 0.5f, 0.5f, 1));
+                      Objects.requireNonNull(unrelated.getColorTexture()),
+                      new Vector4f(0.5f, 0.5f, 0.5f, 1));
               MenuBlurScope.run(
                   GpuFormat.RGBA32_FLOAT,
                   () -> {
-                    other.process(
-                        unrelated,
-                        new GraphicsResourceAllocator() {
-                          @Override
-                          public <T> T acquire(ResourceDescriptor<T> descriptor) {
-                            if (MenuBlurScope.format() != null
-                                || !(descriptor instanceof RenderTargetDescriptor rt)
-                                || rt.color().format() != GpuFormat.RGBA8_UNORM) {
-                              throw new AssertionError(
-                                  "Unrelated post chain inherited the blur scope");
-                            }
-                            return GraphicsResourceAllocator.UNPOOLED.acquire(descriptor);
-                          }
+                    Objects.requireNonNull(other)
+                        .process(
+                            unrelated,
+                            new GraphicsResourceAllocator() {
+                              @Override
+                              public <T> T acquire(ResourceDescriptor<T> descriptor) {
+                                if (MenuBlurScope.format() != null
+                                    || !(descriptor instanceof RenderTargetDescriptor rt)
+                                    || Objects.requireNonNull(rt.color()).format()
+                                        != GpuFormat.RGBA8_UNORM) {
+                                  throw new AssertionError(
+                                      "Unrelated post chain inherited the blur scope");
+                                }
+                                return GraphicsResourceAllocator.UNPOOLED.acquire(descriptor);
+                              }
 
-                          @Override
-                          public <T> void release(ResourceDescriptor<T> descriptor, T resource) {
-                            GraphicsResourceAllocator.UNPOOLED.release(descriptor, resource);
-                          }
-                        });
+                              @Override
+                              public <T> void release(
+                                  ResourceDescriptor<T> descriptor, T resource) {
+                                GraphicsResourceAllocator.UNPOOLED.release(descriptor, resource);
+                              }
+                            });
                     if (MenuBlurScope.format() != GpuFormat.RGBA32_FLOAT) {
                       throw new AssertionError("Nested chain did not restore the outer blur scope");
                     }
@@ -113,7 +124,7 @@ public final class MenuBlurGameTest implements FabricClientGameTest {
       CrossFrameResourcePool pool,
       GpuFormat format,
       boolean enabled) {
-    CompletableFuture<Void> result = new CompletableFuture<>();
+    CompletableFuture<@Nullable Void> result = new CompletableFuture<>();
     context.runOnClient(
         client -> {
           var device = RenderSystem.getDevice();
@@ -126,7 +137,7 @@ public final class MenuBlurGameTest implements FabricClientGameTest {
             device
                 .createCommandEncoder()
                 .clearColorTexture(
-                    target.getColorTexture(),
+                    Objects.requireNonNull(target.getColorTexture()),
                     new Vector4f(1.0f / 1024, 3.0f / 1024, 5.0f / 1024, 1));
             var chain =
                 client
@@ -136,37 +147,40 @@ public final class MenuBlurGameTest implements FabricClientGameTest {
             if (chain == null) {
               throw new AssertionError("Vanilla blur chain is unavailable");
             }
-            chain.process(
-                target,
-                new GraphicsResourceAllocator() {
-                  @Override
-                  public <T> T acquire(ResourceDescriptor<T> descriptor) {
-                    GpuFormat expected = enabled ? format : GpuFormat.RGBA8_UNORM;
-                    if (!(descriptor instanceof RenderTargetDescriptor rt)
-                        || rt.color() == null
-                        || rt.color().format() != expected) {
-                      throw new AssertionError("Wrong blur descriptor format");
-                    }
-                    T resource = pool.acquire(descriptor);
-                    if (((RenderTarget) resource).getColorTexture().getFormat() != expected) {
-                      throw new AssertionError("Reused a pooled target with the wrong format");
-                    }
-                    acquisitions[0]++;
-                    return resource;
-                  }
+            Objects.requireNonNull(chain)
+                .process(
+                    target,
+                    new GraphicsResourceAllocator() {
+                      @Override
+                      public <T> T acquire(ResourceDescriptor<T> descriptor) {
+                        GpuFormat expected = enabled ? format : GpuFormat.RGBA8_UNORM;
+                        if (!(descriptor instanceof RenderTargetDescriptor rt)
+                            || rt.color() == null
+                            || rt.color().format() != expected) {
+                          throw new AssertionError("Wrong blur descriptor format");
+                        }
+                        T resource = pool.acquire(descriptor);
+                        if (Objects.requireNonNull(((RenderTarget) resource).getColorTexture())
+                                .getFormat()
+                            != expected) {
+                          throw new AssertionError("Reused a pooled target with the wrong format");
+                        }
+                        acquisitions[0]++;
+                        return resource;
+                      }
 
-                  @Override
-                  public <T> void release(ResourceDescriptor<T> descriptor, T resource) {
-                    pool.release(descriptor, resource);
-                  }
-                });
+                      @Override
+                      public <T> void release(ResourceDescriptor<T> descriptor, T resource) {
+                        pool.release(descriptor, resource);
+                      }
+                    });
             if (acquisitions[0] == 0 || MenuBlurScope.format() != null) {
               throw new AssertionError("Blur did not allocate targets or restore its scope");
             }
             device
                 .createCommandEncoder()
                 .copyTextureToBuffer(
-                    target.getColorTexture(),
+                    Objects.requireNonNull(target.getColorTexture()),
                     buffer,
                     0,
                     () -> {

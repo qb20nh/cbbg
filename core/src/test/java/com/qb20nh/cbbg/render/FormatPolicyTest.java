@@ -6,8 +6,10 @@ import com.qb20nh.cbbg.config.CbbgConfig.PixelFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import org.jspecify.annotations.NullMarked;
 import org.junit.jupiter.api.Test;
 
+@NullMarked
 class FormatPolicyTest {
   @Test
   void fullCapabilityMatrixPreservesRequestedPrecisionOrFallsBack() {

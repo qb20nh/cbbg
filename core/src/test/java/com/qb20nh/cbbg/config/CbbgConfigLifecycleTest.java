@@ -4,9 +4,11 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import com.qb20nh.cbbg.LegacyCommandGrammar;
 import java.nio.file.Path;
+import org.jspecify.annotations.NullMarked;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+@NullMarked
 class CbbgConfigLifecycleTest {
   @TempDir Path directory;
 
@@ -40,10 +42,12 @@ class CbbgConfigLifecycleTest {
     int[] calls = new int[3];
     LegacyCommandGrammar.Feedback feedback =
         new LegacyCommandGrammar.Feedback() {
+          @Override
           public Object translate(String key) {
             return key;
           }
 
+          @Override
           public void send(boolean error, String key, Object... args) {
             if (error) calls[0]++;
           }

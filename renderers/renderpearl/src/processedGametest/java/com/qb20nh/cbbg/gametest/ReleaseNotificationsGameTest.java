@@ -4,9 +4,9 @@ import com.google.gson.JsonObject;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import java.lang.reflect.Field;
-import java.lang.reflect.Proxy;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicReference;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommands;
@@ -25,26 +25,18 @@ import org.apache.logging.log4j.core.Logger;
 import org.apache.logging.log4j.core.appender.AbstractAppender;
 import org.apache.logging.log4j.core.appender.AppenderLoggingException;
 import org.apache.logging.log4j.core.config.Property;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
 /** Exercises packaged notification behavior through commands and Minecraft UI. */
+@NullMarked
 public final class ReleaseNotificationsGameTest implements FabricClientGameTest {
   private static final int WAIT_TICKS = 600;
 
   @Override
   public void runTest(ClientGameTestContext context) {
     JsonObject original = ReleaseClient.settings().deepCopy();
-    FabricClientCommandSource source =
-        (FabricClientCommandSource)
-            Proxy.newProxyInstance(
-                FabricClientCommandSource.class.getClassLoader(),
-                new Class<?>[] {FabricClientCommandSource.class},
-                (proxy, method, args) -> {
-                  if (method.getName().equals("sendFeedback")
-                      || method.getName().equals("sendError")) {
-                    return null;
-                  }
-                  throw new AssertionError("Unexpected command source call: " + method);
-                });
+    FabricClientCommandSource source = ReleaseClient.silentCommandSource();
     CommandDispatcher<FabricClientCommandSource> dispatcher;
     try (var world = context.worldBuilder().create()) {
       world.getConnection().waitForChunksRender();
@@ -290,11 +282,13 @@ public final class ReleaseNotificationsGameTest implements FabricClientGameTest 
   @SuppressWarnings("unchecked")
   private static List<String> generationMessages(Minecraft client) {
     List<GuiMessage> messages =
-        (List<GuiMessage>) field(ChatComponent.class, "allMessages", client.gui.hud.getChat());
+        (List<GuiMessage>)
+            Objects.requireNonNull(
+                field(ChatComponent.class, "allMessages", client.gui.hud.getChat()));
     return messages.stream().map(message -> message.content().getString()).toList();
   }
 
-  private static void checkToast(Minecraft client, String state) {
+  private static void checkToast(Minecraft client, @Nullable String state) {
     String actual = toastText(client);
     String expected =
         state == null
@@ -306,7 +300,7 @@ public final class ReleaseNotificationsGameTest implements FabricClientGameTest 
   }
 
   @SuppressWarnings("unchecked")
-  private static String toastText(Minecraft client) {
+  private static @Nullable String toastText(Minecraft client) {
     SystemToast toast =
         client
             .gui
@@ -314,7 +308,8 @@ public final class ReleaseNotificationsGameTest implements FabricClientGameTest 
             .getToast(SystemToast.class, SystemToast.SystemToastId.PERIODIC_NOTIFICATION);
     if (toast == null) return null;
     List<FormattedCharSequence> lines =
-        (List<FormattedCharSequence>) field(SystemToast.class, "messageLines", toast);
+        (List<FormattedCharSequence>)
+            Objects.requireNonNull(field(SystemToast.class, "messageLines", toast));
     StringBuilder text = new StringBuilder();
     for (FormattedCharSequence line : lines) {
       line.accept(
@@ -330,20 +325,20 @@ public final class ReleaseNotificationsGameTest implements FabricClientGameTest 
     return text.replaceAll("\\s", "");
   }
 
-  private static Object field(Class<?> owner, String name, Object instance) {
+  private static @Nullable Object field(Class<?> owner, String name, @Nullable Object instance) {
     try {
       Field field = owner.getDeclaredField(name);
       field.setAccessible(true);
       return field.get(instance);
     } catch (ReflectiveOperationException failure) {
-      throw new AssertionError("Could not inspect Minecraft notification UI", failure);
+      throw new LinkageError("Could not inspect Minecraft notification UI", failure);
     }
   }
 
   private static final class Gate {
     private final CountDownLatch release = new CountDownLatch(1);
     private final boolean fail;
-    private volatile Thread worker;
+    private volatile @Nullable Thread worker;
     private volatile boolean interrupted;
 
     private Gate(boolean fail) {
@@ -367,7 +362,7 @@ public final class ReleaseNotificationsGameTest implements FabricClientGameTest 
 
   private static final class GenerationControl extends AbstractAppender implements AutoCloseable {
     private final Logger logger = (Logger) LogManager.getLogger("cbbg-gen");
-    private final AtomicReference<Gate> next = new AtomicReference<>();
+    private final AtomicReference<@Nullable Gate> next = new AtomicReference<>();
     private final java.util.concurrent.CopyOnWriteArrayList<Gate> gates =
         new java.util.concurrent.CopyOnWriteArrayList<>();
 

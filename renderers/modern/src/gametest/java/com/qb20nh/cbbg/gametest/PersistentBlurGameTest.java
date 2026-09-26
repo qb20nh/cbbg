@@ -6,6 +6,7 @@ import com.mojang.blaze3d.resource.GraphicsResourceAllocator;
 import com.mojang.serialization.JsonOps;
 import com.qb20nh.cbbg.config.CbbgConfig;
 import java.util.Map;
+import java.util.Objects;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.minecraft.client.Minecraft;
@@ -15,10 +16,14 @@ import net.minecraft.client.renderer.PostChainConfig;
 import net.minecraft.client.renderer.Projection;
 import net.minecraft.client.renderer.ProjectionMatrixBuffer;
 import net.minecraft.resources.Identifier;
+import org.jspecify.annotations.NullMarked;
 
 /** Exercises the persistent-target branch used by resource-pack blur definitions. */
+@NullMarked
 public final class PersistentBlurGameTest implements FabricClientGameTest {
   @Override
+  // GPU ownership and recreation require checking the exact resource instances.
+  @SuppressWarnings("ReferenceEquality")
   public void runTest(ClientGameTestContext context) {
     CbbgConfig original = CbbgConfig.get();
     PostChain chain = context.computeOnClient(PersistentBlurGameTest::createChain);
@@ -39,13 +44,18 @@ public final class PersistentBlurGameTest implements FabricClientGameTest {
         context.waitTicks(3);
         context.runOnClient(
             client -> {
-              Map<Identifier, RenderTarget> targets = field(chain, "persistentTargets");
-              RenderTarget previous = targets.get(Identifier.withDefaultNamespace("swap"));
+              Map<?, ?> targets = field(chain, "persistentTargets", Map.class);
+              RenderTarget previous =
+                  (RenderTarget) targets.get(Identifier.withDefaultNamespace("swap"));
               RenderTarget main = client.gameRenderer.mainRenderTarget();
               chain.process(main, GraphicsResourceAllocator.UNPOOLED);
-              RenderTarget current = targets.get(Identifier.withDefaultNamespace("swap"));
+              RenderTarget current =
+                  (RenderTarget) targets.get(Identifier.withDefaultNamespace("swap"));
               if (current == null
-                  || !current.getColorTexture().getFormat().name().equals(format)
+                  || !Objects.requireNonNull(current.getColorTexture())
+                      .getFormat()
+                      .name()
+                      .equals(format)
                   || current.width != main.width
                   || current.height != main.height) {
                 throw new AssertionError(
@@ -63,8 +73,8 @@ public final class PersistentBlurGameTest implements FabricClientGameTest {
     } finally {
       context.runOnClient(
           client -> {
-            Map<Identifier, RenderTarget> targets = field(chain, "persistentTargets");
-            RenderTarget last = targets.get(Identifier.withDefaultNamespace("swap"));
+            Map<?, ?> targets = field(chain, "persistentTargets", Map.class);
+            RenderTarget last = (RenderTarget) targets.get(Identifier.withDefaultNamespace("swap"));
             chain.close();
             CbbgConfig.setMode(original.mode());
             CbbgConfig.setPixelFormat(original.pixelFormat());
@@ -91,21 +101,23 @@ public final class PersistentBlurGameTest implements FabricClientGameTest {
           client.getTextureManager(),
           LevelTargetBundle.MAIN_TARGETS,
           id,
-          (Projection) field(vanilla, "projection"),
-          (ProjectionMatrixBuffer) field(vanilla, "projectionMatrixBuffer"));
+          field(Objects.requireNonNull(vanilla), "projection", Projection.class),
+          field(
+              Objects.requireNonNull(vanilla),
+              "projectionMatrixBuffer",
+              ProjectionMatrixBuffer.class));
     } catch (Exception failure) {
       throw new AssertionError("Could not load persistent blur fixture", failure);
     }
   }
 
-  @SuppressWarnings("unchecked")
-  private static <T> T field(Object object, String name) {
+  private static <T> T field(Object object, String name, Class<T> type) {
     try {
       var field = object.getClass().getDeclaredField(name);
       field.setAccessible(true);
-      return (T) field.get(object);
+      return type.cast(Objects.requireNonNull(field.get(object)));
     } catch (ReflectiveOperationException failure) {
-      throw new AssertionError("Could not inspect " + name, failure);
+      throw new LinkageError("Could not inspect " + name, failure);
     }
   }
 }

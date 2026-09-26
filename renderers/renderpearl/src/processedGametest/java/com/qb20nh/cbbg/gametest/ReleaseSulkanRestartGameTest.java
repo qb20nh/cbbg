@@ -3,10 +3,13 @@ package com.qb20nh.cbbg.gametest;
 import com.mojang.renderpearl.api.GpuFormat;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Objects;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
+import org.jspecify.annotations.NullMarked;
 
 /** Prepare, verify and disabled control run in separate JVMs with a shared game directory. */
+@NullMarked
 public final class ReleaseSulkanRestartGameTest implements FabricClientGameTest {
   @Override
   public void runTest(ClientGameTestContext context) {
@@ -15,7 +18,8 @@ public final class ReleaseSulkanRestartGameTest implements FabricClientGameTest 
 
   static void run(ClientGameTestContext context, String pack) {
     String phase = System.getProperty("cbbg.test.restart");
-    if (!"prepare".equals(phase) && !"verify".equals(phase) && !"control".equals(phase)) {
+    if (phase == null
+        || (!"prepare".equals(phase) && !"verify".equals(phase) && !"control".equals(phase))) {
       throw new AssertionError("Sulkan restart requires prepare, verify or control");
     }
     ReleaseSulkanGameTest.requireVulkan(context);
@@ -25,14 +29,16 @@ public final class ReleaseSulkanRestartGameTest implements FabricClientGameTest 
           ReleaseSulkanGameTest.checkGate(
               client, ReleaseSulkanGameTest.userMode(client), ReleaseSulkanGameTest.active());
           if (phase.equals("verify")) {
-            Object config = ReleaseSulkanGameTest.invoke("config", new Class<?>[0]);
+            Object config =
+                Objects.requireNonNull(ReleaseSulkanGameTest.invoke("config", new Class<?>[0]));
             try {
-              if (!(Boolean) config.getClass().getMethod("enabled").invoke(config)
+              if (!Objects.requireNonNull(
+                      (Boolean) config.getClass().getMethod("enabled").invoke(config))
                   || !pack.equals(config.getClass().getMethod("selectedPackId").invoke(config))) {
                 throw new AssertionError("Sulkan selection did not survive restart");
               }
             } catch (ReflectiveOperationException failure) {
-              throw new AssertionError("Could not read Sulkan settings", failure);
+              throw new LinkageError("Could not read Sulkan settings", failure);
             }
             var saved = ReleaseClient.settings();
             if (!saved.get("mode").getAsString().equals("DEMO")
@@ -49,7 +55,7 @@ public final class ReleaseSulkanRestartGameTest implements FabricClientGameTest 
       if (!phase.equals("verify")) {
         var original = ReleaseSulkanGameTest.saveSettings(context);
         try {
-          Path evidence = Path.of(System.getProperty("cbbg.test.evidence"));
+          Path evidence = Path.of(Objects.requireNonNull(System.getProperty("cbbg.test.evidence")));
           Files.createDirectories(evidence);
           Files.writeString(
               evidence.resolve("sulkan-restart-original-settings.json"), original + "\n");

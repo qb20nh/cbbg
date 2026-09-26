@@ -5,8 +5,10 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import net.fabricmc.loader.api.FabricLoader;
 import net.fabricmc.loader.api.entrypoint.PreLaunchEntrypoint;
+import org.jspecify.annotations.NullMarked;
 
 /** Observes an already-started STBN worker without initializing Minecraft or CBBG classes. */
+@NullMarked
 public final class ReleaseStartupPreLaunch implements PreLaunchEntrypoint {
   @Override
   public void onPreLaunch() {

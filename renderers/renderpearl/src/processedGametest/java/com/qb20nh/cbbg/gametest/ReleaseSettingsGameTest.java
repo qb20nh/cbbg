@@ -7,6 +7,7 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.TreeMap;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
@@ -14,13 +15,16 @@ import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.gui.screens.ConfirmScreen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.locale.Language;
+import org.jspecify.annotations.NullMarked;
 
 /** Tests the optimized artifact's settings through its real Mod Menu entry point. */
+@NullMarked
 public final class ReleaseSettingsGameTest implements FabricClientGameTest {
   @Override
   public void runTest(ClientGameTestContext context) {
     boolean expected =
-        List.of(System.getProperty("cbbg.test.compat", "none").split("\\+")).contains("modmenu");
+        List.of(Objects.requireNonNull(System.getProperty("cbbg.test.compat", "none")).split("\\+"))
+            .contains("modmenu");
     boolean installed = FabricLoader.getInstance().isModLoaded("modmenu");
     check(installed == expected, "Mod Menu presence does not match requested fixture");
     if (installed) {
@@ -40,6 +44,8 @@ public final class ReleaseSettingsGameTest implements FabricClientGameTest {
 
   // Optional API types are resolved only in fixtures that install Mod Menu.
   private static final class Installed {
+    // GPU and screen identity detect resource replacement and exact navigation.
+    @SuppressWarnings("ReferenceEquality")
     static void run(ClientGameTestContext context) {
       JsonObject original = ReleaseClient.settings().deepCopy();
       try (var world = context.worldBuilder().create()) {
@@ -76,8 +82,10 @@ public final class ReleaseSettingsGameTest implements FabricClientGameTest {
           open(context, mods);
           GpuTextureView oldNoise =
               context.computeOnClient(client -> ProcessedRenderObservations.lastDitherNoise());
-          check(oldNoise != null && !oldNoise.texture().isClosed(), "No active UI fixture noise");
-          context.runOnClient(client -> editNoise(client.gui.screen()));
+          if (oldNoise == null || oldNoise.texture().isClosed()) {
+            throw new AssertionError("No active UI fixture noise");
+          }
+          context.runOnClient(client -> editNoise(Objects.requireNonNull(client.gui.screen())));
           retainNoise(context, oldNoise, "editing settings");
           context.clickScreenButton("cbbg.config.button.generate_stbn");
           context.waitForScreen(ConfirmScreen.class);
@@ -102,7 +110,9 @@ public final class ReleaseSettingsGameTest implements FabricClientGameTest {
                     && ProcessedRenderObservations.draws() > before;
               },
               600);
-          check(oldNoise.texture().isClosed(), "Confirmed generation retained old GPU noise");
+          check(
+              Objects.requireNonNull(oldNoise).texture().isClosed(),
+              "Confirmed generation retained old GPU noise");
           context.runOnClient(
               client -> {
                 var ui = ReleaseSettingsUi.from(client.gui.screen());
@@ -211,7 +221,10 @@ public final class ReleaseSettingsGameTest implements FabricClientGameTest {
       try {
         for (var entry : locales.entrySet()) {
           check(
-              entry.getValue().keySet().equals(locales.get("en_us").keySet()),
+              entry
+                  .getValue()
+                  .keySet()
+                  .equals(Objects.requireNonNull(locales.get("en_us")).keySet()),
               "Locale keys differ from English: " + entry.getKey());
           reload(context, entry.getKey());
           context.runOnClient(
@@ -245,6 +258,8 @@ public final class ReleaseSettingsGameTest implements FabricClientGameTest {
     }
   }
 
+  // Screen identity verifies invalid edits did not navigate away.
+  @SuppressWarnings("ReferenceEquality")
   private static void editNoise(Screen screen) {
     var ui = ReleaseSettingsUi.from(screen);
     ReleaseSettingsUi.slide(ui.size(), 0);
@@ -284,6 +299,8 @@ public final class ReleaseSettingsGameTest implements FabricClientGameTest {
     ui.seed().setValue("123");
   }
 
+  // The exact noise view must survive editing and canceled generation.
+  @SuppressWarnings("ReferenceEquality")
   private static void retainNoise(
       ClientGameTestContext context, GpuTextureView noise, String action) {
     long before = ProcessedRenderObservations.draws();

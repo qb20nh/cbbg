@@ -1,6 +1,7 @@
 package com.qb20nh.cbbg.render;
 
 import com.qb20nh.cbbg.config.CbbgConfig.PixelFormat;
+import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -13,15 +14,16 @@ import org.jspecify.annotations.Nullable;
  * <p>cbbg uses this guard to selectively upgrade those intermediate targets to float formats while
  * the blur chain is executing, avoiding early quantization before our final present-time dither.
  */
+@NullMarked
 public final class MenuBlurGuard {
 
   private static final ThreadLocal<Integer> DEPTH = ThreadLocal.withInitial(() -> 0);
-  private static final ThreadLocal<PixelFormat> ACTIVE_FORMAT = new ThreadLocal<>();
+  private static final ThreadLocal<@Nullable PixelFormat> ACTIVE_FORMAT = new ThreadLocal<>();
 
   // Tracks the last format used for blur targets (used to decide when to clear the
   // post-processing
   // resource pool so cached targets are recreated with the correct format).
-  private static volatile PixelFormat lastBlurFormat = null;
+  private static volatile @Nullable PixelFormat lastBlurFormat = null;
 
   private MenuBlurGuard() {}
 

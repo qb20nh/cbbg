@@ -2,7 +2,10 @@ package com.qb20nh.cbbg.compat.renderscale;
 
 import com.qb20nh.cbbg.platform.LoaderPlatform;
 import java.lang.reflect.Method;
+import java.util.Objects;
 import java.util.function.Supplier;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Lightweight compatibility helpers for the RenderScale mod.
@@ -11,6 +14,7 @@ import java.util.function.Supplier;
  * target. Older versions identify these by label; RenderPearl versions use {@code MainTarget}.
  * Renderer adapters preserve float precision, while this helper supplies the effective pixel grid.
  */
+@NullMarked
 public final class RenderScaleCompat {
 
   private static final boolean RENDER_SCALE_LOADED = LoaderPlatform.isModLoaded("renderscale");
@@ -19,10 +23,10 @@ public final class RenderScaleCompat {
 
   private static volatile boolean scaleReflectionInitialized = false;
   private static volatile boolean scaleReflectionFailed = false;
-  private static volatile Method commonGetConfig;
-  private static volatile Method configGetScale;
-  private static volatile Method rendererGetInstance;
-  private static volatile Method rendererGetScale;
+  private static volatile @Nullable Method commonGetConfig;
+  private static volatile @Nullable Method configGetScale;
+  private static volatile @Nullable Method rendererGetInstance;
+  private static volatile @Nullable Method rendererGetScale;
 
   private RenderScaleCompat() {}
 
@@ -63,8 +67,9 @@ public final class RenderScaleCompat {
       Object renderer = rendererGetInstance == null ? null : rendererGetInstance.invoke(null);
       Object scale =
           renderer == null
-              ? configGetScale.invoke(commonGetConfig.invoke(null))
-              : rendererGetScale.invoke(renderer);
+              ? Objects.requireNonNull(configGetScale)
+                  .invoke(Objects.requireNonNull(commonGetConfig).invoke(null))
+              : Objects.requireNonNull(rendererGetScale).invoke(renderer);
       if (scale instanceof Number n) {
         return n.floatValue();
       }

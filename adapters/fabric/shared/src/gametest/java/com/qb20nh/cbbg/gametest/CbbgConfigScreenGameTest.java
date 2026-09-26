@@ -8,6 +8,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.TestInput;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
@@ -23,6 +24,7 @@ import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.input.MouseButtonInfo;
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.NullMarked;
 
 /**
  * Client-side UI interaction test for {@link CbbgConfigScreen}.
@@ -31,6 +33,7 @@ import org.jspecify.annotations.NonNull;
  * interactions (clicks, slider adjustments, text input) - assert config updates - ensure we can
  * close the screen
  */
+@NullMarked
 public class CbbgConfigScreenGameTest implements FabricClientGameTest {
 
   private static final int WINDOW_WIDTH = 854;
@@ -38,6 +41,8 @@ public class CbbgConfigScreenGameTest implements FabricClientGameTest {
   private static final int LEFT_MOUSE_BUTTON = 0;
 
   @Override
+  // Screen navigation must retain the exact parent and confirmation instances.
+  @SuppressWarnings("ReferenceEquality")
   public void runTest(@NonNull ClientGameTestContext context) {
     TestInput input = context.getInput();
     input.resizeWindow(WINDOW_WIDTH, WINDOW_HEIGHT);
@@ -57,7 +62,8 @@ public class CbbgConfigScreenGameTest implements FabricClientGameTest {
       // the UI code paths.
       context.runOnClient(
           client -> {
-            ScreenWidgets w = ScreenWidgets.from(ClientTestAccess.screen(client));
+            ScreenWidgets w =
+                ScreenWidgets.from(Objects.requireNonNull(ClientTestAccess.screen(client)));
             MouseButtonInfo click = new MouseButtonInfo(LEFT_MOUSE_BUTTON, 0);
 
             // Pixel format: RGBA16F -> RGBA32F
@@ -73,7 +79,8 @@ public class CbbgConfigScreenGameTest implements FabricClientGameTest {
       var generationBeforeEdits = STBNGenerator.get();
       context.runOnClient(
           client -> {
-            ScreenWidgets w = ScreenWidgets.from(ClientTestAccess.screen(client));
+            ScreenWidgets w =
+                ScreenWidgets.from(Objects.requireNonNull(ClientTestAccess.screen(client)));
             MouseButtonInfo click = new MouseButtonInfo(LEFT_MOUSE_BUTTON, 0);
 
             // STBN size/depth: click near min (keeps any background generation small/fast)
@@ -141,7 +148,8 @@ public class CbbgConfigScreenGameTest implements FabricClientGameTest {
 
       context.runOnClient(
           client -> {
-            ScreenWidgets w = ScreenWidgets.from(ClientTestAccess.screen(client));
+            ScreenWidgets w =
+                ScreenWidgets.from(Objects.requireNonNull(ClientTestAccess.screen(client)));
             MouseButtonInfo click = new MouseButtonInfo(LEFT_MOUSE_BUTTON, 0);
 
             // Notifications: true -> false
@@ -163,7 +171,8 @@ public class CbbgConfigScreenGameTest implements FabricClientGameTest {
       context.waitForScreen(CbbgConfigScreen.class);
       context.runOnClient(
           client -> {
-            ScreenWidgets w = ScreenWidgets.from(ClientTestAccess.screen(client));
+            ScreenWidgets w =
+                ScreenWidgets.from(Objects.requireNonNull(ClientTestAccess.screen(client)));
             assertTrue(w.mode.active && w.done.active, "Mode and Done must remain available");
             for (AbstractWidget widget :
                 List.of(
@@ -185,7 +194,8 @@ public class CbbgConfigScreenGameTest implements FabricClientGameTest {
       // Done button closes screen
       context.runOnClient(
           client -> {
-            ScreenWidgets w = ScreenWidgets.from(ClientTestAccess.screen(client));
+            ScreenWidgets w =
+                ScreenWidgets.from(Objects.requireNonNull(ClientTestAccess.screen(client)));
             MouseButtonInfo click = new MouseButtonInfo(LEFT_MOUSE_BUTTON, 0);
             w.done.onClick(new MouseButtonEvent(centerX(w.done), centerY(w.done), click), false);
           });

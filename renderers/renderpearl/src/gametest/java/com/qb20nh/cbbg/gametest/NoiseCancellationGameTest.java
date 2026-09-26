@@ -7,8 +7,11 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
 /** A cancelled result must not leave obsolete math running beside its replacement. */
+@NullMarked
 public final class NoiseCancellationGameTest implements FabricClientGameTest {
   @Override
   public void runTest(ClientGameTestContext context) {
@@ -16,7 +19,7 @@ public final class NoiseCancellationGameTest implements FabricClientGameTest {
     context.waitFor(client -> DitherController.isReady(), 600);
     context.runOnClient(client -> CbbgConfig.setMode(CbbgConfig.Mode.DISABLED));
     context.waitTicks(3);
-    CompletableFuture<STBNGenerator.STBNFields> old = null;
+    CompletableFuture<STBNGenerator.@Nullable STBNFields> old = null;
     try {
       old = STBNGenerator.generateAsync(64, 64, 32, 913725L);
       Thread worker = null;

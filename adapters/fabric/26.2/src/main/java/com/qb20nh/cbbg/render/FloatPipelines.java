@@ -12,8 +12,11 @@ import java.util.Optional;
 import java.util.WeakHashMap;
 import net.minecraft.resources.Identifier;
 import org.joml.Vector4fc;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
 /** Matches vanilla RGBA8 pipelines to float render target attachments on Vulkan. */
+@NullMarked
 public final class FloatPipelines {
   private static final Map<RenderPipeline, Map<String, RenderPipeline>> VARIANTS =
       new WeakHashMap<>();
@@ -23,12 +26,12 @@ public final class FloatPipelines {
   public static synchronized RenderPipeline forAttachments(
       RenderPipeline source,
       List<RenderPassDescriptor.Attachment<Optional<Vector4fc>>> attachments) {
-    ColorTargetState[] states = source.getColorTargetStates();
+    @Nullable ColorTargetState[] states = source.getColorTargetStates();
     if (states.length != attachments.size()) {
       return source;
     }
 
-    ColorTargetState[] changed = states.clone();
+    @Nullable ColorTargetState[] changed = states.clone();
     StringBuilder key = new StringBuilder();
     for (int i = 0; i < states.length; i++) {
       var attachment = attachments.get(i);
@@ -53,7 +56,8 @@ public final class FloatPipelines {
   }
 
   private static final class FloatPipeline extends RenderPipeline {
-    private FloatPipeline(RenderPipeline source, ColorTargetState[] states, String suffix) {
+    private FloatPipeline(
+        RenderPipeline source, @Nullable ColorTargetState[] states, String suffix) {
       super(
           Identifier.fromNamespaceAndPath(
               "cbbg",

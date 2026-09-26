@@ -4,8 +4,10 @@ import com.mojang.renderpearl.api.GpuFormat;
 import java.nio.file.Files;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
+import org.jspecify.annotations.NullMarked;
 
 /** Checks one command-driven lifecycle against the processed, packaged client. */
+@NullMarked
 public final class ReleaseLifecycleGameTest implements FabricClientGameTest {
   private static final long SEED = 42L;
 
@@ -41,6 +43,15 @@ public final class ReleaseLifecycleGameTest implements FabricClientGameTest {
         throw new AssertionError("No packaged CBBG pipeline draw was observed");
       }
       ReleaseClient.screenshot(context, "release-enabled-rgba16f");
+
+      var enabledReload = context.computeOnClient(client -> client.reloadResourcePacks());
+      context.waitFor(client -> enabledReload.isDone(), 600);
+      enabledReload.join();
+      context.waitFor(client -> client.gui.overlay() == null, 600);
+      long afterEnabledReload = ProcessedRenderObservations.draws();
+      ReleaseClient.awaitFormat(context, GpuFormat.RGBA16_FLOAT);
+      ReleaseClient.awaitDrawAfter(context, afterEnabledReload);
+      ReleaseClient.assertSettings("ENABLED", "RGBA16F", 16, 8, SEED);
 
       long beforeDemo = ProcessedRenderObservations.draws();
       ReleaseClient.command(context, "mode set demo");

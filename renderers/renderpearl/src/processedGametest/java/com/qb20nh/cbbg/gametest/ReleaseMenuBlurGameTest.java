@@ -12,6 +12,7 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.renderpearl.api.GpuFormat;
 import java.nio.ByteOrder;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
@@ -20,8 +21,11 @@ import net.minecraft.client.renderer.LevelTargetBundle;
 import net.minecraft.client.renderer.PostChain;
 import net.minecraft.resources.Identifier;
 import org.joml.Vector4f;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
 /** Exercises vanilla post chains against the optimized packaged mod through public GPU APIs. */
+@NullMarked
 public final class ReleaseMenuBlurGameTest implements FabricClientGameTest {
   @Override
   public void runTest(ClientGameTestContext context) {
@@ -74,6 +78,8 @@ public final class ReleaseMenuBlurGameTest implements FabricClientGameTest {
 
   // addToFrame deliberately bypasses process's scope entry. Its descriptors expose the
   // current scope without linking to production classes or allocating any GPU resources.
+  // The exact injected exception identifies successful descriptor observation.
+  @SuppressWarnings("ReferenceEquality")
   private static void probeScope(PostChain blur, RenderTarget target, GpuFormat expected) {
     var frame = new FrameGraphBuilder();
     var handle = frame.importExternal("CBBG scope probe", target);
@@ -103,6 +109,8 @@ public final class ReleaseMenuBlurGameTest implements FabricClientGameTest {
     }
   }
 
+  // The exact injected exception distinguishes the intended allocation failure.
+  @SuppressWarnings("ReferenceEquality")
   private static void checkFailureAndNesting(ClientGameTestContext context) {
     context.runOnClient(
         client -> {
@@ -112,7 +120,9 @@ public final class ReleaseMenuBlurGameTest implements FabricClientGameTest {
           try {
             RenderSystem.getDevice()
                 .createCommandEncoder()
-                .clearColorTexture(target.getColorTexture(), new Vector4f(0.5f, 0.5f, 0.5f, 1));
+                .clearColorTexture(
+                    Objects.requireNonNull(target.getColorTexture()),
+                    new Vector4f(0.5f, 0.5f, 0.5f, 1));
             RuntimeException injected = new RuntimeException("Injected blur allocation failure");
             try {
               blur.process(
@@ -140,7 +150,8 @@ public final class ReleaseMenuBlurGameTest implements FabricClientGameTest {
               RenderSystem.getDevice()
                   .createCommandEncoder()
                   .clearColorTexture(
-                      unrelated.getColorTexture(), new Vector4f(0.5f, 0.5f, 0.5f, 1));
+                      Objects.requireNonNull(unrelated.getColorTexture()),
+                      new Vector4f(0.5f, 0.5f, 0.5f, 1));
               processUnrelated(other, blur, unrelated, target);
               probeScope(blur, target, GpuFormat.RGBA8_UNORM);
               int[] acquisitions = {0};
@@ -201,7 +212,7 @@ public final class ReleaseMenuBlurGameTest implements FabricClientGameTest {
       CrossFrameResourcePool pool,
       GpuFormat format,
       boolean enabled) {
-    CompletableFuture<Void> result = new CompletableFuture<>();
+    CompletableFuture<@Nullable Void> result = new CompletableFuture<>();
     context.runOnClient(
         client -> {
           var device = RenderSystem.getDevice();
@@ -229,7 +240,7 @@ public final class ReleaseMenuBlurGameTest implements FabricClientGameTest {
               device
                   .createCommandEncoder()
                   .clearColorTexture(
-                      target.getColorTexture(),
+                      Objects.requireNonNull(target.getColorTexture()),
                       new Vector4f(1.0f / 1024, 3.0f / 1024, 5.0f / 1024, 1));
               var blur = chain(client, "blur");
               int[] acquisitions = {0};
@@ -241,7 +252,9 @@ public final class ReleaseMenuBlurGameTest implements FabricClientGameTest {
                       GpuFormat expected = enabled ? format : GpuFormat.RGBA8_UNORM;
                       assertFormat(descriptor, expected);
                       T resource = pool.acquire(descriptor);
-                      if (((RenderTarget) resource).getColorTexture().getFormat() != expected) {
+                      if (Objects.requireNonNull(((RenderTarget) resource).getColorTexture())
+                              .getFormat()
+                          != expected) {
                         pool.release(descriptor, resource);
                         throw new AssertionError("Reused pooled target has the wrong format");
                       }
@@ -259,7 +272,7 @@ public final class ReleaseMenuBlurGameTest implements FabricClientGameTest {
               device
                   .createCommandEncoder()
                   .copyTextureToBuffer(
-                      target.getColorTexture(),
+                      Objects.requireNonNull(target.getColorTexture()),
                       buffer,
                       0,
                       () -> {

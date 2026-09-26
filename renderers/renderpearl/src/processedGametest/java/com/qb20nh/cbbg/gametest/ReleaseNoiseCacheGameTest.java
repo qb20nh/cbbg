@@ -13,11 +13,14 @@ import java.security.MessageDigest;
 import java.util.Arrays;
 import java.util.HexFormat;
 import java.util.List;
-import java.util.Locale;
+import java.util.Objects;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
 /** Exercises the packaged renderer's normal cache loading through public commands. */
+@NullMarked
 public final class ReleaseNoiseCacheGameTest implements FabricClientGameTest {
   private static final int SIZE = 16;
   private static final int DEPTH = 8;
@@ -36,12 +39,12 @@ public final class ReleaseNoiseCacheGameTest implements FabricClientGameTest {
       world.getConnection().waitForChunksRender();
       JsonObject original = ReleaseClient.settings().deepCopy();
       try {
-        disable(context);
-        setting(context, "size", SIZE);
-        setting(context, "depth", DEPTH);
+        ReleaseClient.disableNoise(context);
+        ReleaseClient.noiseSetting(context, "size", SIZE);
+        ReleaseClient.noiseSetting(context, "depth", DEPTH);
         int[] zero = null;
         for (long seed : new long[] {0, 74123}) {
-          setting(context, "seed", seed);
+          ReleaseClient.noiseSetting(context, "seed", seed);
           clearFixture();
           int[] cold = load(context, seed);
           String expected = seed == 0 ? SEED_ZERO_PIXELS : SEED_OTHER_PIXELS;
@@ -53,7 +56,7 @@ public final class ReleaseNoiseCacheGameTest implements FabricClientGameTest {
             throw new AssertionError("Changing the STBN seed did not change decoded pixels");
           }
 
-          disable(context);
+          ReleaseClient.disableNoise(context);
           byte[] manifest = Files.readAllBytes(path(-1));
           // A fixed old timestamp also detects deterministic rewrites on coarse filesystems.
           FileTime[] modified = new FileTime[DEPTH + 1];
@@ -71,54 +74,27 @@ public final class ReleaseNoiseCacheGameTest implements FabricClientGameTest {
             }
           }
 
-          disable(context);
+          ReleaseClient.disableNoise(context);
           Files.write(path(DEPTH - 1), new byte[] {1, 2, 3});
           assertPixels(cold, load(context, seed), "corrupt later PNG recovery");
-          disable(context);
+          ReleaseClient.disableNoise(context);
           Files.delete(path(DEPTH - 1));
           assertPixels(cold, load(context, seed), "missing PNG recovery");
-          disable(context);
+          ReleaseClient.disableNoise(context);
           Files.writeString(path(-1), "invalid manifest\n");
           assertPixels(cold, load(context, seed), "corrupt manifest recovery");
-          disable(context);
+          ReleaseClient.disableNoise(context);
         }
         // Reuse the other seed's valid cache: this must reject its manifest and regenerate.
-        setting(context, "seed", 0);
+        ReleaseClient.noiseSetting(context, "seed", 0);
+        if (zero == null) throw new AssertionError("Seed-zero reference was not captured");
         assertPixels(zero, load(context, 0), "changed seed recovery");
       } catch (Exception failure) {
         throw new AssertionError("Packaged noise cache lifecycle failed", failure);
       } finally {
-        disable(context);
-        setting(context, "size", original.get("stbnSize").getAsLong());
-        setting(context, "depth", original.get("stbnDepth").getAsLong());
-        setting(context, "seed", original.get("stbnSeed").getAsLong());
-        String mode = original.get("mode").getAsString();
-        ReleaseClient.command(context, "mode set " + mode.toLowerCase(Locale.ROOT));
-        context.waitFor(client -> original.equals(ReleaseClient.settings()), WAIT_TICKS);
-        if (!mode.equalsIgnoreCase("disabled")) awaitNoise(context, null);
+        if (ReleaseClient.restoreNoiseSettings(context, original)) awaitNoise(context, null);
       }
     }
-  }
-
-  private static void setting(ClientGameTestContext context, String name, long value) {
-    ReleaseClient.command(context, "stbn " + name + " " + value);
-    String key = "stbn" + Character.toUpperCase(name.charAt(0)) + name.substring(1);
-    context.waitFor(client -> ReleaseClient.settings().get(key).getAsLong() == value, WAIT_TICKS);
-  }
-
-  private static void disable(ClientGameTestContext context) {
-    GpuTextureView noise =
-        context.computeOnClient(client -> ProcessedRenderObservations.lastDitherNoise());
-    GpuTextureView output =
-        context.computeOnClient(client -> ProcessedRenderObservations.lastDitherOutput());
-    ReleaseClient.command(context, "mode set disabled");
-    context.waitFor(
-        client ->
-            "disabled".equalsIgnoreCase(ReleaseClient.settings().get("mode").getAsString())
-                && (noise == null || noise.texture().isClosed())
-                && (output == null || output.texture().isClosed()),
-        WAIT_TICKS);
-    ReleaseClient.assertNoDraws(context);
   }
 
   private static int[] load(ClientGameTestContext context, long seed) throws Exception {
@@ -132,7 +108,9 @@ public final class ReleaseNoiseCacheGameTest implements FabricClientGameTest {
     return readCache(seed);
   }
 
-  private static void awaitNoise(ClientGameTestContext context, GpuTextureView old) {
+  // A new noise view must replace the previous GPU resource.
+  @SuppressWarnings("ReferenceEquality")
+  private static void awaitNoise(ClientGameTestContext context, @Nullable GpuTextureView old) {
     long before = ProcessedRenderObservations.draws();
     context.waitFor(
         client -> {
@@ -164,10 +142,10 @@ public final class ReleaseNoiseCacheGameTest implements FabricClientGameTest {
     int[] pixels = new int[SIZE * SIZE * DEPTH];
     for (int z = 0; z < DEPTH; z++) {
       byte[] bytes = Files.readAllBytes(path(z));
-      String[] entry = manifest.get(z + 1).trim().split("\\s+");
+      String[] entry = manifest.get(z + 1).trim().split("\\s+", 0);
       if (entry.length != 2
           || !entry[0].equals(hash(bytes))
-          || !entry[1].equals(path(z).getFileName().toString())) {
+          || !entry[1].equals(Objects.requireNonNull(path(z).getFileName()).toString())) {
         throw new AssertionError("Incorrect cache PNG hash for frame " + z);
       }
       try (NativeImage image = NativeImage.read(new ByteArrayInputStream(bytes))) {

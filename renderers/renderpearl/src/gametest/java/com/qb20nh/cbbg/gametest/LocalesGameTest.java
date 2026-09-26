@@ -6,12 +6,15 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.Map;
+import java.util.Objects;
 import java.util.TreeMap;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.minecraft.locale.Language;
+import org.jspecify.annotations.NullMarked;
 
 /** Checks every packaged locale through Minecraft's resource reload and config UI. */
+@NullMarked
 public final class LocalesGameTest implements FabricClientGameTest {
   @Override
   public void runTest(ClientGameTestContext context) {
@@ -51,7 +54,10 @@ public final class LocalesGameTest implements FabricClientGameTest {
     try {
       for (var entry : locales.entrySet()) {
         String locale = entry.getKey();
-        if (!entry.getValue().keySet().equals(locales.get("en_us").keySet())) {
+        if (!entry
+            .getValue()
+            .keySet()
+            .equals(Objects.requireNonNull(locales.get("en_us")).keySet())) {
           throw new AssertionError("Translation keys differ from English for " + locale);
         }
         reload(context, locale);
@@ -75,9 +81,7 @@ public final class LocalesGameTest implements FabricClientGameTest {
         context.waitTicks(3);
         context.runOnClient(
             client -> {
-              if (!client
-                  .gui
-                  .screen()
+              if (!Objects.requireNonNull(client.gui.screen())
                   .getTitle()
                   .getString()
                   .equals(entry.getValue().get("cbbg.config.title"))) {
@@ -85,7 +89,7 @@ public final class LocalesGameTest implements FabricClientGameTest {
               }
             });
         Path screenshot = context.takeScreenshot("cbbg-locale-" + locale);
-        Path evidence = Path.of(System.getProperty("cbbg.test.evidence"));
+        Path evidence = Path.of(Objects.requireNonNull(System.getProperty("cbbg.test.evidence")));
         Files.createDirectories(evidence);
         Files.copy(
             screenshot,

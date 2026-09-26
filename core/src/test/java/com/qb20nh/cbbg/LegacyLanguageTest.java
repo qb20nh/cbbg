@@ -2,8 +2,10 @@ package com.qb20nh.cbbg;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import org.jspecify.annotations.NullMarked;
 import org.junit.jupiter.api.Test;
 
+@NullMarked
 class LegacyLanguageTest {
   @Test
   void generatedEscapesRoundTripWithoutReinterpretingLiteralBackslashes() {

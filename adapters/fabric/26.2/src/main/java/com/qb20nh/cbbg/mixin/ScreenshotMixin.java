@@ -11,6 +11,7 @@ import java.util.function.Consumer;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Screenshot;
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.NullMarked;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
@@ -18,6 +19,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(Screenshot.class)
+@NullMarked
 public abstract class ScreenshotMixin {
 
   private ScreenshotMixin() {}
@@ -30,6 +32,8 @@ public abstract class ScreenshotMixin {
           "takeScreenshot(Lcom/mojang/blaze3d/pipeline/RenderTarget;ILjava/util/function/Consumer;)V",
       at = @At("HEAD"),
       cancellable = true)
+  // Target identity preserves other mods' independently owned screenshot targets.
+  @SuppressWarnings("ReferenceEquality")
   private static void cbbg$takeScreenshot(
       RenderTarget target,
       int downscaleFactor,

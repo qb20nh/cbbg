@@ -9,6 +9,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.minecraft.client.Minecraft;
@@ -16,9 +17,11 @@ import net.minecraft.client.gui.components.debug.DebugScreenDisplayer;
 import net.minecraft.client.gui.components.debug.DebugScreenEntries;
 import net.minecraft.client.gui.components.debug.DebugScreenEntryStatus;
 import net.minecraft.resources.Identifier;
+import org.jspecify.annotations.NullMarked;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL30;
 
+@NullMarked
 public final class DebugOverlayGameTest implements FabricClientGameTest {
   private static final Identifier ID = Identifier.fromNamespaceAndPath("cbbg", "cbbg");
 
@@ -48,7 +51,9 @@ public final class DebugOverlayGameTest implements FabricClientGameTest {
             client -> {
               String text = readOutput(client);
               String main =
-                  client.gameRenderer.mainRenderTarget().getColorTexture().getFormat().name();
+                  Objects.requireNonNull(client.gameRenderer.mainRenderTarget().getColorTexture())
+                      .getFormat()
+                      .name();
               String lightmap = client.gameRenderer.levelLightmap().texture().getFormat().name();
               String backend = RenderSystem.getDevice().getDeviceInfo().backendName();
               checkFramebufferState(client, backend, text);
@@ -66,7 +71,9 @@ public final class DebugOverlayGameTest implements FabricClientGameTest {
                 throw new AssertionError("Incorrect CBBG debug state: " + text);
               }
               try {
-                Path evidence = Path.of(System.getProperty("cbbg.test.evidence"), "debug");
+                Path evidence =
+                    Path.of(
+                        Objects.requireNonNull(System.getProperty("cbbg.test.evidence")), "debug");
                 Files.createDirectories(evidence);
                 Files.writeString(evidence.resolve(mode.name() + ".txt"), text + "\n");
                 client.debugEntries.setStatus(ID, DebugScreenEntryStatus.IN_OVERLAY);
@@ -80,7 +87,10 @@ public final class DebugOverlayGameTest implements FabricClientGameTest {
           Path capture = context.takeScreenshot("cbbg-debug-" + mode.name());
           Files.copy(
               capture,
-              Path.of(System.getProperty("cbbg.test.evidence"), "debug", mode.name() + ".png"),
+              Path.of(
+                  Objects.requireNonNull(System.getProperty("cbbg.test.evidence")),
+                  "debug",
+                  mode.name() + ".png"),
               StandardCopyOption.REPLACE_EXISTING);
         } catch (java.io.IOException failure) {
           throw new AssertionError("Could not retain visible debug overlay", failure);
@@ -107,7 +117,7 @@ public final class DebugOverlayGameTest implements FabricClientGameTest {
                   if (!method.getName().equals("addLine")) {
                     throw new AssertionError("Unexpected debug display method " + method);
                   }
-                  lines.add((String) args[0]);
+                  lines.add((String) Objects.requireNonNull(args)[0]);
                   return null;
                 });
     var entry = DebugScreenEntries.getEntry(ID);

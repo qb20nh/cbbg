@@ -3,7 +3,9 @@ package com.qb20nh.cbbg.command;
 import java.util.function.Consumer;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
 import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource;
+import org.jspecify.annotations.NullMarked;
 
+@NullMarked
 public final class CommandPlatform {
   private CommandPlatform() {}
 

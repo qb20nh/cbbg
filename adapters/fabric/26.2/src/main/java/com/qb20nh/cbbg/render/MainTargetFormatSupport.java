@@ -8,6 +8,7 @@ import com.qb20nh.cbbg.Cbbg;
 import com.qb20nh.cbbg.config.CbbgConfig;
 import java.nio.ByteBuffer;
 import java.util.concurrent.atomic.AtomicBoolean;
+import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL30;
@@ -18,6 +19,7 @@ import org.lwjgl.opengl.GL30;
  * <p>If we detect an allocation/renderability failure, we fall back to a lower format for the
  * remainder of the session to avoid hard-crashes or broken output.
  */
+@NullMarked
 public final class MainTargetFormatSupport {
 
   private enum SupportState {
@@ -96,6 +98,8 @@ public final class MainTargetFormatSupport {
   }
 
   /**
+   * Reports whether this device rejected both float main-target formats.
+   *
    * @return true if we have detected that neither RGBA16F nor RGBA32F can be used as a renderable
    *     main target format on this device/driver.
    */
