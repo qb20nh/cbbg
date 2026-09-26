@@ -114,18 +114,29 @@ public class STBNGenerator {
 
   public static CompletableFuture<@Nullable STBNFields> generateAsync(
       int w, int h, int d, long seed) {
-    return generateAsync(w, h, d, seed, () -> STBNCache.isCacheValid(w, h, d, seed));
+    return generateAsync(w, h, d, seed, false);
+  }
+
+  public static CompletableFuture<@Nullable STBNFields> generateAsync(
+      int w, int h, int d, long seed, boolean force) {
+    return generateAsync(w, h, d, seed, force, () -> STBNCache.isCacheValid(w, h, d, seed));
+  }
+
+  static CompletableFuture<@Nullable STBNFields> generateAsync(
+      int w, int h, int d, long seed, BooleanSupplier cacheValid) {
+    return generateAsync(w, h, d, seed, false, cacheValid);
   }
 
   // Future identity distinguishes the current request from a replaced request.
   @SuppressWarnings("ReferenceEquality")
   static synchronized CompletableFuture<@Nullable STBNFields> generateAsync(
-      int w, int h, int d, long seed, BooleanSupplier cacheValid) {
+      int w, int h, int d, long seed, boolean force, BooleanSupplier cacheValid) {
     CompletableFuture<@Nullable STBNFields> early = earlyFuture;
     Key key = earlyKey;
     earlyFuture = null;
     earlyKey = null;
-    if (early != null
+    if (!force
+        && early != null
         && key != null
         && key.equals(new Key(w, h, d, seed))
         && !early.isCancelled()
@@ -166,7 +177,8 @@ public class STBNGenerator {
     }
     CompletableFuture<@Nullable STBNFields> prev = pendingFuture.get();
     if (prev != null && !prev.isDone()) prev.cancel(true);
-    CompletableFuture<@Nullable STBNFields> next = submitJob(w, h, d, seed, cacheValid);
+    CompletableFuture<@Nullable STBNFields> next =
+        submitJob(w, h, d, seed, () -> !force && cacheValid.getAsBoolean());
     pendingFuture.set(next);
     return next;
   }

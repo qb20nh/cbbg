@@ -7,12 +7,34 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.BooleanSupplier;
 import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
 
 @NullMarked
 class STBNGeneratorTest {
+  @Test
+  void forcedGenerationBypassesValidCacheAndMatchingEarlyWork() throws Exception {
+    AtomicInteger checks = new AtomicInteger();
+    BooleanSupplier cacheValid =
+        () -> {
+          checks.incrementAndGet();
+          return true;
+        };
+    assertNull(STBNGenerator.prepareEarly(4, 4, 2, 0L, cacheValid).get(10, TimeUnit.SECONDS));
+    var fields =
+        Objects.requireNonNull(
+            STBNGenerator.generateAsync(4, 4, 2, 0L, true, cacheValid).get(10, TimeUnit.SECONDS));
+    assertEquals(4 * 4 * 2, fields.uField().length);
+    assertEquals(4 * 4 * 2, fields.vField().length);
+    assertEquals(0L, fields.seed());
+    assertEquals(1, checks.get());
+    assertNull(
+        STBNGenerator.generateAsync(4, 4, 2, 0L, false, cacheValid).get(10, TimeUnit.SECONDS));
+    assertEquals(2, checks.get());
+  }
+
   @Test
   void fieldsPreserveArrayOwnershipAndValueContract() {
     double[] u = {0.25, 0.5};

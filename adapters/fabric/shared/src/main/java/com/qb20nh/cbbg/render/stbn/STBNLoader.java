@@ -25,10 +25,12 @@ public class STBNLoader {
       int width, int height, int frames, STBNGenerator.@Nullable STBNFields fields) {
     // 1. Try Cache
     long seed = fields == null ? CbbgConfig.get().stbnSeed() : fields.seed();
-    NativeImage[] cached = loadFromCache(width, height, frames, seed);
-    if (cached.length == frames) {
-      Cbbg.LOGGER.info("STBN Frames loaded from cache.");
-      return cached;
+    if (fields == null) {
+      NativeImage[] cached = loadFromCache(width, height, frames, seed);
+      if (cached.length == frames) {
+        Cbbg.LOGGER.info("STBN Frames loaded from cache.");
+        return cached;
+      }
     }
 
     // 2. Generate from fields

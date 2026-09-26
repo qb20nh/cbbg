@@ -53,18 +53,19 @@ public final class DitherController {
     if (force) {
       STBNLoader.clearCacheExceptDefaults();
     }
-    startLoading(CbbgConfig.get());
+    startLoading(CbbgConfig.get(), force);
     if (force) {
       GenerationNotifications.started(Objects.requireNonNull(loading));
     }
   }
 
-  private static void startLoading(CbbgConfig settings) {
+  private static void startLoading(CbbgConfig settings, boolean force) {
     NoiseKey requested =
         new NoiseKey(settings.stbnSize(), settings.stbnDepth(), settings.stbnSeed());
     key = requested;
     CompletableFuture<NativeImage @Nullable []> generation =
-        STBNGenerator.generateAsync(requested.size, requested.size, requested.depth, requested.seed)
+        STBNGenerator.generateAsync(
+                requested.size, requested.size, requested.depth, requested.seed, force)
             .<NativeImage @Nullable []>thenApplyAsync(
                 fields ->
                     STBNLoader.loadOrGenerate(
@@ -94,7 +95,7 @@ public final class DitherController {
     if (key == null) {
       releaseNoise();
       failed = false;
-      startLoading(settings);
+      startLoading(settings, false);
     }
   }
 
