@@ -43,6 +43,15 @@ public class ProcessedRenderPassMixin {
         return ProcessedDitherInputs.texture(cbbgTestPass, name, original);
     }
 
+    @Inject(method = "setUniform(Ljava/lang/String;Lcom/mojang/renderpearl/api/textures/GpuTextureView;Lcom/mojang/renderpearl/api/textures/GpuSampler;)V",
+            at = @At("RETURN"))
+    private void cbbgTestBoundTexture(String name, GpuTextureView view, GpuSampler sampler,
+            CallbackInfo ci) {
+        if (cbbgTestPass && name.equals("NoiseSampler")) {
+            ProcessedRenderObservations.ditherNoise(view);
+        }
+    }
+
     @ModifyVariable(method = "setUniform(Ljava/lang/String;Lcom/mojang/renderpearl/api/buffers/GpuBufferSlice;)V",
             at = @At("HEAD"), argsOnly = true, index = 2)
     private GpuBufferSlice cbbgTestUniform(GpuBufferSlice original, String name,

@@ -17,6 +17,7 @@ public final class ProcessedRenderObservations {
     private static final AtomicLong FIRST_DRAW = new AtomicLong();
     private static CompiledRenderPipeline selectedPipeline;
     private static GpuTextureView lastDitherOutput;
+    private static GpuTextureView lastDitherNoise;
     private static long ditherSelections;
 
     private ProcessedRenderObservations() {}
@@ -49,6 +50,15 @@ public final class ProcessedRenderObservations {
 
     public static GpuTextureView lastDitherOutput() {
         return lastDitherOutput;
+    }
+
+    /** The texture view successfully bound as NoiseSampler by the most recent dither pass. */
+    public static void ditherNoise(GpuTextureView noise) {
+        lastDitherNoise = noise;
+    }
+
+    public static GpuTextureView lastDitherNoise() {
+        return lastDitherNoise;
     }
 
     public static long ditherSelections() {
