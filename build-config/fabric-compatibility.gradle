@@ -145,7 +145,9 @@ tasks.register('verifyFabricCompatibility') {
         Map previousMinimums = previousReports ? previousReports.first().report : [:]
         List results = []
         Map report = [schemaVersion: 1, target: compatibilityTarget.id, inputs: fixed,
-                complete: false, policy: 'previous minimum, exponential bracket, binary search over released SemVer versions',
+                complete: false, policy: 'previous boundaries, exponential bracket, binary search over released SemVer versions',
+                latestLoader: FabricCompatibilitySearch.ordered(loaders).last(),
+                latestFabricApi: FabricCompatibilitySearch.ordered(apis).last(),
                 startingTarget: previousMinimums.target, results: results]
         def save = {
             File destination = compatibilityReport.get().asFile
@@ -312,12 +314,65 @@ tasks.register('verifyFabricCompatibility') {
             }
             report.minimumLoader = loader
             report.minimumFabricApi = api
+            Map loaderUpper
+            Map apiUpper
+            if (strict) {
+                if (!previousMinimums.maximumLoader || !previousMinimums.maximumFabricApi ||
+                        previousMinimums.latestLoader != report.latestLoader ||
+                        previousMinimums.latestFabricApi != report.latestFabricApi) {
+                    throw new GradleException('Dependency releases changed or upper boundaries are missing; rerun the search')
+                }
+                loaderUpper = [maximum: previousMinimums.maximumLoader,
+                        firstIncompatible: previousMinimums.incompatibleLoader]
+                apiUpper = [maximum: previousMinimums.maximumFabricApi,
+                        firstIncompatible: previousMinimums.incompatibleFabricApi]
+                if (compatibilityTarget.dependencies.incompatibleLoader != loaderUpper.firstIncompatible ||
+                        compatibilityTarget.dependencies.incompatibleFabricApi != apiUpper.firstIncompatible) {
+                    throw new GradleException('Declared upper limits differ from the completed search')
+                }
+            } else {
+                List<String> eligibleLoaders = FabricCompatibilitySearch.ordered(loaders).dropWhile { it != loader }
+                List<String> eligibleApis = FabricCompatibilitySearch.ordered(apis).dropWhile { it != api }
+                String upperLoader = FabricCompatibilitySearch.startingVersion(eligibleLoaders,
+                        previousMinimums.maximumLoader ?: compatibilityTarget.dependencies.loader)
+                String upperApi = FabricCompatibilitySearch.startingVersion(eligibleApis,
+                        previousMinimums.maximumFabricApi ?: compatibilityTarget.dependencies.fabricApi)
+                loaderUpper = FabricCompatibilitySearch.maximum(eligibleLoaders, upperLoader) {
+                    pairPasses(it, compatibilityTarget.dependencies.fabricApi)
+                }
+                String previous
+                Set<String> visited = []
+                do {
+                    previous = loaderUpper.maximum + '/' + upperApi
+                    if (!visited.add(previous)) throw new GradleException('Upper dependency searches did not converge')
+                    apiUpper = FabricCompatibilitySearch.maximum(eligibleApis, upperApi) {
+                        pairPasses(loaderUpper.maximum, it)
+                    }
+                    upperApi = apiUpper.maximum
+                    loaderUpper = FabricCompatibilitySearch.maximum(eligibleLoaders, loaderUpper.maximum) {
+                        pairPasses(it, upperApi)
+                    }
+                } while (previous != loaderUpper.maximum + '/' + upperApi)
+            }
+            report.maximumLoader = loaderUpper.maximum
+            report.maximumFabricApi = apiUpper.maximum
+            report.incompatibleLoader = loaderUpper.firstIncompatible
+            report.incompatibleFabricApi = apiUpper.firstIncompatible
+            for (String selectedLoader : [loader, loaderUpper.maximum].unique()) {
+                for (String selectedApi : [api, apiUpper.maximum].unique()) {
+                    if (!pairPasses(selectedLoader, selectedApi)) {
+                        throw new GradleException('Dependency range contains a failing Loader/API combination: ' +
+                                selectedLoader + '/' + selectedApi)
+                    }
+                }
+            }
+            if (strict) report.declaredBoundsVerified = true
             report.complete = true
             compatibilityLastSuccess.get().asFile.text = JsonOutput.prettyPrint(JsonOutput.toJson(report)) + '\n'
         } finally {
             save()
         }
-        logger.lifecycle('Tested dependency minimums: ' + compatibilityReport.get().asFile)
+        logger.lifecycle('Tested dependency boundaries: ' + compatibilityReport.get().asFile)
     }
 }
 
@@ -328,18 +383,25 @@ tasks.register('updateFabricMinimums') {
     doLast {
         Map report = (Map) CandidateFiles.read(compatibilityReport.get().asFile)
         if (!report.complete) throw new GradleException('Dependency search is incomplete')
+        if (!report.maximumLoader || !report.maximumFabricApi) throw new GradleException('Upper boundaries are missing')
         if (report.results.any { result ->
-            result.status == 'failed' &&
+            result.status in ['failed', 'dependency-rejected'] &&
                     FabricCompatibilitySearch.ordered([report.minimumLoader, result.loader])[0] == report.minimumLoader &&
-                    FabricCompatibilitySearch.ordered([report.minimumFabricApi, result.fabricApi])[0] == report.minimumFabricApi
+                    FabricCompatibilitySearch.ordered([result.loader, report.maximumLoader])[0] == result.loader &&
+                    FabricCompatibilitySearch.ordered([report.minimumFabricApi, result.fabricApi])[0] == report.minimumFabricApi &&
+                    FabricCompatibilitySearch.ordered([result.fabricApi, report.maximumFabricApi])[0] == result.fabricApi
         }) {
-            throw new GradleException('A newer tested pair failed; minimum-only declarations cannot describe these results')
+            throw new GradleException('A tested pair failed inside the proposed dependency range')
         }
         String before = compatibilityCatalog.text
         def data = new JsonSlurper().parseText(before)
         Map selected = data.targets.find { it.id == compatibilityTarget.id }
         selected.dependencies.minimumLoader = report.minimumLoader
         selected.dependencies.minimumFabricApi = report.minimumFabricApi
+        ['incompatibleLoader', 'incompatibleFabricApi'].each { name ->
+            if (report[name]) selected.dependencies[name] = report[name]
+            else selected.dependencies.remove(name)
+        }
         // Preserve the catalog's compact, one-target-per-line convention.
         List lines = before.readLines()
         int index = lines.findIndexOf { it.contains('"id":"' + compatibilityTarget.id + '"') }
@@ -347,6 +409,6 @@ tasks.register('updateFabricMinimums') {
         lines[index] = '    ' + JsonOutput.toJson(selected) + (lines[index].trim().endsWith(',') ? ',' : '')
         String after = lines.join('\n') + '\n'
         if (after != before) compatibilityCatalog.text = after
-        logger.lifecycle('Updated ' + compatibilityTarget.id + ' dependency minimums; rebuild and test without overrides before release.')
+        logger.lifecycle('Updated ' + compatibilityTarget.id + ' dependency bounds; rebuild and test without overrides before release.')
     }
 }

@@ -25,7 +25,17 @@ class FabricCompatibilitySearch {
     }
 
     static String minimum(Collection<String> available, String current, Closure<Boolean> passes) {
+        boundary(ordered(available), current, passes)
+    }
+
+    static Map maximum(Collection<String> available, String current, Closure<Boolean> passes) {
         List<String> versions = ordered(available)
+        String maximum = boundary(versions.reverse(), current, passes)
+        int index = versions.indexOf(maximum)
+        [maximum: maximum, firstIncompatible: index + 1 < versions.size() ? versions[index + 1] : null]
+    }
+
+    private static String boundary(List<String> versions, String current, Closure<Boolean> passes) {
         int index = versions.indexOf(current)
         if (index < 0) throw new GradleException('Current version is absent from discovery: ' + current)
         Map<String, Boolean> tested = [:]
@@ -38,7 +48,7 @@ class FabricCompatibilitySearch {
             }
             tested[version]
         }
-        // Search published releases, assuming compatibility starts at one version.
+        // Search one compatibility transition in the supplied direction.
         // Semantic versioning alone does not establish that assumption.
         int failed = -1
         int passed = -1

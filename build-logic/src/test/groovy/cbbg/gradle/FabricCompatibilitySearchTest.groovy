@@ -152,4 +152,36 @@ class FabricCompatibilitySearchTest {
             [status: 'passed', files: [evidence]]
         }.cached)
     }
+
+    @Test void findsTheUpperBoundaryWithDoublingAndBinarySearch() {
+        List<Integer> visited = []
+        Map result = FabricCompatibilitySearch.maximum((0..<64).collect { '1.0.' + it }, '1.0.10') {
+            int patch = FabricCompatibilitySearch.numbers(it)[2]
+            visited.add(patch)
+            patch <= 20
+        }
+        assertEquals([maximum: '1.0.20', firstIncompatible: '1.0.21'], result)
+        assertEquals([10, 11, 12, 14, 18, 26], visited.take(6))
+        assertTrue(visited.containsAll([19, 20, 21]))
+    }
+
+    @Test void leavesTheUpperRequirementOpenWhenLatestPasses() {
+        assertEquals([maximum: '2.0.0', firstIncompatible: null],
+                FabricCompatibilitySearch.maximum(['1.9.0', '1.10.0', '2.0.0'], '1.9.0') { true })
+    }
+
+    @Test void searchesDownWhenThePreviousMaximumFails() {
+        assertEquals([maximum: '1.0.4', firstIncompatible: '1.0.5'],
+                FabricCompatibilitySearch.maximum((0..<8).collect { '1.0.' + it }, '1.0.7') {
+                    FabricCompatibilitySearch.numbers(it)[2] <= 4
+                })
+    }
+
+    @Test void doesNotConvertAnInconclusiveUpperTestIntoALimit() {
+        assertThrows(GradleException) {
+            FabricCompatibilitySearch.maximum(['1.0.0', '1.0.1'], '1.0.0') {
+                it == '1.0.1' ? null : true
+            }
+        }
+    }
 }

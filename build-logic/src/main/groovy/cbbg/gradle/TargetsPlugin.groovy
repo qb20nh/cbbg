@@ -67,7 +67,7 @@ class TargetsPlugin implements Plugin<Project> {
         }
         def minimums = project.tasks.register('determineFabricMinimums') {
             group = 'verification'
-            description = 'Locally find dependency minimums, update metadata, rebuild and verify the release jar.'
+            description = 'Locally find dependency lower/upper bounds, update metadata and verify the release jar.'
         }
         Map<String, String> localInputs = [:]
         ['compatibilityPython', 'compatibilityRuntime', 'compatibilityJava', 'compatibilityManageDisplay',

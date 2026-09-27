@@ -300,12 +300,19 @@ tasks.named('processResources') {
     }
     def properties = [version: project.version, minecraft_version: target.minecraft,
                       loader_version: target.dependencies.minimumLoader ?: target.dependencies.loader,
-                      fabric_api_minimum: target.dependencies.minimumFabricApi ? '>=' + target.dependencies.minimumFabricApi : '*',
+                      loader_upper_bound: target.dependencies.incompatibleLoader ? ' <' + target.dependencies.incompatibleLoader : '',
+                      fabric_api_minimum: target.dependencies.minimumFabricApi ?: '*',
+                      fabric_api_upper_bound: target.dependencies.incompatibleFabricApi ? ' <' + target.dependencies.incompatibleFabricApi : '',
                       java_version: target.java,
                       renderer_family: target.renderer,
                       shader_import: target.renderer == 'blaze-gpu-format' ? '#moj_import' : '#include']
     inputs.properties(properties)
-    filesMatching('fabric.mod.json') { expand(properties) }
+    filesMatching('fabric.mod.json') {
+        if (properties.fabric_api_minimum == '*') {
+            filter { line -> line.replace('>=${fabric_api_minimum}', '${fabric_api_minimum}') }
+        }
+        expand(properties)
+    }
     doLast {
         cbbg.gradle.FabricBranding.apply(sharedDescriptor, new File(destinationDir, 'fabric.mod.json'))
     }
