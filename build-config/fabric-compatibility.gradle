@@ -5,6 +5,7 @@ import groovy.json.JsonSlurper
 def compatibilityRoot = file('../..')
 def CandidateFiles = plugins.getPlugin('cbbg.packaging').class.classLoader.loadClass('cbbg.gradle.CandidateFiles')
 def FabricCompatibilitySearch = CandidateFiles.classLoader.loadClass('cbbg.gradle.FabricCompatibilitySearch')
+def FabricRuntimeInstallation = CandidateFiles.classLoader.loadClass('cbbg.gradle.FabricRuntimeInstallation')
 def compatibilityCatalog = new File(compatibilityRoot, 'targets.json')
 def compatibilityTarget = new JsonSlurper().parse(compatibilityCatalog).targets.find {
     it.id == providers.gradleProperty('target').getOrElse('26.3-fabric')
@@ -183,13 +184,13 @@ tasks.register('verifyFabricCompatibility') {
             }
             if (!runtimes.containsKey(loaderVersion)) {
                 File runtime = new File(output, 'runtimes/' + loaderVersion)
-                if (!runtime.exists()) {
-                    runtime.parentFile.mkdirs()
-                    int exit = run([python, new File(compatibilityRoot, 'scripts/install_fabric_parity_runtime.py'),
+                FabricRuntimeInstallation.ensure(runtime, compatibilityTarget.id,
+                        'fabric-loader-' + loaderVersion + '-' + minecraft) { boolean resume ->
+                    List command = [python, new File(compatibilityRoot, 'scripts/install_fabric_parity_runtime.py'),
                             '--target', compatibilityTarget.id, '--runtime', runtime,
-                            '--shared-runtime', sharedRuntime, '--loader-version', loaderVersion],
-                            new File(output, 'install-' + loaderVersion + '.log'))
-                    if (exit != 0) throw new GradleException('Runtime installation failed for ' + loaderVersion)
+                            '--shared-runtime', sharedRuntime, '--loader-version', loaderVersion]
+                    if (resume) command.add('--resume')
+                    run(command, new File(output, 'install-' + loaderVersion + '.log'))
                 }
                 File lock = new File(runtime, 'cbbg-runtime-lock.json')
                 int exit = run([python, new File(compatibilityRoot, 'scripts/fabric_runtime_lock.py'),
