@@ -15,6 +15,10 @@ updates:
       - "/build-config/publishing"
     schedule:
       interval: "weekly"
+    groups:
+      gradle-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
