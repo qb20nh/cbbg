@@ -3,6 +3,8 @@
 from pathlib import Path
 import unittest
 
+import yaml
+
 from workflow_support import ROOT, script
 
 
@@ -34,7 +36,17 @@ class WorkflowRoutingTest(unittest.TestCase):
         self.assertIn("-PrequireImplemented=true", script("Validate release selection", release))
         self.assertIn("bundleCandidate", script("Build and bundle candidate", release))
         self.assertIn("verifyProvenance", script("Verify candidate provenance", release))
-        self.assertIn("actions/attest-build-provenance@v3", text)
+        workflow = yaml.safe_load(text)
+        steps = workflow["jobs"]["candidate"]["steps"]
+        attestation = next(step for step in steps if step.get("name") == "Attest candidate files")
+        self.assertRegex(attestation["uses"], r"^actions/attest-build-provenance@\S+$")
+        self.assertEqual(attestation["id"], "provenance")
+        self.assertEqual(attestation["with"]["subject-path"], "build/release-candidate/*")
+        for permission in ("id-token", "attestations"):
+            self.assertEqual(workflow["permissions"][permission], "write")
+        verification = next(step for step in steps if step.get("name") == "Verify candidate provenance")
+        self.assertEqual(verification["env"]["PROVENANCE_BUNDLE"],
+                         "${{ steps.provenance.outputs.bundle-path }}")
         self.assertIn("gh release create", script("Create draft release", release))
         self.assertIn("--draft", script("Create draft release", release))
 
