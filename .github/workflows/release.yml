@@ -103,7 +103,7 @@ jobs:
 
       - name: Attest candidate files
         id: provenance
-        uses: actions/attest-build-provenance@v3
+        uses: actions/attest-build-provenance@v4
         with:
           subject-path: build/release-candidate/*
 
