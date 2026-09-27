@@ -1,0 +1,14 @@
+// Applies to explicit launches and launches pulled into another task's graph.
+gradle.taskGraph.whenReady { graph ->
+    if (System.getenv('CI')?.equalsIgnoreCase('true')) {
+        def launches = graph.allTasks.findAll { task ->
+            task.name == 'runGl2AllocationParity' ||
+                    task.name ==~ /run(Client|Server|Smoke|GameTest).*/ ||
+                    task.class.name.contains('RunMinecraftTask')
+        }
+        if (!launches.isEmpty()) {
+            throw new GradleException('Minecraft runtime tests are local-only; CI cannot run: '
+                    + launches.collect { it.path }.join(', '))
+        }
+    }
+}

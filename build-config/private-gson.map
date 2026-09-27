@@ -1,0 +1,4 @@
+com.google.gson.stream.JsonReader -> com.qb20nh.cbbg.internal.gson.stream.JsonReader:
+com.google.gson.stream.JsonWriter -> com.qb20nh.cbbg.internal.gson.stream.JsonWriter:
+com.google.gson.stream.JsonToken -> com.qb20nh.cbbg.internal.gson.stream.JsonToken:
+com.google.gson.stream.MalformedJsonException -> com.qb20nh.cbbg.internal.gson.stream.MalformedJsonException:

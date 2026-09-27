@@ -23,7 +23,7 @@
 	"icon": "assets/cbbg/icon.png",
 	"environment": "client",
 	"entrypoints": {
-		"afl:prePrePreLaunch": [
+		"preLaunch": [
 			"com.qb20nh.cbbg.CbbgEarlyInit"
 		],
 		"client": [
@@ -32,6 +32,9 @@
 		"modmenu": [
 			"com.qb20nh.cbbg.compat.modmenu.CbbgModMenuApi"
 		]
+	},
+	"languageAdapters": {
+		"cbbg:early": "com.qb20nh.cbbg.CbbgLanguageAdapter"
 	},
 	"mixins": [
 		"cbbg.mixins.json"

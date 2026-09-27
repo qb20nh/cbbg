@@ -1,48 +1,132 @@
-# This workflow uses actions that are not certified by GitHub.
-# They are provided by a third-party and are governed by
-# separate terms of service, privacy policy, and support
-# documentation.
-
-# A sample workflow which sets up periodic OSV-Scanner scanning for vulnerabilities,
-# in addition to a PR check which fails if new vulnerabilities are introduced.
-#
-# For more examples and options, including how to ignore specific vulnerabilities,
-# see https://google.github.io/osv-scanner/github-action/
-
 name: OSV-Scanner
 
 on:
   pull_request:
-    branches: [ "main" ]
+    branches: [main]
   merge_group:
-    branches: [ "main" ]
+    branches: [main]
   schedule:
     - cron: '22 13 * * 4'
   push:
-    branches: [ "main" ]
+    branches: [main]
 
 permissions:
-  # Require writing security events to upload SARIF file to security tab
-  security-events: write
-  # Read commit contents
   contents: read
 
 jobs:
-  scan-scheduled:
-    if: ${{ github.event_name == 'push' || github.event_name == 'schedule' }}
-    uses: "google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@1f1242919d8a60496dd1874b24b62b2370ed4c78" # v1.7.1
-    with:
-      # Example of specifying custom arguments
-      scan-args: |-
-        -r
-        --skip-git
-        ./
-  scan-pr:
-    if: ${{ github.event_name == 'pull_request' || github.event_name == 'merge_group' }}
-    uses: "google/osv-scanner-action/.github/workflows/osv-scanner-reusable-pr.yml@1f1242919d8a60496dd1874b24b62b2370ed4c78" # v1.7.1
-    with:
-      # Example of specifying custom arguments
-      scan-args: |-
-        -r
-        --skip-git
-        ./
+  osv-scan:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout proposed code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: current
+          persist-credentials: false
+      - name: Checkout comparison base
+        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+          path: baseline
+          persist-credentials: false
+      - name: Set up dependency resolution Java 25
+        uses: actions/setup-java@v5.1.0
+        with:
+          java-version: '25'
+          distribution: temurin
+      - uses: gradle/actions/setup-gradle@v5.0.0
+      - name: Resolve Gradle dependencies
+        id: dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          init="$GITHUB_WORKSPACE/current/gradle/dependency-sbom.init.gradle"
+          generate() {
+            local checkout="$GITHUB_WORKSPACE/$1" output="$GITHUB_WORKSPACE/.osv/$1"
+            mkdir -p "$output"
+            for build in . core build-logic build-config/publishing build-config/fabric-upstream; do
+              if [[ -f "$checkout/$build/settings.gradle" ]]; then
+                local label="${build//\//-}"
+                [[ "$build" != . ]] || label=root
+                "$checkout/gradlew" -p "$checkout/$build" --init-script "$init" \
+                  cyclonedxBom "-PsecuritySbom=$output/$label.cdx.json" --no-daemon
+              fi
+            done
+            if [[ -f "$checkout/targets.json" ]]; then
+              jq -er '.ciTargets[] as $id | .targets[] | select(.id == $id) | [.id, .buildProfile] | @tsv' \
+                "$checkout/targets.json" > "$output/targets.tsv"
+              while IFS=$'\t' read -r target profile; do
+                [[ "$target" =~ ^[a-zA-Z0-9._-]+$ && "$profile" =~ ^[a-zA-Z0-9_-]+$ ]]
+                "$checkout/gradlew" -p "$checkout/build-config/$profile" "-Ptarget=$target" \
+                  --init-script "$init" cyclonedxBom "-PsecuritySbom=$output/$target.cdx.json" --no-daemon
+              done < "$output/targets.tsv"
+            fi
+            local sboms=("$output"/*.cdx.json)
+            jq -e --slurp 'all(.[]; .bomFormat == "CycloneDX") and
+              ([.[] | .components[]? | select((.purl // "") | startswith("pkg:maven/"))] | length > 0)' \
+              "${sboms[@]}"
+            {
+              echo "$1-args<<SBOM_ARGS"
+              for sbom in "${sboms[@]}"; do echo "--sbom=${sbom#"$GITHUB_WORKSPACE/"}"; done
+              echo SBOM_ARGS
+            } >> "$GITHUB_OUTPUT"
+          }
+          generate current
+          if [[ -d baseline ]]; then generate baseline; fi
+      - name: Scan base dependencies
+        if: steps.dependencies.outputs.baseline-args != ''
+        continue-on-error: true
+        uses: google/osv-scanner-action/osv-scanner-action@7f58dd6750d78fc29a900ba64b1a0f946f62fba4 # v2.6.0
+        with:
+          scan-args: |-
+            --format=json
+            --output=old-results.json
+            ${{ steps.dependencies.outputs.baseline-args }}
+      - name: Scan proposed dependencies
+        continue-on-error: true
+        uses: google/osv-scanner-action/osv-scanner-action@7f58dd6750d78fc29a900ba64b1a0f946f62fba4 # v2.6.0
+        with:
+          scan-args: |-
+            --format=json
+            --output=new-results.json
+            ${{ steps.dependencies.outputs.current-args }}
+      - name: Require completed scans
+        shell: bash
+        env:
+          COMPARE: ${{ steps.dependencies.outputs.baseline-args != '' }}
+        run: |
+          set -euo pipefail
+          jq -e '.results | type == "array"' new-results.json
+          if [[ "$COMPARE" == true ]]; then
+            jq -e '.results | type == "array"' old-results.json
+          fi
+      - name: Report vulnerabilities
+        uses: google/osv-scanner-action/osv-reporter-action@7f58dd6750d78fc29a900ba64b1a0f946f62fba4 # v2.6.0
+        with:
+          scan-args: |-
+            --output-files=sarif:results.sarif
+            --output-files=gh-annotations:#stderr
+            --fail-on-vuln=true
+            ${{ steps.dependencies.outputs.baseline-args != '' && '--old=old-results.json' || '' }}
+            --new=new-results.json
+      - name: Upload scan evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: osv-dependencies
+          path: |
+            .osv/**/*.cdx.json
+            old-results.json
+            new-results.json
+            results.sarif
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 7
+      - name: Upload to code scanning
+        if: always() && hashFiles('results.sarif') != ''
+        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        with:
+          sarif_file: results.sarif

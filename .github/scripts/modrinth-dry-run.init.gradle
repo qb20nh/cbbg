@@ -1,6 +1,7 @@
 // Loaded only for validation runs, including tags predating this script.
 gradle.projectsEvaluated {
     def modrinth = gradle.rootProject.extensions.getByName('modrinth')
+    if (!modrinth.token.isPresent()) modrinth.token.set('')
     modrinth.debugMode.set(true)
     modrinth.debugMode.finalizeValue()
 }

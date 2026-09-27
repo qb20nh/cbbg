@@ -1,13 +1,13 @@
 # Changelog
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
+This project uses [Keep a Changelog](https://keepachangelog.com/) and [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
 ### Maintenance lines
 
 - The Minecraft 1.21.1 backport is maintained on the `mc1.21.1` branch.
-  - `main` remains the canonical line; backport changes are cherry-picked from `main` when applicable.
+  - Backport changes from `main` when applicable.
   - Release tags use `v<mod_version>(-prerelease)?+mc<minecraft_version>` (SemVer build metadata; `-` is reserved for prereleases).
   - Release tags are branch-gated: the tagged commit must be contained in `main` or `mc<minecraft_version>`.
 
@@ -23,19 +23,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 ### Added
 
 - Config screen status message.
-- Support multiple languages.
+- Support for multiple languages.
 
 ### Fixed
 
 - Color banding in GUI background blurring.
-- Pressing esc key in config menu exiting all menus.
+- Pressing Esc in the config menu closed all menus.
 - Crash when running alongside the Chat Patches mod.
 
 ## [1.2.2] - 2025-12-20
 
 ### Fixed
 
-- Fixed crash when opening config screen
+- Crash when opening the config screen.
 
 ## [1.2.1] - 2025-12-19
 
@@ -50,7 +50,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
-- Fixed generation completion toast not being shown.
+- Missing toast when generation completed.
 
 ## [1.2.0] - 2025-12-18
 
@@ -76,7 +76,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
-- Fixed STBN texture cache not being utilized correctly.
+- Incorrect STBN texture cache use.
 
 ## [1.1.0] - 2025-12-16
 

@@ -62,6 +62,7 @@
   "cbbg.config.size.label": "Размер",
   "cbbg.config.status.disabled_render_error": "⚠ cbbg отключён из-за ошибки рендеринга (см. лог)",
   "cbbg.config.status.iris_active": "⚠ Iris активен: cbbg принудительно выключен",
+  "cbbg.config.status.shader_active": "⚠ %s активен: cbbg принудительно выключен",
   "cbbg.config.status.mode_disabled": "cbbg отключён (включите режим, чтобы редактировать настройки)",
   "cbbg.config.status.no_float_formats": "⚠ Нет поддержки RGBA16F/32F: используется RGBA8",
   "cbbg.config.strength.label": "Сила",
