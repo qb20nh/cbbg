@@ -3,6 +3,7 @@ package cbbg.gradle
 import groovy.json.JsonOutput
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
+import java.util.zip.ZipFile
 import static org.junit.jupiter.api.Assertions.*
 
 class CandidateManifestTest {
@@ -88,9 +89,53 @@ class CandidateManifestTest {
         }
     }
 
+    @Test void mappedCandidatesRejectMissingOrMismatchedEmbeddedMapping() {
+        def fixture = CandidateFixture.create(directory)
+        File sources = new File(fixture.bundle, fixture.record.sources.path)
+        Map<String, byte[]> entries = [:]
+        new ZipFile(sources).withCloseable { zip ->
+            zip.entries().each { entries[it.name] = zip.getInputStream(it).bytes }
+        }
+        for (byte[] invalid : [null, 'different mapping'.bytes]) {
+            entries.remove('META-INF/cbbg/proguard.map')
+            if (invalid != null) entries['META-INF/cbbg/proguard.map'] = invalid
+            CandidateFixture.archive(sources, entries)
+            fixture.record.sources.sha256 = CandidateFiles.sha256(sources)
+            fixture.file.text = JsonOutput.toJson(fixture.manifest)
+            def error = assertThrows(Exception) { new CandidateManifest(fixture.file).verifyPackages(fixture.root) }
+            assertTrue(error.message.contains('release mapping in source archive'))
+        }
+    }
+
+    @Test void mappedCandidatesRejectMissingOrMismatchedEmbeddedSbom() {
+        def fixture = CandidateFixture.create(directory, true, true)
+        File sources = new File(fixture.bundle, fixture.record.sources.path)
+        Map<String, byte[]> entries = [:]
+        new ZipFile(sources).withCloseable { zip ->
+            zip.entries().each { entries[it.name] = zip.getInputStream(it).bytes }
+        }
+        for (byte[] invalid : [null, '{}'.bytes]) {
+            entries.remove('META-INF/cbbg/sbom.cdx.json')
+            if (invalid != null) entries['META-INF/cbbg/sbom.cdx.json'] = invalid
+            CandidateFixture.archive(sources, entries)
+            fixture.record.sources.sha256 = CandidateFiles.sha256(sources)
+            fixture.file.text = JsonOutput.toJson(fixture.manifest)
+            def error = assertThrows(Exception) { new CandidateManifest(fixture.file).verifyPackages(fixture.root) }
+            assertTrue(error.message.contains('release SBOM in source archive'))
+        }
+    }
+
     @Test void historicalCandidatesRemainReadableWithoutProcessingClaims() {
         def fixture = CandidateFixture.create(directory)
+        File sources = new File(fixture.bundle, fixture.record.sources.path)
+        Map<String, byte[]> entries = [:]
+        new ZipFile(sources).withCloseable { zip ->
+            zip.entries().each { if (it.name != 'META-INF/cbbg/proguard.map') entries[it.name] = zip.getInputStream(it).bytes }
+        }
+        CandidateFixture.archive(sources, entries)
+        fixture.record.sources.sha256 = CandidateFiles.sha256(sources)
         fixture.manifest.schema = 2
+        fixture.record.remove('sbom')
         fixture.record.remove('mapping')
         fixture.record.remove('processing')
         fixture.file.text = JsonOutput.toJson(fixture.manifest)

@@ -36,7 +36,9 @@ class ReleasePluginTest {
     @Test void curseForgeReceiptBindsFileIdToSubmittedMetadata() {
         File metadata = new File(directory, 'publication.json')
         metadata.text = JsonOutput.toJson([release: 'v1.4.0', source_commit: 'a' * 40,
-                records: [[targets: ['26.3-fabric'], artifact: [path: 'cbbg.jar', sha256: 'b' * 64]]]])
+                records: [[targets: ['26.3-fabric'], artifact: [path: 'cbbg.jar', sha256: 'b' * 64],
+                           sources: [path: 'cbbg-sources.jar', sha256: 'c' * 64],
+                           evidence: [path: 'cbbg-evidence.zip', sha256: 'd' * 64]]]])
         String[] arguments = ['recordCurseForgeUpload', '-PpublicationMetadata=publication.json',
                               '-Poutput=receipt.json', '-PfileId=123']
         runner(*arguments).build()
@@ -45,10 +47,29 @@ class ReleasePluginTest {
         assertEquals(CandidateFiles.sha256(metadata), result.metadata_sha256)
         assertEquals(['26.3-fabric'], result.targets)
         assertTrue(result.url.endsWith('/123'))
+        assertFalse(result.containsKey('sources_file_id'))
         runner(*arguments).buildAndFail()
+        runner('recordCurseForgeUpload', '-PpublicationMetadata=publication.json',
+                '-Poutput=sources-receipt.json', '-PfileId=123', '-PsourcesFileId=456').build()
+        Map sourcesResult = CandidateFiles.read(new File(directory, 'sources-receipt.json'))
+        assertEquals('123', sourcesResult.file_id)
+        assertEquals('456', sourcesResult.sources_file_id)
+        assertEquals([path: 'cbbg-sources.jar', sha256: 'c' * 64], sourcesResult.sources)
+        assertTrue(sourcesResult.sources_url.endsWith('/456'))
+        runner('recordCurseForgeUpload', '-PpublicationMetadata=publication.json',
+                '-Poutput=evidence-receipt.json', '-PfileId=123', '-PsourcesFileId=456',
+                '-PevidenceFileId=789').build()
+        Map evidenceResult = CandidateFiles.read(new File(directory, 'evidence-receipt.json'))
+        assertEquals('789', evidenceResult.evidence_file_id)
+        assertEquals([path: 'cbbg-evidence.zip', sha256: 'd' * 64], evidenceResult.evidence)
+        assertTrue(evidenceResult.evidence_url.endsWith('/789'))
         ['0', '-1', 'abc', '１２'].each { id ->
             assertTrue(runner('recordCurseForgeUpload', '-PfileId=' + id).buildAndFail().output
                     .contains('no valid file ID'))
+            assertTrue(runner('recordCurseForgeUpload', '-PfileId=123', '-PsourcesFileId=' + id)
+                    .buildAndFail().output.contains('no valid sources file ID'))
+            assertTrue(runner('recordCurseForgeUpload', '-PfileId=123', '-PevidenceFileId=' + id)
+                    .buildAndFail().output.contains('no valid evidence file ID'))
         }
     }
 

@@ -32,6 +32,7 @@ class ReleaseOptimizationTest {
         write('settings.gradle', "rootProject.name = 'example'\n")
         write('build.gradle', '''
 plugins { id 'java'; id 'cbbg.packaging' }
+java { withSourcesJar() }
 tasks.named('jar', Jar) { destinationDirectory = layout.buildDirectory.dir('intermediates/raw-jar') }
 releaseOptimization {
     targetJdk(javaToolchains, 25)
@@ -125,7 +126,7 @@ public class SampleMixin { public void shadow() {} }
             runner('prepareRuntimeFixture').build()
             targetHome = new File(new File(directory, 'target-home.txt').text)
         }
-        def firstBuild = runner('recordSelectedJdk', 'optimizeReleaseJar').build()
+        def firstBuild = runner('recordSelectedJdk', 'releaseSourcesJar').build()
         File runtimeLibrary = new File(directory, 'build/intermediates/proguard/jdk-runtime.jar')
         if (runtimeImage) {
             assertEquals(TaskOutcome.SUCCESS, firstBuild.task(':exportReleaseJdkLibraries').outcome)
@@ -169,7 +170,17 @@ public class SampleMixin { public void shadow() {} }
 
         File output = new File(directory, 'build/libs/example.jar')
         File mapping = new File(directory, 'build/mapping/example.map')
+        new ZipFile(new File(directory, 'build/intermediates/source-jar/example-sources.jar')).withCloseable { zip ->
+            assertNull(zip.getEntry('META-INF/cbbg/proguard.map'))
+            assertNull(zip.getEntry('META-INF/cbbg/sbom.cdx.json'))
+        }
         assertTrue(output.isFile())
+        new ZipFile(new File(directory, 'build/libs/example-sources.jar')).withCloseable { zip ->
+            assertArrayEquals(new File(directory, 'build/libs/example-unspecified.cdx.json').bytes,
+                    zip.getInputStream(zip.getEntry('META-INF/cbbg/sbom.cdx.json')).bytes)
+            assertArrayEquals(mapping.bytes, zip.getInputStream(zip.getEntry('META-INF/cbbg/proguard.map')).bytes)
+            assertNotNull(zip.getEntry('com/qb20nh/cbbg/internal/Useful.java'))
+        }
         assertTrue(mapping.text.contains('com.qb20nh.cbbg.internal.Useful -> '))
         assertFalse(mapping.text.contains('com.qb20nh.cbbg.internal.Dead -> '))
         assertFalse(mapping.text.contains('unused()'))

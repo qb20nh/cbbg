@@ -401,7 +401,8 @@ tasks.named('checkPackages', cbbg.gradle.CheckPackages) {
     dependsOn tasks.named('optimizeReleaseJar')
     artifact.set(releaseOptimization.outputJar)
     mapping.set(releaseOptimization.mappingFile)
-    sources.set(tasks.named('sourcesJar', Jar).flatMap { it.archiveFile })
+    sbom.set(releaseSbomFile)
+    sources.set(tasks.named('releaseSourcesJar', Jar).flatMap { it.archiveFile })
     javaVersion.set(target.java as int)
     coreSources.set(new File(repositoryRoot, 'core/src/main/java'))
 }
@@ -458,8 +459,9 @@ tasks.register('candidateBuildOutputs') {
                                                '--', '.', ':(top,exclude)docs/**']).isEmpty(),
                       artifact: artifact,
                       mapping: reference(releaseOptimization.mappingFile.get().asFile),
+                      sbom: reference(releaseSbomFile.get().asFile),
                       processing: [tool: 'proguard', version: cbbg.gradle.ProguardMapping.VERSION],
-                      sources: reference(tasks.named('sourcesJar', Jar).get().archiveFile.get().asFile),
+                      sources: reference(tasks.named('releaseSourcesJar', Jar).get().archiveFile.get().asFile),
                       source_inventory: reference(layout.buildDirectory.file('source-inventory.json').get().asFile),
                       drivers: drivers]
         destination.get().asFile.text = groovy.json.JsonOutput.prettyPrint(

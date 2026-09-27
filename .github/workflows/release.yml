@@ -118,6 +118,9 @@ jobs:
             -Pcandidate=build/release-candidate/candidate.json \
             -Pbundle=build/release-candidate/provenance.jsonl \
             "-Prepo=${GH_REPO}" -Poutput=build/provenance-result.json verifyProvenance
+          ./gradlew --no-daemon \
+            -Pcandidate=build/release-candidate/candidate.json \
+            "-Prepo=${GH_REPO}" packageReleaseEvidence
 
       - name: Create draft release
         env:

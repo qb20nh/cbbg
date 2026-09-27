@@ -60,7 +60,8 @@ class CandidateManifest {
         if (!(tests instanceof Map) || !(tests.drivers instanceof Map) || tests.drivers.isEmpty()) {
             throw new GradleException('Missing client test drivers')
         }
-        (['artifact', 'sources', 'source_inventory'] + (target.containsKey('mapping') ? ['mapping'] : [])).collect { target[it] as Map } +
+        (['artifact', 'sources', 'source_inventory'] + (target.containsKey('mapping') ? ['mapping'] : []) +
+                (target.containsKey('sbom') ? ['sbom'] : [])).collect { target[it] as Map } +
                 ['catalog', 'contract', 'ordinary_metadata', 'runtime_lock', 'dependency_lock'].collect { tests[it] as Map } +
                 tests.drivers.values().collect { it as Map }
     }
@@ -101,6 +102,13 @@ class CandidateManifest {
         }
         files.SHA256SUMS = CandidateFiles.sha256(checksums)
         files['provenance.jsonl'] = CandidateFiles.sha256(new File(file.parentFile, 'provenance.jsonl'))
+        records.each { id, record ->
+            if (record.containsKey('sbom')) {
+                Map evidence = ReleaseEvidence.reference(this, id)
+                if (files.containsKey(evidence.path)) throw new GradleException('Duplicate release evidence filename')
+                files[evidence.path] = evidence.sha256
+            }
+        }
         files
     }
 }

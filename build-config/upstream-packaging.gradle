@@ -2,7 +2,8 @@ tasks.named('checkPackages') {
     dependsOn tasks.named('optimizeReleaseJar')
     artifact.set(releaseOptimization.outputJar)
     mapping.set(releaseOptimization.mappingFile)
-    sources.set(tasks.named('sourcesJar', Jar).flatMap { it.archiveFile })
+    sbom.set(releaseSbomFile)
+    sources.set(tasks.named('releaseSourcesJar', Jar).flatMap { it.archiveFile })
     javaVersion.set(25)
     coreSources.set(file('../../core/src/main/java'))
 }

@@ -6,7 +6,7 @@ import java.util.zip.ZipOutputStream
 
 /** Small synthetic archives for packaging and release-tool tests. */
 class CandidateFixture {
-    static Map create(File directory, boolean implemented = true) {
+    static Map create(File directory, boolean implemented = true, boolean withSbom = false) {
         File root = new File(directory, 'source')
         File bundle = new File(directory, 'candidate')
         root.mkdirs()
@@ -42,7 +42,6 @@ class CandidateFixture {
             artifact[path.replace('.java', '.class')] = [0xca, 0xfe, 0xba, 0xbe, 0, 0, 0, major] as byte[]
         }
         archive(new File(bundle, 'cbbg-1.4.0+mc26.3-fabric.jar'), artifact)
-        archive(new File(bundle, 'cbbg-1.4.0+mc26.3-fabric-sources.jar'), sources)
         ['catalog.json': catalog, 'source-inventory.json': inventory,
          'contract.json': [schemaVersion: 1, target: target.id, ordinaryMetadata: 'ordinary-metadata.json', additionalRuns: []],
          'ordinary-metadata.json': [id: 'cbbg-renderer-test', entrypoints: ['fabric-client-gametest': ['example.Test']]],
@@ -54,6 +53,14 @@ class CandidateFixture {
             String name = it.replace('.java', '').replace('/', '.')
             name + ' -> ' + name + ':'
         }.join('\n') + '\n'
+        File sbom = new File(bundle, 'cbbg-1.4.0+mc26.3-fabric-sbom.cdx.json')
+        if (withSbom) CandidateFiles.writeNew(sbom, [bomFormat: 'CycloneDX', specVersion: '1.6', version: 1,
+                                     components: [[type: 'library', group: 'com.google.code.gson',
+                                                   name: 'gson', version: '2.8.9',
+                                                   purl: 'pkg:maven/com.google.code.gson/gson@2.8.9']]])
+        if (withSbom) sources['META-INF/cbbg/sbom.cdx.json'] = sbom.bytes
+        sources['META-INF/cbbg/proguard.map'] = new File(bundle, 'cbbg-1.4.0+mc26.3-fabric-mapping.txt').bytes
+        archive(new File(bundle, 'cbbg-1.4.0+mc26.3-fabric-sources.jar'), sources)
         def reference = { String name -> CandidateFiles.reference(bundle, name) }
         Map record = [id: target.id, artifact: reference('cbbg-1.4.0+mc26.3-fabric.jar'),
                       mapping: reference('cbbg-1.4.0+mc26.3-fabric-mapping.txt'),
@@ -64,6 +71,7 @@ class CandidateFixture {
                               ordinary_metadata: reference('ordinary-metadata.json'),
                               runtime_lock: reference('runtime-lock.json'), dependency_lock: reference('dependency-lock.json'),
                               drivers: [ordinary: reference('ordinary-driver.jar')]]]
+        if (withSbom) record.sbom = reference(sbom.name)
         Map manifest = [schema: 3, release: 'v1.4.0', commit: 'a' * 40,
                         catalog_sha256: CandidateFiles.canonicalHash(catalog), selected_targets: [target.id], targets: [record]]
         File manifestFile = new File(bundle, 'candidate.json')

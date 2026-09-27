@@ -16,7 +16,8 @@ class ReleaseChecks {
         Map<String, File> subjects = [(manifestHash): candidate.file]
         Map<File, String> files = [(candidate.file): manifestHash]
         candidate.records.values().each { record ->
-            (['artifact', 'sources'] + (candidate.data.schema == 3 ? ['mapping'] : [])).each { kind ->
+            (['artifact', 'sources'] + (candidate.data.schema == 3 ? ['mapping'] : []) +
+                    (record.containsKey('sbom') ? ['sbom'] : [])).each { kind ->
                 File path = CandidateFiles.checked(candidate.file.parentFile, record[kind] as Map)
                 String hash = record[kind].sha256
                 files[path] = hash
@@ -223,7 +224,8 @@ class ReleaseChecks {
         CandidateFiles.writeNew(metadataFile, metadata)
         Map record = (Map) metadata.records[0]
         File artifact = CandidateFiles.checked(assetDir, candidate.records[TARGET].artifact as Map)
-        githubOutput.append(githubValues(record, candidate.specifications[TARGET], artifact), 'UTF-8')
+        File sources = CandidateFiles.checked(assetDir, candidate.records[TARGET].sources as Map)
+        githubOutput.append(githubValues(record, candidate.specifications[TARGET], artifact, sources), 'UTF-8')
         metadata
     }
 
@@ -294,7 +296,7 @@ class ReleaseChecks {
         CandidateFiles.writeNew(metadataFile, metadata)
         Map record = (Map) metadata.records[0]
         githubOutput.append(githubValues(record, [java: LegacyPublication.javaVersion(source)],
-                new File(assetDir, artifactName)), 'UTF-8')
+                new File(assetDir, artifactName), new File(assetDir, sourcesName)), 'UTF-8')
         metadata
     }
 
@@ -422,14 +424,17 @@ class ReleaseChecks {
         }
     }
 
-    private static String githubValues(Map record, Map specification, File artifact) {
+    private static String githubValues(Map record, Map specification, File artifact, File sources) {
         Map curseforge = record.curseforge
         Map values = [target: record.targets[0], java: specification.java.toString(),
-                      artifact: artifact.absolutePath, cf_project_id: curseforge.project_id,
+                      artifact: artifact.absolutePath, sources: sources.absolutePath,
+                      cf_project_id: curseforge.project_id,
                       cf_game_versions: curseforge.game_versions?.join(',') ?: '',
                       cf_display_name: curseforge.display_name,
                       cf_release_type: curseforge.release_type,
                       cf_relations: curseforge.relations, cf_changelog: curseforge.changelog]
+        values.evidence = record.evidence
+                ? CandidateFiles.checked(artifact.parentFile, record.evidence as Map).absolutePath : ''
         values.collect { key, value ->
             String text = value.toString()
             if (text.contains('\n') || text.contains('\r')) {

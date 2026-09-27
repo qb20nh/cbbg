@@ -29,7 +29,7 @@ class PackageChecks {
     }
 
     static Map verifyArtifact(File artifact, File sources, int javaVersion, Collection<File> sourceRoots,
-                              File mapping = null) {
+                              File mapping = null, File sbom = null) {
         if (javaVersion < 8) throw new GradleException('Invalid target Java baseline')
         Map<String, byte[]> expected = [:]
         for (File coreSources : sourceRoots) {
@@ -81,6 +81,14 @@ class PackageChecks {
         new ZipFile(sources).withCloseable { ZipFile zip ->
             Set<String> names = productionEntries(zip) as Set
             if (names.any { it.endsWith('.class') }) throw new GradleException('Binary class in source archive')
+            if (mapping != null && (!names.contains('META-INF/cbbg/proguard.map') ||
+                    !Arrays.equals(read(zip, 'META-INF/cbbg/proguard.map'), mapping.bytes))) {
+                throw new GradleException('Missing or changed release mapping in source archive')
+            }
+            if (sbom != null && (!names.contains('META-INF/cbbg/sbom.cdx.json') ||
+                    !Arrays.equals(read(zip, 'META-INF/cbbg/sbom.cdx.json'), sbom.bytes))) {
+                throw new GradleException('Missing or changed release SBOM in source archive')
+            }
             for (Map.Entry<String, byte[]> source : expected.entrySet()) {
                 if (!names.contains(source.key) || !Arrays.equals(read(zip, source.key), source.value)) {
                     throw new GradleException('Missing or changed core source: ' + source.key)
@@ -213,7 +221,8 @@ class PackageChecks {
             if (match.find()) sharedRoots.add(new File(sourceRoot, match.group(1)))
         }
         [packaging: verifyArtifact(artifact, sources, (int) specification.java,
-                sharedRoots, targetRecord.mapping == null ? null : CandidateFiles.checked(base, (Map) targetRecord.mapping)),
+                sharedRoots, targetRecord.mapping == null ? null : CandidateFiles.checked(base, (Map) targetRecord.mapping),
+                targetRecord.sbom == null ? null : CandidateFiles.checked(base, (Map) targetRecord.sbom)),
          metadata: verifyFabricMetadata(artifact, specification, version),
          sources: sourceCheck]
     }

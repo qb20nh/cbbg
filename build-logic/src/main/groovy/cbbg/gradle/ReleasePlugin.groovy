@@ -60,6 +60,12 @@ class ReleasePlugin implements Plugin<Project> {
             CandidateFiles.writeNew(input('output'), ReleaseChecks.provenance(
                     input('candidate'), input('bundle'), required('repo'), run))
         }
+        task('packageReleaseEvidence', 'Package SBOM, mappings and GitHub build provenance.') {
+            File manifest = input('candidate')
+            ReleaseChecks.provenance(manifest, new File(manifest.parentFile, 'provenance.jsonl'), required('repo'), run)
+            CandidateManifest candidate = new CandidateManifest(manifest)
+            candidate.records.keySet().each { ReleaseEvidence.assemble(candidate, it) }
+        }
         task('verifyCandidate', 'Check packaged candidate and complete local runtime results.') {
             local()
             File output = input('output')
@@ -90,6 +96,16 @@ class ReleasePlugin implements Plugin<Project> {
             if (!(identifier ==~ /[0-9]+/) || new BigInteger(identifier) <= 0) {
                 throw new GradleException('CurseForge returned no valid file ID; check the project before retrying')
             }
+            String sourcesIdentifier = project.providers.gradleProperty('sourcesFileId').orNull
+            if (sourcesIdentifier != null &&
+                    (!(sourcesIdentifier ==~ /[0-9]+/) || new BigInteger(sourcesIdentifier) <= 0)) {
+                throw new GradleException('CurseForge returned no valid sources file ID; check the project before retrying')
+            }
+            String evidenceIdentifier = project.providers.gradleProperty('evidenceFileId').orNull
+            if (evidenceIdentifier != null &&
+                    (!(evidenceIdentifier ==~ /[0-9]+/) || new BigInteger(evidenceIdentifier) <= 0)) {
+                throw new GradleException('CurseForge returned no valid evidence file ID; check the project before retrying')
+            }
             File metadataFile = input('publicationMetadata')
             Map metadata = CandidateFiles.read(metadataFile)
             if (!(metadata.records instanceof List) || metadata.records.size() != 1) {
@@ -100,6 +116,18 @@ class ReleasePlugin implements Plugin<Project> {
                           targets: record.targets, artifact: record.artifact,
                           metadata_sha256: CandidateFiles.sha256(metadataFile), file_id: identifier,
                           url: 'https://www.curseforge.com/minecraft/mc-mods/cbbg/files/' + identifier]
+            if (sourcesIdentifier != null) {
+                if (!(record.sources instanceof Map)) throw new GradleException('Missing sources publication record')
+                result.sources = record.sources
+                result.sources_file_id = sourcesIdentifier
+                result.sources_url = 'https://www.curseforge.com/minecraft/mc-mods/cbbg/files/' + sourcesIdentifier
+            }
+            if (evidenceIdentifier != null) {
+                if (!(record.evidence instanceof Map)) throw new GradleException('Missing evidence publication record')
+                result.evidence = record.evidence
+                result.evidence_file_id = evidenceIdentifier
+                result.evidence_url = 'https://www.curseforge.com/minecraft/mc-mods/cbbg/files/' + evidenceIdentifier
+            }
             CandidateFiles.writeNew(input('output'), result)
             project.logger.lifecycle(result.url as String)
         }

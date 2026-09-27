@@ -127,6 +127,58 @@ jobs:
           ./gradlew --no-daemon "-PpublicationMetadata=build/publication.json" \
             "-PfileId=$CF_FILE_ID" -Poutput=build/curseforge-result.json recordCurseForgeUpload
 
+      - name: Upload sources and mappings to CurseForge
+        if: ${{ !inputs.dry_run && inputs.services != 'modrinth' }}
+        id: curseforge_sources_upload
+        uses: itsmeow/curseforge-upload@v3.1.2
+        with:
+          token: ${{ secrets.CF_API_TOKEN }}
+          project_id: ${{ steps.publication.outputs.cf_project_id }}
+          game_endpoint: minecraft
+          parent_file_id: ${{ steps.curseforge_upload.outputs.id }}
+          file_path: ${{ steps.publication.outputs.sources }}
+          release_type: ${{ steps.publication.outputs.cf_release_type }}
+          display_name: ${{ steps.publication.outputs.cf_display_name }} sources
+          changelog: ${{ steps.publication.outputs.cf_changelog }}
+          changelog_type: markdown
+
+      - name: Save CurseForge sources upload record
+        if: ${{ !inputs.dry_run && inputs.services != 'modrinth' }}
+        env:
+          CF_FILE_ID: ${{ steps.curseforge_upload.outputs.id }}
+          CF_SOURCES_FILE_ID: ${{ steps.curseforge_sources_upload.outputs.id }}
+        run: |
+          ./gradlew --no-daemon "-PpublicationMetadata=build/publication.json" \
+            "-PfileId=$CF_FILE_ID" "-PsourcesFileId=$CF_SOURCES_FILE_ID" \
+            -Poutput=build/curseforge-sources-result.json recordCurseForgeUpload
+
+      - name: Upload SBOM and provenance to CurseForge
+        if: ${{ !inputs.dry_run && inputs.services != 'modrinth' && steps.publication.outputs.evidence != '' }}
+        id: curseforge_evidence_upload
+        uses: itsmeow/curseforge-upload@v3.1.2
+        with:
+          token: ${{ secrets.CF_API_TOKEN }}
+          project_id: ${{ steps.publication.outputs.cf_project_id }}
+          game_endpoint: minecraft
+          parent_file_id: ${{ steps.curseforge_upload.outputs.id }}
+          file_path: ${{ steps.publication.outputs.evidence }}
+          release_type: ${{ steps.publication.outputs.cf_release_type }}
+          display_name: ${{ steps.publication.outputs.cf_display_name }} build evidence
+          changelog: ${{ steps.publication.outputs.cf_changelog }}
+          changelog_type: markdown
+
+      - name: Save CurseForge evidence upload record
+        if: ${{ !inputs.dry_run && inputs.services != 'modrinth' && steps.publication.outputs.evidence != '' }}
+        env:
+          CF_FILE_ID: ${{ steps.curseforge_upload.outputs.id }}
+          CF_SOURCES_FILE_ID: ${{ steps.curseforge_sources_upload.outputs.id }}
+          CF_EVIDENCE_FILE_ID: ${{ steps.curseforge_evidence_upload.outputs.id }}
+        run: |
+          ./gradlew --no-daemon "-PpublicationMetadata=build/publication.json" \
+            "-PfileId=$CF_FILE_ID" "-PsourcesFileId=$CF_SOURCES_FILE_ID" \
+            "-PevidenceFileId=$CF_EVIDENCE_FILE_ID" \
+            -Poutput=build/curseforge-evidence-result.json recordCurseForgeUpload
+
       - name: Save publication records
         if: always()
         uses: actions/upload-artifact@v6
@@ -135,5 +187,7 @@ jobs:
           path: |
             build/publication.json
             build/curseforge-result.json
+            build/curseforge-sources-result.json
+            build/curseforge-evidence-result.json
             build/publishing/**/modrinth-plan.json
             build/publishing/**/modrinth-result.json

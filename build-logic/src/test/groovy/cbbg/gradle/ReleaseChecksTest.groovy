@@ -314,8 +314,10 @@ class ReleaseChecksTest {
         }
         Map resolved = Publication.resolve(metadata, 'curseforge', fetch, 'fixture')
         String output = ReleaseChecks.githubValues(resolved.records[0], fixture.target,
-                new File(fixture.root, fixture.record.artifact.path))
+                new File(fixture.root, fixture.record.artifact.path),
+                new File(fixture.root, fixture.record.sources.path))
         assertTrue(output.readLines().contains('cf_game_versions=101,202,303,404'))
+        assertTrue(output.readLines().contains('sources=' + new File(fixture.root, fixture.record.sources.path).absolutePath))
     }
 
     @Test

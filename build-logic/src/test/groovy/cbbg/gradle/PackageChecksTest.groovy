@@ -112,6 +112,8 @@ class PackageChecksTest {
         Map s = specimen()
         File mapping = new File(root, 'mapping.txt')
         mapping.text = 'example.Core -> example.a:\nexample.Client -> example.Client:\nexample.mixin.RenderMixin -> example.mixin.RenderMixin:\n'
+        s.sourceEntries['META-INF/cbbg/proguard.map'] = mapping.bytes
+        archive(s.sources, s.sourceEntries)
         byte[] original = s.binary.remove('example/Core.class')
         s.binary['example/a.class'] = original
         archive(s.artifact, s.binary)

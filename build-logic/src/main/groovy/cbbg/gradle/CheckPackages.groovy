@@ -11,6 +11,7 @@ abstract class CheckPackages extends DefaultTask {
     @InputFile abstract RegularFileProperty getArtifact()
     @InputFile abstract RegularFileProperty getSources()
     @Optional @InputFile abstract RegularFileProperty getMapping()
+    @Optional @InputFile abstract RegularFileProperty getSbom()
     @InputDirectory abstract DirectoryProperty getCoreSources()
     @InputFiles @PathSensitive(PathSensitivity.RELATIVE)
     abstract ConfigurableFileCollection getSharedSources()
@@ -19,6 +20,6 @@ abstract class CheckPackages extends DefaultTask {
     @TaskAction void verify() {
         PackageChecks.verifyArtifact(artifact.get().asFile, sources.get().asFile,
                 javaVersion.get(), ([coreSources.get().asFile] + sharedSources.files).unique(),
-                mapping.orNull?.asFile)
+                mapping.orNull?.asFile, sbom.orNull?.asFile)
     }
 }

@@ -18,7 +18,7 @@ class BundleCandidateTest {
     }
 
     private Map setup() {
-        def fixture = CandidateFixture.create(directory, false)
+        def fixture = CandidateFixture.create(directory, false, true)
         File root = fixture.root
         new File(root, '.gitignore').text = 'build/\n.gradle/\n'
         Files.copy(new File(fixture.bundle, 'ordinary-metadata.json').toPath(), new File(root, 'ordinary-metadata.json').toPath())
@@ -34,7 +34,7 @@ class BundleCandidateTest {
             CandidateFiles.reference(root, 'build/inputs/' + reference.path) + [filename: reference.path]
         }
         Map outputs = [schema: 2, target: fixture.target.id, version: '1.4.0+mc26.3-fabric',
-                       processing: fixture.record.processing, mapping: copy(fixture.record.mapping),
+                       processing: fixture.record.processing, mapping: copy(fixture.record.mapping), sbom: copy(fixture.record.sbom),
                        source_commit: git(root, 'rev-parse', 'HEAD'), source_dirty: false,
                        artifact: copy(fixture.record.artifact), sources: copy(fixture.record.sources),
                        source_inventory: copy(fixture.record.source_inventory),

@@ -47,6 +47,9 @@ class Publication {
                                  relations: 'fabric-api:requiredDependency',
                                  changelog: notes, changelog_type: 'markdown']
             ])
+            if (target.containsKey('sbom')) {
+                records.last().evidence = ReleaseEvidence.reference(manifest, id)
+            }
         }
         if (CandidateFiles.sha256(candidate) != before) {
             throw new GradleException('Candidate changed during metadata generation')
@@ -69,7 +72,7 @@ class Publication {
         List<Map> expectedRecords = expected.records.findAll { it.targets == [target] }
         if (expectedRecords.size() != 1 ||
                 ['schema', 'release', 'source_commit', 'manifest_sha256'].any { published[it] != expected[it] } ||
-                ['targets', 'artifact', 'sources', 'modrinth'].any { record[it] != expectedRecords[0][it] }) {
+                ['targets', 'artifact', 'sources', 'evidence', 'modrinth'].any { record[it] != expectedRecords[0][it] }) {
             throw new GradleException('Publishing metadata differs from the checked candidate')
         }
         Map curseforge = record.curseforge instanceof Map ? new LinkedHashMap(record.curseforge) : [:]
@@ -161,6 +164,7 @@ class Publication {
         if (record.targets != [target]) throw new GradleException('Publishing target differs from selected target')
         File assets = candidate != null ? candidate.parentFile : legacyAssets
         Map upload = record.modrinth
+        List<String> kinds = ['artifact', 'sources'] + (record.containsKey('evidence') ? ['evidence'] : [])
         Map project = request(fetch, MODRINTH_API + '/project/' + segment(upload.project_id), [:]) as Map
         if (project.id != upload.project_id || !(project.slug instanceof String) ||
                 !(project.slug ==~ /[\w-]+/)) {
@@ -177,6 +181,7 @@ class Publication {
                       metadata_sha256: metadataHash,
                       project_id: project.id, version_number: upload.version_number,
                       artifact: record.artifact, sources: record.sources, action: 'upload']
+        if (record.containsKey('evidence')) result.evidence = record.evidence
         if (candidate != null) result.manifest_sha256 = expected.manifest_sha256
         if (!matches.isEmpty()) {
             Map existing = matches[0]
@@ -208,10 +213,10 @@ class Publication {
             if (actual.size() != dependencies.size() || actual.toSet() != dependencies.toSet()) {
                 throw new GradleException('Existing Modrinth version has different dependencies')
             }
-            if (!(existing.files instanceof List) || existing.files.size() != 2) {
+            if (!(existing.files instanceof List) || existing.files.size() != kinds.size()) {
                 throw new GradleException('Existing Modrinth version has different files')
             }
-            for (String kind : ['artifact', 'sources']) {
+            for (String kind : kinds) {
                 File file = CandidateFiles.checked(assets, (Map) record[kind])
                 List fileMatches = existing.files.findAll { it instanceof Map && it.filename == file.name }
                 if (fileMatches.size() != 1) {
@@ -231,7 +236,7 @@ class Publication {
             result.version_id = existing.id
             result.url = 'https://modrinth.com/mod/' + project.slug + '/version/' + existing.id
         }
-        ['artifact', 'sources'].each { CandidateFiles.checked(assets, (Map) record[it]) }
+        kinds.each { CandidateFiles.checked(assets, (Map) record[it]) }
         if ((candidate != null && CandidateFiles.sha256(candidate) != expected.manifest_sha256) ||
                 CandidateFiles.sha256(metadataFile) != metadataHash) {
             throw new GradleException('Candidate or publishing metadata changed during the Modrinth check')

@@ -85,7 +85,7 @@ abstract class BundleCandidate extends DefaultTask {
             throw new GradleException('Build outputs require ProGuard processing and mapping')
         }
         Map record = [id: target.id, processing: built.processing]
-        ['artifact', 'sources', 'source_inventory', 'mapping'].each { kind ->
+        ['artifact', 'sources', 'source_inventory', 'mapping', 'sbom'].each { kind ->
             record[kind] = add(built[kind].filename, CandidateFiles.checked(root, built[kind]))
         }
         record.client_tests = [catalog: add('catalog.json', new File(root, 'targets.json')),

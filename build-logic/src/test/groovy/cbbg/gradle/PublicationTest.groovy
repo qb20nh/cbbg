@@ -172,7 +172,7 @@ class PublicationTest {
          status: 'listed', changelog: upload.changelog,
          loaders: ['fabric'], game_versions: ['26.3'],
          dependencies: [[project_id: 'P7dR8mSH', dependency_type: 'required']],
-         files: ['artifact', 'sources'].collect { String kind ->
+         files: (['artifact', 'sources'] + (record.containsKey('evidence') ? ['evidence'] : [])).collect { String kind ->
              File file = new File(fixture.bundle, record[kind].path)
              [filename: file.name, hashes: [sha512: sha512(file)],
               primary: kind == 'artifact', file_type: kind == 'sources' ? 'sources-jar' : null]
@@ -204,6 +204,35 @@ class PublicationTest {
         result = Publication.plan(fixture.file, publication, '26.3-fabric', fixture.root, fetch([], []))
         assertEquals('upload', result.action)
         assertFalse(result.containsKey('version_id'))
+    }
+
+    @Test
+    void publishesEvidenceAndChecksItWhenRetrying() {
+        fixture = CandidateFixture.create(new File(directory, 'with-evidence'), true, true)
+        ReleaseEvidence.assemble(new CandidateManifest(fixture.file), fixture.target.id)
+        Map value = metadata()
+        writeMetadata(value)
+        Map record = value.records[0]
+        assertTrue(record.evidence.path.endsWith('-evidence.zip'))
+        Map remote = existing(record)
+        assertEquals(3, remote.files.size())
+        Map result = Publication.plan(fixture.file, publication, '26.3-fabric', fixture.root,
+                fetch([remote], []))
+        assertEquals('reuse', result.action)
+        assertEquals(record.evidence, result.evidence)
+        remote.files[2].hashes.sha512 = '0' * 128
+        fails('file differs') {
+            Publication.plan(fixture.file, publication, '26.3-fabric', fixture.root, fetch([remote], []))
+        }
+        remote.files.remove(2)
+        fails('different files') {
+            Publication.plan(fixture.file, publication, '26.3-fabric', fixture.root, fetch([remote], []))
+        }
+        value.records[0].evidence.sha256 = '0' * 64
+        writeMetadata(value)
+        fails('checked candidate') {
+            Publication.checkedRecord(fixture.file, publication, fixture.target.id, fixture.root)
+        }
     }
 
     @Test

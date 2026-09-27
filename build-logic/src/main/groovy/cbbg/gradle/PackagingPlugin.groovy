@@ -2,10 +2,12 @@ package cbbg.gradle
 
 import org.gradle.api.Plugin
 import org.gradle.api.Project
+import org.gradle.api.tasks.bundling.Jar
 import proguard.gradle.ProGuardTask
 
 class PackagingPlugin implements Plugin<Project> {
     void apply(Project project) {
+        project.pluginManager.apply('cbbg.release-sbom')
         def optimization = project.extensions.create('releaseOptimization', ReleaseOptimization, project.objects, project)
         optimization.usageFile.convention(project.layout.buildDirectory.file('reports/proguard/usage.txt'))
         optimization.configurationFile.convention(project.layout.buildDirectory.file('reports/proguard/configuration.txt'))
@@ -48,6 +50,33 @@ class PackagingPlugin implements Plugin<Project> {
                 printconfiguration(configurationDump)
             }
             doLast { ReproducibleJar.normalize(optimization.outputJar.get().asFile) }
+        }
+        project.afterEvaluate {
+            if (optimization.mappingFile.isPresent()) {
+                def sources = project.tasks.named('sourcesJar', Jar)
+                sources.configure { destinationDirectory = project.layout.buildDirectory.dir('intermediates/source-jar') }
+                def releaseSources = project.tasks.register('releaseSourcesJar', Jar) {
+                    group = 'build'
+                    description = 'Package release sources with their exact ProGuard mapping.'
+                    dependsOn sources, project.tasks.named('optimizeReleaseJar'), project.tasks.named('releaseSbom')
+                    archiveFileName.set(sources.flatMap { it.archiveFileName })
+                    destinationDirectory.set(project.layout.buildDirectory.dir('libs'))
+                    from({ project.zipTree(sources.get().archiveFile.get().asFile) })
+                    from(project.releaseSbomFile) {
+                        into 'META-INF/cbbg'
+                        rename { 'sbom.cdx.json' }
+                    }
+                    from(optimization.mappingFile) {
+                        into 'META-INF/cbbg'
+                        rename { 'proguard.map' }
+                    }
+                }
+                project.tasks.named('assemble') { dependsOn releaseSources }
+                project.configurations.named('sourcesElements') {
+                    outgoing.artifacts.clear()
+                    outgoing.artifact(releaseSources)
+                }
+            }
         }
         project.tasks.register('checkPackages', CheckPackages) {
             group = 'verification'

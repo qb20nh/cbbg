@@ -82,6 +82,39 @@ class CandidatePublishWorkflowTests(unittest.TestCase):
         self.assertIn('-PpublicationMetadata=build/publication.json', args)
         self.assertIn('-Poutput=build/curseforge-result.json', args)
 
+    def test_curseforge_sources_are_linked_to_main_file(self):
+        workflow = (ROOT / '.github/workflows/publish.yml').read_text()
+        child = next(step for step in workflow.split('\n      - ') if 'id: curseforge_sources_upload' in step)
+        self.assertIn('parent_file_id: ${{ steps.curseforge_upload.outputs.id }}', child)
+        self.assertIn('file_path: ${{ steps.publication.outputs.sources }}', child)
+        self.assertNotIn('game_versions:', child)
+        self.assertIn("if: ${{ !inputs.dry_run && inputs.services != 'modrinth' }}", child)
+        self.assertLess(workflow.index('name: Save CurseForge upload record'),
+                        workflow.index('name: Upload sources and mappings to CurseForge'))
+
+        self.env['CF_FILE_ID'] = '123'
+        self.env['CF_SOURCES_FILE_ID'] = '456'
+        result = self.run_step('Save CurseForge sources upload record')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        args = json.loads((self.root / 'gradle-arguments.json').read_text())
+        self.assertIn('-PfileId=123', args)
+        self.assertIn('-PsourcesFileId=456', args)
+        self.assertIn('-Poutput=build/curseforge-sources-result.json', args)
+
+    def test_curseforge_evidence_is_a_separate_child_file(self):
+        workflow = (ROOT / '.github/workflows/publish.yml').read_text()
+        child = next(step for step in workflow.split('\n      - ') if 'id: curseforge_evidence_upload' in step)
+        self.assertIn('parent_file_id: ${{ steps.curseforge_upload.outputs.id }}', child)
+        self.assertIn('file_path: ${{ steps.publication.outputs.evidence }}', child)
+        self.assertNotIn('game_versions:', child)
+        self.assertIn("steps.publication.outputs.evidence != ''", child)
+        self.env.update(CF_FILE_ID='123', CF_SOURCES_FILE_ID='456', CF_EVIDENCE_FILE_ID='789')
+        result = self.run_step('Save CurseForge evidence upload record')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        args = json.loads((self.root / 'gradle-arguments.json').read_text())
+        self.assertIn('-PevidenceFileId=789', args)
+        self.assertIn('-Poutput=build/curseforge-evidence-result.json', args)
+
     def test_curseforge_retry_requires_new_dispatch(self):
         workflow = (ROOT / '.github/workflows/publish.yml').read_text()
         self.assertIn("github.run_attempt != '1'", workflow)
