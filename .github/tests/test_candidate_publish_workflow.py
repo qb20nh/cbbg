@@ -37,8 +37,24 @@ class CandidatePublishWorkflowTests(unittest.TestCase):
         for argument in ('-Prelease=v1.4.0', '-Prepo=example/mod',
                          '-PsourceRoot=.release-source', '-Passets=release-assets',
                          '-Poutput=build/publication.json',
-                         '-PgithubOutput=' + str(self.root / 'output'), '-Pservices=modrinth'):
+                         '-PgithubOutput=' + str(self.root / 'output'), '-Pservices=modrinth',
+                         '-PdryRun=true'):
             self.assertIn(argument, args)
+
+    def test_preflight_passes_actual_publication_mode_and_dry_run_env(self):
+        self.env['DRY_RUN'] = 'false'
+        result = self.run_step('Prepare publication')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        args = json.loads((self.root / 'gradle-arguments.json').read_text())
+        self.assertIn('-PdryRun=false', args)
+        workflow = (ROOT / '.github/workflows/publish.yml').read_text()
+        prepare = next(step for step in workflow.split('\n      - ') if 'id: publication' in step)
+        self.assertIn('DRY_RUN: ${{ inputs.dry_run }}', prepare)
+        for step in workflow.split('\n      - '):
+            if 'uses: itsmeow/curseforge-upload' in step:
+                self.assertIn('!inputs.dry_run', step)
+        publisher = (ROOT / 'build-config/publishing/build.gradle').read_text()
+        self.assertIn('Publication.requireUploadAllowed(CandidateFiles.read(metadataFile))', publisher)
 
     def test_modrinth_dry_run_uses_isolated_publisher_and_tagged_source(self):
         result = self.run_step('Validate or publish to Modrinth')

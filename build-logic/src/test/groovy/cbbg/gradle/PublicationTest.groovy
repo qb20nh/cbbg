@@ -35,6 +35,18 @@ class PublicationTest {
     }
 
     @Test
+    void draftOnlyMetadataMayBePlannedButCannotBeUploaded() {
+        Map value = metadata()
+        value.dry_run_only = true
+        writeMetadata(value)
+        assertEquals('upload', Publication.plan(fixture.file, publication, '26.3-fabric',
+                fixture.root, fetch([], [])).action)
+        assertThrows(GradleException) { Publication.requireUploadAllowed(value) }
+        value.remove('dry_run_only')
+        Publication.requireUploadAllowed(value)
+    }
+
+    @Test
     void metadataUsesCheckedCandidateAndExactPublishingLabels() {
         Map result = metadata()
         assertEquals(1, result.schema)

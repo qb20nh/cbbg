@@ -291,9 +291,97 @@ class ReleaseChecksTest {
                 runFor(fixture, commands, true), fetch)
         assertEquals([fixture.target.id], metadata.records[0].targets)
         assertTrue(output.isFile())
+        assertFalse(metadata.containsKey('dry_run_only'))
+        Publication.requireUploadAllowed(metadata)
         assertTrue(github.text.contains('target=' + fixture.target.id))
         assertTrue(github.text.readLines().contains('cf_game_versions='))
         assertFalse(commands.any { it.contains('PATCH') })
+    }
+
+    private static Closure modrinthLabels() {
+        { String url, Map headers ->
+            if (url.endsWith('/tag/game_version')) return [[version: '26.3']]
+            if (url.endsWith('/tag/loader')) return [[name: 'fabric']]
+            throw new AssertionError('Unexpected lookup: ' + url)
+        }
+    }
+
+    @Test
+    void draftDryRunPreflightRetainsPackageAndProvenanceChecksWithoutWrites() {
+        Map fixture = CandidateFixture.create(directory)
+        List<List<String>> commands = []
+        File output = new File(directory, 'publication.json')
+        Map metadata = ReleaseChecks.preparePublication(fixture.manifest.release, 'owner/repo',
+                fixture.root, new File(directory, 'download'), output,
+                new File(directory, 'github.txt'), 'modrinth', runFor(fixture, commands),
+                modrinthLabels(), true)
+        assertEquals(true, metadata.dry_run_only)
+        assertEquals(true, CandidateFiles.read(output).dry_run_only)
+        assertEquals([fixture.target.id], metadata.records[0].targets)
+        assertTrue(commands.any { it.take(3) == ['gh', 'attestation', 'verify'] })
+        assertFalse(commands.any { it.contains('PATCH') || it.contains('--method') })
+        assertThrows(org.gradle.api.GradleException) { Publication.requireUploadAllowed(metadata) }
+    }
+
+    @Test
+    void draftDryRunRejectsChangedIdentityAssetsAndMissingAssets() {
+        Map fixture = CandidateFixture.create(directory)
+        int attempt = 0
+        for (String field : ['id', 'body', 'name', 'digest', 'updated_at', 'missing']) {
+            int reads = 0
+            Closure normal = runFor(fixture, [])
+            Closure changed = { List<String> command, File cwd ->
+                String response = normal(command, cwd)
+                if (command.take(2) == ['gh', 'api'] && command[2].contains('/releases/tags/')) {
+                    reads++
+                    Map release = CandidateFiles.parse(new StringReader(response)) as Map
+                    if (field == 'missing') release.assets.remove(0)
+                    else if (reads > 1) {
+                        if (field in ['digest', 'updated_at']) release.assets[0][field] = 'changed'
+                        else release[field] = field == 'id' ? 99 : 'Changed'
+                    }
+                    return JsonOutput.toJson(release)
+                }
+                response
+            }
+            File output = new File(directory, 'changed-' + attempt + '.json')
+            File github = new File(directory, 'github-' + attempt + '.txt')
+            assertThrows(IllegalArgumentException) {
+                ReleaseChecks.preparePublication(fixture.manifest.release, 'owner/repo', fixture.root,
+                        new File(directory, 'download-' + attempt), output, github, 'modrinth',
+                        changed, modrinthLabels(), true)
+            }
+            assertFalse(output.exists())
+            assertFalse(github.exists())
+            attempt++
+        }
+    }
+
+    @Test
+    void draftDryRunRejectsInvalidProvenanceAndMissingDownloadedAssets() {
+        Map fixture = CandidateFixture.create(directory)
+        Closure normal = runFor(fixture, [])
+        int attempt = 0
+        for (String failure : ['provenance', 'missing']) {
+            Closure invalid = { List<String> command, File cwd ->
+                if (failure == 'provenance' && command.take(3) == ['gh', 'attestation', 'verify']) {
+                    return JsonOutput.toJson(attestation('0' * 64))
+                }
+                String response = normal(command, cwd)
+                if (failure == 'missing' && command.take(3) == ['gh', 'release', 'download']) {
+                    new File(command[command.indexOf('--dir') + 1], 'provenance.jsonl').delete()
+                }
+                response
+            }
+            File output = new File(directory, 'invalid-' + attempt + '.json')
+            assertThrows(failure == 'missing' ? FileNotFoundException : IllegalArgumentException) {
+                ReleaseChecks.preparePublication(fixture.manifest.release, 'owner/repo', fixture.root,
+                        new File(directory, 'invalid-download-' + attempt), output,
+                        new File(directory, 'github.txt'), 'modrinth', invalid, modrinthLabels(), true)
+            }
+            assertFalse(output.exists())
+            attempt++
+        }
     }
 
     @Test

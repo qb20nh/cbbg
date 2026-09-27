@@ -15,6 +15,12 @@ class Publication {
     private static final String MODRINTH_API = 'https://api.modrinth.com/v2'
     private static final String CURSEFORGE_API = 'https://minecraft.curseforge.com/api/game'
 
+    static void requireUploadAllowed(Map metadata) {
+        if (metadata.dry_run_only == true) {
+            throw new GradleException('Draft publication metadata is dry-run only; refusing upload')
+        }
+    }
+
     static Map metadata(File candidate, File sourceRoot, String notes) {
         if (!(notes instanceof String) || !notes.trim()) throw new GradleException('Release notes are empty')
         String before = CandidateFiles.sha256(candidate)

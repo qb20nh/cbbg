@@ -33,6 +33,17 @@ class ReleasePluginTest {
         assertFalse(result.output.contains(':compileJava '))
     }
 
+    @Test void publicationDryRunRequiresStrictBooleanProperty() {
+        ['TRUE', '1', 'yes', ''].each { value ->
+            assertTrue(runner('preparePublication', '-Prelease=v1.4.0', '-PdryRun=' + value)
+                    .buildAndFail().output.contains('Expected -PdryRun=true or false'))
+        }
+        ['true', 'false'].each { value ->
+            assertTrue(runner('preparePublication', '-Prelease=v1.4.0', '-PdryRun=' + value)
+                    .buildAndFail().output.contains('Missing -Prepo'))
+        }
+    }
+
     @Test void curseForgeReceiptBindsFileIdToSubmittedMetadata() {
         File metadata = new File(directory, 'publication.json')
         metadata.text = JsonOutput.toJson([release: 'v1.4.0', source_commit: 'a' * 40,

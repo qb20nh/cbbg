@@ -174,7 +174,8 @@ class ReleaseChecks {
     }
 
     static Map preparePublication(String tag, String repo, File sourceRoot, File assets, File output,
-                                  File githubOutput, String services, Closure run, Closure fetch = null) {
+                                  File githubOutput, String services, Closure run, Closure fetch = null,
+                                  boolean dryRun = false) {
         repository(repo)
         CandidateFiles.releaseIdentity(tag, '0' * 40)
         File source = sourceRoot.canonicalFile
@@ -198,7 +199,8 @@ class ReleaseChecks {
             throw new IllegalArgumentException('Live release tag differs from source checkout')
         }
         Map published = api(releaseEndpoint, source, run)
-        Map snapshot = publishedSnapshot(published, tag)
+        boolean draft = published.draft == true && dryRun
+        Map snapshot = draft ? draftSnapshot(published, tag, null) : publishedSnapshot(published, tag)
         assetDir.mkdirs()
         run(['gh', 'release', 'download', tag, '--repo', repo, '--dir',
              assetDir.absolutePath, '--pattern', '*'], source)
@@ -209,17 +211,20 @@ class ReleaseChecks {
                 candidate.data.selected_targets != [TARGET]) {
             throw new IllegalArgumentException('Published candidate differs from selected target or source')
         }
-        publishedSnapshot(published, tag, files)
+        if (draft) draftSnapshot(published, tag, files)
+        else publishedSnapshot(published, tag, files)
         if (localFiles(assetDir) != files || assetDir.listFiles().size() != files.size()) {
             throw new IllegalArgumentException('Downloaded release assets differ from candidate')
         }
         provenance(manifest, new File(assetDir, 'provenance.jsonl'), repo, run)
         Map metadata = Publication.resolve(Publication.metadata(manifest, source, snapshot.body as String),
                                             services, fetch)
+        Map current = api(releaseEndpoint, source, run)
         if (api(tagEndpoint, source, run).sha != commit ||
-                publishedSnapshot(api(releaseEndpoint, source, run), tag, files) != snapshot) {
-            throw new IllegalArgumentException('Published release changed during preflight')
+                (draft ? draftSnapshot(current, tag, files) : publishedSnapshot(current, tag, files)) != snapshot) {
+            throw new IllegalArgumentException('Release changed during preflight')
         }
+        if (draft) metadata.dry_run_only = true
         checkFiles(assetDir, files)
         CandidateFiles.writeNew(metadataFile, metadata)
         Map record = (Map) metadata.records[0]
@@ -345,7 +350,7 @@ class ReleaseChecks {
         java.net.URLEncoder.encode(value, 'UTF-8')
     }
 
-    private static Map draftSnapshot(Map release, String tag, Map files) {
+    private static Map draftSnapshot(Map release, String tag, Map files = null) {
         if (release.tag_name != tag || release.draft != true ||
                 release.prerelease != tag.contains('-') ||
                 !(release.id instanceof Integer || release.id instanceof Long ||
@@ -355,14 +360,16 @@ class ReleaseChecks {
         }
         Map assets = [:]
         release.assets.each { asset ->
-            if (!(asset instanceof Map) || !(asset.name instanceof String) ||
+            if (!(asset instanceof Map) || !(asset.name instanceof String) || !asset.name ||
+                    asset.name in ['.', '..'] || asset.name.contains('/') || asset.name.contains('\\') ||
                     assets.containsKey(asset.name) || asset.state != 'uploaded') {
                 throw new IllegalArgumentException('Duplicate or incomplete draft asset')
             }
             assets[asset.name] = asset.subMap(['id', 'size', 'digest', 'updated_at'])
         }
-        if (assets.keySet() != files.keySet()) {
-            throw new IllegalArgumentException('Draft asset names differ from candidate')
+        if (files != null && (assets.keySet() != files.keySet() ||
+                files.any { name, hash -> !(assets[name].digest in [null, 'sha256:' + hash]) })) {
+            throw new IllegalArgumentException('Draft assets differ from candidate')
         }
         [id: release.id, tag: tag, assets: assets, name: release.name,
          body: release.body, prerelease: release.prerelease]

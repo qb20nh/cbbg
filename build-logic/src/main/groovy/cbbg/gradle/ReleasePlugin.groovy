@@ -83,12 +83,14 @@ class ReleasePlugin implements Plugin<Project> {
         }
         task('preparePublication', 'Check immutable release files and prepare service metadata.') {
             String tag = required('release')
+            String dryRun = project.providers.gradleProperty('dryRun').getOrElse('false')
+            if (!(dryRun in ['true', 'false'])) throw new GradleException('Expected -PdryRun=true or false')
             def arguments = [tag, required('repo'), source(), input('assets'), input('output'),
                              input('githubOutput'), project.providers.gradleProperty('services').getOrElse('both'), run]
             if (tag.contains('+mc')) {
                 ReleaseChecks.prepareLegacyPublication(*arguments)
             } else {
-                ReleaseChecks.preparePublication(*arguments)
+                ReleaseChecks.preparePublication(*(arguments + [null, dryRun == 'true']))
             }
         }
         task('recordCurseForgeUpload', 'Save the CurseForge file ID with the submitted metadata.') {

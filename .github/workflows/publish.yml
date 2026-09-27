@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Existing immutable release tag (vX.Y.Z or historical vX.Y.Z+mcVERSION)"
+        description: "Release tag (draft candidates allowed only for dry runs; historical vX.Y.Z+mcVERSION)"
         required: true
         type: string
       dry_run:
@@ -68,13 +68,14 @@ jobs:
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ inputs.tag }}
           SERVICES: ${{ inputs.services }}
+          DRY_RUN: ${{ inputs.dry_run }}
           CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
         run: |
           mkdir -p build
           ./gradlew --no-daemon "-Prelease=$RELEASE_TAG" "-Prepo=$GH_REPO" \
             -PsourceRoot=.release-source -Passets=release-assets \
             -Poutput=build/publication.json "-PgithubOutput=$GITHUB_OUTPUT" \
-            "-Pservices=$SERVICES" preparePublication
+            "-Pservices=$SERVICES" "-PdryRun=$DRY_RUN" preparePublication
 
       - name: Validate or publish to Modrinth
         if: inputs.services != 'curseforge'
