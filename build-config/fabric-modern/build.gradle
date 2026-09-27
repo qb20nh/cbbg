@@ -206,6 +206,9 @@ if (targetId == '26.3-fabric') {
         dependsOn tasks.named('optimizeReleaseJar')
     }
     tasks.named('processProcessedGametestResources') {
+        def loaderMinimum = target.dependencies.minimumLoader ?: target.dependencies.loader
+        inputs.property('loaderMinimum', loaderMinimum)
+        filesMatching('fabric.mod.json') { expand(loader_minimum: loaderMinimum) }
         from(new File(repositoryRoot, 'renderers/modern/src/gametest/resources')) {
             include 'cbbg-iris-fixture/**'
         }
@@ -286,18 +289,33 @@ releaseOptimization {
 tasks.named('optimizeReleaseJar') { dependsOn tasks.named('jar', Jar) }
 
 tasks.named('processResources') {
+    def sharedDescriptor = new File(repositoryRoot, 'src/main/resources/fabric.mod.json')
+    inputs.file(sharedDescriptor).withPropertyName('sharedFabricMetadata')
     if (!usesTextureFormat) {
         from(new File(repositoryRoot, 'src/main/resources')) {
+            include 'assets/cbbg/icon.png'
             include 'assets/cbbg/shaders/include/dither.glsl'
             include 'assets/cbbg/lang/*.json'
         }
     }
     def properties = [version: project.version, minecraft_version: target.minecraft,
-                      loader_version: target.dependencies.loader, java_version: target.java,
+                      loader_version: target.dependencies.minimumLoader ?: target.dependencies.loader,
+                      loader_upper_bound: target.dependencies.loaderUpperExclusive ? ' <' + target.dependencies.loaderUpperExclusive : '',
+                      fabric_api_minimum: target.dependencies.minimumFabricApi ?: '*',
+                      fabric_api_upper_bound: target.dependencies.fabricApiUpperExclusive ? ' <' + target.dependencies.fabricApiUpperExclusive : '',
+                      java_version: target.java,
                       renderer_family: target.renderer,
                       shader_import: target.renderer == 'blaze-gpu-format' ? '#moj_import' : '#include']
     inputs.properties(properties)
-    filesMatching('fabric.mod.json') { expand(properties) }
+    filesMatching('fabric.mod.json') {
+        if (properties.fabric_api_minimum == '*') {
+            filter { line -> line.replace('>=${fabric_api_minimum}', '${fabric_api_minimum}') }
+        }
+        expand(properties)
+    }
+    doLast {
+        cbbg.gradle.FabricBranding.apply(sharedDescriptor, new File(destinationDir, 'fabric.mod.json'))
+    }
     if (usesTextureFormat) {
         filesMatching('fabric.mod.json') {
             filter { line -> line.replace('afl:prePrePreLaunch', 'preLaunch')
@@ -313,6 +331,9 @@ tasks.named('processResources') {
 }
 
 apply from: new File(repositoryRoot, 'build-config/source-inventory.gradle')
+if (target.renderer == 'renderpearl') {
+    apply from: new File(repositoryRoot, 'build-config/fabric-compatibility.gradle')
+}
 
 tasks.named('sourcesJar') {
     dependsOn tasks.named('sourceInventory')
@@ -405,6 +426,13 @@ tasks.named('checkPackages', cbbg.gradle.CheckPackages) {
     sources.set(tasks.named('releaseSourcesJar', Jar).flatMap { it.archiveFile })
     javaVersion.set(target.java as int)
     coreSources.set(new File(repositoryRoot, 'core/src/main/java'))
+    doLast {
+        def sharedDescriptor = new File(repositoryRoot, 'src/main/resources/fabric.mod.json')
+        [tasks.named('jar', Jar).get().archiveFile.get().asFile,
+         releaseOptimization.outputJar.get().asFile].each {
+            cbbg.gradle.FabricBranding.verify(sharedDescriptor, it)
+        }
+    }
 }
 tasks.register('verifyCandidatePackaging') { dependsOn tasks.named('checkPackages') }
 tasks.named('check') { dependsOn tasks.named('checkPackages') }

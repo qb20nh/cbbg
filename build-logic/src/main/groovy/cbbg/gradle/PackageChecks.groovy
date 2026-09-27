@@ -155,8 +155,11 @@ class PackageChecks {
                     throw new GradleException('Wrong Fabric metadata: ' + entry.key)
                 }
             }
-            Map dependencies = [fabricloader: '>=' + target.dependencies.loader,
-                    minecraft: target.minecraft, java: '>=' + target.java, 'fabric-api': '*']
+            Map dependencies = [fabricloader: '>=' + (target.dependencies.minimumLoader ?: target.dependencies.loader) +
+                    (target.dependencies.loaderUpperExclusive ? ' <' + target.dependencies.loaderUpperExclusive : ''),
+                    minecraft: target.minecraft, java: '>=' + target.java,
+                    'fabric-api': (target.dependencies.minimumFabricApi ? '>=' + target.dependencies.minimumFabricApi : '*') +
+                            (target.dependencies.fabricApiUpperExclusive ? ' <' + target.dependencies.fabricApiUpperExclusive : '')]
             if (metadata.depends != dependencies) throw new GradleException('Dependencies differ from target')
             if (!(metadata.entrypoints instanceof Map) || !metadata.entrypoints.client) {
                 throw new GradleException('Missing client entrypoint')

@@ -21,18 +21,27 @@ class CandidateWorkflowTest(unittest.TestCase):
                         REQUESTED_TARGET='26.3-fabric', GITHUB_OUTPUT=str(self.root / 'output'))
         locks = self.root / 'runtime-locks'
         locks.mkdir()
+        profile = self.root / 'build-config/fabric-modern'
+        profile.mkdir(parents=True)
+        (profile / 'build.gradle').write_text('')
+        (self.root / 'targets.json').write_text(json.dumps({'targets': [
+            {'id': '26.3-fabric', 'java': 25},
+            {'id': '26.2-fabric', 'java': 8, 'buildJava': 21},
+            {'id': '26.3-quilt', 'java': 25},
+        ]}))
         for suffix in ('scenarios', 'mods', 'linux-x86_64'):
             (locks / f'26.3-fabric-{suffix}.json').write_text('{}')
         launcher = self.root / 'gradlew'
-        launcher.write_text('#!/usr/bin/env python3\nimport json,sys\nfrom pathlib import Path\n'
+        launcher.write_text('#!/usr/bin/env python3\nimport json,os,sys\nfrom pathlib import Path\n'
                             'args=sys.argv[1:]\n'
                             'with Path("gradle-arguments.jsonl").open("a") as out: out.write(json.dumps(args)+"\\n")\n'
                             'if args[-1] == "targetMatrix":\n'
                             '  target=next(a.split("=",1)[1] for a in args if a.startswith("-Ptarget="))\n'
-                            '  if target not in ("26.3-fabric", "26.3-quilt"): sys.exit(1)\n'
-                            '  profile="fabric-modern" if target == "26.3-fabric" else "quilt"\n'
+                            '  targets=target.split(",")\n'
+                            '  if len(set(targets)) != len(targets) or any(t not in ("26.3-fabric", "26.2-fabric", "26.3-quilt") for t in targets): sys.exit(1)\n'
                             '  output=next(a.split("=",1)[1] for a in args if a.startswith("-Poutput="))\n'
-                            '  Path(output).write_text(json.dumps({"include":[{"id":target,"java":25,"buildProfile":profile}]}))\n')
+                            '  Path(output).write_text(json.dumps({"include":[{"id":t,"java":8 if t == "26.2-fabric" else 25,"buildProfile":"quilt" if t == "26.3-quilt" else "fabric-modern"} for t in targets]}))\n'
+                            'if args[-1] == "releaseNotes" and os.environ.get("MISSING_RELEASE_NOTES") == "true": sys.exit(2)\n')
         launcher.chmod(0o755)
 
     def run_step(self, name, cwd=None):
@@ -43,7 +52,7 @@ class CandidateWorkflowTest(unittest.TestCase):
         result = self.run_step('Validate release selection')
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual((self.root / 'output').read_text(),
-                         'target=26.3-fabric\njava=25\nprofile=fabric-modern\n')
+                         'targets=26.3-fabric\njava<<JAVA_VERSIONS\n25\nJAVA_VERSIONS\n')
         args = json.loads((self.root / 'gradle-arguments.jsonl').read_text().splitlines()[-1])
         self.assertIn('-PrequireImplemented=true', args)
         self.assertEqual(args[-1], 'targetMatrix')
@@ -61,17 +70,51 @@ class CandidateWorkflowTest(unittest.TestCase):
                 self.env[key] = previous
 
     def test_build_and_bundle_use_recorded_outputs_without_python(self):
-        self.env['TARGET'] = '26.3-fabric'
-        self.env['BUILD_PROFILE'] = 'fabric-modern'
+        self.env['TARGETS'] = '26.3-fabric'
+        self.env['JAVA_HOME_25_X64'] = self.env.get('JAVA_HOME', '/tmp/java25')
+        self.assertEqual(self.run_step('Validate release selection').returncode, 0)
         result = self.run_step('Build and bundle candidate')
         self.assertEqual(result.returncode, 0, result.stderr)
         calls = [json.loads(line) for line in
-                 (self.root / 'gradle-arguments.jsonl').read_text().splitlines()]
+                 (self.root / 'gradle-arguments.jsonl').read_text().splitlines()[1:]]
         self.assertEqual([args[-1] for args in calls], ['candidateBuildOutputs', 'bundleCandidate'])
-        self.assertIn('-PbuildOutputs=build/targets/26.3-fabric/candidate-build-outputs.json',
+        self.assertIn('-Ptargets=26.3-fabric',
                       calls[1])
         self.assertIn('-Prelease=v1.4.0', calls[1])
         self.assertIn('-Poutput=build/release-candidate', calls[1])
+
+    def test_selects_notes_for_the_release_tag_and_target(self):
+        self.env['TARGETS'] = '26.3-fabric'
+        result = self.run_step('Select release notes')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        args = json.loads((self.root / 'gradle-arguments.jsonl').read_text().splitlines()[-1])
+        self.assertEqual(args[-1], 'releaseNotes')
+        self.assertIn('-Prelease=v1.4.0', args)
+        self.assertIn('-Ptargets=26.3-fabric', args)
+        self.assertIn('-Poutput=build/release-notes.md', args)
+        self.env['MISSING_RELEASE_NOTES'] = 'true'
+        self.assertNotEqual(self.run_step('Select release notes').returncode, 0)
+
+    def test_multiple_targets_validate_inputs_and_bundle_once(self):
+        self.env['REQUESTED_TARGET'] = '26.3-fabric,26.2-fabric'
+        self.env['TARGETS'] = self.env['REQUESTED_TARGET']
+        self.env['JAVA_HOME_25_X64'] = self.env.get('JAVA_HOME', '/tmp/java25')
+        for suffix in ('scenarios', 'mods', 'linux-x86_64'):
+            (self.root / f'runtime-locks/26.2-fabric-{suffix}.json').write_text('{}')
+        self.assertEqual(self.run_step('Validate release selection').returncode, 0)
+        self.assertEqual((self.root / 'output').read_text(),
+                         'targets=26.3-fabric,26.2-fabric\njava<<JAVA_VERSIONS\n8\n21\n25\nJAVA_VERSIONS\n')
+        self.assertEqual(self.run_step('Build and bundle candidate').returncode, 0)
+        calls = [json.loads(line) for line in (self.root / 'gradle-arguments.jsonl').read_text().splitlines()]
+        self.assertEqual([args[-1] for args in calls],
+                         ['targetMatrix', 'candidateBuildOutputs', 'candidateBuildOutputs', 'bundleCandidate'])
+        self.assertIn('-Ptargets=26.3-fabric,26.2-fabric', calls[-1])
+        (self.root / 'runtime-locks/26.2-fabric-mods.json').unlink()
+        self.assertNotEqual(self.run_step('Validate release selection').returncode, 0)
+
+    def test_duplicate_targets_are_rejected(self):
+        self.env['REQUESTED_TARGET'] = '26.3-fabric,26.3-fabric'
+        self.assertNotEqual(self.run_step('Validate release selection').returncode, 0)
 
     def test_creates_draft_with_existing_tag_and_candidate_files(self):
         command = self.root / 'gh'
@@ -93,6 +136,7 @@ class CandidateWorkflowTest(unittest.TestCase):
                 self.assertEqual(arguments[:3], ['release', 'create', tag])
                 self.assertIn('--draft', arguments)
                 self.assertIn('--verify-tag', arguments)
+                self.assertEqual(arguments[arguments.index('--notes-file') + 1], 'build/release-notes.md')
                 self.assertEqual('--prerelease' in arguments, '-rc.' in tag)
                 for path in bundle.iterdir():
                     self.assertIn(path.relative_to(self.root).as_posix(), arguments)

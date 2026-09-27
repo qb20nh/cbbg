@@ -17,6 +17,15 @@ class FabricProfileTests(unittest.TestCase):
     def test_matching_profile(self):
         self.assertEqual(validate_profile(self.profile, self.target), self.profile["id"])
 
+    def test_explicit_loader_does_not_change_catalog_target(self):
+        profile = copy.deepcopy(self.profile)
+        profile['id'] = 'fabric-loader-0.19.3-26.3'
+        profile['libraries'] = [{'name': 'net.fabricmc:fabric-loader:0.19.3'}]
+        self.assertEqual(validate_profile(profile, self.target, '0.19.3'), profile['id'])
+        self.assertEqual(self.target['dependencies']['loader'], '0.19.5')
+        with self.assertRaises(ValueError):
+            validate_profile(profile, self.target, '0.19.4')
+
     def test_wrong_runtime_identity(self):
         for key in ("id", "inheritsFrom", "mainClass"):
             with self.subTest(key=key):

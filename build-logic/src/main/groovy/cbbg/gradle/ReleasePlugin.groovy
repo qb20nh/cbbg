@@ -53,6 +53,20 @@ class ReleasePlugin implements Plugin<Project> {
                 doLast(action)
             }
         }
+        task('releaseNotes', 'Select shared and target-specific changelog notes for a release.') {
+            String tag = required('release')
+            CandidateFiles.releaseIdentity(tag, '0' * 40)
+            if (project.providers.gradleProperty('targets').isPresent() && project.providers.gradleProperty('target').isPresent()) {
+                throw new GradleException('Use either -Ptarget or -Ptargets')
+            }
+            String selection = project.providers.gradleProperty('targets').orElse(project.providers.gradleProperty('target')).orNull
+            if (!selection) throw new GradleException('Release notes require an explicit target selection')
+            List<Map> targets = TargetCatalog.read(new File(source(), 'targets.json')).select(selection)
+            String notes = ChangelogNotes.select(new File(source(), 'CHANGELOG.md'), tag.substring(1), targets)
+            File output = input('output')
+            output.parentFile.mkdirs()
+            output.setText(notes, 'UTF-8')
+        }
         task('retrace', 'Decode a crash with its release mapping.') {
             RetraceLog.translate(input('candidate'), required('target'), input('crash'), input('output'))
         }
@@ -83,13 +97,20 @@ class ReleasePlugin implements Plugin<Project> {
         }
         task('preparePublication', 'Check immutable release files and prepare service metadata.') {
             String tag = required('release')
+            String dryRun = project.providers.gradleProperty('dryRun').getOrElse('false')
+            if (!(dryRun in ['true', 'false'])) throw new GradleException('Expected -PdryRun=true or false')
             def arguments = [tag, required('repo'), source(), input('assets'), input('output'),
                              input('githubOutput'), project.providers.gradleProperty('services').getOrElse('both'), run]
             if (tag.contains('+mc')) {
                 ReleaseChecks.prepareLegacyPublication(*arguments)
             } else {
-                ReleaseChecks.preparePublication(*arguments)
+                ReleaseChecks.preparePublication(*(arguments + [null, dryRun == 'true']))
             }
+        }
+        task('selectPublication', 'Recheck release files and select one artifact for upload.') {
+            ReleaseChecks.selectPublication(required('release'), required('repo'), source(), input('assets'),
+                    input('publicationMetadata'), required('target'), input('githubOutput'), run,
+                    null, project.providers.gradleProperty('services').getOrElse('both'))
         }
         task('recordCurseForgeUpload', 'Save the CurseForge file ID with the submitted metadata.') {
             String identifier = required('fileId')
@@ -108,10 +129,11 @@ class ReleasePlugin implements Plugin<Project> {
             }
             File metadataFile = input('publicationMetadata')
             Map metadata = CandidateFiles.read(metadataFile)
-            if (!(metadata.records instanceof List) || metadata.records.size() != 1) {
-                throw new GradleException('Expected one publication record')
-            }
-            Map record = metadata.records[0]
+            if (!(metadata.records instanceof List)) throw new GradleException('Expected publication records')
+            String selected = project.providers.gradleProperty('target').orNull
+            List<Map> matches = selected ? metadata.records.findAll { it.targets?.contains(selected) } : metadata.records
+            if (matches.size() != 1) throw new GradleException('Select one publication record with -Ptarget')
+            Map record = matches[0]
             Map result = [release: metadata.release, source_commit: metadata.source_commit,
                           targets: record.targets, artifact: record.artifact,
                           metadata_sha256: CandidateFiles.sha256(metadataFile), file_id: identifier,

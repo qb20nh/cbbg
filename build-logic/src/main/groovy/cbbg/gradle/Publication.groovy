@@ -15,6 +15,12 @@ class Publication {
     private static final String MODRINTH_API = 'https://api.modrinth.com/v2'
     private static final String CURSEFORGE_API = 'https://minecraft.curseforge.com/api/game'
 
+    static void requireUploadAllowed(Map metadata) {
+        if (metadata.dry_run_only == true) {
+            throw new GradleException('Draft publication metadata is dry-run only; refusing upload')
+        }
+    }
+
     static Map metadata(File candidate, File sourceRoot, String notes) {
         if (!(notes instanceof String) || !notes.trim()) throw new GradleException('Release notes are empty')
         String before = CandidateFiles.sha256(candidate)
@@ -23,29 +29,43 @@ class Publication {
             throw new GradleException('Candidate requires an explicit target selection')
         }
         Map projects = projectIds(new File(sourceRoot, 'gradle.properties'))
+        if (manifest.specifications.values().any { !it.implemented }) {
+            throw new GradleException('Selected target is not implemented')
+        }
         manifest.verifyPackages(sourceRoot)
         List<Map> records = []
-        for (String id : manifest.data.selected_targets) {
+        List<String> owners = manifest.data.selected_targets.collect {
+            manifest.specifications[it].artifactOf ?: it
+        }.unique()
+        Map loaderLabels = [fabric: 'Fabric', forge: 'Forge', neoforge: 'NeoForge', quilt: 'Quilt']
+        for (String id : owners) {
             Map target = manifest.records[id]
             Map specification = manifest.specifications[id]
-            if (specification.loader != 'fabric') {
+            List<String> runtimes = [id] + manifest.data.selected_targets.findAll {
+                it != id && manifest.specifications[it].artifactOf == id
+            }
+            List<Map> specifications = runtimes.collect { manifest.specifications[it] }
+            if (specifications.any { !loaderLabels.containsKey(it.loader) }) {
                 throw new GradleException('Publishing metadata is not configured for ' + id)
             }
+            String artifactNotes = ChangelogNotes.forTargets(notes, specifications)
+            List<String> loaders = specifications.collect { it.loader }.unique()
+            boolean fabricApi = specification.loader == 'fabric'
             String minecraft = specification.minecraft
-            String version = manifest.data.release.substring(1) + '+mc' + minecraft + '-fabric'
+            String version = CandidateManifest.packageVersion(manifest.data.release as String, specification)
             String channel = manifest.data.release.contains('-') ? 'beta' : 'release'
             records.add([
-                    targets: [id], artifact: target.artifact, sources: target.sources,
+                    targets: runtimes, artifact: target.artifact, sources: target.sources,
                     modrinth: [project_id: projects.modrinth, version_number: version,
                                version_name: 'cbbg ' + version, version_type: channel,
-                               game_versions: [minecraft], loaders: [specification.loader],
-                               required_projects: ['fabric-api'], changelog: notes],
+                               game_versions: [minecraft], loaders: loaders,
+                               required_projects: fabricApi ? ['fabric-api'] : [], changelog: artifactNotes],
                     curseforge: [project_id: projects.curseforge, display_name: 'cbbg ' + version,
                                  release_type: channel,
-                                 version_labels: [minecraft, 'Java ' + specification.java,
-                                                  'Fabric', 'Environment:Client'],
-                                 relations: 'fabric-api:requiredDependency',
-                                 changelog: notes, changelog_type: 'markdown']
+                                 version_labels: [minecraft, 'Java ' + specification.java] +
+                                         loaders.collect { loaderLabels[it] } + ['Environment:Client'],
+                                 relations: fabricApi ? 'fabric-api:requiredDependency' : '',
+                                 changelog: artifactNotes, changelog_type: 'markdown']
             ])
             if (target.containsKey('sbom')) {
                 records.last().evidence = ReleaseEvidence.reference(manifest, id)
@@ -55,7 +75,7 @@ class Publication {
             throw new GradleException('Candidate changed during metadata generation')
         }
         [schema: 1, release: manifest.data.release, source_commit: manifest.data.commit,
-         manifest_sha256: before, records: records]
+         manifest_sha256: before, release_notes: notes, records: records]
     }
 
     static List checkedRecord(File candidate, File metadataFile, String target, File sourceRoot) {
@@ -65,13 +85,14 @@ class Publication {
             throw new GradleException('Invalid publishing metadata')
         }
         Map published = (Map) value
-        List<Map> matches = published.records.findAll { it instanceof Map && it.targets == [target] }
+        List<Map> matches = published.records.findAll { it instanceof Map && it.targets instanceof List && it.targets[0] == target }
         if (matches.size() != 1) throw new GradleException('Expected one publishing record for the selected target')
         Map record = matches[0]
-        Map expected = metadata(candidate, sourceRoot, record.modrinth?.changelog)
-        List<Map> expectedRecords = expected.records.findAll { it.targets == [target] }
+        Map expected = metadata(candidate, sourceRoot, published.release_notes ?: record.modrinth?.changelog)
+        List<Map> expectedRecords = expected.records.findAll { it.targets[0] == target }
         if (expectedRecords.size() != 1 ||
                 ['schema', 'release', 'source_commit', 'manifest_sha256'].any { published[it] != expected[it] } ||
+                published.records.size() != expected.records.size() ||
                 ['targets', 'artifact', 'sources', 'evidence', 'modrinth'].any { record[it] != expectedRecords[0][it] }) {
             throw new GradleException('Publishing metadata differs from the checked candidate')
         }
@@ -79,6 +100,17 @@ class Publication {
         curseforge.remove('game_versions')
         if (curseforge != expectedRecords[0].curseforge) {
             throw new GradleException('CurseForge metadata differs from the checked candidate')
+        }
+        for (int index = 0; index < expected.records.size(); index++) {
+            Object item = published.records[index]
+            if (!(item instanceof Map)) throw new GradleException('Invalid publishing record')
+            Map normalized = new LinkedHashMap((Map) item)
+            if (!(normalized.curseforge instanceof Map)) throw new GradleException('Invalid CurseForge metadata')
+            normalized.curseforge = new LinkedHashMap(normalized.curseforge)
+            normalized.curseforge.remove('game_versions')
+            if (normalized != expected.records[index]) {
+                throw new GradleException('Publishing metadata differs from the checked candidate')
+            }
         }
         if (CandidateFiles.sha256(metadataFile) != before) {
             throw new GradleException('Publishing metadata changed during validation')
@@ -161,7 +193,7 @@ class Publication {
         Map expected = (Map) checked[0]
         Map record = (Map) checked[1]
         String metadataHash = (String) checked[2]
-        if (record.targets != [target]) throw new GradleException('Publishing target differs from selected target')
+        if (record.targets[0] != target) throw new GradleException('Publishing target differs from selected target')
         File assets = candidate != null ? candidate.parentFile : legacyAssets
         Map upload = record.modrinth
         List<String> kinds = ['artifact', 'sources'] + (record.containsKey('evidence') ? ['evidence'] : [])

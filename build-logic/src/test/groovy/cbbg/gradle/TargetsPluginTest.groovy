@@ -55,6 +55,40 @@ case "$*" in *-Pcompat=fail*) exit 7;; esac
         assertEquals(1, new File(directory, 'build/arguments.txt').readLines().count('build'))
     }
 
+    @Test void minimumSearchUpdatesThenVerifiesInFreshBuilds() {
+        fixture()
+        def env = new HashMap(System.getenv())
+        env.remove('CI')
+        env.remove('GITHUB_ACTIONS')
+        runner('determineFabricMinimums', '-Ptarget=26.3-fabric', '-PcompatibilityRuntime=/local/runtime')
+                .withEnvironment(env).build()
+        List args = new File(directory, 'build/arguments.txt').readLines()
+        assertTrue(args.indexOf('updateFabricMinimums') < args.indexOf('verifyFabricCompatibility'))
+        assertEquals(2, args.count('-PcompatibilityRuntime=/local/runtime'))
+        assertTrue(args.contains('-PverifyDeclaredMinimums=false'))
+        assertTrue(args.contains('-PverifyDeclaredMinimums=true'))
+    }
+
+    @Test void ciCannotRunTheMinimumSearch() {
+        fixture()
+        ['CI', 'GITHUB_ACTIONS'].each { name ->
+            def env = new HashMap(System.getenv())
+            env.remove('CI')
+            env.remove('GITHUB_ACTIONS')
+            env[name] = 'true'
+            assertTrue(runner('determineFabricMinimums').withEnvironment(env).buildAndFail()
+                    .output.contains('Minecraft runtime tests are local-only'))
+        }
+        assertFalse(new File(directory, 'build/arguments.txt').exists())
+    }
+
+    @Test void minimumSearchRequiresASingleFabricTarget() {
+        fixture()
+        assertTrue(runner('determineFabricMinimums', '-Ptargets=26.3-fabric,26.3-quilt').buildAndFail()
+                .output.contains('determineFabricMinimums requires one RenderPearl Fabric target'))
+        assertFalse(new File(directory, 'build/arguments.txt').exists())
+    }
+
     @Test void clientRequiresSingleRuntimeAndCiRejectsLaunch() {
         fixture()
         assertTrue(runner('runClient', '-Ptargets=26.3-fabric,26.3-quilt')

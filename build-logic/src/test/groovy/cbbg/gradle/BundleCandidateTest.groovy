@@ -125,4 +125,84 @@ class BundleCandidateTest {
         assertThrows(Exception) { fixture.task.bundle() }
         assertEquals('keep', existing.text)
     }
+
+    private void conventionalInputs(Map fixture, List<String> ids) {
+        def task = fixture.task
+        File outputs = new File(fixture.root, 'build/targets/26.3-fabric/candidate-build-outputs.json')
+        outputs.parentFile.mkdirs()
+        outputs.text = fixture.outputsFile.text
+        File locks = new File(fixture.root, 'runtime-locks')
+        locks.mkdirs()
+        ids.each { id ->
+            Map contract = CandidateFiles.read(task.contract.get().asFile) + [target: id]
+            contract.ordinaryMetadata = id + '-ordinary-metadata.json'
+            new File(fixture.root, contract.ordinaryMetadata).text = new File(fixture.root, 'ordinary-metadata.json').text
+            new File(locks, id + '-scenarios.json').text = JsonOutput.toJson(contract)
+            new File(locks, id + '-linux-x86_64.json').text = task.runtimeLock.get().asFile.text
+            new File(locks, id + '-mods.json').text = task.dependencyLock.get().asFile.text
+        }
+        git(fixture.root, 'add', '.')
+        git(fixture.root, '-c', 'user.name=Test', '-c', 'user.email=test@example.invalid',
+                '-c', 'commit.gpgsign=false', 'commit', '-m', 'Runtime inputs')
+        fixture.outputs.source_commit = git(fixture.root, 'rev-parse', 'HEAD')
+        outputs.text = JsonOutput.toJson(fixture.outputs)
+        [task.buildOutputs, task.contract, task.runtimeLock, task.dependencyLock].each { it.unset() }
+        task.selectedTargets.set(ids)
+    }
+
+    @Test void explicitSelectionBundlesOwnerAndAliasWithIndependentRuntimeInputs() {
+        def fixture = setup()
+        fixture.catalog.targets.add(fixture.target + [id: '26.3-quilt', loader: 'quilt', artifactOf: '26.3-fabric'])
+        new File(fixture.root, 'targets.json').text = JsonOutput.toJson(fixture.catalog)
+        conventionalInputs(fixture, ['26.3-fabric', '26.3-quilt'])
+        fixture.task.bundle()
+        def candidate = new CandidateManifest(new File(fixture.task.destination.get().asFile, 'candidate.json'))
+        assertEquals(['26.3-fabric', '26.3-quilt'] as Set, candidate.verifyPackages(fixture.root).keySet())
+        assertEquals(candidate.records['26.3-fabric'].artifact, candidate.records['26.3-quilt'].artifact)
+        assertNotEquals(candidate.records['26.3-fabric'].client_tests.contract.path,
+                candidate.records['26.3-quilt'].client_tests.contract.path)
+        assertEquals(['26.3-fabric', '26.3-quilt'], candidate.data.selected_targets)
+    }
+
+    @Test void explicitSelectionRejectsDuplicatesAndSingleInputOverrides() {
+        def fixture = setup()
+        conventionalInputs(fixture, ['26.3-fabric'])
+        fixture.task.selectedTargets.set(['26.3-fabric', '26.3-fabric'])
+        assertThrows(Exception) { fixture.task.bundle() }
+        fixture.task.selectedTargets.set(['26.3-fabric'])
+        fixture.task.buildOutputs.set(fixture.outputsFile)
+        assertThrows(Exception) { fixture.task.bundle() }
+        assertFalse(fixture.task.destination.get().asFile.exists())
+    }
+
+    @Test void explicitSelectionBundlesDistinctArtifactsAndRejectsMixedBuildIdentity() {
+        def fixture = setup()
+        def second = CandidateFixture.create(new File(directory, 'second'), false, true, '26.2')
+        fixture.catalog.targets.add(second.target)
+        new File(fixture.root, 'targets.json').text = JsonOutput.toJson(fixture.catalog)
+        conventionalInputs(fixture, ['26.3-fabric', '26.2-fabric'])
+        File inputs = new File(fixture.root, 'build/second-inputs')
+        inputs.mkdirs()
+        def copy = { Map reference ->
+            File input = new File(inputs, reference.path)
+            Files.copy(new File(second.bundle, reference.path).toPath(), input.toPath())
+            CandidateFiles.reference(fixture.root, 'build/second-inputs/' + reference.path) + [filename: reference.path]
+        }
+        Map outputs = [schema: 2, target: second.target.id, version: '1.4.0+mc26.2-fabric',
+                       processing: second.record.processing, source_commit: fixture.outputs.source_commit, source_dirty: false,
+                       drivers: [ordinary: copy(second.record.client_tests.drivers.ordinary)]]
+        ['artifact', 'sources', 'source_inventory', 'mapping', 'sbom'].each { outputs[it] = copy(second.record[it]) }
+        File outputsFile = new File(fixture.root, 'build/targets/26.2-fabric/candidate-build-outputs.json')
+        outputsFile.parentFile.mkdirs()
+        for (Map invalid : [outputs + [source_commit: 'b' * 40], outputs + [version: '2.0.0+mc26.2-fabric']]) {
+            outputsFile.text = JsonOutput.toJson(invalid)
+            assertThrows(Exception) { fixture.task.bundle() }
+            assertFalse(fixture.task.destination.get().asFile.exists())
+        }
+        outputsFile.text = JsonOutput.toJson(outputs)
+        fixture.task.bundle()
+        def candidate = new CandidateManifest(new File(fixture.task.destination.get().asFile, 'candidate.json'))
+        assertEquals(['26.3-fabric', '26.2-fabric'] as Set, candidate.verifyPackages(fixture.root).keySet())
+        assertNotEquals(candidate.records['26.3-fabric'].artifact, candidate.records['26.2-fabric'].artifact)
+    }
 }

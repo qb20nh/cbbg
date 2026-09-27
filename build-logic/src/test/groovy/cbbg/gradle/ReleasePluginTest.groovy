@@ -31,6 +31,59 @@ class ReleasePluginTest {
         def result = runner('preparePublication', '--dry-run').build()
         assertFalse(result.output.contains(':build '))
         assertFalse(result.output.contains(':compileJava '))
+        assertTrue(runner('selectPublication').buildAndFail().output.contains('Missing -Prelease'))
+    }
+
+    @Test void releaseNotesSupportsSingleAndSharedTargetSelections() {
+        Map fabric = [id: '26.3-fabric', minecraft: '26.3', loader: 'fabric', java: 25,
+                      renderer: 'renderpearl', backends: ['opengl', 'vulkan'], implemented: false]
+        Map forge = fabric + [id: '26.3-neoforge', loader: 'neoforge']
+        new File(directory, 'targets.json').text = JsonOutput.toJson([schema: 1, targets: [fabric, forge]])
+        new File(directory, 'CHANGELOG.md').text = '''## [1.5.0] <!-- [1.5.0-mc26.3-fabric] [1.5.0-mc26.3-neoforge] -->
+### Fixed
+- Shared fix.
+#### Fabric
+- Fabric fix.
+#### NeoForge
+- NeoForge fix.
+'''
+        runner('releaseNotes', '-Prelease=v1.5.0', '-Ptarget=26.3-fabric', '-Poutput=notes.md').build()
+        String single = new File(directory, 'notes.md').text
+        assertTrue(single.contains('Fabric fix.'))
+        assertFalse(single.contains('NeoForge fix.'))
+        runner('releaseNotes', '-Prelease=v1.5.0', '-Ptargets=26.3-fabric,26.3-neoforge', '-Poutput=notes.md').build()
+        assertTrue(new File(directory, 'notes.md').text.contains('NeoForge fix.'))
+        assertTrue(runner('releaseNotes', '-Prelease=v1.5.0', '-Poutput=notes.md').buildAndFail()
+                .output.contains('explicit target selection'))
+        assertTrue(runner('releaseNotes', '-Prelease=v1.5.0', '-Ptarget=26.3-fabric',
+                '-Ptargets=26.3-neoforge', '-Poutput=notes.md').buildAndFail().output.contains('Use either'))
+    }
+
+    @Test void curseForgeReceiptsSelectAnArtifactWithinASharedRelease() {
+        new File(directory, 'publication.json').text = JsonOutput.toJson([release: 'v1.5.0',
+                source_commit: 'a' * 40, records: [
+                [targets: ['26.3-fabric', '26.3-quilt'], artifact: [path: 'fabric.jar', sha256: 'b' * 64]],
+                [targets: ['26.2-fabric'], artifact: [path: 'older.jar', sha256: 'c' * 64]]]])
+        runner('recordCurseForgeUpload', '-PpublicationMetadata=publication.json',
+                '-Ptarget=26.3-quilt', '-Poutput=receipt.json', '-PfileId=123').build()
+        assertEquals(['26.3-fabric', '26.3-quilt'], CandidateFiles.read(new File(directory, 'receipt.json')).targets)
+        for (String selection : ['', '-Ptarget=missing']) {
+            List args = ['recordCurseForgeUpload', '-PpublicationMetadata=publication.json',
+                         '-Poutput=other-receipt.json', '-PfileId=123']
+            if (selection) args.add(selection)
+            assertTrue(runner(*(args as String[])).buildAndFail().output.contains('Select one publication record'))
+        }
+    }
+
+    @Test void publicationDryRunRequiresStrictBooleanProperty() {
+        ['TRUE', '1', 'yes', ''].each { value ->
+            assertTrue(runner('preparePublication', '-Prelease=v1.4.0', '-PdryRun=' + value)
+                    .buildAndFail().output.contains('Expected -PdryRun=true or false'))
+        }
+        ['true', 'false'].each { value ->
+            assertTrue(runner('preparePublication', '-Prelease=v1.4.0', '-PdryRun=' + value)
+                    .buildAndFail().output.contains('Missing -Prepo'))
+        }
     }
 
     @Test void curseForgeReceiptBindsFileIdToSubmittedMetadata() {

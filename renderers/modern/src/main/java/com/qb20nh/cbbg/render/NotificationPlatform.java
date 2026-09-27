@@ -11,6 +11,7 @@ final class NotificationPlatform {
 
   static void chat(Component message) {
     Minecraft.getInstance().gui.hud.getChat().addClientSystemMessage(message);
+    Minecraft.getInstance().getNarrator().saySystemQueued(message);
   }
 
   static void toast(Component title, Component message) {

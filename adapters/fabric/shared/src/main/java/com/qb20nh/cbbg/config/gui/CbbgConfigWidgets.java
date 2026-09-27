@@ -20,13 +20,10 @@ import org.jspecify.annotations.NullMarked;
 @NullMarked
 final class CbbgConfigWidgets {
   static long parseSeed(String text) {
-    if (text == null || text.isEmpty()) {
-      return 0L;
+    if (!text.matches("-?[0-9]*")) {
+      throw new NumberFormatException("Seed must be an integer");
     }
-    if (!text.matches("-?[0-9]+")) {
-      throw new NumberFormatException("Invalid seed");
-    }
-    return Long.parseLong(text);
+    return text.isEmpty() ? 0 : Long.parseLong(text);
   }
 
   static final int CARD_WIDTH = 260;
@@ -195,21 +192,9 @@ final class CbbgConfigWidgets {
 
     // 5. Seed Input
     seedEdit =
-        new SeedEditBox(
+        new EditBox(
             this.font, cx - 100 + 40, y, 160, 20, Text.translatable("cbbg.config.seed.label"));
     seedEdit.setValue(Objects.requireNonNull(Long.toString(CbbgConfig.get().stbnSeed())));
-    seedEdit.setResponder(
-        s -> {
-          if (lockedByError || lockedByUser) {
-            return;
-          }
-          try {
-            long seed = parseSeed(s);
-            CbbgConfig.setStbnSeed(seed);
-          } catch (NumberFormatException ignored) {
-            // Do nothing
-          }
-        });
     WidgetPlatform.tooltip(seedEdit, TOOLTIP_STBN_SEED);
     this.add(seedEdit);
 
@@ -236,6 +221,21 @@ final class CbbgConfigWidgets {
                 200,
                 20,
                 TOOLTIP_GENERATE_STBN));
+
+    seedEdit.setResponder(
+        s -> {
+          if (lockedByError || lockedByUser) {
+            return;
+          }
+          try {
+            CbbgConfig.setStbnSeed(parseSeed(s));
+            seedEdit.setTextColor(0xFFE0E0E0);
+            generateButton.active = true;
+          } catch (NumberFormatException invalidSeed) {
+            seedEdit.setTextColor(0xFFFF5555);
+            generateButton.active = false;
+          }
+        });
 
     y += 28;
 
@@ -329,51 +329,6 @@ final class CbbgConfigWidgets {
           case DEMO -> "cbbg.config.mode.tooltip.demo";
         };
     return Text.translatable(tooltipKey);
-  }
-
-  // EditBox removed setFilter in 26.3. Validate edits before mutation on both APIs.
-  private static final class SeedEditBox extends EditBox {
-    private int selectionEnd;
-    private int limit = 32;
-
-    SeedEditBox(Font font, int x, int y, int width, int height, Component label) {
-      super(font, x, y, width, height, label);
-    }
-
-    @Override
-    public void setValue(String value) {
-      if (value.matches("-?\\d*")) {
-        super.setValue(value);
-      }
-    }
-
-    @Override
-    public void setHighlightPos(int position) {
-      super.setHighlightPos(position);
-      selectionEnd = Math.max(0, Math.min(position, getValue().length()));
-    }
-
-    @Override
-    public void setMaxLength(int length) {
-      limit = length;
-      super.setMaxLength(length);
-    }
-
-    @Override
-    public void insertText(String input) {
-      int start = Math.min(getCursorPosition(), selectionEnd);
-      int end = Math.max(getCursorPosition(), selectionEnd);
-      int available = limit - getValue().length() + end - start;
-      if (available <= 0) {
-        return;
-      }
-      String text = WidgetPlatform.filterText(input);
-      text = text.substring(0, Math.min(available, text.length()));
-      String proposed = getValue().substring(0, start) + text + getValue().substring(end);
-      if (proposed.matches("-?\\d*")) {
-        super.insertText(input);
-      }
-    }
   }
 
   // Custom Slider for Power-of-Two values

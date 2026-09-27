@@ -26,7 +26,8 @@ abstract class TargetBuild extends DefaultTask {
 
     @TaskAction
     void runBuild() {
-        if (operation.get() == 'runClient' && 'true'.equalsIgnoreCase(System.getenv('CI'))) {
+        if (operation.get() in ['runClient', 'updateFabricMinimums', 'verifyFabricCompatibility'] &&
+                ('true'.equalsIgnoreCase(System.getenv('CI')) || System.getenv('GITHUB_ACTIONS') == 'true')) {
             throw new GradleException('Minecraft runtime tests are local-only')
         }
         File root = repositoryDirectory.get().asFile

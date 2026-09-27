@@ -65,6 +65,45 @@ class TargetsPlugin implements Plugin<Project> {
                 parent.configure { dependsOn(child) }
             }
         }
+        def minimums = project.tasks.register('determineFabricMinimums') {
+            group = 'verification'
+            description = 'Locally find dependency lower/upper bounds, update metadata and verify the release jar.'
+        }
+        Map<String, String> localInputs = [:]
+        ['compatibilityPython', 'compatibilityRuntime', 'compatibilityJava', 'compatibilityManageDisplay',
+         'compatibilityDisplayDirectory', 'compatibilityWaylandDisplay', 'compatibilityEglVendorFile'].each { key ->
+            def value = project.providers.gradleProperty(key)
+            if (value.present) localInputs[key] = value.get()
+        }
+        def previousPhase = null
+        ['updateFabricMinimums', 'verifyFabricCompatibility'].each { operation ->
+            def phase = project.tasks.register('local_' + operation, TargetBuild) {
+                def target = selected.first()
+                repositoryDirectory.set(project.layout.projectDirectory)
+                targetId.set(target.id as String)
+                profile.set((target.buildProfile ?: '') as String)
+                delegate.operation.set(operation)
+                offline.set(project.gradle.startParameter.offline)
+                delegate.options.set(options)
+                buildProperties.set(localInputs + [verifyDeclaredMinimums:
+                        operation == 'verifyFabricCompatibility' ? 'true' : 'false'])
+                javaHome.set(toolchains.launcherFor {
+                    languageVersion = JavaLanguageVersion.of((target.buildJava ?: 25) as int)
+                }.map { it.metadata.installationPath })
+                usesService(serial)
+                doFirst {
+                    if (selected.size() != 1 || target.loader != 'fabric' || target.renderer != 'renderpearl') {
+                        throw new GradleException('determineFabricMinimums requires one RenderPearl Fabric target')
+                    }
+                }
+            }
+            if (previousPhase != null) {
+                def dependency = previousPhase
+                phase.configure { dependsOn(dependency) }
+            }
+            previousPhase = phase
+        }
+        minimums.configure { dependsOn(previousPhase) }
         project.tasks.register('checkCatalog') {
             group = 'verification'
             description = 'Validate the distribution catalog.'
@@ -94,6 +133,7 @@ class TargetsPlugin implements Plugin<Project> {
             group = 'distribution'
             description = 'Bundle recorded build outputs without rebuilding them.'
             sourceRoot.set(project.layout.projectDirectory)
+            selectedTargets.set(project.providers.gradleProperty('targets').map { it.split(',', -1).toList() }.orElse([]))
             buildOutputs.set(project.layout.file(project.providers.gradleProperty('buildOutputs').map { project.file(it) }))
             contract.set(project.layout.file(project.providers.gradleProperty('contract').map { project.file(it) }))
             runtimeLock.set(project.layout.file(project.providers.gradleProperty('runtimeLock').map { project.file(it) }))

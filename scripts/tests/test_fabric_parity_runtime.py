@@ -88,6 +88,24 @@ class LauncherFailureTests(unittest.TestCase):
     def receipt(self):
         return json.loads((self.game / 'probe.json').read_text())
 
+    def test_minimum_search_changes_only_cbbg_and_test_driver_requirements(self):
+        def client(command, **kwargs):
+            overrides = json.loads((self.game / 'config/fabric_loader_dependencies.json').read_text())
+            self.assertEqual(overrides, {'version': 1, 'overrides': {
+                'cbbg': {'-depends': {'fabricloader': '*', 'fabric-api': '*'},
+                         '+depends': {'fabricloader': '*', 'fabric-api': '*'}},
+                'cbbg-renderer-test': {'-depends': {'fabricloader': '*'},
+                                       '+depends': {'fabricloader': '*'}}}})
+            raise subprocess.TimeoutExpired(command, 240)
+        self.run.side_effect = client
+        with (patch.object(sys, 'argv', sys.argv + ['--loader-version', '0.19.3',
+                '--fabric-api-version', '0.153.1+26.3', '--test-dependency-minimums']),
+              self.assertRaises(subprocess.TimeoutExpired)):
+            launcher.main()
+        self.assertEqual(self.receipt()['loaderProfile'], 'fabric-loader-0.19.3-26.3')
+        self.assertTrue(self.receipt()['dependencyMinimumTest'])
+        self.assertFalse(self.receipt()['releaseAcceptance'])
+
     def test_initial_config_is_installed_before_launch_and_retained(self):
         settings = self.root / 'settings.json'
         settings.write_text('{"strength": 2}\n')

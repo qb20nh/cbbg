@@ -29,6 +29,9 @@ class TargetCatalogTest {
         TargetCatalog catalog = TargetCatalog.read(CATALOG)
         assertEquals(31, catalog.select().size())
         assertEquals(['26.3-fabric'], catalog.defaults()*.id)
+        assertEquals(['26.3-fabric'], catalog.select().findAll { it.implemented }*.id)
+        assertEquals(['26.3-fabric'], catalog.defaults(true)*.id)
+        assertEquals(['26.3-fabric'], catalog.matrix('26.3-fabric', true)*.id)
         assertEquals(['1.21.11-neoforge', '26.1.2-neoforge', '26.2-neoforge'],
                 catalog.selectProfile('neoforge-modern')*.id)
         assertEquals(['26.3-fabric', '26.3-quilt'], catalog.select('26.3-quilt,26.3-fabric')*.id)
@@ -49,9 +52,11 @@ class TargetCatalogTest {
         }
         assertTrue(assertThrows(IllegalArgumentException) { catalog.select('unknown') }
                 .message.contains('Unknown targets'))
-        assertTrue(assertThrows(IllegalArgumentException) { catalog.matrix('26.3-fabric', true) }
+        assertTrue(assertThrows(IllegalArgumentException) { catalog.matrix('26.3-quilt', true) }
                 .message.contains('not implemented'))
-        assertTrue(assertThrows(IllegalArgumentException) { catalog.defaults(true) }
+        Map pending = copyData()
+        target(pending, '26.3-fabric').implemented = false
+        assertTrue(assertThrows(IllegalArgumentException) { new TargetCatalog(pending).defaults(true) }
                 .message.contains('not implemented'))
         assertThrows(IllegalArgumentException) { catalog.selectProfile('missing') }
     }

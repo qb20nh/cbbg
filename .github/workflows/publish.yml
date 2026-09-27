@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Existing immutable release tag (vX.Y.Z or historical vX.Y.Z+mcVERSION)"
+        description: "Release tag (draft candidates allowed only for dry runs; historical vX.Y.Z+mcVERSION)"
         required: true
         type: string
       dry_run:
@@ -31,9 +31,11 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  publish:
+  preflight:
     runs-on: ubuntu-latest
     environment: "build and publish"
+    outputs:
+      matrix: ${{ steps.publication.outputs.matrix }}
     steps:
       - name: Require a new dispatch for CurseForge retries
         if: ${{ !inputs.dry_run && inputs.services != 'modrinth' && github.run_attempt != '1' }}
@@ -68,13 +70,98 @@ jobs:
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ inputs.tag }}
           SERVICES: ${{ inputs.services }}
+          DRY_RUN: ${{ inputs.dry_run }}
           CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
         run: |
           mkdir -p build
           ./gradlew --no-daemon "-Prelease=$RELEASE_TAG" "-Prepo=$GH_REPO" \
             -PsourceRoot=.release-source -Passets=release-assets \
             -Poutput=build/publication.json "-PgithubOutput=$GITHUB_OUTPUT" \
-            "-Pservices=$SERVICES" preparePublication
+            "-Pservices=$SERVICES" "-PdryRun=$DRY_RUN" preparePublication
+
+      - name: Check all Modrinth retry plans
+        if: inputs.services != 'curseforge'
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          python3 -c 'import json; records=json.load(open("build/publication.json"))["records"]; assert records; print("\n".join(r["targets"][0] for r in records))' > build/publication-targets.txt
+          mapfile -t targets < build/publication-targets.txt
+          for target in "${targets[@]}"; do
+            args=(--no-daemon -p build-config/publishing
+              "-PpublicationMetadata=$PWD/build/publication.json"
+              "-PsourceRoot=$PWD/.release-source" "-Ptarget=$target")
+            if [[ "$RELEASE_TAG" == *+mc* ]]; then
+              args+=("-PlegacyAssets=$PWD/release-assets")
+            else
+              args+=("-Pcandidate=$PWD/release-assets/candidate.json")
+            fi
+            ./gradlew "${args[@]}" planModrinthUpload
+          done
+
+  publish:
+    needs: preflight
+    runs-on: ubuntu-latest
+    environment: "build and publish"
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix: ${{ fromJSON(needs.preflight.outputs.matrix) }}
+    steps:
+      - name: Require a new dispatch for CurseForge retries
+        if: ${{ !inputs.dry_run && inputs.services != 'modrinth' && github.run_attempt != '1' }}
+        run: |
+          echo "Check the CurseForge project files, then start a new dispatch for the intended service."
+          exit 1
+
+      - name: Checkout publishing tools
+        uses: actions/checkout@v6.0.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+
+      - name: Checkout release source
+        uses: actions/checkout@v6.0.1
+        with:
+          ref: ${{ inputs.tag }}
+          path: .release-source
+          persist-credentials: false
+
+      - name: Set up build Java 25
+        uses: actions/setup-java@v5.1.0
+        with:
+          java-version: '25'
+          distribution: temurin
+      - uses: gradle/actions/setup-gradle@v5.0.0
+
+      - name: Recheck publication
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ inputs.tag }}
+          SERVICES: ${{ inputs.services }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+        run: |
+          mkdir -p build
+          ./gradlew --no-daemon "-Prelease=$RELEASE_TAG" "-Prepo=$GH_REPO" \
+            -PsourceRoot=.release-source -Passets=release-assets \
+            -Poutput=build/publication.json "-PgithubOutput=$GITHUB_OUTPUT" \
+            "-Pservices=$SERVICES" "-PdryRun=$DRY_RUN" preparePublication
+
+      - name: Select checked publication record
+        id: publication
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ inputs.tag }}
+          SERVICES: ${{ inputs.services }}
+          TARGET_ID: ${{ matrix.target }}
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+        run: |
+          ./gradlew --no-daemon "-Prelease=$RELEASE_TAG" "-Prepo=$GH_REPO" \
+            -PsourceRoot=.release-source -Passets=release-assets \
+            -PpublicationMetadata=build/publication.json "-Ptarget=$TARGET_ID" \
+            "-PgithubOutput=$GITHUB_OUTPUT" "-Pservices=$SERVICES" selectPublication
 
       - name: Validate or publish to Modrinth
         if: inputs.services != 'curseforge'
@@ -123,9 +210,10 @@ jobs:
         if: ${{ !inputs.dry_run && inputs.services != 'modrinth' }}
         env:
           CF_FILE_ID: ${{ steps.curseforge_upload.outputs.id }}
+          TARGET_ID: ${{ matrix.target }}
         run: |
           ./gradlew --no-daemon "-PpublicationMetadata=build/publication.json" \
-            "-PfileId=$CF_FILE_ID" -Poutput=build/curseforge-result.json recordCurseForgeUpload
+            "-Ptarget=$TARGET_ID" "-PfileId=$CF_FILE_ID" -Poutput=build/curseforge-result.json recordCurseForgeUpload
 
       - name: Upload sources and mappings to CurseForge
         if: ${{ !inputs.dry_run && inputs.services != 'modrinth' }}
@@ -147,9 +235,10 @@ jobs:
         env:
           CF_FILE_ID: ${{ steps.curseforge_upload.outputs.id }}
           CF_SOURCES_FILE_ID: ${{ steps.curseforge_sources_upload.outputs.id }}
+          TARGET_ID: ${{ matrix.target }}
         run: |
           ./gradlew --no-daemon "-PpublicationMetadata=build/publication.json" \
-            "-PfileId=$CF_FILE_ID" "-PsourcesFileId=$CF_SOURCES_FILE_ID" \
+            "-Ptarget=$TARGET_ID" "-PfileId=$CF_FILE_ID" "-PsourcesFileId=$CF_SOURCES_FILE_ID" \
             -Poutput=build/curseforge-sources-result.json recordCurseForgeUpload
 
       - name: Upload SBOM and provenance to CurseForge
@@ -173,9 +262,10 @@ jobs:
           CF_FILE_ID: ${{ steps.curseforge_upload.outputs.id }}
           CF_SOURCES_FILE_ID: ${{ steps.curseforge_sources_upload.outputs.id }}
           CF_EVIDENCE_FILE_ID: ${{ steps.curseforge_evidence_upload.outputs.id }}
+          TARGET_ID: ${{ matrix.target }}
         run: |
           ./gradlew --no-daemon "-PpublicationMetadata=build/publication.json" \
-            "-PfileId=$CF_FILE_ID" "-PsourcesFileId=$CF_SOURCES_FILE_ID" \
+            "-Ptarget=$TARGET_ID" "-PfileId=$CF_FILE_ID" "-PsourcesFileId=$CF_SOURCES_FILE_ID" \
             "-PevidenceFileId=$CF_EVIDENCE_FILE_ID" \
             -Poutput=build/curseforge-evidence-result.json recordCurseForgeUpload
 
@@ -183,7 +273,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: publication-${{ inputs.tag }}-${{ inputs.services }}
+          name: publication-${{ inputs.tag }}-${{ inputs.services }}-${{ matrix.target }}
           path: |
             build/publication.json
             build/curseforge-result.json

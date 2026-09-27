@@ -184,6 +184,21 @@ class PackageChecksTest {
         fails('Wrong Fabric metadata') { PackageChecks.verifyFabricMetadata(s.artifact, s.target, '1.4.0') }
     }
 
+    @Test void metadataRequiresBothKnownDependencyLimits() {
+        Map s = specimen()
+        s.target.dependencies += [minimumFabricApi: '0.160.3+26.3',
+                loaderUpperExclusive: '0.20.0', fabricApiUpperExclusive: '0.162.0+26.3']
+        s.metadata.depends.fabricloader = '>=0.19.5 <0.20.0'
+        s.metadata.depends['fabric-api'] = '>=0.160.3+26.3 <0.162.0+26.3'
+        s.binary['fabric.mod.json'] = json(s.metadata)
+        archive(s.artifact, s.binary)
+        PackageChecks.verifyFabricMetadata(s.artifact, s.target, '1.4.0')
+        s.metadata.depends['fabric-api'] = '>=0.160.3+26.3'
+        s.binary['fabric.mod.json'] = json(s.metadata)
+        archive(s.artifact, s.binary)
+        fails('Dependencies differ') { PackageChecks.verifyFabricMetadata(s.artifact, s.target, '1.4.0') }
+    }
+
     @Test
     void inventoryRejectsTamperingExtraSourcesAndTraversal() {
         Map s = specimen()

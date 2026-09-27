@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 
 import java.security.MessageDigest
+import java.util.zip.ZipFile
 
 import static org.junit.jupiter.api.Assertions.*
 
@@ -32,6 +33,18 @@ class PublicationTest {
 
     private static String sha512(File file) {
         MessageDigest.getInstance('SHA-512').digest(file.bytes).encodeHex().toString()
+    }
+
+    @Test
+    void draftOnlyMetadataMayBePlannedButCannotBeUploaded() {
+        Map value = metadata()
+        value.dry_run_only = true
+        writeMetadata(value)
+        assertEquals('upload', Publication.plan(fixture.file, publication, '26.3-fabric',
+                fixture.root, fetch([], [])).action)
+        assertThrows(GradleException) { Publication.requireUploadAllowed(value) }
+        value.remove('dry_run_only')
+        Publication.requireUploadAllowed(value)
     }
 
     @Test
@@ -62,6 +75,107 @@ class PublicationTest {
         properties.text = properties.text.replace('modrinth_project_id=other\n', '')
         new File(fixture.bundle, fixture.record.artifact.path).bytes = 'changed'.bytes
         assertThrows(GradleException) { metadata() }
+    }
+
+    @Test
+    void sharedReleaseGeneratesIndependentRecordsWithApplicableNotes() {
+        fixture = SharedPublicationFixture.multiple(new File(directory, 'multiple-notes'))
+        String notes = '''### Fixed
+#### Minecraft 26.3 — Fabric
+- New target fix.
+#### Minecraft 26.2 — Fabric
+- Older target fix.
+#### Fabric
+- Common loader fix.
+'''
+        Map value = Publication.metadata(fixture.file, fixture.root, notes)
+        assertEquals(2, value.records.size())
+        assertEquals(notes, value.release_notes)
+        assertTrue(value.records[0].modrinth.changelog.contains('New target fix.'))
+        assertFalse(value.records[0].modrinth.changelog.contains('Older target fix.'))
+        assertFalse(value.records[1].curseforge.changelog.contains('New target fix.'))
+        assertTrue(value.records[1].curseforge.changelog.contains('Older target fix.'))
+        assertTrue(value.records.every { it.modrinth.changelog.contains('Common loader fix.') })
+        writeMetadata(value)
+        assertEquals(['26.2-fabric'], Publication.checkedRecord(fixture.file, publication,
+                '26.2-fabric', fixture.root)[1].targets)
+        value.records[0].modrinth.changelog = 'tampered other record'
+        writeMetadata(value)
+        fails('checked candidate') {
+            Publication.checkedRecord(fixture.file, publication, '26.2-fabric', fixture.root)
+        }
+    }
+
+    @Test
+    void recordValidationRejectsMissingOrDuplicateOtherTargets() {
+        fixture = SharedPublicationFixture.multiple(new File(directory, 'multiple-validation'))
+        Map value = metadata()
+        value.records.remove(0)
+        writeMetadata(value)
+        fails('checked candidate') {
+            Publication.checkedRecord(fixture.file, publication, '26.2-fabric', fixture.root)
+        }
+        value = metadata()
+        value.records.add(value.records[0])
+        writeMetadata(value)
+        fails('checked candidate') {
+            Publication.checkedRecord(fixture.file, publication, '26.2-fabric', fixture.root)
+        }
+    }
+
+    @Test
+    void sharedArtifactRuntimeAliasesPublishOnceWithUnionNotesAndLoaderLabels() {
+        Map quilt = fixture.target + [id: '26.3-quilt', loader: 'quilt', artifactOf: fixture.target.id]
+        fixture.catalog.targets.add(quilt)
+        new File(fixture.root, 'targets.json').text = JsonOutput.toJson(fixture.catalog)
+        File catalog = new File(fixture.bundle, fixture.record.client_tests.catalog.path)
+        catalog.text = JsonOutput.toJson(fixture.catalog)
+        fixture.record.client_tests.catalog.sha256 = CandidateFiles.sha256(catalog)
+        Map record = CandidateFiles.parse(new StringReader(JsonOutput.toJson(fixture.record))) as Map
+        record.id = quilt.id
+        fixture.manifest.selected_targets.add(quilt.id)
+        fixture.manifest.targets.add(record)
+        fixture.manifest.catalog_sha256 = CandidateFiles.canonicalHash(fixture.catalog)
+        fixture.file.text = JsonOutput.toJson(fixture.manifest)
+        Map value = Publication.metadata(fixture.file, fixture.root,
+                '### Fixed\n#### Fabric\n- Fabric fix.\n#### Quilt\n- Quilt fix.\n#### Forge\n- Other fix.\n')
+        assertEquals(1, value.records.size())
+        assertEquals(['26.3-fabric', '26.3-quilt'], value.records[0].targets)
+        assertEquals(['fabric', 'quilt'], value.records[0].modrinth.loaders)
+        assertTrue(value.records[0].modrinth.changelog.contains('Fabric fix.'))
+        assertTrue(value.records[0].modrinth.changelog.contains('Quilt fix.'))
+        assertFalse(value.records[0].modrinth.changelog.contains('Other fix.'))
+        writeMetadata(value)
+        assertEquals(value.records[0], Publication.checkedRecord(fixture.file, publication,
+                fixture.target.id, fixture.root)[1])
+        fails('Expected one publishing record') {
+            Publication.checkedRecord(fixture.file, publication, quilt.id, fixture.root)
+        }
+    }
+
+    @Test
+    void upstreamArtifactRetainsItsVersionAndUnimplementedTargetsAreRejected() {
+        fixture.target.buildProfile = 'fabric-upstream'
+        new File(fixture.root, 'targets.json').text = JsonOutput.toJson(fixture.catalog)
+        File catalog = new File(fixture.bundle, fixture.record.client_tests.catalog.path)
+        catalog.text = JsonOutput.toJson(fixture.catalog)
+        fixture.record.client_tests.catalog.sha256 = CandidateFiles.sha256(catalog)
+        fixture.manifest.catalog_sha256 = CandidateFiles.canonicalHash(fixture.catalog)
+        File artifact = new File(fixture.bundle, fixture.record.artifact.path)
+        Map entries = [:]
+        new ZipFile(artifact).withCloseable { zip ->
+            zip.entries().each { entry ->
+                byte[] bytes = zip.getInputStream(entry).bytes
+                entries[entry.name] = entry.name == 'fabric.mod.json'
+                        ? new String(bytes, 'UTF-8').replace('1.4.0+mc26.3-fabric', '1.4.0+mc26.3').getBytes('UTF-8') : bytes
+            }
+        }
+        CandidateFixture.archive(artifact, entries)
+        fixture.record.artifact.sha256 = CandidateFiles.sha256(artifact)
+        fixture.file.text = JsonOutput.toJson(fixture.manifest)
+        assertEquals('1.4.0+mc26.3', metadata().records[0].modrinth.version_number)
+        fixture = CandidateFixture.create(new File(directory, 'unimplemented'), false)
+        fails('not implemented') { metadata() }
     }
 
     @Test

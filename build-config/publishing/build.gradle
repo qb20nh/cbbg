@@ -45,7 +45,7 @@ def checked = legacy
         ? LegacyPublication.checkedRecord(metadataFile, sourceRoot, legacyAssets)
         : Publication.checkedRecord(candidateFile, metadataFile, targetId, sourceRoot)
 def record = checked[1]
-if (record.targets != [targetId]) throw new GradleException('Publishing target differs from selected target')
+if (record.targets.first() != targetId) throw new GradleException('Publishing target differs from selected target')
 def metadataHash = checked[2]
 def assets = legacy ? legacyAssets : candidateFile.parentFile
 def uploadFiles = [:]
@@ -114,6 +114,7 @@ def uploadSettings = extensions.getByName('modrinth')
 tasks.named('modrinth') {
     dependsOn tasks.named('planModrinthUpload')
     onlyIf('The requested version is not already uploaded') {
+        Publication.requireUploadAllowed(CandidateFiles.read(metadataFile))
         def plan = CandidateFiles.read(uploadPlan.get().asFile)
         if (!(plan.action in ['upload', 'reuse'])) throw new GradleException('Invalid Modrinth upload plan')
         plan.action == 'upload'

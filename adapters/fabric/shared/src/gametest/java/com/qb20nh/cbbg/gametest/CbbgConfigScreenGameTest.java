@@ -92,13 +92,20 @@ public class CbbgConfigScreenGameTest implements FabricClientGameTest {
             // Seed edit box: set value (triggers responder)
             w.seed.setValue("123");
             w.seed.setValue("12x");
-            assertEquals("123", w.seed.getValue(), "invalid seed text");
+            assertEquals("12x", w.seed.getValue(), "invalid seed text stays editable");
+            assertTrue(!w.generate.active, "Invalid seed disables generation");
+            assertEquals(123L, CbbgConfig.get().stbnSeed(), "invalid seed preserves config");
+            w.seed.setValue("123");
             w.seed.setCursorPosition(1);
             w.seed.setHighlightPos(2);
             w.seed.insertText("-");
-            assertEquals("123", w.seed.getValue(), "invalid seed insertion");
+            assertEquals("1-3", w.seed.getValue(), "invalid seed insertion stays editable");
+            assertTrue(!w.generate.active, "Invalid seed insertion disables generation");
+            w.seed.setCursorPosition(1);
+            w.seed.setHighlightPos(2);
             w.seed.insertText("9");
             assertEquals("193", w.seed.getValue(), "selected seed replacement");
+            assertTrue(w.generate.active, "Valid seed replacement enables generation");
             w.seed.setValue("-42");
             assertEquals(-42L, CbbgConfig.get().stbnSeed(), "negative seed");
             w.seed.moveCursorToEnd(false);
@@ -111,9 +118,11 @@ public class CbbgConfigScreenGameTest implements FabricClientGameTest {
             assertEquals("123", w.seed.getValue(), "seed length bound");
             w.seed.setMaxLength(32);
 
-            for (String invalid : List.of("-", "9223372036854775808", "-9223372036854775809")) {
+            for (String invalid :
+                List.of("-", "+42", "9223372036854775808", "-9223372036854775809")) {
               w.seed.setValue(invalid);
               assertEquals(invalid, w.seed.getValue(), "intermediate seed text");
+              assertTrue(!w.generate.active, "Invalid seed disables generation");
               var generation = STBNGenerator.get();
               w.generate.onClick(
                   new MouseButtonEvent(centerX(w.generate), centerY(w.generate), click), false);
@@ -124,6 +133,9 @@ public class CbbgConfigScreenGameTest implements FabricClientGameTest {
               assertTrue(
                   STBNGenerator.get() == generation, "Invalid seed must not start generation");
             }
+            w.seed.setValue("");
+            assertEquals(0L, CbbgConfig.get().stbnSeed(), "empty seed");
+            assertTrue(w.generate.active, "Empty seed enables generation");
             w.seed.setValue("123");
 
             // Generate button opens confirmation screen; cancel out.

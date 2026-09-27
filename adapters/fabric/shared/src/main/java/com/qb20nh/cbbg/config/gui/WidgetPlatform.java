@@ -6,7 +6,6 @@ import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.CycleButton;
 import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.network.chat.Component;
-import net.minecraft.util.StringUtil;
 import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 
@@ -39,9 +38,5 @@ final class WidgetPlatform {
   @SafeVarargs
   static <T> CycleButton.Builder<T> cycle(Function<T, Component> label, T initial, T... values) {
     return CycleButton.builder(label, initial).withValues(values);
-  }
-
-  static String filterText(String text) {
-    return StringUtil.filterText(text);
   }
 }
