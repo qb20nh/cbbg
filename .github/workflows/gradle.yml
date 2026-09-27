@@ -17,7 +17,7 @@ jobs:
       build: ${{ steps.batch.outputs.build || steps.targets.outputs.build }}
       core: ${{ steps.batch.outputs.core || steps.targets.outputs.core }}
     steps:
-      - uses: actions/checkout@v6.0.1
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - name: Set up build Java 25
@@ -66,7 +66,7 @@ jobs:
       matrix:
         java: [8, 17, 21, 25]
     steps:
-      - uses: actions/checkout@v6.0.1
+      - uses: actions/checkout@v7
       - name: Set up test runtime Java ${{ matrix.java }}
         id: test-java
         uses: actions/setup-java@v5.1.0
@@ -106,7 +106,7 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
     steps:
-      - uses: actions/checkout@v6.0.1
+      - uses: actions/checkout@v7
       - name: Set up target Java ${{ matrix.java }}
         uses: actions/setup-java@v5.1.0
         with:
@@ -144,7 +144,7 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
     steps:
-      - uses: actions/checkout@v6.0.1
+      - uses: actions/checkout@v7
       - name: Set up target Java ${{ matrix.java }}
         uses: actions/setup-java@v5.1.0
         with:
