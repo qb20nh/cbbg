@@ -79,7 +79,7 @@ jobs:
       - name: Scan base dependencies
         if: steps.dependencies.outputs.baseline-args != ''
         continue-on-error: true
-        uses: google/osv-scanner-action/osv-scanner-action@7f58dd6750d78fc29a900ba64b1a0f946f62fba4 # v2.6.0
+        uses: google/osv-scanner-action/osv-scanner-action@a345acffa64b0eaede81a3d9aae6141214d9c8fc # v2.6.0
         with:
           scan-args: |-
             --format=json
@@ -87,7 +87,7 @@ jobs:
             ${{ steps.dependencies.outputs.baseline-args }}
       - name: Scan proposed dependencies
         continue-on-error: true
-        uses: google/osv-scanner-action/osv-scanner-action@7f58dd6750d78fc29a900ba64b1a0f946f62fba4 # v2.6.0
+        uses: google/osv-scanner-action/osv-scanner-action@a345acffa64b0eaede81a3d9aae6141214d9c8fc # v2.6.0
         with:
           scan-args: |-
             --format=json
@@ -104,7 +104,7 @@ jobs:
             jq -e '.results | type == "array"' old-results.json
           fi
       - name: Report vulnerabilities
-        uses: google/osv-scanner-action/osv-reporter-action@7f58dd6750d78fc29a900ba64b1a0f946f62fba4 # v2.6.0
+        uses: google/osv-scanner-action/osv-reporter-action@a345acffa64b0eaede81a3d9aae6141214d9c8fc # v2.6.0
         with:
           scan-args: |-
             --output-files=sarif:results.sarif
