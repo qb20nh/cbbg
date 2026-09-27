@@ -156,10 +156,10 @@ class PackageChecks {
                 }
             }
             Map dependencies = [fabricloader: '>=' + (target.dependencies.minimumLoader ?: target.dependencies.loader) +
-                    (target.dependencies.incompatibleLoader ? ' <' + target.dependencies.incompatibleLoader : ''),
+                    (target.dependencies.loaderUpperExclusive ? ' <' + target.dependencies.loaderUpperExclusive : ''),
                     minecraft: target.minecraft, java: '>=' + target.java,
                     'fabric-api': (target.dependencies.minimumFabricApi ? '>=' + target.dependencies.minimumFabricApi : '*') +
-                            (target.dependencies.incompatibleFabricApi ? ' <' + target.dependencies.incompatibleFabricApi : '')]
+                            (target.dependencies.fabricApiUpperExclusive ? ' <' + target.dependencies.fabricApiUpperExclusive : '')]
             if (metadata.depends != dependencies) throw new GradleException('Dependencies differ from target')
             if (!(metadata.entrypoints instanceof Map) || !metadata.entrypoints.client) {
                 throw new GradleException('Missing client entrypoint')

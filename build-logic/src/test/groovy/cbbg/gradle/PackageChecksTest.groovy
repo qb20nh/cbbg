@@ -187,7 +187,7 @@ class PackageChecksTest {
     @Test void metadataRequiresBothKnownDependencyLimits() {
         Map s = specimen()
         s.target.dependencies += [minimumFabricApi: '0.160.3+26.3',
-                incompatibleLoader: '0.20.0', incompatibleFabricApi: '0.162.0+26.3']
+                loaderUpperExclusive: '0.20.0', fabricApiUpperExclusive: '0.162.0+26.3']
         s.metadata.depends.fabricloader = '>=0.19.5 <0.20.0'
         s.metadata.depends['fabric-api'] = '>=0.160.3+26.3 <0.162.0+26.3'
         s.binary['fabric.mod.json'] = json(s.metadata)

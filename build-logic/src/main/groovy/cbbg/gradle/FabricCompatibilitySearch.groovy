@@ -35,6 +35,10 @@ class FabricCompatibilitySearch {
         [maximum: maximum, firstIncompatible: index + 1 < versions.size() ? versions[index + 1] : null]
     }
 
+    static String upperLimit(String maximum, String firstIncompatible) {
+        firstIncompatible ?: (numbers(maximum)[0] + 1) + '.0.0'
+    }
+
     private static String boundary(List<String> versions, String current, Closure<Boolean> passes) {
         int index = versions.indexOf(current)
         if (index < 0) throw new GradleException('Current version is absent from discovery: ' + current)

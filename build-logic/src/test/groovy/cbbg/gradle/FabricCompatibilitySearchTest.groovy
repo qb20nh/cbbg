@@ -165,9 +165,19 @@ class FabricCompatibilitySearchTest {
         assertTrue(visited.containsAll([19, 20, 21]))
     }
 
-    @Test void leavesTheUpperRequirementOpenWhenLatestPasses() {
+    @Test void recordsNoKnownIncompatibilityWhenLatestPasses() {
         assertEquals([maximum: '2.0.0', firstIncompatible: null],
                 FabricCompatibilitySearch.maximum(['1.9.0', '1.10.0', '2.0.0'], '1.9.0') { true })
+    }
+
+    @Test void limitsLatestPassingVersionsToTheirCurrentMajor() {
+        assertEquals('1.0.0', FabricCompatibilitySearch.upperLimit('0.19.5', null))
+        assertEquals('1.0.0', FabricCompatibilitySearch.upperLimit('0.161.0+26.3', null))
+        assertEquals('3.0.0', FabricCompatibilitySearch.upperLimit('2.9.7', null))
+    }
+
+    @Test void usesTheObservedFailureBeforeTheNextMajor() {
+        assertEquals('0.19.6', FabricCompatibilitySearch.upperLimit('0.19.5', '0.19.6'))
     }
 
     @Test void searchesDownWhenThePreviousMaximumFails() {

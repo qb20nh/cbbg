@@ -300,9 +300,9 @@ tasks.named('processResources') {
     }
     def properties = [version: project.version, minecraft_version: target.minecraft,
                       loader_version: target.dependencies.minimumLoader ?: target.dependencies.loader,
-                      loader_upper_bound: target.dependencies.incompatibleLoader ? ' <' + target.dependencies.incompatibleLoader : '',
+                      loader_upper_bound: target.dependencies.loaderUpperExclusive ? ' <' + target.dependencies.loaderUpperExclusive : '',
                       fabric_api_minimum: target.dependencies.minimumFabricApi ?: '*',
-                      fabric_api_upper_bound: target.dependencies.incompatibleFabricApi ? ' <' + target.dependencies.incompatibleFabricApi : '',
+                      fabric_api_upper_bound: target.dependencies.fabricApiUpperExclusive ? ' <' + target.dependencies.fabricApiUpperExclusive : '',
                       java_version: target.java,
                       renderer_family: target.renderer,
                       shader_import: target.renderer == 'blaze-gpu-format' ? '#moj_import' : '#include']

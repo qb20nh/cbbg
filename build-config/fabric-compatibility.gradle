@@ -146,6 +146,7 @@ tasks.register('verifyFabricCompatibility') {
         List results = []
         Map report = [schemaVersion: 1, target: compatibilityTarget.id, inputs: fixed,
                 complete: false, policy: 'previous boundaries, exponential bracket, binary search over released SemVer versions',
+                upperPolicy: 'first failing release, or next major when the latest release passes',
                 latestLoader: FabricCompatibilitySearch.ordered(loaders).last(),
                 latestFabricApi: FabricCompatibilitySearch.ordered(apis).last(),
                 startingTarget: previousMinimums.target, results: results]
@@ -326,8 +327,10 @@ tasks.register('verifyFabricCompatibility') {
                         firstIncompatible: previousMinimums.incompatibleLoader]
                 apiUpper = [maximum: previousMinimums.maximumFabricApi,
                         firstIncompatible: previousMinimums.incompatibleFabricApi]
-                if (compatibilityTarget.dependencies.incompatibleLoader != loaderUpper.firstIncompatible ||
-                        compatibilityTarget.dependencies.incompatibleFabricApi != apiUpper.firstIncompatible) {
+                if (compatibilityTarget.dependencies.loaderUpperExclusive !=
+                        FabricCompatibilitySearch.upperLimit(loaderUpper.maximum, loaderUpper.firstIncompatible) ||
+                        compatibilityTarget.dependencies.fabricApiUpperExclusive !=
+                        FabricCompatibilitySearch.upperLimit(apiUpper.maximum, apiUpper.firstIncompatible)) {
                     throw new GradleException('Declared upper limits differ from the completed search')
                 }
             } else {
@@ -358,6 +361,8 @@ tasks.register('verifyFabricCompatibility') {
             report.maximumFabricApi = apiUpper.maximum
             report.incompatibleLoader = loaderUpper.firstIncompatible
             report.incompatibleFabricApi = apiUpper.firstIncompatible
+            report.loaderUpperExclusive = FabricCompatibilitySearch.upperLimit(loaderUpper.maximum, loaderUpper.firstIncompatible)
+            report.fabricApiUpperExclusive = FabricCompatibilitySearch.upperLimit(apiUpper.maximum, apiUpper.firstIncompatible)
             for (String selectedLoader : [loader, loaderUpper.maximum].unique()) {
                 for (String selectedApi : [api, apiUpper.maximum].unique()) {
                     if (!pairPasses(selectedLoader, selectedApi)) {
@@ -398,10 +403,8 @@ tasks.register('updateFabricMinimums') {
         Map selected = data.targets.find { it.id == compatibilityTarget.id }
         selected.dependencies.minimumLoader = report.minimumLoader
         selected.dependencies.minimumFabricApi = report.minimumFabricApi
-        ['incompatibleLoader', 'incompatibleFabricApi'].each { name ->
-            if (report[name]) selected.dependencies[name] = report[name]
-            else selected.dependencies.remove(name)
-        }
+        selected.dependencies.loaderUpperExclusive = FabricCompatibilitySearch.upperLimit(report.maximumLoader, report.incompatibleLoader)
+        selected.dependencies.fabricApiUpperExclusive = FabricCompatibilitySearch.upperLimit(report.maximumFabricApi, report.incompatibleFabricApi)
         // Preserve the catalog's compact, one-target-per-line convention.
         List lines = before.readLines()
         int index = lines.findIndexOf { it.contains('"id":"' + compatibilityTarget.id + '"') }
