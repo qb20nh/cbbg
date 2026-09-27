@@ -33,6 +33,8 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+    env:
+      BATCH_APP_CLIENT_ID: ${{ vars.DEPENDABOT_BATCH_APP_CLIENT_ID }}
     steps:
       - name: Checkout trusted utility
         uses: actions/checkout@v6.0.1
@@ -41,9 +43,21 @@ jobs:
           persist-credentials: false
       - name: Install metadata parser
         run: python3 -m pip install --disable-pip-version-check -r .github/scripts/requirements.txt
+      - name: Create repository-scoped branch token
+        id: branch-token
+        if: env.BATCH_APP_CLIENT_ID != ''
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ env.BATCH_APP_CLIENT_ID }}
+          private-key: ${{ secrets.DEPENDABOT_BATCH_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: write
+          permission-workflows: write
       - name: Assemble dependency snapshot
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_BRANCH_TOKEN: ${{ steps.branch-token.outputs.token }}
           CONTROLLER_SHA: ${{ github.workflow_sha }}
           PR_NUMBERS: ${{ inputs.pr_numbers || '' }}
         run: python3 .github/scripts/dependabot_major_batch.py --pr-numbers "$PR_NUMBERS"

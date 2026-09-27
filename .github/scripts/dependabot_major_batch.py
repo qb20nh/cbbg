@@ -30,20 +30,24 @@ class ApiError(BatchError):
 
 
 class GitHub:
-    def __init__(self, repo, token):
+    def __init__(self, repo, token, branch_token=None):
         if not re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', repo):
             raise BatchError('Expected owner/repository')
         if not token:
             raise BatchError('GH_TOKEN is required')
         self.repo = repo
         self.token = token
+        self.branch_token = branch_token or token
 
     def request(self, method, path, data=None):
+        branch_write = method in ('POST', 'PATCH', 'DELETE') and (
+            path in ('merges', 'git/refs') or path.startswith('git/refs/'))
+        token = self.branch_token if branch_write else self.token
         request = urllib.request.Request(
             f'https://api.github.com/repos/{self.repo}/{path}',
             data=json.dumps(data).encode() if data is not None else None,
             method=method,
-            headers={'Authorization': f'Bearer {self.token}',
+            headers={'Authorization': f'Bearer {token}',
                      'Accept': 'application/vnd.github+json',
                      'Content-Type': 'application/json',
                      'X-GitHub-Api-Version': '2022-11-28',
@@ -432,7 +436,8 @@ def main():
     utility = None
     failed = False
     try:
-        api = GitHub(os.environ.get('GITHUB_REPOSITORY', ''), os.environ.get('GH_TOKEN', ''))
+        api = GitHub(os.environ.get('GITHUB_REPOSITORY', ''), os.environ.get('GH_TOKEN', ''),
+                     os.environ.get('GH_BRANCH_TOKEN'))
         utility = Batch(api, os.environ.get('GITHUB_RUN_ID', ''), os.environ.get('GITHUB_RUN_ATTEMPT', ''),
                         os.environ.get('CONTROLLER_SHA', ''))
         event = json.loads(Path(os.environ['GITHUB_EVENT_PATH']).read_text())
