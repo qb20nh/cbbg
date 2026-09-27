@@ -53,24 +53,10 @@ that target's previous published release. Include every such change and combine
 related items. Write briefly without dropping information; explain changes for
 readers who have no development-session context.
 
-Keep shared changes loader-agnostic under the standard `### Added`, `### Changed`
-and `### Fixed` categories. For future entries covering multiple targets, use
-`####` subheadings for target-specific changes. Label them with the Minecraft
-version, loader or both, whichever identifies the affected targets:
-
-```md
-### Fixed
-
-- Shared fix affecting every target in this release.
-
-#### Minecraft 26.3 — Fabric
-
-- Fix specific to this target.
-```
-
-For a single-target entry, its release heading already identifies the target;
-keep changes directly under the categories. Update release-note selection to
-support grouped targets before combining their entries.
+Use the standard `### Added`, `### Changed` and `### Fixed` categories. The release
+heading identifies the Minecraft version and loader. Keep shared change
+descriptions loader-agnostic; mention a loader only when it helps explain the
+change.
 
 Extract the selected entry with Gradle:
 
