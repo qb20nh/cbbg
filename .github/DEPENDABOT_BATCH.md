@@ -27,12 +27,24 @@ and merged batches receive no automatic additions.
 ## Run and review checks
 
 Repository **Settings → Actions → General → Workflow permissions** must allow
-GitHub Actions to create pull requests. Keep the default token permission at
-read; only the utility job requests Contents and Pull requests write access.
-No additional token secret is required.
+GitHub Actions to create pull requests. GitHub combines PR creation and review
+approval in one repository setting; this utility never submits approving reviews.
+Keep the default token permission at read; only the utility job requests Contents
+and Pull requests write access.
+
+`GITHUB_TOKEN` can assemble Gradle-only updates, but GitHub rejects branch merges
+that change `.github/workflows/` without `workflows` permission. The first
+[all-major live run](https://github.com/qb20nh/cbbg/actions/runs/36329554317)
+confirmed this restriction and removed its temporary branch without creating a PR.
+The current utility has no additional credential configured, so an all-major
+batch containing GitHub Actions updates fails explicitly. Use a Gradle-only
+diagnostic subset while this permission remains unavailable; do not treat that
+subset as verification of the full batch.
 
 PRs created or updated with `GITHUB_TOKEN` require a maintainer to approve their
 workflows, as described in [GitHub's trigger documentation](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow#triggering-a-workflow-from-a-workflow).
+The [Gradle-only live diagnostic](https://github.com/qb20nh/cbbg/pull/59) confirmed
+that Java CI, CodeQL, and OSV runs are created in an approval-required state.
 Open the batch and choose **Approve workflows to run** after creation
 and each new head. Confirm that Java CI runs formatting, build/release tooling
 tests, core tests on Java 8/17/21/25, and every catalog `ciTargets` build and package
