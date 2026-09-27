@@ -153,6 +153,34 @@ class FakeGitHub:
 
 
 class MetadataTest(unittest.TestCase):
+    def test_branch_writes_use_app_token_and_pr_operations_use_github_token(self):
+        api = batch.GitHub(REPO, 'pr-token', 'branch-token')
+        cases = [
+            ('GET', 'pulls/1', 'pr-token'),
+            ('GET', 'git/ref/heads/main', 'pr-token'),
+            ('POST', 'pulls', 'pr-token'),
+            ('PATCH', 'pulls/1', 'pr-token'),
+            ('POST', 'git/refs', 'branch-token'),
+            ('POST', 'merges', 'branch-token'),
+            ('PATCH', 'git/refs/heads/automation/batch', 'branch-token'),
+            ('DELETE', 'git/refs/heads/automation/batch', 'branch-token'),
+        ]
+        with patch.object(batch.urllib.request, 'urlopen') as urlopen:
+            response = urlopen.return_value.__enter__.return_value
+            response.status = 200
+            response.read.return_value = b'{}'
+            for method, path, token in cases:
+                with self.subTest(method=method, path=path):
+                    api.request(method, path)
+                    request = urlopen.call_args.args[0]
+                    self.assertEqual(request.get_header('Authorization'), 'Bearer ' + token)
+
+    def test_no_app_token_preserves_github_token_fallback(self):
+        for token in (None, ''):
+            with self.subTest(token=token):
+                api = batch.GitHub(REPO, 'pr-token', token)
+                self.assertEqual(api.branch_token, 'pr-token')
+
     def test_api_paginates_prs_and_commits(self):
         api = batch.GitHub(REPO, 'test-token')
         for path in ['pulls?state=open&base=main', 'pulls/1/commits']:
@@ -388,6 +416,23 @@ class BatchTest(unittest.TestCase):
 
 
 class BatchWorkflowTest(unittest.TestCase):
+    def test_app_token_is_optional_and_scoped_to_branch_permissions_in_this_repo(self):
+        workflow = yaml.load((ROOT / '.github/workflows/dependabot-major-batch.yml').read_text(),
+                             Loader=yaml.BaseLoader)
+        job = workflow['jobs']['assemble']
+        token = next(s for s in job['steps'] if s.get('id') == 'branch-token')
+        self.assertEqual(token['if'], "env.BATCH_APP_CLIENT_ID != ''")
+        self.assertEqual(job['env']['BATCH_APP_CLIENT_ID'], '${{ vars.DEPENDABOT_BATCH_APP_CLIENT_ID }}')
+        inputs = token['with']
+        self.assertEqual(inputs['owner'], '${{ github.repository_owner }}')
+        self.assertEqual(inputs['repositories'], '${{ github.event.repository.name }}')
+        self.assertEqual({k: v for k, v in inputs.items() if k.startswith('permission-')},
+                         {'permission-contents': 'write', 'permission-workflows': 'write'})
+        self.assertNotIn('skip-token-revoke', inputs)
+        assemble = next(s for s in job['steps'] if s.get('name') == 'Assemble dependency snapshot')
+        self.assertEqual(assemble['env']['GH_TOKEN'], '${{ secrets.GITHUB_TOKEN }}')
+        self.assertEqual(assemble['env']['GH_BRANCH_TOKEN'], '${{ steps.branch-token.outputs.token }}')
+
     def test_controller_uses_trusted_checkout_and_only_assembles(self):
         workflow = yaml.load((ROOT / '.github/workflows/dependabot-major-batch.yml').read_text(),
                              Loader=yaml.BaseLoader)

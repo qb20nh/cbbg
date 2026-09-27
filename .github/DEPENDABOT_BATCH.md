@@ -27,14 +27,52 @@ and merged batches receive no automatic additions.
 ## Run and review checks
 
 Repository **Settings → Actions → General → Workflow permissions** must allow
-GitHub Actions to create pull requests. Keep the default token permission at
-read; only the utility job requests Contents and Pull requests write access.
-No additional token secret is required.
+GitHub Actions to create pull requests. GitHub combines PR creation and review
+approval in one repository setting; this utility never submits approving reviews.
+Keep the default token permission at read; only the utility job requests Contents
+and Pull requests write access.
+
+`GITHUB_TOKEN` can assemble Gradle-only updates, but GitHub rejects branch merges
+that change `.github/workflows/` without `workflows` permission. The first
+[all-major live run](https://github.com/qb20nh/cbbg/actions/runs/36329554317)
+confirmed this restriction and removed its temporary branch without creating a PR.
+Configure the optional GitHub App below to include GitHub Actions updates.
+Without it, an all-major batch containing those updates fails explicitly. A
+Gradle-only diagnostic subset does not verify the full batch.
+
+## Configure the branch GitHub App
+
+1. [Register a private GitHub App](https://github.com/settings/apps/new). Use the
+   repository URL for its homepage, disable the webhook, and allow installation
+   only on your account.
+2. Grant repository **Contents: Read and write** and **Workflows: Read and write**.
+   Metadata read access is automatic. Do not grant Pull requests or other write
+   permissions; this App does not create or approve PRs.
+3. Install the App with **Only select repositories**, selecting `cbbg`.
+4. In the repository's **Settings → Secrets and variables → Actions**, add a
+   variable named `DEPENDABOT_BATCH_APP_CLIENT_ID` with the App's Client ID.
+5. Generate an App private key and put the entire PEM file into a repository
+   secret named `DEPENDABOT_BATCH_APP_PRIVATE_KEY`.
+
+The workflow uses GitHub's pinned `actions/create-github-app-token` release to
+request a token limited to this repository and those two permissions. The action
+revokes the token when the job finishes. Only branch mutations and server-side
+merges use it; PR reads, creation, and body updates still use `GITHUB_TOKEN`, so
+managed PRs keep the `github-actions[bot]` author. No source PR code runs in the
+job holding either token. If the Client ID is unset, Gradle-only operation falls
+back to `GITHUB_TOKEN`; a configured App with a missing key or installation fails
+rather than silently falling back.
+
+## Approve and review PR checks
 
 PRs created or updated with `GITHUB_TOKEN` require a maintainer to approve their
 workflows, as described in [GitHub's trigger documentation](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow#triggering-a-workflow-from-a-workflow).
-Open the batch and choose **Approve workflows to run** after creation
-and each new head. Confirm that Java CI runs formatting, build/release tooling
+The [Gradle-only live diagnostic](https://github.com/qb20nh/cbbg/pull/59) confirmed
+that Java CI, CodeQL, and OSV runs are created in an approval-required state.
+Open the batch and choose **Approve workflows to run** whenever GitHub displays
+the approval banner. PR creation uses `GITHUB_TOKEN`; branch updates using the
+App token can trigger CI without that prompt. Confirm fresh checks for every new
+head: Java CI runs formatting, build/release tooling
 tests, core tests on Java 8/17/21/25, and every catalog `ciTargets` build and package
 check, along with the existing CodeQL and OSV workflows. An assembly run passing
 does not mean the PR checks passed. Review the combined diff and check results
