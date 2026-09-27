@@ -32,7 +32,8 @@ read; only the utility job requests Contents and Pull requests write access.
 No additional token secret is required.
 
 PRs created or updated with `GITHUB_TOKEN` require a maintainer to approve their
-workflows. Open the batch and choose **Approve workflows to run** after creation
+workflows, as described in [GitHub's trigger documentation](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow#triggering-a-workflow-from-a-workflow).
+Open the batch and choose **Approve workflows to run** after creation
 and each new head. Confirm that Java CI runs formatting, build/release tooling
 tests, core tests on Java 8/17/21/25, and every catalog `ciTargets` build and package
 check, along with the existing CodeQL and OSV workflows. An assembly run passing
