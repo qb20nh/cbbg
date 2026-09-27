@@ -145,7 +145,7 @@ jobs:
           java-version: '25'
           distribution: temurin
       - name: Generate and submit target dependency graph
-        uses: gradle/actions/dependency-submission@af1da67850ed9a4cedd57bfd976089dd991e2582 # v4.0.0
+        uses: gradle/actions/dependency-submission@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
         with:
           build-root-directory: .
           additional-arguments: -p build-config/${{ matrix.buildProfile }} -Ptarget=${{ matrix.id }}
