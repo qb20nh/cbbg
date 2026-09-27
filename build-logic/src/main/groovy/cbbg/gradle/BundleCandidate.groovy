@@ -45,7 +45,10 @@ abstract class BundleCandidate extends DefaultTask {
     @TaskAction void bundle() {
         File root = sourceRoot.get().asFile.canonicalFile
         File output = destination.get().asFile.canonicalFile
-        if (output.exists()) throw new GradleException('Candidate destination already exists')
+        // Gradle creates @OutputDirectory before invoking the task.
+        if (output.exists() && (!output.isDirectory() || output.listFiles()?.length != 0)) {
+            throw new GradleException('Candidate destination already exists')
+        }
         def state = sourceState()
         String commit = state[0]
         String release = releaseTag.get()
@@ -123,7 +126,7 @@ abstract class BundleCandidate extends DefaultTask {
                                }]
         records[target.id] = record
         }
-        if (!output.mkdirs()) throw new GradleException('Could not create candidate directory')
+        if (!output.isDirectory() && !output.mkdirs()) throw new GradleException('Could not create candidate directory')
         try {
             files.each { name, reference ->
                 File copied = new File(output, name)
