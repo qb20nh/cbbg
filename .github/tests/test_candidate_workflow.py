@@ -24,7 +24,7 @@ class CandidateWorkflowTest(unittest.TestCase):
         for suffix in ('scenarios', 'mods', 'linux-x86_64'):
             (locks / f'26.3-fabric-{suffix}.json').write_text('{}')
         launcher = self.root / 'gradlew'
-        launcher.write_text('#!/usr/bin/env python3\nimport json,sys\nfrom pathlib import Path\n'
+        launcher.write_text('#!/usr/bin/env python3\nimport json,os,sys\nfrom pathlib import Path\n'
                             'args=sys.argv[1:]\n'
                             'with Path("gradle-arguments.jsonl").open("a") as out: out.write(json.dumps(args)+"\\n")\n'
                             'if args[-1] == "targetMatrix":\n'
@@ -32,7 +32,8 @@ class CandidateWorkflowTest(unittest.TestCase):
                             '  if target not in ("26.3-fabric", "26.3-quilt"): sys.exit(1)\n'
                             '  profile="fabric-modern" if target == "26.3-fabric" else "quilt"\n'
                             '  output=next(a.split("=",1)[1] for a in args if a.startswith("-Poutput="))\n'
-                            '  Path(output).write_text(json.dumps({"include":[{"id":target,"java":25,"buildProfile":profile}]}))\n')
+                            '  Path(output).write_text(json.dumps({"include":[{"id":target,"java":25,"buildProfile":profile}]}))\n'
+                            'if args[-1] == "releaseNotes" and os.environ.get("MISSING_RELEASE_NOTES") == "true": sys.exit(2)\n')
         launcher.chmod(0o755)
 
     def run_step(self, name, cwd=None):
@@ -73,6 +74,18 @@ class CandidateWorkflowTest(unittest.TestCase):
         self.assertIn('-Prelease=v1.4.0', calls[1])
         self.assertIn('-Poutput=build/release-candidate', calls[1])
 
+    def test_selects_notes_for_the_release_tag_and_target(self):
+        self.env['TARGET'] = '26.3-fabric'
+        result = self.run_step('Select release notes')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        args = json.loads((self.root / 'gradle-arguments.jsonl').read_text().splitlines()[-1])
+        self.assertEqual(args[-1], 'releaseNotes')
+        self.assertIn('-Prelease=v1.4.0', args)
+        self.assertIn('-Ptarget=26.3-fabric', args)
+        self.assertIn('-Poutput=build/release-notes.md', args)
+        self.env['MISSING_RELEASE_NOTES'] = 'true'
+        self.assertNotEqual(self.run_step('Select release notes').returncode, 0)
+
     def test_creates_draft_with_existing_tag_and_candidate_files(self):
         command = self.root / 'gh'
         command.write_text('#!/usr/bin/env python3\nimport json, sys\n'
@@ -93,6 +106,7 @@ class CandidateWorkflowTest(unittest.TestCase):
                 self.assertEqual(arguments[:3], ['release', 'create', tag])
                 self.assertIn('--draft', arguments)
                 self.assertIn('--verify-tag', arguments)
+                self.assertEqual(arguments[arguments.index('--notes-file') + 1], 'build/release-notes.md')
                 self.assertEqual('--prerelease' in arguments, '-rc.' in tag)
                 for path in bundle.iterdir():
                     self.assertIn(path.relative_to(self.root).as_posix(), arguments)

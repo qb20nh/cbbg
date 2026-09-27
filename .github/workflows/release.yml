@@ -61,6 +61,13 @@ jobs:
           done
           printf 'target=%s\njava=%s\nprofile=%s\n' "$target" "$java" "$profile" >> "$GITHUB_OUTPUT"
 
+      - name: Select release notes
+        env:
+          TARGET: ${{ steps.selection.outputs.target }}
+        run: |
+          ./gradlew --no-daemon "-Prelease=$GITHUB_REF_NAME" "-Ptarget=$TARGET" \
+            -Poutput=build/release-notes.md releaseNotes
+
       - name: Check release does not already exist
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -133,5 +140,5 @@ jobs:
           fi
           gh release create "${GITHUB_REF_NAME}" build/release-candidate/* \
             --verify-tag --draft --title "cbbg ${GITHUB_REF_NAME#v}" \
-            --notes "Candidate for local acceptance testing. Release notes will be added before publication." \
+            --notes-file build/release-notes.md \
             "${flags[@]}"

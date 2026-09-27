@@ -4,12 +4,22 @@ This project uses [Keep a Changelog](https://keepachangelog.com/) and [Semantic 
 
 ## [Unreleased]
 
-### Maintenance lines
+## [1.4.1 for Minecraft 26.3 Fabric] - 2026-09-27 <!-- [1.4.1-mc26.3-fabric] -->
 
-- The Minecraft 1.21.1 backport is maintained on the `mc1.21.1` branch.
-  - Backport changes from `main` when applicable.
-  - Release tags use `v<mod_version>(-prerelease)?+mc<minecraft_version>` (SemVer build metadata; `-` is reserved for prereleases).
-  - Release tags are branch-gated: the tagged commit must be contained in `main` or `mc<minecraft_version>`.
+### Added
+
+- Minecraft 26.3 Fabric support for OpenGL and Vulkan.
+- Suspend dithering while Sulkan shaderpacks are active.
+
+### Changed
+
+- Smaller jar size by implementing our own ealry entry and removing the bundled AsmFabricLoader library.
+- Even smaller jar size with ProGuard. Source mappings included in release files.
+
+### Fixed
+
+- Fixed various bugs and edge case behavior around noise generation and cache saving/loading.
+- Use the currently displayed noise frame in screenshots instead of re-dithering it from scratch.
 
 ## [1.4.0] - 2026-09-22
 

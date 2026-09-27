@@ -53,6 +53,16 @@ class ReleasePlugin implements Plugin<Project> {
                 doLast(action)
             }
         }
+        task('releaseNotes', 'Select changelog notes for one release version, Minecraft version and loader.') {
+            String tag = required('release')
+            CandidateFiles.releaseIdentity(tag, '0' * 40)
+            List<Map> targets = TargetCatalog.read(new File(source(), 'targets.json')).select(required('target'))
+            if (targets.size() != 1) throw new GradleException('Release notes require one target')
+            String notes = ChangelogNotes.select(new File(source(), 'CHANGELOG.md'), tag.substring(1), targets.first())
+            File output = input('output')
+            output.parentFile.mkdirs()
+            output.setText(notes, 'UTF-8')
+        }
         task('retrace', 'Decode a crash with its release mapping.') {
             RetraceLog.translate(input('candidate'), required('target'), input('crash'), input('output'))
         }

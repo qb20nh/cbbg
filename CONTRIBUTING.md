@@ -40,6 +40,31 @@ historical `vX.Y.Z+mc<minecraft_version>` releases.
 
 ## Releases
 
+Give each release entry a readable version, Minecraft version and loader, followed
+by a stable identifier in an HTML comment:
+
+```md
+## [1.4.1 for Minecraft 26.3 Fabric] - 2026-09-27 <!-- [1.4.1-mc26.3-fabric] -->
+```
+
+Use `<mod_version>-mc<minecraft_version>-<loader>` for the comment identifier.
+Create one entry per target. Describe changes users can experience compared with
+that target's previous published release. Include every such change and combine
+related items. Write briefly without dropping information; explain changes for
+readers who have no development-session context.
+
+Extract the selected entry with Gradle:
+
+```sh
+./gradlew releaseNotes -Prelease=v1.4.1 -Ptarget=26.3-fabric -Poutput=build/release-notes.md
+```
+
+The task selects the hidden identifier and rejects missing, duplicate or empty
+entries. Historical `## [X.Y.Z] - YYYY-MM-DD` headings remain supported. Candidate
+CI runs the same task and uses its output for the draft body. Pass the generated
+file as `-Pnotes=build/release-notes.md` to `checkRelease` and `publishRelease`.
+Modrinth and CurseForge receive the finalized GitHub release body.
+
 1. Finish the selected target and update its version and changelog. Obtain
    approval before release preparation commits, pushes and tags.
 2. After approval, create and push the release tag. Manually dispatch
