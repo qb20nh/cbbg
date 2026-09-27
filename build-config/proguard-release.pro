@@ -7,7 +7,7 @@
 -keep class com.qb20nh.cbbg.compat.modmenu.CbbgModMenuApi { *; }
 -keep class com.qb20nh.cbbg.mixin.** { *; }
 
-# JsonReader's Gson 2.2.4 compatibility bridge has a constructor that only
+# JsonReader's Gson compatibility bridge has a constructor that only
 # calls its empty superclass constructor. Preserve constructor semantics.
 -assumenoexternalsideeffects class com.qb20nh.cbbg.internal.gson.stream.JsonReader$1 {
     <init>();

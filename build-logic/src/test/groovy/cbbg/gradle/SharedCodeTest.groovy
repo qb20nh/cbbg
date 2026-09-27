@@ -17,7 +17,7 @@ class SharedCodeTest {
         write('shared-code.gradle', new File(repository, 'build-config/shared-code.gradle').text)
         write('build-config/private-gson.map',
                 new File(repository, 'build-config/private-gson.map').text)
-        for (String name : ['Apache-2.0.txt', 'Gson-2.2.4.txt']) {
+        for (String name : ['Apache-2.0.txt', 'Gson-2.8.9.txt']) {
             write('build-config/licenses/' + name,
                     new File(repository, 'build-config/licenses/' + name).text)
         }
@@ -40,13 +40,14 @@ tasks.register('privateGsonJar', Jar) {
     archiveFileName = 'gson-stream.jar'
     from('private-parser')
 }
+ext.privateGsonVersion = '2.8.9'
 ext.privateGsonArchive = tasks.named('privateGsonJar', Jar).flatMap { it.archiveFile }
-ext.privateGsonSourceArchive = files('gson-2.2.4-sources.jar')
+ext.privateGsonSourceArchive = files('gson-2.8.9-sources.jar')
 ext.privateGsonMapping = files('mapping.txt')
 ''')
         write('core/private-parser/com/qb20nh/cbbg/internal/gson/stream/JsonReader.class',
                 'private parser fixture')
-        write('core/gson-2.2.4-sources.jar', 'source fixture')
+        write('core/gson-2.8.9-sources.jar', 'source fixture')
         write('core/mapping.txt', 'mapping fixture')
         write('core/src/main/java/example/Common.java', 'package example; public class Common {}')
         write('rendering/src/main/java/example/Rendering.java', 'package example; public class Rendering {}')
@@ -67,12 +68,12 @@ ext.privateGsonMapping = files('mapping.txt')
                     assertEquals('private parser fixture',
                             zip.getInputStream(parser).getText('UTF-8'))
                     assertNull(zip.getEntry('com/google/gson/Gson.class'))
-                    assertNotNull(zip.getEntry('META-INF/licenses/gson-2.2.4/Apache-2.0.txt'))
-                    assertNotNull(zip.getEntry('META-INF/licenses/gson-2.2.4/Gson-2.2.4.txt'))
+                    assertNotNull(zip.getEntry('META-INF/licenses/gson-2.8.9/Apache-2.0.txt'))
+                    assertNotNull(zip.getEntry('META-INF/licenses/gson-2.8.9/Gson-2.8.9.txt'))
                 } else {
-                    assertNotNull(zip.getEntry('third-party/gson-2.2.4/gson-2.2.4-sources.jar'))
-                    assertNotNull(zip.getEntry('third-party/gson-2.2.4/private-gson.map'))
-                    assertNotNull(zip.getEntry('third-party/gson-2.2.4/mapping.txt'))
+                    assertNotNull(zip.getEntry('third-party/gson-2.8.9/gson-2.8.9-sources.jar'))
+                    assertNotNull(zip.getEntry('third-party/gson-2.8.9/private-gson.map'))
+                    assertNotNull(zip.getEntry('third-party/gson-2.8.9/mapping.txt'))
                 }
             }
         }

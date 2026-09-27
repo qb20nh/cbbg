@@ -7,7 +7,8 @@ def privateGson = project(':core')
 def privateGsonTask = privateGson.tasks.named('privateGsonJar')
 def sharedRepositoryRoot = privateGson.projectDir.parentFile
 def gsonLicense = new File(sharedRepositoryRoot, 'build-config/licenses/Apache-2.0.txt')
-def gsonNotice = new File(sharedRepositoryRoot, 'build-config/licenses/Gson-2.2.4.txt')
+def gsonVersion = privateGson.privateGsonVersion
+def gsonNotice = new File(sharedRepositoryRoot, "build-config/licenses/Gson-${gsonVersion}.txt")
 plugins.withId('net.fabricmc.fabric-loom') {
     def modFiles = files(sourceSets.main.output,
             sharedProjects.collect { it.sourceSets.main.output },
@@ -29,17 +30,17 @@ tasks.withType(Jar).configureEach {
         from({ zipTree(privateGson.privateGsonArchive.get().asFile) }) {
             exclude 'META-INF/**'
         }
-        from(gsonLicense) { into 'META-INF/licenses/gson-2.2.4' }
-        from(gsonNotice) { into 'META-INF/licenses/gson-2.2.4' }
+        from(gsonLicense) { into "META-INF/licenses/gson-${gsonVersion}" }
+        from(gsonNotice) { into "META-INF/licenses/gson-${gsonVersion}" }
     } else if (name == 'sourcesJar') {
         from(sharedProjects.collect { it.sourceSets.main.allSource })
         dependsOn privateGsonTask
-        from(privateGson.privateGsonSourceArchive) { into 'third-party/gson-2.2.4' }
-        from(gsonLicense) { into 'third-party/gson-2.2.4' }
-        from(gsonNotice) { into 'third-party/gson-2.2.4' }
+        from(privateGson.privateGsonSourceArchive) { into "third-party/gson-${gsonVersion}" }
+        from(gsonLicense) { into "third-party/gson-${gsonVersion}" }
+        from(gsonNotice) { into "third-party/gson-${gsonVersion}" }
         from(new File(sharedRepositoryRoot, 'build-config/private-gson.map')) {
-            into 'third-party/gson-2.2.4'
+            into "third-party/gson-${gsonVersion}"
         }
-        from(privateGson.privateGsonMapping) { into 'third-party/gson-2.2.4' }
+        from(privateGson.privateGsonMapping) { into "third-party/gson-${gsonVersion}" }
     }
 }

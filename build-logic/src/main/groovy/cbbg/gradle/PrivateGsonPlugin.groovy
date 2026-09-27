@@ -9,15 +9,18 @@ import proguard.gradle.ProGuardTask
 import javax.inject.Inject
 
 class PrivateGsonPlugin implements Plugin<Project> {
+    static final String GSON_VERSION = '2.8.9'
+
     private final JavaToolchainService toolchains
 
     @Inject PrivateGsonPlugin(JavaToolchainService toolchains) { this.toolchains = toolchains }
 
     void apply(Project project) {
+        project.extensions.extraProperties.set('privateGsonVersion', GSON_VERSION)
         def gson = project.configurations.create('privateGsonInput') { transitive = false }
         def gsonSources = project.configurations.create('privateGsonSources') { transitive = false }
-        project.dependencies.add(gson.name, 'com.google.code.gson:gson:2.2.4')
-        project.dependencies.add(gsonSources.name, 'com.google.code.gson:gson:2.2.4:sources@jar')
+        project.dependencies.add(gson.name, "com.google.code.gson:gson:${GSON_VERSION}")
+        project.dependencies.add(gsonSources.name, "com.google.code.gson:gson:${GSON_VERSION}:sources@jar")
 
         def rules = new File(project.projectDir.parentFile, 'build-config/private-gson.pro')
         def mapping = new File(project.projectDir.parentFile, 'build-config/private-gson.map')

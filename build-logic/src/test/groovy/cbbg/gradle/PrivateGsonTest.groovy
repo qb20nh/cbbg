@@ -58,6 +58,12 @@ tasks.register('prepareRuntimeFixture') {
         new ZipFile(archive).withCloseable { zip ->
             assertTrue(zip.entries().toList().any { it.name.startsWith('com/qb20nh/cbbg/internal/gson/') })
             assertFalse(zip.entries().toList().any { it.name.startsWith('java/') || it.name.startsWith('javax/') })
+            assertNull(zip.getEntry('com/google/gson/Gson.class'))
+            zip.entries().toList().findAll { it.name.endsWith('.class') }.each { entry ->
+                byte[] bytes = zip.getInputStream(entry).bytes
+                int major = ((bytes[6] & 0xff) << 8) | (bytes[7] & 0xff)
+                assertTrue(major <= 52, entry.name + ' must run on Java 8')
+            }
         }
         byte[] original = archive.bytes
         def repeated = runner('privateGsonJar').build()
