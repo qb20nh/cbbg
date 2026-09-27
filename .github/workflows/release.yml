@@ -85,6 +85,7 @@ jobs:
       - name: Test candidate tooling
         run: |
           ./gradlew -p build-logic --no-daemon test
+          python3 -m pip install --disable-pip-version-check -r .github/scripts/requirements.txt
           python3 -m unittest discover -s scripts/tests
           python3 -m unittest discover -s .github/tests
 

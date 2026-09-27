@@ -13,9 +13,9 @@ jobs:
   plan:
     runs-on: ubuntu-latest
     outputs:
-      matrix: ${{ steps.targets.outputs.matrix }}
-      build: ${{ steps.targets.outputs.build }}
-      core: ${{ steps.targets.outputs.core }}
+      matrix: ${{ steps.batch.outputs.matrix || steps.targets.outputs.matrix }}
+      build: ${{ steps.batch.outputs.build || steps.targets.outputs.build }}
+      core: ${{ steps.batch.outputs.core || steps.targets.outputs.core }}
     steps:
       - uses: actions/checkout@v6.0.1
         with:
@@ -36,6 +36,16 @@ jobs:
           mkdir -p build
           ./gradlew --no-daemon "-Pbase=$BASE_COMMIT" \
             -Poutput=build/change-impact.json "-PgithubOutput=$GITHUB_OUTPUT" selectChecks
+      - name: Select full batch CI
+        id: batch
+        if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'automation/dependabot-major-batch/')
+        run: |
+          targets="$(jq -er '.ciTargets | select(length > 0) | join(",")' targets.json)"
+          ./gradlew --no-daemon "-Ptargets=$targets" -PrequireImplemented=true \
+            -Poutput=build/batch-matrix.json targetMatrix
+          jq -e '.include | length > 0' build/batch-matrix.json
+          printf 'matrix=%s\nbuild=true\ncore=true\n' \
+            "$(jq -c . build/batch-matrix.json)" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@v6
         with:
           name: change-impact
@@ -43,6 +53,7 @@ jobs:
       - name: Test build and release tooling
         run: |
           ./gradlew -p build-logic --no-daemon test
+          python3 -m pip install --disable-pip-version-check -r .github/scripts/requirements.txt
           python3 -m unittest discover -s scripts/tests
           python3 -m unittest discover -s .github/tests
 
