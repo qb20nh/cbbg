@@ -12,6 +12,36 @@ initscript {
     }
 }
 
+// This init script changes resolution only for a standalone security inventory.
+if (gradle.parent == null && gradle.startParameter.taskNames != ['cyclonedxBom']) {
+    throw new GradleException('dependency-sbom.init.gradle requires only cyclonedxBom')
+}
+
+// Cut Minecraft's library origins, preserving Loom wrappers which also carry
+// loader and development dependencies. Shared coordinates requested by CBBG
+// remain reachable through their own dependency paths.
+def minecraftOrigins = [
+    'minecraft', 'minecraftClientLibraries', 'minecraftClientRuntimeLibraries',
+    'minecraftServerLibraries', 'minecraftServerRuntimeLibraries', 'minecraftNatives'
+] as Set
+
+gradle.projectsEvaluated {
+    gradle.rootProject.allprojects { project ->
+        if (project.plugins.hasPlugin('net.fabricmc.fabric-loom')) {
+            project.configurations.each { configuration ->
+                def parents = configuration.extendsFrom
+                def retained = parents.findAll { !minecraftOrigins.contains(it.name) }
+                if (retained.size() != parents.size()) {
+                    configuration.setExtendsFrom(retained)
+                }
+            }
+            project.tasks.named('cyclonedxDirectBom', CyclonedxDirectTask) {
+                skipConfigs = minecraftOrigins.toList()
+            }
+        }
+    }
+}
+
 gradle.rootProject { root ->
     root.pluginManager.apply(CyclonedxPlugin)
     root.allprojects { project ->
