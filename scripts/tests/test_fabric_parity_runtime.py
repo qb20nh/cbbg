@@ -283,14 +283,9 @@ class LauncherFailureTests(unittest.TestCase):
             launcher.main()
         self.assertNotIn('scenarios', self.receipt())
 
-    def prepare_restart(self, shader='iris', external=False):
-        entry = ('com.qb20nh.cbbg.gametest.' + shader.capitalize()
-                 + ('External' if external else '') + 'RestartGameTest')
-        backend = 'vulkan' if shader == 'sulkan' else 'opengl'
-        if shader == 'sulkan':
-            args = list(sys.argv)
-            args[args.index('--backend') + 1] = backend
-            self.enterContext(patch.object(sys, 'argv', args))
+    def prepare_restart(self):
+        entry = 'com.qb20nh.cbbg.gametest.IrisRestartGameTest'
+        backend = 'opengl'
         with zipfile.ZipFile(self.driver, 'w') as jar:
             jar.writestr('fabric.mod.json', json.dumps({
                 'id': 'cbbg-renderer-test',
@@ -307,19 +302,10 @@ class LauncherFailureTests(unittest.TestCase):
             if phase == 'prepare':
                 (self.game / 'config').mkdir()
                 (self.game / 'config/cbbg.json').write_text('{"mode":"ENABLED"}')
-                if shader == 'sulkan':
-                    (self.game / 'config/sulkan-shaders.json').write_text(json.dumps({
-                        'enabled': True, 'selectedPackId': 'cbbg-native-test' if external else '__builtin__'}))
-                    if external:
-                        pack = self.game / 'shaders/cbbg-native-test'
-                        pack.mkdir(parents=True)
-                        (pack / 'sulkan.json').write_text('{"version":1}')
-                        (pack / 'color.fsh').write_text('fixture shader')
-                else:
-                    (self.game / 'config/iris.properties').write_text('enableShaders=true')
-                    pack = self.game / 'shaderpacks/cbbg-parity/shaders'
-                    pack.mkdir(parents=True)
-                    (pack / 'final.fsh').write_text('fixture shader')
+                (self.game / 'config/iris.properties').write_text('enableShaders=true')
+                pack = self.game / 'shaderpacks/cbbg-parity/shaders'
+                pack.mkdir(parents=True)
+                (pack / 'final.fsh').write_text('fixture shader')
             return subprocess.CompletedProcess(command, 0)
         self.run.side_effect = client
         self.enterContext(patch.object(launcher.subprocess, 'check_output',
@@ -338,63 +324,6 @@ class LauncherFailureTests(unittest.TestCase):
         self.assertEqual(verified['prepareReceiptSha256'], launcher.digest(prepare))
         self.assertEqual(verified['inputState'], json.loads(before)['persistedState'])
         self.assertEqual(self.run.call_count, 2)
-
-    def test_sulkan_restart_records_settings_from_prepare(self):
-        self.prepare_restart('sulkan')
-        prepare = self.game / 'prepare-probe.json'
-        before = prepare.read_bytes()
-        with patch.object(sys, 'argv', sys.argv + ['--restart-phase', 'verify']), patch('builtins.print'):
-            launcher.main()
-        verified = json.loads((self.game / 'verify-probe.json').read_text())
-        self.assertEqual(prepare.read_bytes(), before)
-        self.assertEqual(verified['inputState'], json.loads(before)['persistedState'])
-        self.assertEqual(set(verified['inputState']), {'config/cbbg.json', 'config/sulkan-shaders.json'})
-        self.assertEqual(self.run.call_count, 2)
-
-    def test_sulkan_restart_rejects_changed_shader_settings(self):
-        self.prepare_restart('sulkan')
-        (self.game / 'config/sulkan-shaders.json').write_text('{"enabled":false}')
-        with (patch.object(sys, 'argv', sys.argv + ['--restart-phase', 'verify']),
-              self.assertRaisesRegex(ValueError, 'persisted state changed')):
-            launcher.main()
-        self.assertEqual(self.run.call_count, 1)
-
-    def test_sulkan_restart_rejects_opengl_before_launch(self):
-        with zipfile.ZipFile(self.driver, 'w') as jar:
-            jar.writestr('fabric.mod.json', json.dumps({
-                'id': 'cbbg-renderer-test',
-                'entrypoints': {'fabric-client-gametest': [
-                    'com.qb20nh.cbbg.gametest.SulkanRestartGameTest']}}))
-        with (patch.object(sys, 'argv', sys.argv + ['--restart-phase', 'prepare']),
-              redirect_stderr(io.StringIO()), self.assertRaises(SystemExit)):
-            launcher.main()
-        self.run.assert_not_called()
-        self.assertFalse(self.game.exists())
-
-    def test_external_sulkan_restart_records_pack_files(self):
-        self.prepare_restart('sulkan', external=True)
-        with patch.object(sys, 'argv', sys.argv + ['--restart-phase', 'verify']), patch('builtins.print'):
-            launcher.main()
-        verified = json.loads((self.game / 'verify-probe.json').read_text())
-        self.assertEqual(set(verified['inputState']), {
-            'config/cbbg.json', 'config/sulkan-shaders.json',
-            'shaders/cbbg-native-test/sulkan.json', 'shaders/cbbg-native-test/color.fsh'})
-
-    def test_external_sulkan_restart_rejects_changed_shader(self):
-        self.prepare_restart('sulkan', external=True)
-        (self.game / 'shaders/cbbg-native-test/color.fsh').write_text('different shader')
-        with (patch.object(sys, 'argv', sys.argv + ['--restart-phase', 'verify']),
-              self.assertRaisesRegex(ValueError, 'persisted state changed')):
-            launcher.main()
-        self.assertEqual(self.run.call_count, 1)
-
-    def test_external_sulkan_restart_rejects_missing_shader(self):
-        self.prepare_restart('sulkan', external=True)
-        (self.game / 'shaders/cbbg-native-test/color.fsh').unlink()
-        with (patch.object(sys, 'argv', sys.argv + ['--restart-phase', 'verify']),
-              self.assertRaisesRegex(ValueError, 'restart pack is missing')):
-            launcher.main()
-        self.assertEqual(self.run.call_count, 1)
 
     def test_restart_rejects_changed_settings_without_launch(self):
         self.prepare_restart()

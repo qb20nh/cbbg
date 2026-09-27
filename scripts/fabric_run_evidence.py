@@ -143,7 +143,7 @@ def verify_restart(receipt_path, target, **inputs):
         raise EvidenceError('Restart input state differs from prepare result')
     for name, checksum in after.items():
         checked_file(game, {'path': name, 'sha256': checksum})
-    if restart_state(game, shader) != after:
+    if restart_state(game) != after:
         raise EvidenceError('Restart saved state inventory differs')
     second.update(prepare_receipt_sha256=first['receipt_sha256'], restart=True,
                   evidence_files=first['evidence_files'] + second['evidence_files'])
