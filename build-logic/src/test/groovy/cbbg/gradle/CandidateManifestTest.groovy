@@ -77,16 +77,24 @@ class CandidateManifestTest {
         record.id = '26.3-quilt'
         fixture.manifest.targets.add(record)
         fixture.file.text = JsonOutput.toJson(fixture.manifest)
-        new CandidateManifest(fixture.file)
+        assertEquals(['26.3-fabric', '26.3-quilt'] as Set,
+                new CandidateManifest(fixture.file).verifyPackages(fixture.root).keySet())
         File different = new File(fixture.bundle, 'different.jar')
         different.text = 'different'
-        ['artifact', 'sources', 'mapping'].each { kind ->
+        ['artifact', 'sources', 'mapping', 'source_inventory'].each { kind ->
             Map previous = record[kind]
             record[kind] = CandidateFiles.reference(fixture.bundle, different.name)
             fixture.file.text = JsonOutput.toJson(fixture.manifest)
             assertThrows(Exception) { new CandidateManifest(fixture.file) }
             record[kind] = previous
         }
+    }
+
+    @Test void preservedUpstreamVersionHasNoLoaderSuffix() {
+        assertEquals('1.4.0+mc26.2', CandidateManifest.packageVersion('v1.4.0',
+                [minecraft: '26.2', loader: 'fabric', buildProfile: 'fabric-upstream']))
+        assertEquals('1.4.0+mc26.3-fabric', CandidateManifest.packageVersion('v1.4.0',
+                [minecraft: '26.3', loader: 'fabric', buildProfile: 'fabric-modern']))
     }
 
     @Test void mappedCandidatesRejectMissingOrMismatchedEmbeddedMapping() {

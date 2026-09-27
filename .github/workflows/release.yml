@@ -4,11 +4,10 @@ on:
   workflow_dispatch:
     inputs:
       target:
-        description: "Candidate target; run this workflow from the release tag"
+        description: "Explicit comma-separated candidate targets; run from the release tag"
         required: true
-        type: choice
-        options:
-          - 26.3-fabric
+        type: string
+        default: 26.3-fabric
 
 permissions:
   contents: write
@@ -46,26 +45,33 @@ jobs:
           mkdir -p build
           ./gradlew --no-daemon "-Ptarget=$REQUESTED_TARGET" \
             -PrequireImplemented=true -Poutput=build/release-selection.json targetMatrix
-          target="$(jq -r '.include[0].id' build/release-selection.json)"
-          profile="$(jq -r '.include[0].buildProfile' build/release-selection.json)"
-          java="$(jq -r '.include[0].java' build/release-selection.json)"
-          if [[ "$target" != "$REQUESTED_TARGET" || "$profile" != "fabric-modern" ]]; then
-            echo "Candidate workflow is not configured for this target."
-            exit 1
-          fi
-          for suffix in scenarios mods linux-x86_64; do
-            if [[ ! -f "runtime-locks/$target-$suffix.json" ]]; then
-              echo "Missing candidate test inputs: $suffix"
+          while IFS=$'\t' read -r target profile java; do
+            if [[ ! -f "build-config/$profile/build.gradle" ]]; then
+              echo "Missing catalog build profile: $profile"
               exit 1
             fi
+          done < <(jq -r '.include[] | [.id, .buildProfile, .java] | @tsv' build/release-selection.json)
+          IFS=',' read -ra targets <<< "$REQUESTED_TARGET"
+          for target in "${targets[@]}"; do
+            for suffix in scenarios mods linux-x86_64; do
+              if [[ ! -f "runtime-locks/$target-$suffix.json" ]]; then
+                echo "Missing candidate test inputs for $target: $suffix"
+                exit 1
+              fi
+            done
           done
-          printf 'target=%s\njava=%s\nprofile=%s\n' "$target" "$java" "$profile" >> "$GITHUB_OUTPUT"
+          printf 'targets=%s\n' "$REQUESTED_TARGET" >> "$GITHUB_OUTPUT"
+          echo 'java<<JAVA_VERSIONS' >> "$GITHUB_OUTPUT"
+          jq -r --slurpfile catalog targets.json \
+            '([25] + [.include[] | .java, (.id as $id | $catalog[0].targets[] | select(.id == $id) | (.buildJava // 25))]) | unique | (map(select(. != 25)) + [25]) | .[]' \
+            build/release-selection.json >> "$GITHUB_OUTPUT"
+          echo 'JAVA_VERSIONS' >> "$GITHUB_OUTPUT"
 
       - name: Select release notes
         env:
-          TARGET: ${{ steps.selection.outputs.target }}
+          TARGETS: ${{ steps.selection.outputs.targets }}
         run: |
-          ./gradlew --no-daemon "-Prelease=$GITHUB_REF_NAME" "-Ptarget=$TARGET" \
+          ./gradlew --no-daemon "-Prelease=$GITHUB_REF_NAME" "-Ptargets=$TARGETS" \
             -Poutput=build/release-notes.md releaseNotes
 
       - name: Check release does not already exist
@@ -78,7 +84,7 @@ jobs:
             exit 1
           fi
 
-      - name: Set up target Java ${{ steps.selection.outputs.java }}
+      - name: Set up catalog Java versions
         uses: actions/setup-java@v5.1.0
         with:
           java-version: ${{ steps.selection.outputs.java }}
@@ -97,16 +103,16 @@ jobs:
 
       - name: Build and bundle candidate
         env:
-          TARGET: ${{ steps.selection.outputs.target }}
-          BUILD_PROFILE: ${{ steps.selection.outputs.profile }}
+          TARGETS: ${{ steps.selection.outputs.targets }}
         run: |
-          ./gradlew --no-daemon --console=plain "-Ptarget=${TARGET}" candidateBuildOutputs
+          export JAVA_HOME="$JAVA_HOME_25_X64"
+          while IFS= read -r target; do
+            ./gradlew --no-daemon --console=plain "-Ptarget=${target}" candidateBuildOutputs
+          done < <(jq -r '.include[].id' build/release-selection.json)
           ./gradlew --no-daemon --console=plain \
-            "-PbuildOutputs=build/targets/${TARGET}/candidate-build-outputs.json" \
+            "-Ptargets=${TARGETS}" \
             -Poutput=build/release-candidate "-Prelease=${GITHUB_REF_NAME}" \
-            "-Pcontract=runtime-locks/${TARGET}-scenarios.json" \
-            "-PruntimeLock=runtime-locks/${TARGET}-linux-x86_64.json" \
-            "-PdependencyLock=runtime-locks/${TARGET}-mods.json" bundleCandidate
+            bundleCandidate
 
       - name: Attest candidate files
         id: provenance

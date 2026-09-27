@@ -46,8 +46,9 @@ class CandidateManifest {
         specifications = expected
         specifications.each { id, specification ->
             if (specification.artifactOf) {
-                (['artifact', 'sources'] + (data.schema == 3 ? ['mapping'] : [])).each { kind ->
-                    if (records[id][kind].sha256 != records[specification.artifactOf][kind].sha256) {
+                (['artifact', 'sources', 'source_inventory'] + (data.schema == 3 ? ['mapping'] : []) +
+                        (records[id].containsKey('sbom') || records[specification.artifactOf].containsKey('sbom') ? ['sbom'] : [])).each { kind ->
+                    if (records[id][kind]?.sha256 != records[specification.artifactOf][kind]?.sha256) {
                         throw new GradleException('Shared ' + kind + ' differs from owner: ' + id)
                     }
                 }
@@ -69,13 +70,18 @@ class CandidateManifest {
     Map verifyPackages(File sourceRoot) {
         def reports = [:]
         records.each { id, record ->
-            def target = specifications[id]
-            String version = data.release.substring(1) + '+mc' + target.minecraft + '-' + target.loader
+            def runtime = specifications[id]
+            def target = specifications[runtime.artifactOf ?: id]
+            String version = packageVersion(data.release as String, target)
             PackageChecks.verifyCandidatePackage(file.parentFile, record, target, version, sourceRoot)
             reports[id] = [target: id, manifest_sha256: CandidateFiles.sha256(file),
                            source_commit: data.commit, release: data.release]
         }
         reports
+    }
+
+    static String packageVersion(String release, Map target) {
+        release.substring(1) + '+mc' + target.minecraft + (target.buildProfile == 'fabric-upstream' ? '' : '-' + target.loader)
     }
 
     Map<String, String> releaseFiles(boolean requireImplemented = true) {

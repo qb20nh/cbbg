@@ -133,6 +133,7 @@ class TargetsPlugin implements Plugin<Project> {
             group = 'distribution'
             description = 'Bundle recorded build outputs without rebuilding them.'
             sourceRoot.set(project.layout.projectDirectory)
+            selectedTargets.set(project.providers.gradleProperty('targets').map { it.split(',', -1).toList() }.orElse([]))
             buildOutputs.set(project.layout.file(project.providers.gradleProperty('buildOutputs').map { project.file(it) }))
             contract.set(project.layout.file(project.providers.gradleProperty('contract').map { project.file(it) }))
             runtimeLock.set(project.layout.file(project.providers.gradleProperty('runtimeLock').map { project.file(it) }))

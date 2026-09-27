@@ -307,6 +307,69 @@ class ReleaseChecksTest {
     }
 
     @Test
+    void sharedReleasePreflightChecksAllRecordsAndSelectionRevalidatesRelease() {
+        Map fixture = SharedPublicationFixture.multiple(directory)
+        Closure fetch = { String url, Map headers ->
+            if (url.endsWith('/tag/game_version')) return [[version: '26.3'], [version: '26.2']]
+            if (url.endsWith('/tag/loader')) return [[name: 'fabric']]
+            throw new AssertionError('Unexpected lookup: ' + url)
+        }
+        File assets = new File(directory, 'download')
+        File metadataFile = new File(directory, 'publication.json')
+        File github = new File(directory, 'github.txt')
+        Closure run = runFor(fixture, [], true)
+        Map metadata = ReleaseChecks.preparePublication(fixture.manifest.release, 'owner/repo',
+                fixture.root, assets, metadataFile, github, 'modrinth', run, fetch)
+        assertEquals(2, metadata.records.size())
+        assertTrue(github.text.contains('matrix={"target":["26.3-fabric","26.2-fabric"]}'))
+        assertFalse(github.text.readLines().any { it.startsWith('artifact=') })
+        File selectedOutput = new File(directory, 'selected.txt')
+        Map selected = ReleaseChecks.selectPublication(fixture.manifest.release, 'owner/repo',
+                fixture.root, assets, metadataFile, '26.2-fabric', selectedOutput, run, fetch, 'modrinth')
+        assertEquals(['26.2-fabric'], selected.targets)
+        assertTrue(selectedOutput.text.contains('target=26.2-fabric'))
+        metadata.records[0].modrinth.changelog = 'Changed unrelated record'
+        metadataFile.text = JsonOutput.toJson(metadata)
+        File invalidOutput = new File(directory, 'invalid-selected.txt')
+        assertThrows(IllegalArgumentException) {
+            ReleaseChecks.selectPublication(fixture.manifest.release, 'owner/repo', fixture.root,
+                    assets, metadataFile, '26.2-fabric', invalidOutput, run, fetch, 'modrinth')
+        }
+        assertFalse(invalidOutput.exists())
+    }
+
+    @Test
+    void selectingDraftRetainsDryRunOnlyAndRejectsSourceAndFileChanges() {
+        Map fixture = CandidateFixture.create(directory)
+        File assets = new File(directory, 'download')
+        File metadataFile = new File(directory, 'publication.json')
+        Closure run = runFor(fixture, [])
+        ReleaseChecks.preparePublication(fixture.manifest.release, 'owner/repo', fixture.root,
+                assets, metadataFile, new File(directory, 'github.txt'), 'modrinth', run,
+                modrinthLabels(), true)
+        ReleaseChecks.selectPublication(fixture.manifest.release, 'owner/repo', fixture.root,
+                assets, metadataFile, fixture.target.id, new File(directory, 'selected.txt'),
+                run, modrinthLabels(), 'modrinth')
+        assertTrue(CandidateFiles.read(metadataFile).dry_run_only)
+        Closure changedSource = { List<String> command, File cwd ->
+            command.take(3) == ['git', 'rev-parse', 'HEAD'] ? 'b' * 40 : run(command, cwd)
+        }
+        assertThrows(IllegalArgumentException) {
+            ReleaseChecks.selectPublication(fixture.manifest.release, 'owner/repo', fixture.root,
+                    assets, metadataFile, fixture.target.id, new File(directory, 'invalid-source.txt'),
+                    changedSource, modrinthLabels(), 'modrinth')
+        }
+        new File(assets, fixture.record.artifact.path).append('changed')
+        assertThrows(Exception) {
+            ReleaseChecks.selectPublication(fixture.manifest.release, 'owner/repo', fixture.root,
+                    assets, metadataFile, fixture.target.id, new File(directory, 'invalid-file.txt'),
+                    run, modrinthLabels(), 'modrinth')
+        }
+        assertFalse(new File(directory, 'invalid-source.txt').exists())
+        assertFalse(new File(directory, 'invalid-file.txt').exists())
+    }
+
+    @Test
     void draftDryRunPreflightRetainsPackageAndProvenanceChecksWithoutWrites() {
         Map fixture = CandidateFixture.create(directory)
         List<List<String>> commands = []
@@ -530,6 +593,10 @@ class ReleaseChecksTest {
         assertEquals(2, assets.listFiles().length)
         assertTrue(assets.listFiles().every { it.name.endsWith('.jar') })
         assertFalse(commands.any { it.contains('PATCH') })
+        ReleaseChecks.selectPublication(fixture.tag, 'owner/repo', fixture.root, assets, output,
+                '26.3-fabric', new File(directory, 'legacy-selected.txt'),
+                legacyRun(fixture, []), fetch, 'modrinth')
+        assertTrue(new File(directory, 'legacy-selected.txt').text.contains('target=26.3-fabric'))
     }
 
     @Test

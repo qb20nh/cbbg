@@ -5,7 +5,6 @@ import java.nio.file.Files
 
 class ReleaseChecks {
     private static final String PREDICATE = 'https://slsa.dev/provenance/v1'
-    private static final String TARGET = '26.3-fabric'
 
     static Map provenance(File manifest, File bundle, String repo, Closure run) {
         repository(repo)
@@ -207,9 +206,8 @@ class ReleaseChecks {
         File manifest = new File(assetDir, 'candidate.json')
         CandidateManifest candidate = new CandidateManifest(manifest)
         Map<String, String> files = candidate.releaseFiles()
-        if (candidate.data.release != tag || candidate.data.commit != commit ||
-                candidate.data.selected_targets != [TARGET]) {
-            throw new IllegalArgumentException('Published candidate differs from selected target or source')
+        if (candidate.data.release != tag || candidate.data.commit != commit) {
+            throw new IllegalArgumentException('Published candidate differs from selected release or source')
         }
         if (draft) draftSnapshot(published, tag, files)
         else publishedSnapshot(published, tag, files)
@@ -227,10 +225,13 @@ class ReleaseChecks {
         if (draft) metadata.dry_run_only = true
         checkFiles(assetDir, files)
         CandidateFiles.writeNew(metadataFile, metadata)
-        Map record = (Map) metadata.records[0]
-        File artifact = CandidateFiles.checked(assetDir, candidate.records[TARGET].artifact as Map)
-        File sources = CandidateFiles.checked(assetDir, candidate.records[TARGET].sources as Map)
-        githubOutput.append(githubValues(record, candidate.specifications[TARGET], artifact, sources), 'UTF-8')
+        githubOutput.append(matrixValue(metadata), 'UTF-8')
+        if (metadata.records.size() == 1) {
+            Map record = (Map) metadata.records[0]
+            githubOutput.append(githubValues(record, candidate.specifications[record.targets[0]],
+                    CandidateFiles.checked(assetDir, record.artifact as Map),
+                    CandidateFiles.checked(assetDir, record.sources as Map)), 'UTF-8')
+        }
         metadata
     }
 
@@ -300,9 +301,90 @@ class ReleaseChecks {
         }
         CandidateFiles.writeNew(metadataFile, metadata)
         Map record = (Map) metadata.records[0]
+        githubOutput.append(matrixValue(metadata), 'UTF-8')
         githubOutput.append(githubValues(record, [java: LegacyPublication.javaVersion(source)],
                 new File(assetDir, artifactName), new File(assetDir, sourcesName)), 'UTF-8')
         metadata
+    }
+
+    static Map selectPublication(String tag, String repo, File sourceRoot, File assets,
+                                 File metadataFile, String target, File githubOutput, Closure run,
+                                 Closure fetch = null, String services = 'both') {
+        repository(repo)
+        String hash = CandidateFiles.sha256(metadataFile)
+        Object value = CandidateFiles.read(metadataFile)
+        if (!(value instanceof Map)) throw new IllegalArgumentException('Invalid publishing metadata')
+        Map metadata = (Map) value
+        String commit = sourceCommit(sourceRoot, run)
+        cleanSource(sourceRoot, commit, run)
+        if (metadata.release != tag || metadata.source_commit != commit ||
+                run(['git', 'rev-parse', '--verify', 'refs/tags/' + tag + '^{commit}'], sourceRoot).trim() != commit) {
+            throw new IllegalArgumentException('Publishing metadata differs from selected tag or source')
+        }
+        String endpoint = 'repos/' + repo
+        String tagEndpoint = endpoint + '/commits/' + segment('refs/tags/' + tag)
+        String releaseEndpoint = endpoint + '/releases/tags/' + tag
+        if (api(tagEndpoint, sourceRoot, run).sha != commit) {
+            throw new IllegalArgumentException('Live release tag differs from source checkout')
+        }
+        Map release = api(releaseEndpoint, sourceRoot, run)
+        boolean draft = metadata.dry_run_only == true
+        Map files
+        Map specification
+        Map expected
+        Map snapshot
+        if (metadata.legacy == true) {
+            if (draft) throw new IllegalArgumentException('Legacy draft publication is unsupported')
+            snapshot = publishedSnapshot(release, tag, null, tag.substring(1).split(/\+mc/)[0].contains('-'))
+            expected = LegacyPublication.metadata(sourceRoot, tag, snapshot.body as String,
+                    release.prerelease as boolean, assets, commit)
+            files = expected.records[0].subMap(['artifact', 'sources']).values().collectEntries {
+                [(it.path): it.sha256]
+            }
+            if (files.any { name, digest -> !snapshot.assets.containsKey(name) ||
+                    !(snapshot.assets[name] in [null, 'sha256:' + digest]) }) {
+                throw new IllegalArgumentException('Legacy assets differ from immutable release')
+            }
+            specification = [java: LegacyPublication.javaVersion(sourceRoot)]
+        } else {
+            CandidateManifest candidate = new CandidateManifest(new File(assets, 'candidate.json'))
+            files = candidate.releaseFiles()
+            if (candidate.data.release != tag || candidate.data.commit != commit) {
+                throw new IllegalArgumentException('Candidate differs from selected tag or source')
+            }
+            snapshot = draft ? draftSnapshot(release, tag, files) : publishedSnapshot(release, tag, files)
+            provenance(candidate.file, new File(assets, 'provenance.jsonl'), repo, run)
+            expected = Publication.metadata(candidate.file, sourceRoot, snapshot.body as String)
+            specification = candidate.specifications[target]
+        }
+        expected = Publication.resolve(expected, services, fetch)
+        if (draft) expected.dry_run_only = true
+        if (metadata != expected || localFiles(assets) != files || assets.listFiles().size() != files.size()) {
+            throw new IllegalArgumentException('Publishing metadata or assets differ from checked release')
+        }
+        List<Map> matches = metadata.records.findAll { it.targets[0] == target }
+        if (matches.size() != 1 || specification == null) {
+            throw new IllegalArgumentException('Expected one artifact owner publication record for selected target')
+        }
+        Map current = api(releaseEndpoint, sourceRoot, run)
+        Map currentSnapshot = draft ? draftSnapshot(current, tag, files) :
+                publishedSnapshot(current, tag, metadata.legacy == true ? null : files,
+                        metadata.legacy == true ? release.prerelease as Boolean : null)
+        if (api(tagEndpoint, sourceRoot, run).sha != commit || currentSnapshot != snapshot ||
+                CandidateFiles.sha256(metadataFile) != hash) {
+            throw new IllegalArgumentException('Release or publishing metadata changed during selection')
+        }
+        checkFiles(assets, files)
+        cleanSource(sourceRoot, commit, run)
+        Map record = matches[0]
+        githubOutput.append(githubValues(record, specification,
+                CandidateFiles.checked(assets, record.artifact as Map),
+                CandidateFiles.checked(assets, record.sources as Map)), 'UTF-8')
+        record
+    }
+
+    private static String matrixValue(Map metadata) {
+        'matrix=' + JsonOutput.toJson([target: metadata.records.collect { it.targets[0] }]) + '\n'
     }
 
     private static void identity(Map report, Map expected, String target = null) {
