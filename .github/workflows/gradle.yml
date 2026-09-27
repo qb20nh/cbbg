@@ -41,7 +41,7 @@ jobs:
         if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'automation/dependabot-major-batch/')
         run: |
           targets="$(jq -er '.ciTargets | select(length > 0) | join(",")' targets.json)"
-          ./gradlew --no-daemon "-Ptargets=$targets" -PrequireImplemented=true \
+          ./gradlew --no-daemon "-Ptargets=$targets" \
             -Poutput=build/batch-matrix.json targetMatrix
           jq -e '.include | length > 0' build/batch-matrix.json
           printf 'matrix=%s\nbuild=true\ncore=true\n' \
