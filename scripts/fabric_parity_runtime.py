@@ -98,6 +98,10 @@ def main():
     parser.add_argument('--dependency', action='append', default=[], metavar='NAME=JAR')
     parser.add_argument('--backend', choices=['opengl', 'vulkan'], required=True)
     parser.add_argument('--compat', default='none')
+    parser.add_argument('--loader-version', help='Loader under compatibility testing')
+    parser.add_argument('--fabric-api-version', help='Fabric API under compatibility testing')
+    parser.add_argument('--test-dependency-minimums', action='store_true',
+                        help='Test CBBG dependency minimums without changing candidate bytes')
     parser.add_argument('--timeout', type=int, default=240)
     parser.add_argument('--dsa-mode', choices=['auto', 'emulated'])
     parser.add_argument('--restart-phase', choices=['prepare', 'verify', 'control'])
@@ -123,6 +127,12 @@ def main():
         except ValueError:
             parser.error('Initial CBBG config must be a JSON object')
     target = select_targets(load_catalog(), args.target)[0]
+    if args.loader_version or args.fabric_api_version:
+        target = dict(target, dependencies=dict(target['dependencies']))
+        if args.loader_version:
+            target['dependencies']['loader'] = args.loader_version
+        if args.fabric_api_version:
+            target['dependencies']['fabricApi'] = args.fabric_api_version
     if args.backend not in target['compatibilityProfiles'].get(args.compat, []):
         parser.error('Backend is not supported by the selected catalog profile')
     if version('minecraft-launcher-lib') != '8.0':
@@ -216,6 +226,7 @@ def main():
                'sourceDirty': source_dirty(ROOT),
                'artifacts': {}, 'restartPhase': args.restart_phase,
                'startupMode': args.startup_mode}
+    receipt['dependencyMinimumTest'] = args.test_dependency_minimums
     if args.restart_phase == 'verify':
         previous_path = game / 'prepare-probe.json'
         previous = json.loads(previous_path.read_text())
@@ -253,6 +264,19 @@ def main():
             receipt['initialConfigSha256'] = hashlib.sha256(initial_config).hexdigest()
         if args.startup_mode:
             prepare_startup_cache(game, evidence, args.startup_mode, args.startup_cache)
+        if args.test_dependency_minimums:
+            if args.restart_phase:
+                raise ValueError('Dependency minimum tests require a fresh game directory')
+            config = game / 'config'
+            config.mkdir(exist_ok=True)
+            overrides = {'version': 1, 'overrides': {
+                'cbbg': {'-depends': {'fabricloader': '*', 'fabric-api': '*'},
+                         '+depends': {'fabricloader': '*', 'fabric-api': '*'}},
+                'cbbg-renderer-test': {'-depends': {'fabricloader': '*'},
+                                       '+depends': {'fabricloader': '*'}}}}
+            override_path = config / 'fabric_loader_dependencies.json'
+            override_path.write_text(json.dumps(overrides, indent=2) + '\n')
+            receipt['dependencyOverridesSha256'] = digest(override_path)
         for name, source in sources.items():
             if args.restart_phase != 'verify':
                 shutil.copyfile(source, mods / name)

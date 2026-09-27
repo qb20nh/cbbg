@@ -34,7 +34,7 @@
   },
   "depends": {
     "cbbg": "*",
-    "fabricloader": ">=0.19.5",
+    "fabricloader": ">=${loader_minimum}",
     "minecraft": "26.3",
     "fabric-client-gametest-api-v1": "*"
   }

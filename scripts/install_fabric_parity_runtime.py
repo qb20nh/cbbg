@@ -11,8 +11,8 @@ from runtime_catalog import load_catalog, select_targets
 from fabric_runtime_lock import capture_runtime, fabric_command
 
 
-def validate_profile(profile, target):
-    loader = target["dependencies"]["loader"]
+def validate_profile(profile, target, loader=None):
+    loader = loader or target["dependencies"]["loader"]
     identity = "fabric-loader-" + loader + "-" + target["minecraft"]
     if (profile.get("id") != identity
             or profile.get("inheritsFrom") != target["minecraft"]
@@ -31,22 +31,24 @@ def main():
     parser.add_argument("--runtime", type=Path, required=True)
     parser.add_argument("--shared-runtime", type=Path)
     parser.add_argument("--resume", action="store_true")
+    parser.add_argument("--loader-version", help="Loader under compatibility testing")
     args = parser.parse_args()
     selected = select_targets(load_catalog(), args.target)
     if len(selected) != 1 or selected[0]["loader"] != "fabric":
         parser.error("Select exactly one Fabric target")
     target = selected[0]
+    loader = args.loader_version or target["dependencies"]["loader"]
     if version("minecraft-launcher-lib") != "8.0":
         raise ValueError("Use minecraft-launcher-lib==8.0 in an isolated environment")
     import requests
     from minecraft_launcher_lib.install import install_minecraft_version
 
     url = ("https://meta.fabricmc.net/v2/versions/loader/" + target["minecraft"]
-           + "/" + target["dependencies"]["loader"] + "/profile/json")
+           + "/" + loader + "/profile/json")
     response = requests.get(url, timeout=30)
     response.raise_for_status()
     profile = response.json()
-    identity = validate_profile(profile, target)
+    identity = validate_profile(profile, target, loader)
     runtime = args.runtime.resolve()
     receipt_path = runtime / "cbbg-install-receipt.json"
     if args.resume:
@@ -73,10 +75,10 @@ def main():
         profile_path.write_bytes(response.content)
         install_minecraft_version(identity, runtime,
                                   callback={"setStatus": lambda text: print(text, flush=True)})
-        loader = target["dependencies"]["loader"]
         jar = runtime / "libraries/net/fabricmc/fabric-loader" / loader / ("fabric-loader-" + loader + ".jar")
         digest = hashlib.sha256(jar.read_bytes()).hexdigest()
-        expected = target["dependencies"].get("loaderSha256")
+        expected = (target["dependencies"].get("loaderSha256")
+                    if loader == target["dependencies"]["loader"] else None)
         if expected is not None and digest != expected:
             raise ValueError("Fabric loader checksum mismatch")
         lock = capture_runtime(runtime, identity, fabric_command(runtime, identity))

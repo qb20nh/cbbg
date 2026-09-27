@@ -206,6 +206,9 @@ if (targetId == '26.3-fabric') {
         dependsOn tasks.named('optimizeReleaseJar')
     }
     tasks.named('processProcessedGametestResources') {
+        def loaderMinimum = target.dependencies.minimumLoader ?: target.dependencies.loader
+        inputs.property('loaderMinimum', loaderMinimum)
+        filesMatching('fabric.mod.json') { expand(loader_minimum: loaderMinimum) }
         from(new File(repositoryRoot, 'renderers/modern/src/gametest/resources')) {
             include 'cbbg-iris-fixture/**'
         }
@@ -296,7 +299,9 @@ tasks.named('processResources') {
         }
     }
     def properties = [version: project.version, minecraft_version: target.minecraft,
-                      loader_version: target.dependencies.loader, java_version: target.java,
+                      loader_version: target.dependencies.minimumLoader ?: target.dependencies.loader,
+                      fabric_api_minimum: target.dependencies.minimumFabricApi ? '>=' + target.dependencies.minimumFabricApi : '*',
+                      java_version: target.java,
                       renderer_family: target.renderer,
                       shader_import: target.renderer == 'blaze-gpu-format' ? '#moj_import' : '#include']
     inputs.properties(properties)
@@ -319,6 +324,9 @@ tasks.named('processResources') {
 }
 
 apply from: new File(repositoryRoot, 'build-config/source-inventory.gradle')
+if (target.renderer == 'renderpearl') {
+    apply from: new File(repositoryRoot, 'build-config/fabric-compatibility.gradle')
+}
 
 tasks.named('sourcesJar') {
     dependsOn tasks.named('sourceInventory')
