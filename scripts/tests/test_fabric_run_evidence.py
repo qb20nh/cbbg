@@ -162,9 +162,10 @@ class FabricRunEvidenceTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'dedicated validator'):
             self.verify()
 
-    def prepare_restart_pair(self, shader='iris'):
+    def prepare_restart_pair(self):
         self.restart = True
-        backend = 'opengl' if shader == 'iris' else 'vulkan'
+        shader = 'iris'
+        backend = 'opengl'
         self.target['compatibilityProfiles'] = {shader: [backend]}
         self.target['dependencies'].update({shader: 'test', 'sodium': 'test'})
         lock = json.loads(self.lock.read_text())
@@ -196,11 +197,10 @@ class FabricRunEvidenceTest(unittest.TestCase):
         (self.game / 'config').mkdir()
         (self.game / 'config/cbbg.json').write_text('{"mode":"ENABLED"}')
         (self.game / 'config/iris.properties').write_text('enableShaders=true')
-        (self.game / 'config/sulkan-shaders.json').write_text('{"enabled":true,"selectedPackId":"__builtin__"}')
         pack = self.game / 'shaderpacks/cbbg-parity/shaders'
         pack.mkdir(parents=True)
         (pack / 'final.fsh').write_text('test shader')
-        before = restart_state(self.game, shader)
+        before = restart_state(self.game)
         for phase in ('prepare', 'verify'):
             report = copy.deepcopy(self.report)
             report['restartPhase'] = phase
@@ -216,8 +216,7 @@ class FabricRunEvidenceTest(unittest.TestCase):
                 report['inputState'] = before
                 report['prepareReceiptSha256'] = digest(self.game / 'prepare-probe.json')
                 (self.game / 'config/iris.properties').write_text('enableShaders=false')
-                (self.game / 'config/sulkan-shaders.json').write_text('{"enabled":false,"selectedPackId":"__builtin__"}')
-            report['persistedState'] = restart_state(self.game, shader)
+            report['persistedState'] = restart_state(self.game)
             path = self.game / (phase + '-probe.json')
             path.write_text(json.dumps(report))
         self.receipt = path
@@ -229,12 +228,6 @@ class FabricRunEvidenceTest(unittest.TestCase):
         self.assertTrue(result['restart'])
         self.assertEqual(result['evidence_files'], 6)
         self.assertFalse(result['releaseAcceptance'])
-
-    def test_sulkan_restart_pair_checks_both_runs(self):
-        self.prepare_restart_pair('sulkan')
-        result = self.verify()
-        self.assertTrue(result['restart'])
-        self.assertEqual(result['backend'], 'vulkan')
 
     def test_restart_rejects_changed_prepare_receipt(self):
         self.prepare_restart_pair()

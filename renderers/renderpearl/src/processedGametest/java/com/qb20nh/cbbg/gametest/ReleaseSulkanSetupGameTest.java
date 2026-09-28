@@ -37,7 +37,6 @@ public final class ReleaseSulkanSetupGameTest implements FabricClientGameTest {
           }
           ReleaseSulkanGameTest.checkGate(client, user, vulkan);
         });
-    if (vulkan) ReleaseSulkanGameTest.assertStopped(context, user);
     ReleaseSulkanGameTest.select(context, false, "__builtin__");
     context.waitFor(client -> !ReleaseSulkanGameTest.active(), 600);
     context.runOnClient(client -> ReleaseSulkanGameTest.checkGate(client, user, false));

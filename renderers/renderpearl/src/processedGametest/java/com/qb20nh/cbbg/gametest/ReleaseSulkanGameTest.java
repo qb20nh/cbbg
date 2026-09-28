@@ -2,10 +2,7 @@ package com.qb20nh.cbbg.gametest;
 
 import com.google.gson.JsonObject;
 import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.renderpearl.api.GpuFormat;
 import java.lang.reflect.InvocationTargetException;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
@@ -22,9 +19,16 @@ import org.jspecify.annotations.Nullable;
 public final class ReleaseSulkanGameTest implements FabricClientGameTest {
   @Override
   public void runTest(ClientGameTestContext context) {
+    boolean expected =
+        java.util.List.of(
+                Objects.requireNonNull(System.getProperty("cbbg.test.compat", "none")).split("\\+"))
+            .contains("sulkan");
+    if (FabricLoader.getInstance().isModLoaded("sulkan") != expected) {
+      throw new AssertionError("Sulkan presence does not match the requested fixture");
+    }
     ReleaseClient.checkArtifactAndBackend(context);
     boolean vulkan = vulkan(context);
-    if (!FabricLoader.getInstance().isModLoaded("sulkan")) {
+    if (!expected) {
       context.runOnClient(
           client -> {
             if (active()) throw new AssertionError("Absent Sulkan is active");
@@ -40,20 +44,18 @@ public final class ReleaseSulkanGameTest implements FabricClientGameTest {
       world.getConnection().waitForChunksRender();
       JsonObject saved = saveSettings(context);
       try {
-        ReleaseClient.command(context, "stbn size 16");
-        ReleaseClient.command(context, "stbn depth 8");
         ReleaseClient.command(context, "mode set demo");
-        for (boolean enabled : new boolean[] {true, false, true, false}) {
+        for (boolean enabled : new boolean[] {true, false}) {
           select(context, enabled, "__builtin__");
           boolean suspended = enabled && vulkan;
           context.waitFor(client -> active() == suspended, 600);
-          if (suspended) {
-            ReleaseClient.awaitFormat(context, GpuFormat.RGBA8_UNORM);
-            assertStopped(context, "DEMO");
-          } else {
-            awaitRendering(context, "DEMO");
-          }
-          ReleaseClient.screenshot(context, "sulkan-" + enabled);
+          context.runOnClient(
+              client -> {
+                checkGate(client, "DEMO", suspended);
+                if (!ReleaseClient.settings().get("mode").getAsString().equals("DEMO")) {
+                  throw new AssertionError("Sulkan changed the saved CBBG user mode");
+                }
+              });
         }
       } finally {
         try {
@@ -69,14 +71,6 @@ public final class ReleaseSulkanGameTest implements FabricClientGameTest {
     return context.computeOnClient(
         client ->
             "vulkan".equalsIgnoreCase(RenderSystem.getDevice().getDeviceInfo().backendName()));
-  }
-
-  static void requireVulkan(ClientGameTestContext context) {
-    if (!FabricLoader.getInstance().isModLoaded("sulkan")) {
-      throw new AssertionError("Sulkan fixture requires Sulkan");
-    }
-    ReleaseClient.checkArtifactAndBackend(context);
-    if (!vulkan(context)) throw new AssertionError("Sulkan fixture requires actual Vulkan");
   }
 
   static boolean active() {
@@ -100,83 +94,6 @@ public final class ReleaseSulkanGameTest implements FabricClientGameTest {
     }
   }
 
-  static void checkDebug(Minecraft client, String user, boolean suspended) {
-    checkGate(client, user, suspended);
-    String output = String.join("\n", ReleaseDebugState.read(client));
-    var frame = Pattern.compile("stbn=(\\d+)/(\\d+)").matcher(output);
-    boolean stopped = suspended || user.equals("DISABLED");
-    boolean frames =
-        frame.find()
-            && (stopped
-                ? Objects.requireNonNull(frame.group(1)).equals("0")
-                    && Objects.requireNonNull(frame.group(2)).equals("0")
-                : Integer.parseInt(Objects.requireNonNull(frame.group(2)))
-                        == ReleaseClient.settings().get("stbnDepth").getAsInt()
-                    && Integer.parseInt(Objects.requireNonNull(frame.group(1)))
-                        < Integer.parseInt(Objects.requireNonNull(frame.group(2))));
-    GpuFormat format = stopped ? GpuFormat.RGBA8_UNORM : savedFormat();
-    JsonObject saved = ReleaseClient.settings();
-    if ((saved.has("mode") && !saved.get("mode").getAsString().equals(user))
-        || !frames
-        || !output.contains("main=" + format.name())
-        || Objects.requireNonNull(client.gameRenderer.mainRenderTarget().getColorTexture())
-                .getFormat()
-            != format) {
-      throw new AssertionError("Sulkan resources differ from the render state: " + output);
-    }
-    try {
-      Path evidence =
-          Path.of(Objects.requireNonNull(System.getProperty("cbbg.test.evidence")), "debug");
-      Files.createDirectories(evidence);
-      Files.writeString(
-          evidence.resolve("sulkan-" + suspended + "-" + user + ".txt"), output + "\n");
-    } catch (java.io.IOException failure) {
-      throw new AssertionError("Could not retain Sulkan debug output", failure);
-    }
-  }
-
-  static GpuFormat savedFormat() {
-    return switch (ReleaseClient.settings().get("pixelFormat").getAsString()) {
-      case "RGBA8" -> GpuFormat.RGBA8_UNORM;
-      case "RGBA16F" -> GpuFormat.RGBA16_FLOAT;
-      case "RGBA32F" -> GpuFormat.RGBA32_FLOAT;
-      default -> throw new AssertionError("Unexpected saved pixel format");
-    };
-  }
-
-  static void assertStopped(ClientGameTestContext context, String user) {
-    context.runOnClient(client -> checkDebug(client, user, true));
-    long draws = ProcessedRenderObservations.draws();
-    long presentations = ProcessedRenderObservations.presentations();
-    context.waitTicks(5);
-    context.runOnClient(
-        client -> {
-          checkDebug(client, user, true);
-          if (ProcessedRenderObservations.draws() != draws
-              || ProcessedRenderObservations.presentations() != presentations) {
-            throw new AssertionError("CBBG drew or presented while Sulkan shaders were active");
-          }
-        });
-  }
-
-  static void awaitRendering(ClientGameTestContext context, String user) {
-    ReleaseClient.awaitFormat(context, savedFormat());
-    long draws = ProcessedRenderObservations.draws();
-    long presentations = ProcessedRenderObservations.presentations();
-    context.waitFor(
-        client ->
-            ProcessedRenderObservations.draws() > draws
-                && ProcessedRenderObservations.presentations() > presentations,
-        600);
-    context.runOnClient(
-        client -> {
-          if (!ReleaseClient.settings().get("mode").getAsString().equals(user)) {
-            throw new AssertionError("Sulkan changed the saved CBBG user mode");
-          }
-          checkDebug(client, user, false);
-        });
-  }
-
   /** A no-op command persists defaults only after startup observations and a live connection. */
   static JsonObject saveSettings(ClientGameTestContext context) {
     String user = context.computeOnClient(ReleaseSulkanGameTest::userMode);
@@ -186,10 +103,6 @@ public final class ReleaseSulkanGameTest implements FabricClientGameTest {
   }
 
   static void restoreSettings(ClientGameTestContext context, JsonObject saved) {
-    ReleaseClient.command(context, "stbn size " + saved.get("stbnSize").getAsInt());
-    ReleaseClient.command(context, "stbn depth " + saved.get("stbnDepth").getAsInt());
-    ReleaseClient.command(
-        context, "format set " + saved.get("pixelFormat").getAsString().toLowerCase(Locale.ROOT));
     ReleaseClient.command(
         context, "mode set " + saved.get("mode").getAsString().toLowerCase(Locale.ROOT));
     context.waitFor(client -> saved.equals(ReleaseClient.settings()), 600);

@@ -106,10 +106,32 @@ class CandidateFiles {
     static void releaseIdentity(String tag, String commit) {
         String number = '(?:0|[1-9][0-9]*)'
         String suffix = '(?:-[A-Za-z][0-9A-Za-z-]*(?:\\.[A-Za-z][0-9A-Za-z-]*)*\\.[1-9][0-9]*)?'
-        if (!(tag ==~ ('v' + number + '\\.' + number + '\\.' + number + suffix))) {
+        if (!(tag ==~ ('v' + number + '\\.' + number + '\\.' + number + suffix + '(?:\\+' + TARGET_METADATA + ')?'))) {
             throw new GradleException('Invalid release tag')
         }
         if (!(commit ==~ /[0-9a-f]{40}/)) throw new GradleException('Invalid source commit')
+    }
+
+    private static final String TARGET_METADATA =
+            'mc[0-9][0-9A-Za-z-]*(?:\\.[0-9A-Za-z-]+)*-(?:fabric|quilt|forge|neoforge|legacy-fabric)'
+
+    static String releaseVersion(String tag) {
+        tag.substring(1).split(/\+/, 2)[0]
+    }
+
+    static boolean targetedRelease(String tag) {
+        tag.contains('+') && tag.substring(tag.indexOf('+') + 1) ==~ TARGET_METADATA
+    }
+
+    static boolean prerelease(String tag) {
+        releaseVersion(tag).contains('-')
+    }
+
+    static void releaseTargets(String tag, Collection<Map> targets) {
+        if (tag.contains('+') && (targets.size() != 1 ||
+                tag != 'v' + releaseVersion(tag) + '+mc' + targets.first().minecraft + '-' + targets.first().loader)) {
+            throw new GradleException('Release tag must match the single selected target')
+        }
     }
 
     static void writeNew(File file, Object value) {

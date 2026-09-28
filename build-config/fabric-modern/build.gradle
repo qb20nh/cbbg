@@ -213,7 +213,7 @@ if (targetId == '26.3-fabric') {
             include 'cbbg-iris-fixture/**'
         }
         from(new File(repositoryRoot, 'renderers/renderpearl/src/gametest/resources')) {
-            include 'cbbg-world-goldens/**', 'sulkan-fixture/**', 'cbbg.early-startup-test.mixins.json'
+            include 'cbbg-world-goldens/**', 'cbbg.early-startup-test.mixins.json'
         }
     }
     tasks.register('processedDriverJar', Jar) {
@@ -224,9 +224,7 @@ if (targetId == '26.3-fabric') {
      Shutdown: 'shutdown', GeneratingShutdown: 'generating-shutdown',
      EarlyStartup: 'early-startup',
      EarlyStartupCold: 'startup-cold', EarlyStartupWarm: 'startup-warm',
-     EarlyStartupDamaged: 'startup-damaged',
-     Sulkan: 'sulkan', SulkanRestart: 'sulkan-restart',
-     SulkanExternal: 'sulkan-external', SulkanExternalRestart: 'sulkan-external-restart'].each { suite, classifier ->
+     EarlyStartupDamaged: 'startup-damaged'].each { suite, classifier ->
         def suiteMetadata = tasks.register("processed${suite}Metadata") {
             dependsOn tasks.named('processProcessedGametestResources')
             def source = layout.buildDirectory.file('resources/processedGametest/fabric.mod.json')
@@ -363,10 +361,6 @@ def parityDriverJar = tasks.register('parityDriverJar', Jar) {
 if (target.renderer == 'renderpearl') {
     [earlyStartup: ['EarlyStartupGameTest'],
      irisRestart: ['IrisRestartGameTest'],
-     sulkan: ['SulkanGameTest'],
-     sulkanRestart: ['SulkanRestartGameTest'],
-     sulkanExternal: ['SulkanExternalGameTest'],
-     sulkanExternalRestart: ['SulkanExternalRestartGameTest'],
      maximumNoiseCache: ['Rgba8ReadbackGameTest', 'MaximumNoiseCacheGameTest'],
      worldPixels: ['Rgba8ReadbackGameTest', 'WorldPixelsGameTest'],
      worldControl: ['Rgba8ReadbackGameTest', 'WorldControlGameTest'],
@@ -401,10 +395,6 @@ if (target.renderer == 'renderpearl') {
         tasks.register("${fixture}DriverJar", Jar) {
             archiveClassifier = [earlyStartup: 'early-startup-driver',
                                  irisRestart: 'iris-restart-driver',
-                                 sulkan: 'sulkan-driver',
-                                 sulkanRestart: 'sulkan-restart-driver',
-                                 sulkanExternal: 'sulkan-external-driver',
-                                 sulkanExternalRestart: 'sulkan-external-restart-driver',
                                  maximumNoiseCache: 'maximum-noise-cache-driver',
                                  worldPixels: 'world-pixels-driver',
                                  worldControl: 'world-control-driver',

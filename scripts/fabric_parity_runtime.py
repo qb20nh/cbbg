@@ -22,10 +22,6 @@ ROOT = Path(__file__).resolve().parents[1]
 RESTART_DRIVERS = {
     ('opengl', 'com.qb20nh.cbbg.gametest.IrisRestartGameTest'): 'iris',
     ('opengl', 'com.qb20nh.cbbg.gametest.ReleaseIrisRestartGameTest'): 'iris',
-    ('vulkan', 'com.qb20nh.cbbg.gametest.SulkanRestartGameTest'): 'sulkan',
-    ('vulkan', 'com.qb20nh.cbbg.gametest.ReleaseSulkanRestartGameTest'): 'sulkan',
-    ('vulkan', 'com.qb20nh.cbbg.gametest.SulkanExternalRestartGameTest'): 'sulkan',
-    ('vulkan', 'com.qb20nh.cbbg.gametest.ReleaseSulkanExternalRestartGameTest'): 'sulkan',
 }
 
 
@@ -69,18 +65,7 @@ def java_identity(executable):
                 'libjvm': home / 'lib/server/libjvm.so'}.items()}}
 
 
-def restart_state(game, shader='iris'):
-    if shader == 'sulkan':
-        files = [game / 'config/cbbg.json', game / 'config/sulkan-shaders.json']
-        selected = json.loads(files[1].read_text()).get('selectedPackId', '__builtin__')
-        if selected != '__builtin__':
-            if selected != 'cbbg-native-test':
-                raise ValueError('Unexpected Sulkan restart pack')
-            pack = game / 'shaders/cbbg-native-test'
-            if not (pack / 'sulkan.json').is_file() or not (pack / 'color.fsh').is_file():
-                raise ValueError('Sulkan restart pack is missing')
-            files.extend(path for path in sorted(pack.rglob('*')) if path.is_file())
-        return {path.relative_to(game).as_posix(): digest(path) for path in files}
+def restart_state(game):
     settings = [game / 'config/cbbg.json', game / 'config/iris.properties']
     pack = sorted((game / 'shaderpacks/cbbg-parity').rglob('*'))
     files = settings + [path for path in pack if path.is_file()]
@@ -166,7 +151,7 @@ def main():
     if args.restart_phase:
         restart_shader = RESTART_DRIVERS.get((args.backend, expected[0])) if len(expected) == 1 else None
         if restart_shader is None:
-            parser.error('Restart phases require the dedicated Iris/OpenGL or Sulkan/Vulkan driver')
+            parser.error('Restart phases require the dedicated Iris/OpenGL driver')
 
     runtime = args.runtime.resolve()
     game = args.game_dir.resolve()
@@ -250,7 +235,7 @@ def main():
         for name, expected_hash in previous['evidence'].items():
             if digest(game / name) != expected_hash:
                 raise ValueError('Restart prepare evidence changed: ' + name)
-        state = restart_state(game, restart_shader)
+        state = restart_state(game)
         if state != previous['persistedState']:
             raise ValueError('Restart persisted state changed')
         receipt['prepareReceiptSha256'] = digest(previous_path)
@@ -302,7 +287,7 @@ def main():
         receipt['graphics']['contextProfile'] = context.get('profile')
         receipt['scenarios'] = scenarios
         if args.restart_phase:
-            receipt['persistedState'] = restart_state(game, restart_shader)
+            receipt['persistedState'] = restart_state(game)
     except Exception as failure:
         receipt['failure'] = {'type': type(failure).__name__, 'message': str(failure)}
         raise

@@ -2,6 +2,7 @@ package cbbg.gradle
 
 import groovy.json.JsonOutput
 import org.gradle.testfixtures.ProjectBuilder
+import org.gradle.testkit.runner.GradleRunner
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import java.nio.file.Files
@@ -65,6 +66,30 @@ class BundleCandidateTest {
         assertTrue(new File(output, 'SHA256SUMS').isFile())
         candidate.verifyPackages(fixture.root)
         assertThrows(Exception) { fixture.task.bundle() }
+    }
+
+    @Test void bundlesThroughGradleWhenItCreatesTheOutputDirectory() {
+        def fixture = setup()
+        File project = new File(directory, 'gradle-project')
+        project.mkdirs()
+        new File(project, 'settings.gradle').text = "rootProject.name = 'candidate-test'\n"
+        new File(project, 'build.gradle').text = '''import cbbg.gradle.BundleCandidate
+plugins { id 'cbbg.packaging' apply false }
+tasks.register('assembleCandidate', BundleCandidate) {
+''' + [sourceRoot: fixture.root, buildOutputs: fixture.outputsFile,
+       contract: fixture.task.contract.get().asFile,
+       runtimeLock: fixture.task.runtimeLock.get().asFile,
+       dependencyLock: fixture.task.dependencyLock.get().asFile,
+       destination: fixture.task.destination.get().asFile].collect { name, file ->
+            '    ' + name + '.set(file(' + JsonOutput.toJson(file.absolutePath) + '))'
+        }.join('\n') + "\n    releaseTag.set('v1.4.0')\n}\n"
+        def runner = GradleRunner.create().withProjectDir(project).withPluginClasspath()
+                .withArguments('assembleCandidate', '--stacktrace')
+        runner.build()
+        File manifest = new File(fixture.task.destination.get().asFile, 'candidate.json')
+        assertEquals(fixture.outputs.source_commit, new CandidateManifest(manifest).data.commit)
+        assertTrue(runner.buildAndFail().output.contains('Candidate destination already exists'))
+        assertTrue(manifest.isFile())
     }
 
     @Test void dirtySourceAndStaleBuildIdentityAreRejected() {

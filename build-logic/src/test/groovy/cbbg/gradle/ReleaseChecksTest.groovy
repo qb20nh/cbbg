@@ -1,6 +1,7 @@
 package cbbg.gradle
 
 import groovy.json.JsonOutput
+import org.gradle.api.GradleException
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 
@@ -235,6 +236,34 @@ class ReleaseChecksTest {
     }
 
     @Test
+    void finalizationFindsDraftWhenReleaseByTagApiReturnsNotFound() {
+        Map fixture = CandidateFixture.create(directory)
+        File notes = new File(directory, 'notes.md')
+        notes.text = 'Release notes'
+        File result = new File(directory, 'result-index.json')
+        result.text = '{}'
+        List<List<String>> commands = []
+        Closure normal = runFor(fixture, commands)
+        Closure draftApi = { List<String> command, File cwd ->
+            if (command.take(2) == ['gh', 'api'] && command[2].contains('/releases/tags/')) {
+                throw new GradleException('gh failed: gh: Not Found (HTTP 404)')
+            }
+            if (command.take(2) == ['gh', 'api'] && command[2].contains('/releases?')) {
+                commands << command
+                Map selected = CandidateFiles.parse(new StringReader(normal(
+                        ['gh', 'api', 'repos/owner/repo/releases/tags/' + fixture.manifest.release], cwd))) as Map
+                return JsonOutput.toJson([[tag_name: 'other-release'], selected])
+            }
+            normal(command, cwd)
+        }
+        File output = new File(directory, 'draft.json')
+        Map report = ReleaseChecks.finalizeCandidate(fixture.file, [(fixture.target.id): result],
+                fixture.root, 'owner/repo', fixture.manifest.release, notes, output, false, draftApi)
+        assertFalse(report.published)
+        assertEquals(2, commands.count { it[0..1] == ['gh', 'api'] && it[2].contains('/releases?') })
+    }
+
+    @Test
     void finalizationRejectsChangingDraftAndImmutableSetting() {
         Map fixture = CandidateFixture.create(directory)
         File notes = new File(directory, 'notes.md')
@@ -296,6 +325,106 @@ class ReleaseChecksTest {
         assertTrue(github.text.contains('target=' + fixture.target.id))
         assertTrue(github.text.readLines().contains('cf_game_versions='))
         assertFalse(commands.any { it.contains('PATCH') })
+    }
+
+    @Test
+    void privateCandidateSupportsAReleaseWithOnlyPublicFiles() {
+        Map fixture = CandidateFixture.create(directory, true, true)
+        fixture.manifest.release = 'v1.4.0+mc26.3-fabric'
+        fixture.file.text = JsonOutput.toJson(fixture.manifest)
+        CandidateFixture.checksums(fixture.bundle)
+        CandidateManifest candidate = new CandidateManifest(fixture.file)
+        ReleaseEvidence.assemble(candidate, fixture.target.id)
+        Map<String, String> publicFiles = ReleaseChecks.publicFiles(candidate)
+        assertEquals(4, publicFiles.size())
+        assertFalse(publicFiles.containsKey(fixture.record.mapping.path))
+        assertFalse(publicFiles.containsKey(fixture.record.sbom.path))
+        assertFalse(publicFiles.containsKey('candidate.json'))
+        File publicAssets = new File(directory, 'public-assets')
+        assertEquals(publicFiles, ReleaseChecks.preparePublicAssets(fixture.file, publicAssets))
+        assertEquals(publicFiles.keySet(), publicAssets.listFiles()*.name as Set)
+        assertThrows(IllegalArgumentException) {
+            ReleaseChecks.preparePublicAssets(fixture.file, publicAssets)
+        }
+        Map release = [id: 14, tag_name: fixture.manifest.release, draft: false,
+                       prerelease: false, immutable: true, name: 'Release',
+                       body: 'Release notes\n\n<!-- cbbg-candidate-run: 42 -->\n',
+                       assets: publicFiles.collect { name, hash ->
+                           [name: name, state: 'uploaded', id: 1, size: 1,
+                            digest: 'sha256:' + hash, updated_at: 'now']
+                       }]
+        List<List<String>> commands = []
+        Closure base = runFor(fixture, commands, true)
+        Closure run = { List<String> command, File cwd ->
+            if (command.take(2) == ['gh', 'api'] && command[2].endsWith('/actions/runs/42')) {
+                return JsonOutput.toJson([head_sha: fixture.manifest.commit,
+                                          event: 'workflow_dispatch', conclusion: 'success',
+                                          path: '.github/workflows/release.yml'])
+            }
+            if (command.take(2) == ['gh', 'api'] && command[2].contains('/releases/tags/')) {
+                return JsonOutput.toJson(release)
+            }
+            if (command.take(3) == ['gh', 'run', 'download']) {
+                commands << command
+                File target = new File(command[command.indexOf('--dir') + 1])
+                fixture.bundle.listFiles().each { new File(target, it.name).bytes = it.bytes }
+                return ''
+            }
+            if (command.take(3) == ['gh', 'release', 'download']) {
+                commands << command
+                File target = new File(command[command.indexOf('--dir') + 1])
+                publicFiles.keySet().findAll { it != 'SHA256SUMS' }.each { name ->
+                    new File(target, name).bytes = new File(fixture.bundle, name).bytes
+                }
+                new File(target, 'SHA256SUMS').text = publicFiles.keySet().findAll { it != 'SHA256SUMS' }
+                        .sort().collect { publicFiles[it] + '  ' + it }.join('\n') + '\n'
+                return ''
+            }
+            base(command, cwd)
+        }
+        File assets = new File(directory, 'download')
+        Map metadata = ReleaseChecks.preparePublication(fixture.manifest.release, 'owner/repo',
+                fixture.root, assets, new File(directory, 'publication.json'),
+                new File(directory, 'github-output.txt'), 'modrinth', run, modrinthLabels())
+        assertEquals([fixture.target.id], metadata.records[0].targets)
+        assertTrue(commands.any { it.take(3) == ['gh', 'run', 'download'] })
+        assertFalse(assets.listFiles().toList().size() == publicFiles.size())
+        Map selected = ReleaseChecks.selectPublication(fixture.manifest.release, 'owner/repo',
+                fixture.root, assets, new File(directory, 'publication.json'), fixture.target.id,
+                new File(directory, 'selected.txt'), run, modrinthLabels(), 'modrinth')
+        assertEquals([fixture.target.id], selected.targets)
+        release.draft = true
+        release.immutable = false
+        File notes = new File(directory, 'notes.md')
+        notes.text = 'Release notes\n'
+        File result = new File(directory, 'results.json')
+        result.text = '{}'
+        Map finalization = ReleaseChecks.finalizeCandidate(fixture.file, [(fixture.target.id): result],
+                fixture.root, 'owner/repo', fixture.manifest.release, notes,
+                new File(directory, 'finalization.json'), false, run)
+        assertEquals(publicFiles, finalization.files)
+        assertTrue(finalization.notes.contains('<!-- cbbg-candidate-run: 42 -->'))
+        release.draft = false
+        release.immutable = true
+        Closure wrongRun = { List<String> command, File cwd ->
+            if (command.take(2) == ['gh', 'api'] && command[2].endsWith('/actions/runs/42')) {
+                return JsonOutput.toJson([head_sha: '0' * 40, event: 'workflow_dispatch',
+                                          conclusion: 'success', path: '.github/workflows/release.yml'])
+            }
+            run(command, cwd)
+        }
+        assertThrows(IllegalArgumentException) {
+            ReleaseChecks.preparePublication(fixture.manifest.release, 'owner/repo', fixture.root,
+                    new File(directory, 'wrong-run-download'), new File(directory, 'wrong-run.json'),
+                    new File(directory, 'wrong-run-output.txt'), 'modrinth', wrongRun, modrinthLabels())
+        }
+        Map wrongAsset = release.assets[0].clone() as Map
+        release.assets[0] = wrongAsset + [digest: 'sha256:' + ('0' * 64)]
+        assertThrows(IllegalArgumentException) {
+            ReleaseChecks.preparePublication(fixture.manifest.release, 'owner/repo', fixture.root,
+                    new File(directory, 'wrong-public-download'), new File(directory, 'wrong-public.json'),
+                    new File(directory, 'wrong-public-output.txt'), 'modrinth', run, modrinthLabels())
+        }
     }
 
     private static Closure modrinthLabels() {

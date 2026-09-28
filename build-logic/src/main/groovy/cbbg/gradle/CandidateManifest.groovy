@@ -44,6 +44,7 @@ class CandidateManifest {
             references(record).each { CandidateFiles.checked(this.file.parentFile, it) }
         }
         specifications = expected
+        CandidateFiles.releaseTargets(data.release as String, specifications.values())
         specifications.each { id, specification ->
             if (specification.artifactOf) {
                 (['artifact', 'sources', 'source_inventory'] + (data.schema == 3 ? ['mapping'] : []) +
@@ -81,7 +82,7 @@ class CandidateManifest {
     }
 
     static String packageVersion(String release, Map target) {
-        release.substring(1) + '+mc' + target.minecraft + (target.buildProfile == 'fabric-upstream' ? '' : '-' + target.loader)
+        CandidateFiles.releaseVersion(release) + '+mc' + target.minecraft + (target.buildProfile == 'fabric-upstream' ? '' : '-' + target.loader)
     }
 
     Map<String, String> releaseFiles(boolean requireImplemented = true) {

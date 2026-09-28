@@ -24,6 +24,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
   attestations: read
 
 concurrency:
@@ -81,8 +82,6 @@ jobs:
 
       - name: Check all Modrinth retry plans
         if: inputs.services != 'curseforge'
-        env:
-          RELEASE_TAG: ${{ inputs.tag }}
         run: |
           python3 -c 'import json; records=json.load(open("build/publication.json"))["records"]; assert records; print("\n".join(r["targets"][0] for r in records))' > build/publication-targets.txt
           mapfile -t targets < build/publication-targets.txt
@@ -90,7 +89,7 @@ jobs:
             args=(--no-daemon -p build-config/publishing
               "-PpublicationMetadata=$PWD/build/publication.json"
               "-PsourceRoot=$PWD/.release-source" "-Ptarget=$target")
-            if [[ "$RELEASE_TAG" == *+mc* ]]; then
+            if jq -e '.legacy == true' build/publication.json >/dev/null; then
               args+=("-PlegacyAssets=$PWD/release-assets")
             else
               args+=("-Pcandidate=$PWD/release-assets/candidate.json")
@@ -169,12 +168,11 @@ jobs:
           DRY_RUN: ${{ inputs.dry_run }}
           MODRINTH_TOKEN: ${{ secrets.MODRINTH_TOKEN }}
           TARGET_ID: ${{ steps.publication.outputs.target }}
-          RELEASE_TAG: ${{ inputs.tag }}
         run: |
           args=(--no-daemon -p build-config/publishing
             "-PpublicationMetadata=$PWD/build/publication.json"
             "-PsourceRoot=$PWD/.release-source" "-Ptarget=$TARGET_ID")
-          if [[ "$RELEASE_TAG" == *+mc* ]]; then
+          if jq -e '.legacy == true' build/publication.json >/dev/null; then
             args+=("-PlegacyAssets=$PWD/release-assets")
           else
             args+=("-Pcandidate=$PWD/release-assets/candidate.json")

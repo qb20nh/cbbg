@@ -23,6 +23,8 @@ class CandidatePublishWorkflowTests(unittest.TestCase):
                             'from pathlib import Path\n'
                             'Path("gradle-arguments.json").write_text(json.dumps(sys.argv[1:]))\n')
         launcher.chmod(0o755)
+        (self.root / 'build').mkdir()
+        (self.root / 'build/publication.json').write_text('{}')
 
     def run_step(self, name):
         return subprocess.run(['bash', '-euo', 'pipefail', '-c', script(name)],
@@ -69,11 +71,20 @@ class CandidatePublishWorkflowTests(unittest.TestCase):
         self.assertNotIn('build', args)
 
         self.env['RELEASE_TAG'] = 'v1.3.0+mc26.2'
+        (self.root / 'build/publication.json').write_text('{"legacy": true}')
         result = self.run_step('Validate or publish to Modrinth')
         self.assertEqual(result.returncode, 0, result.stderr)
         args = json.loads((self.root / 'gradle-arguments.json').read_text())
         self.assertIn('-PlegacyAssets=' + str(self.root / 'release-assets'), args)
         self.assertFalse(any(arg.startswith('-Pcandidate=') for arg in args))
+
+    def test_target_tag_uses_candidate_publication(self):
+        self.env['RELEASE_TAG'] = 'v1.4.0+mc26.3-fabric'
+        result = self.run_step('Validate or publish to Modrinth')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        args = json.loads((self.root / 'gradle-arguments.json').read_text())
+        self.assertIn('-Pcandidate=' + str(self.root / 'release-assets/candidate.json'), args)
+        self.assertFalse(any(arg.startswith('-PlegacyAssets=') for arg in args))
 
     def test_modrinth_upload_requires_token(self):
         self.env['DRY_RUN'] = 'false'
@@ -121,7 +132,6 @@ class CandidatePublishWorkflowTests(unittest.TestCase):
         self.assertIn('-PsourceRoot=.release-source', args)
 
     def test_modrinth_preflight_checks_every_record_before_uploads(self):
-        (self.root / 'build').mkdir()
         (self.root / 'build/publication.json').write_text(json.dumps({
             'records': [{'targets': ['26.3-fabric']}, {'targets': ['26.2-fabric']}]}))
         launcher = self.root / 'gradlew'
