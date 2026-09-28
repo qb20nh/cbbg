@@ -1,3 +1,4 @@
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -46,6 +47,25 @@ class RuntimeLockTests(unittest.TestCase):
         verify_runtime(self.root, 'fabric', self.command, lock)
         profile['libraries'] = [{'name': 'different:library:1.0'}]
         path.write_text(json.dumps(profile))
+        with self.assertRaises(ValueError):
+            verify_runtime(self.root, 'fabric', self.command, lock)
+
+    def test_existing_schema_one_lock_uses_original_profile_hash(self):
+        lock = capture_runtime(self.root, 'fabric', self.command)
+        lock.pop('profileTimestampFieldsExcluded')
+        path = self.root / 'versions/fabric/fabric.json'
+        lock['files']['versions/fabric/fabric.json'] = hashlib.sha256(path.read_bytes()).hexdigest()
+        verify_runtime(self.root, 'fabric', self.command, lock)
+
+        profile = json.loads(path.read_text())
+        profile['time'] = '2026-09-28T15:06:18+0000'
+        path.write_text(json.dumps(profile))
+        with self.assertRaises(ValueError):
+            verify_runtime(self.root, 'fabric', self.command, lock)
+
+    def test_unknown_profile_hash_policy_fails(self):
+        lock = capture_runtime(self.root, 'fabric', self.command)
+        lock['profileTimestampFieldsExcluded'] = ['releaseTime']
         with self.assertRaises(ValueError):
             verify_runtime(self.root, 'fabric', self.command, lock)
 

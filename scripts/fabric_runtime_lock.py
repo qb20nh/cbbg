@@ -9,7 +9,7 @@ from pathlib import Path
 import re
 
 
-def capture_runtime(runtime, profile, command):
+def capture_runtime(runtime, profile, command, *, exclude_profile_timestamps=True):
     runtime = Path(runtime).absolute()
 
     def relative(path):
@@ -46,7 +46,7 @@ def capture_runtime(runtime, profile, command):
         files.update(relative(path) for path in (runtime / directory).rglob('*') if path.is_file())
     digests = {}
     for name in sorted(files):
-        if name == f'versions/{profile}/{profile}.json':
+        if exclude_profile_timestamps and name == f'versions/{profile}/{profile}.json':
             metadata = json.loads((runtime / name).read_text(encoding='utf-8'))
             metadata.pop('time', None)
             metadata.pop('releaseTime', None)
@@ -55,14 +55,20 @@ def capture_runtime(runtime, profile, command):
         else:
             with (runtime / name).open('rb') as stream:
                 digests[name] = hashlib.file_digest(stream, 'sha256').hexdigest()
-    return {'schemaVersion': 1, 'scope': 'classpath-profiles-native-libraries',
-            'profileTimestampFieldsExcluded': ['time', 'releaseTime'],
+    lock = {'schemaVersion': 1, 'scope': 'classpath-profiles-native-libraries',
             'profile': profile, 'profiles': profiles, 'classpath': classpath,
             'nativeDirectories': native_directories, 'files': digests}
+    if exclude_profile_timestamps:
+        lock['profileTimestampFieldsExcluded'] = ['time', 'releaseTime']
+    return lock
 
 
 def verify_runtime(runtime, profile, command, expected):
-    if capture_runtime(runtime, profile, command) != expected:
+    policy = expected.get('profileTimestampFieldsExcluded')
+    if policy not in (None, ['time', 'releaseTime']):
+        raise ValueError('Unknown profile hash policy')
+    if capture_runtime(runtime, profile, command,
+                       exclude_profile_timestamps=policy is not None) != expected:
         raise ValueError('Runtime inputs differ from the recorded lock')
 
 
