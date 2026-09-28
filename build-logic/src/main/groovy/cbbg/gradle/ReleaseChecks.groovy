@@ -2,6 +2,7 @@ package cbbg.gradle
 
 import groovy.json.JsonOutput
 import java.nio.file.Files
+import java.security.MessageDigest
 
 class ReleaseChecks {
     private static final String PREDICATE = 'https://slsa.dev/provenance/v1'
@@ -96,12 +97,12 @@ class ReleaseChecks {
     }
 
     static Map finalizeCandidate(File manifest, Map results, File sourceRoot, String repo, String tag,
-                                 File notes, File output, boolean publish, Closure run) {
+                                  File notes, File output, boolean publish, Closure run) {
         repository(repo)
         if (manifest.name != 'candidate.json') throw new IllegalArgumentException('Expected candidate.json')
         outputGuard(manifest, output)
         CandidateManifest candidate = new CandidateManifest(manifest)
-        Map<String, String> files = candidate.releaseFiles()
+        Map<String, String> internalFiles = candidate.releaseFiles()
         if (candidate.data.release != tag) throw new IllegalArgumentException('Requested release differs from candidate')
         cleanSource(sourceRoot, candidate.data.commit as String, run)
         String body = notes.getText('UTF-8')
@@ -117,7 +118,12 @@ class ReleaseChecks {
         if (api(endpoint + '/immutable-releases', sourceRoot, run).enabled != true) {
             throw new IllegalArgumentException('Enable immutable releases before finalization')
         }
-        Map snapshot = draftSnapshot(api(releaseEndpoint, sourceRoot, run), tag, files)
+        Map release = api(releaseEndpoint, sourceRoot, run)
+        String runId = candidateRunId(release.body as String)
+        if (runId) checkedCandidateRun(runId, repo, candidate.data.commit as String, tag, sourceRoot, run)
+        Map<String, String> files = runId ? publicFiles(candidate) : internalFiles
+        if (runId) body = body.stripTrailing() + '\n\n<!-- cbbg-candidate-run: ' + runId + ' -->\n'
+        Map snapshot = draftSnapshot(release, tag, files)
         File download = Files.createTempDirectory('cbbg-finalize-').toFile()
         try {
             run(['gh', 'release', 'download', tag, '--repo', repo, '--dir',
@@ -131,12 +137,12 @@ class ReleaseChecks {
         if (draftSnapshot(api(releaseEndpoint, sourceRoot, run), tag, files) != snapshot) {
             throw new IllegalArgumentException('Draft changed during finalization checks')
         }
-        checkFiles(candidate.file.parentFile, files)
+        checkFiles(candidate.file.parentFile, internalFiles)
         if (api(tagEndpoint, sourceRoot, run).sha != candidate.data.commit) {
             throw new IllegalArgumentException('Release tag changed during finalization checks')
         }
         Map report = [release: tag, repository: repo, source_commit: candidate.data.commit,
-                      manifest_sha256: files['candidate.json'], files: files, draft: snapshot,
+                       manifest_sha256: internalFiles['candidate.json'], files: files, draft: snapshot,
                       validation: validation, notes: body, published: false]
         CandidateFiles.writeNew(output, report)
         if (publish) {
@@ -198,28 +204,48 @@ class ReleaseChecks {
             throw new IllegalArgumentException('Live release tag differs from source checkout')
         }
         Map published = api(releaseEndpoint, source, run)
+        String candidateRun = candidateRunId(published.body as String)
         boolean draft = published.draft == true && dryRun
         Map snapshot = draft ? draftSnapshot(published, tag, null) : publishedSnapshot(published, tag)
         assetDir.mkdirs()
-        run(['gh', 'release', 'download', tag, '--repo', repo, '--dir',
-             assetDir.absolutePath, '--pattern', '*'], source)
+        if (candidateRun) {
+            checkedCandidateRun(candidateRun, repo, commit, tag, source, run)
+            run(['gh', 'run', 'download', candidateRun, '--repo', repo, '--name',
+                 'cbbg-candidate', '--dir', assetDir.absolutePath], source)
+        } else {
+            run(['gh', 'release', 'download', tag, '--repo', repo, '--dir',
+                 assetDir.absolutePath, '--pattern', '*'], source)
+        }
         File manifest = new File(assetDir, 'candidate.json')
         CandidateManifest candidate = new CandidateManifest(manifest)
         Map<String, String> files = candidate.releaseFiles()
         if (candidate.data.release != tag || candidate.data.commit != commit) {
             throw new IllegalArgumentException('Published candidate differs from selected release or source')
         }
-        if (draft) draftSnapshot(published, tag, files)
-        else publishedSnapshot(published, tag, files)
+        Map<String, String> releaseFiles = candidateRun ? publicFiles(candidate) : files
+        if (draft) draftSnapshot(published, tag, releaseFiles)
+        else publishedSnapshot(published, tag, releaseFiles)
         if (localFiles(assetDir) != files || assetDir.listFiles().size() != files.size()) {
-            throw new IllegalArgumentException('Downloaded release assets differ from candidate')
+            throw new IllegalArgumentException('Downloaded candidate files differ from candidate')
+        }
+        if (candidateRun) {
+            File publicDir = Files.createTempDirectory('cbbg-public-assets-').toFile()
+            try {
+                run(['gh', 'release', 'download', tag, '--repo', repo, '--dir',
+                     publicDir.absolutePath, '--pattern', '*'], source)
+                if (localFiles(publicDir) != releaseFiles) {
+                    throw new IllegalArgumentException('Downloaded release assets differ from candidate')
+                }
+            } finally {
+                removeTree(publicDir)
+            }
         }
         provenance(manifest, new File(assetDir, 'provenance.jsonl'), repo, run)
         Map metadata = Publication.resolve(Publication.metadata(manifest, source, snapshot.body as String),
                                             services, fetch)
         Map current = api(releaseEndpoint, source, run)
         if (api(tagEndpoint, source, run).sha != commit ||
-                (draft ? draftSnapshot(current, tag, files) : publishedSnapshot(current, tag, files)) != snapshot) {
+                (draft ? draftSnapshot(current, tag, releaseFiles) : publishedSnapshot(current, tag, releaseFiles)) != snapshot) {
             throw new IllegalArgumentException('Release changed during preflight')
         }
         if (draft) metadata.dry_run_only = true
@@ -352,7 +378,8 @@ class ReleaseChecks {
             if (candidate.data.release != tag || candidate.data.commit != commit) {
                 throw new IllegalArgumentException('Candidate differs from selected tag or source')
             }
-            snapshot = draft ? draftSnapshot(release, tag, files) : publishedSnapshot(release, tag, files)
+            Map releasedFiles = candidateRunId(release.body as String) ? publicFiles(candidate) : files
+            snapshot = draft ? draftSnapshot(release, tag, releasedFiles) : publishedSnapshot(release, tag, releasedFiles)
             provenance(candidate.file, new File(assets, 'provenance.jsonl'), repo, run)
             expected = Publication.metadata(candidate.file, sourceRoot, snapshot.body as String)
             specification = candidate.specifications[target]
@@ -367,8 +394,10 @@ class ReleaseChecks {
             throw new IllegalArgumentException('Expected one artifact owner publication record for selected target')
         }
         Map current = api(releaseEndpoint, sourceRoot, run)
-        Map currentSnapshot = draft ? draftSnapshot(current, tag, files) :
-                publishedSnapshot(current, tag, metadata.legacy == true ? null : files,
+        Map selectedFiles = metadata.legacy == true ? null :
+                (candidateRunId(release.body as String) ? publicFiles(new CandidateManifest(new File(assets, 'candidate.json'))) : files)
+        Map currentSnapshot = draft ? draftSnapshot(current, tag, selectedFiles) :
+                publishedSnapshot(current, tag, selectedFiles,
                         metadata.legacy == true ? release.prerelease as Boolean : null)
         if (api(tagEndpoint, sourceRoot, run).sha != commit || currentSnapshot != snapshot ||
                 CandidateFiles.sha256(metadataFile) != hash) {
@@ -481,6 +510,70 @@ class ReleaseChecks {
             throw new IllegalArgumentException('Published assets differ from candidate')
         }
         [id: release.id, body: release.body, assets: assets]
+    }
+
+    static Map<String, String> publicFiles(CandidateManifest candidate) {
+        Map<String, String> files = [:]
+        candidate.records.values().each { record ->
+            ['artifact', 'sources', 'sbom', 'mapping'].each { kind ->
+                Map reference = record[kind] as Map
+                if (reference != null) {
+                    String name = reference.path
+                    String hash = reference.sha256
+                    if (files.containsKey(name) && files[name] != hash) {
+                        throw new IllegalArgumentException('Conflicting public filename: ' + name)
+                    }
+                    files[name] = hash
+                }
+            }
+        }
+        files['provenance.jsonl'] = CandidateFiles.sha256(new File(candidate.file.parentFile, 'provenance.jsonl'))
+        String list = files.keySet().sort().collect { files[it] + '  ' + it }.join('\n') + '\n'
+        files.SHA256SUMS = MessageDigest.getInstance('SHA-256').digest(list.getBytes('UTF-8')).encodeHex().toString()
+        files
+    }
+
+    static Map<String, String> preparePublicAssets(File manifest, File destination) {
+        CandidateManifest candidate = new CandidateManifest(manifest)
+        candidate.releaseFiles()
+        File output = destination.canonicalFile
+        outputGuard(candidate.file, output)
+        Map<String, String> files = publicFiles(candidate)
+        if (!output.mkdirs()) throw new IllegalArgumentException('Could not create public asset directory')
+        try {
+            files.each { name, hash ->
+                if (name != 'SHA256SUMS') {
+                    File source = new File(candidate.file.parentFile, name)
+                    Files.copy(source.toPath(), new File(output, name).toPath())
+                }
+            }
+            new File(output, 'SHA256SUMS').setText(files.keySet().findAll { it != 'SHA256SUMS' }
+                    .sort().collect { files[it] + '  ' + it }.join('\n') + '\n', 'UTF-8')
+            if (localFiles(output) != files) throw new IllegalArgumentException('Public assets changed during preparation')
+        } catch (Exception error) {
+            removeTree(output)
+            throw error
+        }
+        files
+    }
+
+    private static String candidateRunId(String body) {
+        if (body == null) return null
+        def match = body =~ /<!-- cbbg-candidate-run: ([1-9][0-9]*) -->/
+        if (!match.find()) return null
+        String id = match.group(1)
+        if (match.find()) throw new IllegalArgumentException('Duplicate candidate run reference')
+        id
+    }
+
+    private static void checkedCandidateRun(String id, String repo, String commit, String tag, File source, Closure run) {
+        Map result = api('repos/' + repo + '/actions/runs/' + id, source, run)
+        String workflow = '.github/workflows/release.yml'
+        if (result.head_sha != commit || result.event != 'workflow_dispatch' ||
+                result.conclusion != 'success' ||
+                !(result.path in [workflow, workflow + '@' + tag, workflow + '@refs/tags/' + tag])) {
+            throw new IllegalArgumentException('Candidate run differs from selected release')
+        }
     }
 
     private static Map<String, String> localFiles(File directory) {

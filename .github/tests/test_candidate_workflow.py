@@ -1,8 +1,10 @@
 """Exercise candidate workflow commands without contacting GitHub."""
 
+import hashlib
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -18,7 +20,8 @@ class CandidateWorkflowTest(unittest.TestCase):
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name)
         self.env = dict(os.environ, GITHUB_REF_TYPE='tag', GITHUB_REF_NAME='v1.4.0',
-                        REQUESTED_TARGET='26.3-fabric', GITHUB_OUTPUT=str(self.root / 'output'))
+                        REQUESTED_TARGET='26.3-fabric', GITHUB_OUTPUT=str(self.root / 'output'),
+                        GITHUB_RUN_ID='123456')
         locks = self.root / 'runtime-locks'
         locks.mkdir()
         profile = self.root / 'build-config/fabric-modern'
@@ -116,17 +119,81 @@ class CandidateWorkflowTest(unittest.TestCase):
         self.env['REQUESTED_TARGET'] = '26.3-fabric,26.3-fabric'
         self.assertNotEqual(self.run_step('Validate release selection').returncode, 0)
 
-    def test_creates_draft_with_existing_tag_and_candidate_files(self):
+    def candidate_fixture(self, targets=('26.3-fabric',)):
+        bundle = self.root / 'build/release-candidate'
+        bundle.mkdir(parents=True)
+        records = []
+        for target in targets:
+            prefix = f"cbbg-1.4.0+mc{target.removesuffix('-fabric')}-fabric"
+            record = {'id': target}
+            for kind, name in (('artifact', prefix + '.jar'),
+                               ('sources', prefix + '-sources.jar'),
+                               ('sbom', prefix + '-sbom.cdx.json'),
+                               ('mapping', prefix + '-mapping.txt')):
+                payload = f'{target} {kind}'.encode()
+                (bundle / name).write_bytes(payload)
+                record[kind] = {'path': name, 'sha256': hashlib.sha256(payload).hexdigest()}
+            records.append(record)
+        (bundle / 'candidate.json').write_text(json.dumps({'targets': records}))
+        (bundle / 'test-driver.jar').write_text('private test driver')
+        (bundle / 'SHA256SUMS').write_text('private checksums')
+        (bundle / 'provenance.jsonl').write_text('{}\n')
+        return bundle
+
+    def public_fixture(self, bundle):
+        public = self.root / 'build/release-assets'
+        public.mkdir()
+        record = json.loads((bundle / 'candidate.json').read_text())['targets'][0]
+        names = {record[kind]['path'] for kind in ('artifact', 'sources', 'sbom', 'mapping')}
+        names.add('provenance.jsonl')
+        for name in names:
+            shutil.copyfile(bundle / name, public / name)
+        (public / 'SHA256SUMS').write_text(''.join(
+            f'{hashlib.sha256((public / name).read_bytes()).hexdigest()}  {name}\n'
+            for name in sorted(names)))
+        return public
+
+    def test_prepares_public_assets_with_gradle(self):
+        self.candidate_fixture()
+        result = self.run_step('Prepare public release assets')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        args = json.loads((self.root / 'gradle-arguments.jsonl').read_text().splitlines()[-1])
+        self.assertEqual(args, ['--no-daemon',
+                                '-Pcandidate=build/release-candidate/candidate.json',
+                                '-Poutput=build/release-assets', 'preparePublicReleaseAssets'])
+
+    def test_private_candidate_is_uploaded_before_public_release(self):
+        workflow = WORKFLOW.read_text()
+        self.assertLess(workflow.index('packageReleaseEvidence'),
+                        workflow.index('- name: Store private candidate'))
+        self.assertLess(workflow.index('- name: Store private candidate'),
+                        workflow.index('- name: Create draft release'))
+        self.assertIn('uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1\n'
+                      '        with:\n          name: cbbg-candidate\n'
+                      '          path: build/release-candidate/\n', workflow)
+
+    def test_verify_provenance_and_package_evidence_with_gradle(self):
+        bundle = self.candidate_fixture()
+        provenance = self.root / 'attestation.jsonl'
+        provenance.write_text('attested\n')
+        self.env.update(PROVENANCE_BUNDLE=str(provenance), GH_REPO='example/cbbg')
+        result = self.run_step('Verify candidate provenance')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((bundle / 'provenance.jsonl').read_text(), 'attested\n')
+        calls = [json.loads(line) for line in
+                 (self.root / 'gradle-arguments.jsonl').read_text().splitlines()]
+        self.assertEqual([args[-1] for args in calls],
+                         ['verifyProvenance', 'packageReleaseEvidence'])
+
+    def test_creates_draft_with_existing_tag_and_public_files(self):
         command = self.root / 'gh'
         command.write_text('#!/usr/bin/env python3\nimport json, sys\n'
                            'from pathlib import Path\n'
                            'Path("arguments.json").write_text(json.dumps(sys.argv[1:]))\n')
         command.chmod(0o755)
         self.env['PATH'] = str(self.root) + os.pathsep + self.env['PATH']
-        bundle = self.root / 'build/release-candidate'
-        bundle.mkdir(parents=True)
-        for name in ('candidate.json', 'mod.jar', 'sources.jar', 'provenance.jsonl'):
-            (bundle / name).write_text('fixture')
+        public = self.public_fixture(self.candidate_fixture())
+        (self.root / 'build/release-notes.md').write_text('Release notes\n')
         for tag in ('v1.4.0', 'v1.4.0-rc.1'):
             with self.subTest(tag=tag):
                 self.env['GITHUB_REF_NAME'] = tag
@@ -138,8 +205,14 @@ class CandidateWorkflowTest(unittest.TestCase):
                 self.assertIn('--verify-tag', arguments)
                 self.assertEqual(arguments[arguments.index('--notes-file') + 1], 'build/release-notes.md')
                 self.assertEqual('--prerelease' in arguments, '-rc.' in tag)
-                for path in bundle.iterdir():
-                    self.assertIn(path.relative_to(self.root).as_posix(), arguments)
+                uploaded = {argument for argument in arguments if argument.startswith('build/release-assets/')}
+                self.assertEqual(uploaded, {path.relative_to(self.root).as_posix() for path in public.iterdir()})
+                self.assertEqual(len(uploaded), 6)
+                self.assertFalse(any(argument.startswith('build/release-candidate/') for argument in arguments))
+                self.assertNotIn('candidate.json', ' '.join(arguments))
+                self.assertNotIn('test-driver.jar', ' '.join(arguments))
+                self.assertIn('<!-- cbbg-candidate-run: 123456 -->',
+                              (self.root / 'build/release-notes.md').read_text())
 
 
 if __name__ == '__main__':

@@ -298,6 +298,101 @@ class ReleaseChecksTest {
         assertFalse(commands.any { it.contains('PATCH') })
     }
 
+    @Test
+    void privateCandidateSupportsAReleaseWithOnlyPublicFiles() {
+        Map fixture = CandidateFixture.create(directory, true, true)
+        CandidateManifest candidate = new CandidateManifest(fixture.file)
+        ReleaseEvidence.assemble(candidate, fixture.target.id)
+        Map<String, String> publicFiles = ReleaseChecks.publicFiles(candidate)
+        assertEquals(6, publicFiles.size())
+        assertFalse(publicFiles.containsKey('candidate.json'))
+        File publicAssets = new File(directory, 'public-assets')
+        assertEquals(publicFiles, ReleaseChecks.preparePublicAssets(fixture.file, publicAssets))
+        assertEquals(publicFiles.keySet(), publicAssets.listFiles()*.name as Set)
+        assertThrows(IllegalArgumentException) {
+            ReleaseChecks.preparePublicAssets(fixture.file, publicAssets)
+        }
+        Map release = [id: 14, tag_name: fixture.manifest.release, draft: false,
+                       prerelease: false, immutable: true, name: 'Release',
+                       body: 'Release notes\n\n<!-- cbbg-candidate-run: 42 -->\n',
+                       assets: publicFiles.collect { name, hash ->
+                           [name: name, state: 'uploaded', id: 1, size: 1,
+                            digest: 'sha256:' + hash, updated_at: 'now']
+                       }]
+        List<List<String>> commands = []
+        Closure base = runFor(fixture, commands, true)
+        Closure run = { List<String> command, File cwd ->
+            if (command.take(2) == ['gh', 'api'] && command[2].endsWith('/actions/runs/42')) {
+                return JsonOutput.toJson([head_sha: fixture.manifest.commit,
+                                          event: 'workflow_dispatch', conclusion: 'success',
+                                          path: '.github/workflows/release.yml'])
+            }
+            if (command.take(2) == ['gh', 'api'] && command[2].contains('/releases/tags/')) {
+                return JsonOutput.toJson(release)
+            }
+            if (command.take(3) == ['gh', 'run', 'download']) {
+                commands << command
+                File target = new File(command[command.indexOf('--dir') + 1])
+                fixture.bundle.listFiles().each { new File(target, it.name).bytes = it.bytes }
+                return ''
+            }
+            if (command.take(3) == ['gh', 'release', 'download']) {
+                commands << command
+                File target = new File(command[command.indexOf('--dir') + 1])
+                publicFiles.keySet().findAll { it != 'SHA256SUMS' }.each { name ->
+                    new File(target, name).bytes = new File(fixture.bundle, name).bytes
+                }
+                new File(target, 'SHA256SUMS').text = publicFiles.keySet().findAll { it != 'SHA256SUMS' }
+                        .sort().collect { publicFiles[it] + '  ' + it }.join('\n') + '\n'
+                return ''
+            }
+            base(command, cwd)
+        }
+        File assets = new File(directory, 'download')
+        Map metadata = ReleaseChecks.preparePublication(fixture.manifest.release, 'owner/repo',
+                fixture.root, assets, new File(directory, 'publication.json'),
+                new File(directory, 'github-output.txt'), 'modrinth', run, modrinthLabels())
+        assertEquals([fixture.target.id], metadata.records[0].targets)
+        assertTrue(commands.any { it.take(3) == ['gh', 'run', 'download'] })
+        assertFalse(assets.listFiles().toList().size() == publicFiles.size())
+        Map selected = ReleaseChecks.selectPublication(fixture.manifest.release, 'owner/repo',
+                fixture.root, assets, new File(directory, 'publication.json'), fixture.target.id,
+                new File(directory, 'selected.txt'), run, modrinthLabels(), 'modrinth')
+        assertEquals([fixture.target.id], selected.targets)
+        release.draft = true
+        release.immutable = false
+        File notes = new File(directory, 'notes.md')
+        notes.text = 'Release notes\n'
+        File result = new File(directory, 'results.json')
+        result.text = '{}'
+        Map finalization = ReleaseChecks.finalizeCandidate(fixture.file, [(fixture.target.id): result],
+                fixture.root, 'owner/repo', fixture.manifest.release, notes,
+                new File(directory, 'finalization.json'), false, run)
+        assertEquals(publicFiles, finalization.files)
+        assertTrue(finalization.notes.contains('<!-- cbbg-candidate-run: 42 -->'))
+        release.draft = false
+        release.immutable = true
+        Closure wrongRun = { List<String> command, File cwd ->
+            if (command.take(2) == ['gh', 'api'] && command[2].endsWith('/actions/runs/42')) {
+                return JsonOutput.toJson([head_sha: '0' * 40, event: 'workflow_dispatch',
+                                          conclusion: 'success', path: '.github/workflows/release.yml'])
+            }
+            run(command, cwd)
+        }
+        assertThrows(IllegalArgumentException) {
+            ReleaseChecks.preparePublication(fixture.manifest.release, 'owner/repo', fixture.root,
+                    new File(directory, 'wrong-run-download'), new File(directory, 'wrong-run.json'),
+                    new File(directory, 'wrong-run-output.txt'), 'modrinth', wrongRun, modrinthLabels())
+        }
+        Map wrongAsset = release.assets[0].clone() as Map
+        release.assets[0] = wrongAsset + [digest: 'sha256:' + ('0' * 64)]
+        assertThrows(IllegalArgumentException) {
+            ReleaseChecks.preparePublication(fixture.manifest.release, 'owner/repo', fixture.root,
+                    new File(directory, 'wrong-public-download'), new File(directory, 'wrong-public.json'),
+                    new File(directory, 'wrong-public-output.txt'), 'modrinth', run, modrinthLabels())
+        }
+    }
+
     private static Closure modrinthLabels() {
         { String url, Map headers ->
             if (url.endsWith('/tag/game_version')) return [[version: '26.3']]

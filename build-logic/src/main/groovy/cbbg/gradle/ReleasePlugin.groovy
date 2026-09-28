@@ -80,6 +80,9 @@ class ReleasePlugin implements Plugin<Project> {
             CandidateManifest candidate = new CandidateManifest(manifest)
             candidate.records.keySet().each { ReleaseEvidence.assemble(candidate, it) }
         }
+        task('preparePublicReleaseAssets', 'Select public files from a verified candidate.') {
+            ReleaseChecks.preparePublicAssets(input('candidate'), input('output'))
+        }
         task('verifyCandidate', 'Check packaged candidate and complete local runtime results.') {
             local()
             File output = input('output')
