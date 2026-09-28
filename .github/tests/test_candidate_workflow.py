@@ -28,9 +28,9 @@ class CandidateWorkflowTest(unittest.TestCase):
         profile.mkdir(parents=True)
         (profile / 'build.gradle').write_text('')
         (self.root / 'targets.json').write_text(json.dumps({'targets': [
-            {'id': '26.3-fabric', 'java': 25},
-            {'id': '26.2-fabric', 'java': 8, 'buildJava': 21},
-            {'id': '26.3-quilt', 'java': 25},
+            {'id': '26.3-fabric', 'java': 25, 'minecraft': '26.3', 'loader': 'fabric'},
+            {'id': '26.2-fabric', 'java': 8, 'buildJava': 21, 'minecraft': '26.2', 'loader': 'fabric'},
+            {'id': '26.3-quilt', 'java': 25, 'minecraft': '26.3', 'loader': 'quilt'},
         ]}))
         for suffix in ('scenarios', 'mods', 'linux-x86_64'):
             (locks / f'26.3-fabric-{suffix}.json').write_text('{}')
@@ -199,6 +199,7 @@ class CandidateWorkflowTest(unittest.TestCase):
                            'Path("arguments.json").write_text(json.dumps(sys.argv[1:]))\n')
         command.chmod(0o755)
         self.env['PATH'] = str(self.root) + os.pathsep + self.env['PATH']
+        self.env['TARGETS'] = '26.3-fabric'
         public = self.public_fixture(self.candidate_fixture())
         (self.root / 'build/release-notes.md').write_text('Release notes\n')
         for tag in ('v1.4.0', 'v1.4.0-rc.1', 'v1.4.0+mc26.3-fabric', 'v1.4.0-rc.1+mc26.3-fabric'):
@@ -210,6 +211,9 @@ class CandidateWorkflowTest(unittest.TestCase):
                 self.assertEqual(arguments[:3], ['release', 'create', tag])
                 self.assertIn('--draft', arguments)
                 self.assertIn('--verify-tag', arguments)
+                expected_title = ('cbbg ' + tag[1:].split('+')[0] +
+                                  (' for Minecraft 26.3 Fabric' if '+mc' in tag else ''))
+                self.assertEqual(arguments[arguments.index('--title') + 1], expected_title)
                 self.assertEqual(arguments[arguments.index('--notes-file') + 1], 'build/release-notes.md')
                 self.assertEqual('--prerelease' in arguments, '-rc.' in tag)
                 uploaded = {argument for argument in arguments if argument.startswith('build/release-assets/')}

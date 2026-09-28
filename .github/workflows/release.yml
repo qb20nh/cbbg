@@ -152,14 +152,30 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
+          TARGETS: ${{ steps.selection.outputs.targets }}
         run: |
           printf '\n<!-- cbbg-candidate-run: %s -->\n' "${GITHUB_RUN_ID}" >> build/release-notes.md
+          version="${GITHUB_REF_NAME#v}"
+          version="${version%%+*}"
+          title="cbbg $version"
+          if [[ "$GITHUB_REF_NAME" == *+mc* ]]; then
+            read -r minecraft loader < <(jq -r --arg id "$TARGETS" \
+              '.targets[] | select(.id == $id) | [.minecraft, .loader] | @tsv' targets.json)
+            case "$loader" in
+              fabric) loader_title=Fabric ;;
+              quilt) loader_title=Quilt ;;
+              forge) loader_title=Forge ;;
+              neoforge) loader_title=NeoForge ;;
+              legacy-fabric) loader_title='Legacy Fabric' ;;
+              *) echo "Unknown release loader: $loader"; exit 1 ;;
+            esac
+            title="cbbg $version for Minecraft $minecraft $loader_title"
+          fi
           flags=()
-          version="${GITHUB_REF_NAME%%+*}"
           if [[ "$version" == *-* ]]; then
             flags+=(--prerelease)
           fi
           gh release create "${GITHUB_REF_NAME}" build/release-assets/* \
-            --verify-tag --draft --title "cbbg ${GITHUB_REF_NAME#v}" \
+            --verify-tag --draft --title "$title" \
             --notes-file build/release-notes.md \
             "${flags[@]}"
