@@ -1,6 +1,7 @@
 {
   "schemaVersion": 1,
   "scope": "classpath-profiles-native-libraries",
+  "profileTimestampFieldsExcluded": ["time", "releaseTime"],
   "profile": "fabric-loader-0.19.5-26.3",
   "profiles": [
     "fabric-loader-0.19.5-26.3",
@@ -161,6 +162,6 @@
     "libraries/org/slf4j/slf4j-api/2.0.17/slf4j-api-2.0.17.jar": "7b751d952061954d5abfed7181c1f645d336091b679891591d63329c622eb832",
     "versions/26.3/26.3.json": "061edddc346be236acf38f51b63c2361b084ae7b0d7ca15367242f99b1596839",
     "versions/fabric-loader-0.19.5-26.3/fabric-loader-0.19.5-26.3.jar": "4508d006323f24fa02876310c192d739af56516eb259000ac50f0909a68c9a2d",
-    "versions/fabric-loader-0.19.5-26.3/fabric-loader-0.19.5-26.3.json": "afb700cc71ebe3517b4ff2e46123f7fa144c8ab6f42055625e73adfca10c7c6d"
+    "versions/fabric-loader-0.19.5-26.3/fabric-loader-0.19.5-26.3.json": "ea2f10e3e3ed283c2792e72a1ed8e17c54b18a700f9029056763086f722767c6"
   }
 }
