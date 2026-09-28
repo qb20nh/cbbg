@@ -22,6 +22,13 @@ class FabricAcceptanceTests(unittest.TestCase):
                     for backend in backends}
         self.assertEqual(actual, expected)
 
+    def test_sulkan_vulkan_suspension_has_own_profile(self):
+        runs = required_runs(self.target, self.contract)
+        selected = [run for run in runs if run['suite'] == 'ordinary'
+                    and run['profile'] == 'sulkan' and run['backend'] == 'vulkan']
+        self.assertEqual(len(selected), 1)
+        self.assertIn('com.qb20nh.cbbg.gametest.ReleaseSulkanGameTest', selected[0]['entrypoints'])
+
     def test_restart_runs_follow_shader_profiles(self):
         runs = required_runs(self.target, self.contract)
         for suite, mod, backend in [('iris-restart', 'iris', 'opengl')]:
