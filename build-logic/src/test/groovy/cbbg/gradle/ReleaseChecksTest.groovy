@@ -1,6 +1,7 @@
 package cbbg.gradle
 
 import groovy.json.JsonOutput
+import org.gradle.api.GradleException
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 
@@ -232,6 +233,34 @@ class ReleaseChecksTest {
         assertEquals('https://example.invalid/release', report.url)
         assertEquals(true, CandidateFiles.read(output).published)
         assertEquals(1, commands.count { it.contains('PATCH') })
+    }
+
+    @Test
+    void finalizationFindsDraftWhenReleaseByTagApiReturnsNotFound() {
+        Map fixture = CandidateFixture.create(directory)
+        File notes = new File(directory, 'notes.md')
+        notes.text = 'Release notes'
+        File result = new File(directory, 'result-index.json')
+        result.text = '{}'
+        List<List<String>> commands = []
+        Closure normal = runFor(fixture, commands)
+        Closure draftApi = { List<String> command, File cwd ->
+            if (command.take(2) == ['gh', 'api'] && command[2].contains('/releases/tags/')) {
+                throw new GradleException('gh failed: gh: Not Found (HTTP 404)')
+            }
+            if (command.take(2) == ['gh', 'api'] && command[2].contains('/releases?')) {
+                commands << command
+                Map selected = CandidateFiles.parse(new StringReader(normal(
+                        ['gh', 'api', 'repos/owner/repo/releases/tags/' + fixture.manifest.release], cwd))) as Map
+                return JsonOutput.toJson([[tag_name: 'other-release'], selected])
+            }
+            normal(command, cwd)
+        }
+        File output = new File(directory, 'draft.json')
+        Map report = ReleaseChecks.finalizeCandidate(fixture.file, [(fixture.target.id): result],
+                fixture.root, 'owner/repo', fixture.manifest.release, notes, output, false, draftApi)
+        assertFalse(report.published)
+        assertEquals(2, commands.count { it[0..1] == ['gh', 'api'] && it[2].contains('/releases?') })
     }
 
     @Test

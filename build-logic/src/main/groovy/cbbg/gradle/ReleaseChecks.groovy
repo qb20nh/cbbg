@@ -3,6 +3,7 @@ package cbbg.gradle
 import groovy.json.JsonOutput
 import java.nio.file.Files
 import java.security.MessageDigest
+import org.gradle.api.GradleException
 
 class ReleaseChecks {
     private static final String PREDICATE = 'https://slsa.dev/provenance/v1'
@@ -118,7 +119,7 @@ class ReleaseChecks {
         if (api(endpoint + '/immutable-releases', sourceRoot, run).enabled != true) {
             throw new IllegalArgumentException('Enable immutable releases before finalization')
         }
-        Map release = api(releaseEndpoint, sourceRoot, run)
+        Map release = releaseApi(releaseEndpoint, sourceRoot, run)
         String runId = candidateRunId(release.body as String)
         if (runId) checkedCandidateRun(runId, repo, candidate.data.commit as String, tag, sourceRoot, run)
         Map<String, String> files = runId ? publicFiles(candidate) : internalFiles
@@ -134,7 +135,7 @@ class ReleaseChecks {
         } finally {
             removeTree(download)
         }
-        if (draftSnapshot(api(releaseEndpoint, sourceRoot, run), tag, files) != snapshot) {
+        if (draftSnapshot(releaseApi(releaseEndpoint, sourceRoot, run), tag, files) != snapshot) {
             throw new IllegalArgumentException('Draft changed during finalization checks')
         }
         checkFiles(candidate.file.parentFile, internalFiles)
@@ -164,7 +165,7 @@ class ReleaseChecks {
             } finally {
                 request.delete()
             }
-            Map published = api(releaseEndpoint, sourceRoot, run)
+            Map published = releaseApi(releaseEndpoint, sourceRoot, run)
             if (published.id != snapshot.id || published.draft != false ||
                     published.immutable != true || published.body != body ||
                     api(tagEndpoint, sourceRoot, run).sha != candidate.data.commit ||
@@ -203,7 +204,7 @@ class ReleaseChecks {
         if (api(tagEndpoint, source, run).sha != commit) {
             throw new IllegalArgumentException('Live release tag differs from source checkout')
         }
-        Map published = api(releaseEndpoint, source, run)
+        Map published = releaseApi(releaseEndpoint, source, run)
         String candidateRun = candidateRunId(published.body as String)
         boolean draft = published.draft == true && dryRun
         Map snapshot = draft ? draftSnapshot(published, tag, null) : publishedSnapshot(published, tag)
@@ -243,7 +244,7 @@ class ReleaseChecks {
         provenance(manifest, new File(assetDir, 'provenance.jsonl'), repo, run)
         Map metadata = Publication.resolve(Publication.metadata(manifest, source, snapshot.body as String),
                                             services, fetch)
-        Map current = api(releaseEndpoint, source, run)
+        Map current = releaseApi(releaseEndpoint, source, run)
         if (api(tagEndpoint, source, run).sha != commit ||
                 (draft ? draftSnapshot(current, tag, releaseFiles) : publishedSnapshot(current, tag, releaseFiles)) != snapshot) {
             throw new IllegalArgumentException('Release changed during preflight')
@@ -298,7 +299,7 @@ class ReleaseChecks {
             throw new IllegalArgumentException('Live release tag differs from source checkout')
         }
         boolean prerelease = version.contains('-')
-        Map published = api(releaseEndpoint, source, run)
+        Map published = releaseApi(releaseEndpoint, source, run)
         Map snapshot = publishedSnapshot(published, tag, null, prerelease)
         String base = archive + '-' + version + '+mc' + minecraft
         String artifactName = base + '.jar'
@@ -321,7 +322,7 @@ class ReleaseChecks {
                 LegacyPublication.metadata(source, tag, snapshot.body as String, prerelease, assetDir, commit),
                 services, fetch)
         if (api(tagEndpoint, source, run).sha != commit ||
-                publishedSnapshot(api(releaseEndpoint, source, run), tag, null, prerelease) != snapshot ||
+                publishedSnapshot(releaseApi(releaseEndpoint, source, run), tag, null, prerelease) != snapshot ||
                 localFiles(assetDir) != downloaded) {
             throw new IllegalArgumentException('Published legacy release changed during preflight')
         }
@@ -353,7 +354,7 @@ class ReleaseChecks {
         if (api(tagEndpoint, sourceRoot, run).sha != commit) {
             throw new IllegalArgumentException('Live release tag differs from source checkout')
         }
-        Map release = api(releaseEndpoint, sourceRoot, run)
+        Map release = releaseApi(releaseEndpoint, sourceRoot, run)
         boolean draft = metadata.dry_run_only == true
         Map files
         Map specification
@@ -393,7 +394,7 @@ class ReleaseChecks {
         if (matches.size() != 1 || specification == null) {
             throw new IllegalArgumentException('Expected one artifact owner publication record for selected target')
         }
-        Map current = api(releaseEndpoint, sourceRoot, run)
+        Map current = releaseApi(releaseEndpoint, sourceRoot, run)
         Map selectedFiles = metadata.legacy == true ? null :
                 (candidateRunId(release.body as String) ? publicFiles(new CandidateManifest(new File(assets, 'candidate.json'))) : files)
         Map currentSnapshot = draft ? draftSnapshot(current, tag, selectedFiles) :
@@ -455,6 +456,33 @@ class ReleaseChecks {
         Object parsed = CandidateFiles.parse(new StringReader(run(['gh', 'api', endpoint], cwd) as String))
         if (!(parsed instanceof Map)) throw new IllegalArgumentException('Invalid GitHub API response')
         parsed as Map
+    }
+
+    private static Map releaseApi(String endpoint, File cwd, Closure run) {
+        try {
+            return api(endpoint, cwd, run)
+        } catch (GradleException error) {
+            if (!error.message?.contains('HTTP 404')) throw error
+        }
+        String marker = '/releases/tags/'
+        int split = endpoint.indexOf(marker)
+        if (split < 0) throw new IllegalArgumentException('Invalid release endpoint')
+        String tag = endpoint.substring(split + marker.length())
+        String repo = endpoint.substring(0, split)
+        for (int page = 1; ; page++) {
+            Object parsed = CandidateFiles.parse(new StringReader(run(
+                    ['gh', 'api', repo + '/releases?per_page=100&page=' + page], cwd) as String))
+            if (!(parsed instanceof List) || parsed.any { !(it instanceof Map) }) {
+                throw new IllegalArgumentException('Invalid GitHub releases response')
+            }
+            List matches = parsed.findAll { it.tag_name == tag }
+            if (matches.size() != 0) {
+                if (matches.size() != 1) throw new IllegalArgumentException('Duplicate releases for tag')
+                return matches[0] as Map
+            }
+            if (parsed.size() < 100) break
+        }
+        throw new IllegalArgumentException('Release not found for tag: ' + tag)
     }
 
     private static String segment(String value) {
