@@ -45,13 +45,13 @@ jobs:
           exit 1
 
       - name: Checkout publishing tools
-        uses: actions/checkout@v6.0.1
+        uses: actions/checkout@v7
         with:
           ref: ${{ github.workflow_sha }}
           persist-credentials: false
 
       - name: Checkout release source
-        uses: actions/checkout@v6.0.1
+        uses: actions/checkout@v7
         with:
           ref: ${{ inputs.tag }}
           path: .release-source
@@ -113,13 +113,13 @@ jobs:
           exit 1
 
       - name: Checkout publishing tools
-        uses: actions/checkout@v6.0.1
+        uses: actions/checkout@v7
         with:
           ref: ${{ github.workflow_sha }}
           persist-credentials: false
 
       - name: Checkout release source
-        uses: actions/checkout@v6.0.1
+        uses: actions/checkout@v7
         with:
           ref: ${{ inputs.tag }}
           path: .release-source

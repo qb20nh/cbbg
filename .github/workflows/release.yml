@@ -22,7 +22,7 @@ jobs:
   candidate:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6.0.1
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -98,6 +98,7 @@ jobs:
       - name: Test candidate tooling
         run: |
           ./gradlew -p build-logic --no-daemon test
+          python3 -m pip install --disable-pip-version-check -r .github/scripts/requirements.txt
           python3 -m unittest discover -s scripts/tests
           python3 -m unittest discover -s .github/tests
 
@@ -116,7 +117,7 @@ jobs:
 
       - name: Attest candidate files
         id: provenance
-        uses: actions/attest-build-provenance@v3
+        uses: actions/attest-build-provenance@v4
         with:
           subject-path: build/release-candidate/*
 

@@ -1,5 +1,8 @@
 # Build and release commands
 
+To test major Dependabot updates together, use the
+[draft batch workflow](../.github/DEPENDABOT_BATCH.md).
+
 Run these commands from the repository root with Java 25. `targets.json`
 defines target dependencies, build profiles, runtime Java versions and default
 CI selection. Each profile uses its own Gradle process and can use its own

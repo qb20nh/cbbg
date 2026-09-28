@@ -1,0 +1,71 @@
+name: Dependabot major batch
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr_numbers:
+        description: "Blank: all major updates; otherwise PR numbers separated by commas or spaces"
+        required: false
+        default: ""
+        type: string
+  pull_request_target:
+    branches: [main]
+    types: [opened, reopened, ready_for_review]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dependabot-major-batch-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  assemble:
+    if: >-
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'pull_request_target' &&
+       github.event.pull_request.user.login == 'dependabot[bot]' &&
+       github.event.pull_request.head.repo.full_name == github.repository &&
+       github.event.pull_request.base.ref == 'main' &&
+       !github.event.pull_request.draft)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      pull-requests: write
+    env:
+      BATCH_APP_CLIENT_ID: ${{ vars.DEPENDABOT_BATCH_APP_CLIENT_ID }}
+    steps:
+      - name: Checkout trusted utility
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+      - name: Install metadata parser
+        run: python3 -m pip install --disable-pip-version-check -r .github/scripts/requirements.txt
+      - name: Create repository-scoped branch token
+        id: branch-token
+        if: env.BATCH_APP_CLIENT_ID != ''
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ env.BATCH_APP_CLIENT_ID }}
+          private-key: ${{ secrets.DEPENDABOT_BATCH_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: write
+          permission-workflows: write
+      - name: Assemble dependency snapshot
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_BRANCH_TOKEN: ${{ steps.branch-token.outputs.token }}
+          CONTROLLER_SHA: ${{ github.workflow_sha }}
+          PR_NUMBERS: ${{ inputs.pr_numbers || '' }}
+        run: python3 .github/scripts/dependabot_major_batch.py --pr-numbers "$PR_NUMBERS"
+      - name: Save assembly records
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dependabot-major-batch-${{ github.run_id }}-${{ github.run_attempt }}
+          path: build/dependabot-major-batch/
+          if-no-files-found: warn
+          retention-days: 14
