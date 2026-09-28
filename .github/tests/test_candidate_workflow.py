@@ -63,6 +63,7 @@ class CandidateWorkflowTest(unittest.TestCase):
     def test_rejects_branch_invalid_tag_and_unsupported_target(self):
         for key, value in [('GITHUB_REF_TYPE', 'branch'), ('GITHUB_REF_NAME', 'main'),
                            ('GITHUB_REF_NAME', 'v1.4.0+mc26.3'),
+                           ('GITHUB_REF_NAME', 'v1.4.0+mc26.3_fabric'),
                            ('REQUESTED_TARGET', '26.3-quilt'), ('REQUESTED_TARGET', 'missing')]:
             with self.subTest(key=key, value=value):
                 previous = self.env[key]
@@ -71,6 +72,12 @@ class CandidateWorkflowTest(unittest.TestCase):
                 self.assertNotEqual(result.returncode, 0)
                 self.assertFalse((self.root / 'output').exists())
                 self.env[key] = previous
+
+    def test_accepts_target_metadata_on_stable_and_prerelease_tags(self):
+        for tag in ('v1.4.0+mc26.3-fabric', 'v1.4.0-rc.1+mc26.3-fabric'):
+            self.env['GITHUB_REF_NAME'] = tag
+            result = self.run_step('Validate release selection')
+            self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_build_and_bundle_use_recorded_outputs_without_python(self):
         self.env['TARGETS'] = '26.3-fabric'
@@ -144,7 +151,7 @@ class CandidateWorkflowTest(unittest.TestCase):
         public = self.root / 'build/release-assets'
         public.mkdir()
         record = json.loads((bundle / 'candidate.json').read_text())['targets'][0]
-        names = {record[kind]['path'] for kind in ('artifact', 'sources', 'sbom', 'mapping')}
+        names = {record[kind]['path'] for kind in ('artifact', 'sources')}
         names.add('provenance.jsonl')
         for name in names:
             shutil.copyfile(bundle / name, public / name)
@@ -194,7 +201,7 @@ class CandidateWorkflowTest(unittest.TestCase):
         self.env['PATH'] = str(self.root) + os.pathsep + self.env['PATH']
         public = self.public_fixture(self.candidate_fixture())
         (self.root / 'build/release-notes.md').write_text('Release notes\n')
-        for tag in ('v1.4.0', 'v1.4.0-rc.1'):
+        for tag in ('v1.4.0', 'v1.4.0-rc.1', 'v1.4.0+mc26.3-fabric', 'v1.4.0-rc.1+mc26.3-fabric'):
             with self.subTest(tag=tag):
                 self.env['GITHUB_REF_NAME'] = tag
                 result = self.run_step('Create draft release', self.root)
@@ -207,7 +214,7 @@ class CandidateWorkflowTest(unittest.TestCase):
                 self.assertEqual('--prerelease' in arguments, '-rc.' in tag)
                 uploaded = {argument for argument in arguments if argument.startswith('build/release-assets/')}
                 self.assertEqual(uploaded, {path.relative_to(self.root).as_posix() for path in public.iterdir()})
-                self.assertEqual(len(uploaded), 6)
+                self.assertEqual(len(uploaded), 4)
                 self.assertFalse(any(argument.startswith('build/release-candidate/') for argument in arguments))
                 self.assertNotIn('candidate.json', ' '.join(arguments))
                 self.assertNotIn('test-driver.jar', ' '.join(arguments))

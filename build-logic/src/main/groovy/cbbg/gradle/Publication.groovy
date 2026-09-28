@@ -53,7 +53,7 @@ class Publication {
             boolean fabricApi = specification.loader == 'fabric'
             String minecraft = specification.minecraft
             String version = CandidateManifest.packageVersion(manifest.data.release as String, specification)
-            String channel = manifest.data.release.contains('-') ? 'beta' : 'release'
+            String channel = CandidateFiles.prerelease(manifest.data.release as String) ? 'beta' : 'release'
             records.add([
                     targets: runtimes, artifact: target.artifact, sources: target.sources,
                     modrinth: [project_id: projects.modrinth, version_number: version,

@@ -330,10 +330,15 @@ class ReleaseChecksTest {
     @Test
     void privateCandidateSupportsAReleaseWithOnlyPublicFiles() {
         Map fixture = CandidateFixture.create(directory, true, true)
+        fixture.manifest.release = 'v1.4.0+mc26.3-fabric'
+        fixture.file.text = JsonOutput.toJson(fixture.manifest)
+        CandidateFixture.checksums(fixture.bundle)
         CandidateManifest candidate = new CandidateManifest(fixture.file)
         ReleaseEvidence.assemble(candidate, fixture.target.id)
         Map<String, String> publicFiles = ReleaseChecks.publicFiles(candidate)
-        assertEquals(6, publicFiles.size())
+        assertEquals(4, publicFiles.size())
+        assertFalse(publicFiles.containsKey(fixture.record.mapping.path))
+        assertFalse(publicFiles.containsKey(fixture.record.sbom.path))
         assertFalse(publicFiles.containsKey('candidate.json'))
         File publicAssets = new File(directory, 'public-assets')
         assertEquals(publicFiles, ReleaseChecks.preparePublicAssets(fixture.file, publicAssets))

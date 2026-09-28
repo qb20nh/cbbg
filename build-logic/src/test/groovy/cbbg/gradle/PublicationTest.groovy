@@ -67,6 +67,20 @@ class PublicationTest {
     }
 
     @Test
+    void targetReleaseKeepsStableChannelAndArtifactVersion() {
+        fixture.manifest.release = 'v1.4.0+mc26.3-fabric'
+        fixture.file.text = JsonOutput.toJson(fixture.manifest)
+        Map result = metadata()
+        assertEquals('v1.4.0+mc26.3-fabric', result.release)
+        assertEquals('1.4.0+mc26.3-fabric', result.records[0].modrinth.version_number)
+        assertEquals('release', result.records[0].modrinth.version_type)
+        assertEquals('release', result.records[0].curseforge.release_type)
+        fixture.manifest.release = 'v1.4.0+mc26.3-quilt'
+        fixture.file.text = JsonOutput.toJson(fixture.manifest)
+        fails('single selected target') { metadata() }
+    }
+
+    @Test
     void emptyNotesInvalidProjectsAndBadPackageStopMetadata() {
         fails('Release notes') { Publication.metadata(fixture.file, fixture.root, ' ') }
         File properties = new File(fixture.root, 'gradle.properties')

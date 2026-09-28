@@ -62,6 +62,7 @@ abstract class BundleCandidate extends DefaultTask {
         }
         if (!multipleInputs) ids = [CandidateFiles.read(buildOutputs.get().asFile).target as String]
         Map<String, Map> selected = catalog.releaseTargets(ids)
+        CandidateFiles.releaseTargets(release, selected.values())
         Map<String, Map> files = [:]
         Set<String> inputPaths = [] as Set
         def add = { String name, File file ->

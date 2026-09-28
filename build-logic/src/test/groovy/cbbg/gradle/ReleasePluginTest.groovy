@@ -51,6 +51,11 @@ class ReleasePluginTest {
         String single = new File(directory, 'notes.md').text
         assertTrue(single.contains('Fabric fix.'))
         assertFalse(single.contains('NeoForge fix.'))
+        runner('releaseNotes', '-Prelease=v1.5.0+mc26.3-fabric', '-Ptarget=26.3-fabric', '-Poutput=notes.md').build()
+        assertEquals(single, new File(directory, 'notes.md').text)
+        assertTrue(runner('releaseNotes', '-Prelease=v1.5.0+mc26.3-fabric',
+                '-Ptargets=26.3-fabric,26.3-neoforge', '-Poutput=notes.md').buildAndFail()
+                .output.contains('single selected target'))
         runner('releaseNotes', '-Prelease=v1.5.0', '-Ptargets=26.3-fabric,26.3-neoforge', '-Poutput=notes.md').build()
         assertTrue(new File(directory, 'notes.md').text.contains('NeoForge fix.'))
         assertTrue(runner('releaseNotes', '-Prelease=v1.5.0', '-Poutput=notes.md').buildAndFail()

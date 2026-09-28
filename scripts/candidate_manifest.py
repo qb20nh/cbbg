@@ -3,7 +3,8 @@
 from pathlib import Path
 
 from parity_evidence import (EvidenceError, catalog_digest, checked_file, read_json,
-                             selected_target_specs, unique_by, validate_release_identity)
+                             selected_target_specs, unique_by, validate_release_identity,
+                             validate_release_targets)
 from runtime_catalog import load_catalog
 
 
@@ -27,6 +28,7 @@ def client_candidate(manifest_path, target_id):
     base = manifest_path.parent
     catalog = load_catalog(checked_file(base, target['client_tests']['catalog']))
     selected = selected_target_specs(catalog, manifest['selected_targets'])
+    validate_release_targets(manifest['release'], selected)
     if targets.keys() != selected.keys() or manifest['catalog_sha256'] != catalog_digest(catalog):
         raise EvidenceError('Candidate catalog or target selection differs')
     for identifier, specification in selected.items():

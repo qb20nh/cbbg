@@ -38,7 +38,7 @@ jobs:
         env:
           REQUESTED_TARGET: ${{ inputs.target }}
         run: |
-          if [[ "$GITHUB_REF_TYPE" != "tag" || ! "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z][0-9A-Za-z.-]*\.[1-9][0-9]*)?$ ]]; then
+          if [[ "$GITHUB_REF_TYPE" != "tag" || ! "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z][0-9A-Za-z.-]*\.[1-9][0-9]*)?(\+mc[0-9][0-9A-Za-z.-]*-(fabric|quilt|forge|neoforge|legacy-fabric))?$ ]]; then
             echo "Run this workflow from an explicit version release tag."
             exit 1
           fi
@@ -155,7 +155,8 @@ jobs:
         run: |
           printf '\n<!-- cbbg-candidate-run: %s -->\n' "${GITHUB_RUN_ID}" >> build/release-notes.md
           flags=()
-          if [[ "${GITHUB_REF_NAME}" == *-* ]]; then
+          version="${GITHUB_REF_NAME%%+*}"
+          if [[ "$version" == *-* ]]; then
             flags+=(--prerelease)
           fi
           gh release create "${GITHUB_REF_NAME}" build/release-assets/* \

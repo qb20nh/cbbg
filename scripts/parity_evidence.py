@@ -72,11 +72,20 @@ def unique_by(items, key, description):
 def validate_release_identity(release, commit):
     number = r"(?:0|[1-9][0-9]*)"
     prerelease = r"(?:-[A-Za-z][0-9A-Za-z-]*(?:\.[A-Za-z][0-9A-Za-z-]*)*\.[1-9][0-9]*)?"
+    target = r"(?:\+mc[0-9][0-9A-Za-z-]*(?:\.[0-9A-Za-z-]+)*-(?:fabric|quilt|forge|neoforge|legacy-fabric))?"
     if not isinstance(release, str) or not re.fullmatch(
-            "v" + number + r"\." + number + r"\." + number + prerelease, release):
+            "v" + number + r"\." + number + r"\." + number + prerelease + target, release):
         raise EvidenceError("Invalid release tag")
     if not isinstance(commit, str) or not re.fullmatch(r"[0-9a-f]{40}", commit):
         raise EvidenceError("Invalid source commit")
+
+
+def validate_release_targets(release, targets):
+    if "+" in release:
+        suffixes = ["mc" + target["minecraft"] + "-" + target["loader"]
+                    for target in targets.values()]
+        if len(suffixes) != 1 or release.split("+", 1)[1] != suffixes[0]:
+            raise EvidenceError("Release tag must match the single selected target")
 
 
 def selected_target_specs(catalog, selection):
@@ -107,6 +116,7 @@ def verify(manifest_path, receipts_directory, catalog):
     # Old manifests retain their full-catalog meaning. Scope must be explicit.
     expected_targets = selected_target_specs(catalog, candidate.get(
         'selected_targets', [target['id'] for target in catalog['targets']]))
+    validate_release_targets(candidate["release"], expected_targets)
     targets = unique_by(candidate["targets"], lambda t: t["id"], "target")
     if targets.keys() != expected_targets.keys():
         scope = 'selection' if 'selected_targets' in candidate else 'catalog'

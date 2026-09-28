@@ -30,13 +30,22 @@ code belongs in the core or renderer modules; adapters handle version-specific
 APIs. Discuss new ports before adding a profile.
 
 Set `mod_version=X.Y.Z` or `X.Y.Z-rc.1` in `gradle.properties`. Modern artifacts
-use `<mod_version>+mc<minecraft_version>-<loader>` and release tags use `vX.Y.Z`
-or `vX.Y.Z-rc.1`. Gradle expands the version and Minecraft requirement in mod
-metadata. Keep these values in properties and the catalog.
+use `<mod_version>+mc<minecraft_version>-<loader>`. Tag a single-target release
+`vX.Y.Z+mc<minecraft_version>-<loader>` and a shared release `vX.Y.Z`.
+For a prerelease, put `-rc.1` before `+mc`, for example
+`v1.4.1-rc.1+mc26.3-fabric`. The target suffix is SemVer build metadata;
+it does not make the release a prerelease. Gradle expands the version and
+Minecraft requirement in mod metadata. Keep these values in properties and the catalog.
 
 The preserved 26.2 profile retains its `<mod_version>+mc<minecraft_version>`
 artifact names and root source resources. The publisher also accepts existing
 historical `vX.Y.Z+mc<minecraft_version>` releases.
+
+GitHub creates the dedicated Release attestation when an immutable release is
+published. Drafts show only the uploaded `provenance.jsonl` build attestation.
+Upload the mod JAR, sources JAR, `provenance.jsonl`, and `SHA256SUMS`.
+The sources JAR includes the ProGuard mapping and CycloneDX SBOM under
+`META-INF/cbbg/`; they need no separate release assets.
 
 ## Releases
 

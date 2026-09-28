@@ -50,12 +50,35 @@ class CandidateFilesTest {
 
     @Test void releaseIdentityAndExclusiveWrites() {
         CandidateFiles.releaseIdentity('v1.4.0-rc.1', 'a' * 40)
-        ['v01.4.0', 'v1.4.0-rc', 'v1.4.0+mc26.3'].each { tag ->
+        ['v01.4.0', 'v1.4.0-rc', 'v1.4.0+mc26.3', 'v1.4.1+mc26.3_fabric',
+         'v1.4.1+mc26..3-fabric', 'v1.4.1+mc26.3-fabric+extra'].each { tag ->
             assertThrows(GradleException) { CandidateFiles.releaseIdentity(tag, 'a' * 40) }
         }
         File output = new File(directory, 'candidate.json')
         CandidateFiles.writeNew(output, [value: 1])
         assertThrows(java.nio.file.FileAlreadyExistsException) { CandidateFiles.writeNew(output, [value: 2]) }
         assertEquals(1, CandidateFiles.read(output).value)
+    }
+
+    @Test void targetMetadataDoesNotChangeTheReleaseChannel() {
+        ['fabric', 'quilt', 'forge', 'neoforge', 'legacy-fabric'].each { loader ->
+            String tag = 'v1.4.1+mc1.20.1-' + loader
+            CandidateFiles.releaseIdentity(tag, 'a' * 40)
+            assertTrue(CandidateFiles.targetedRelease(tag))
+            assertFalse(CandidateFiles.prerelease(tag))
+            assertEquals('1.4.1', CandidateFiles.releaseVersion(tag))
+            CandidateFiles.releaseTargets(tag, [[minecraft: '1.20.1', loader: loader]])
+        }
+        CandidateFiles.releaseIdentity('v1.4.1-rc.1+mc26.3-fabric', 'a' * 40)
+        assertTrue(CandidateFiles.prerelease('v1.4.1-rc.1+mc26.3-fabric'))
+        assertFalse(CandidateFiles.targetedRelease('v1.4.0+mc26.2'))
+        assertFalse(CandidateFiles.targetedRelease('v1.4.1'))
+        [[minecraft: '26.2', loader: 'fabric'], [minecraft: '26.3', loader: 'quilt']].each { target ->
+            assertThrows(GradleException) { CandidateFiles.releaseTargets('v1.4.1+mc26.3-fabric', [target]) }
+        }
+        assertThrows(GradleException) {
+            CandidateFiles.releaseTargets('v1.4.1+mc26.3-fabric',
+                    [[minecraft: '26.3', loader: 'fabric'], [minecraft: '26.3', loader: 'quilt']])
+        }
     }
 }

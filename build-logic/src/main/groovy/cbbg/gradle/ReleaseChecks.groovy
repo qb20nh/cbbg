@@ -491,7 +491,7 @@ class ReleaseChecks {
 
     private static Map draftSnapshot(Map release, String tag, Map files = null) {
         if (release.tag_name != tag || release.draft != true ||
-                release.prerelease != tag.contains('-') ||
+                release.prerelease != CandidateFiles.prerelease(tag) ||
                 !(release.id instanceof Integer || release.id instanceof Long ||
                         release.id instanceof BigInteger) || release.id <= 0 ||
                 !(release.assets instanceof List)) {
@@ -517,7 +517,7 @@ class ReleaseChecks {
     private static Map publishedSnapshot(Map release, String tag, Map files = null,
                                          Boolean expectedPrerelease = null) {
         if (release.tag_name != tag || release.draft != false ||
-                release.prerelease != (expectedPrerelease == null ? tag.contains('-') : expectedPrerelease) ||
+                release.prerelease != (expectedPrerelease == null ? CandidateFiles.prerelease(tag) : expectedPrerelease) ||
                 release.immutable != true ||
                 !(release.body instanceof String) || !release.body.trim() ||
                 !(release.assets instanceof List)) {
@@ -543,7 +543,7 @@ class ReleaseChecks {
     static Map<String, String> publicFiles(CandidateManifest candidate) {
         Map<String, String> files = [:]
         candidate.records.values().each { record ->
-            ['artifact', 'sources', 'sbom', 'mapping'].each { kind ->
+            ['artifact', 'sources'].each { kind ->
                 Map reference = record[kind] as Map
                 if (reference != null) {
                     String name = reference.path

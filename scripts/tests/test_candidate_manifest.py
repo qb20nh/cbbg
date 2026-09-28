@@ -46,6 +46,15 @@ class CandidateManifestTest(unittest.TestCase):
         self.assertEqual(target['artifact'], self.reference('artifact.jar'))
         self.assertEqual(specification['minecraft'], '26.3')
 
+    def test_target_tag_must_match_selected_runtime(self):
+        for tag in ('v1.4.0+mc26.3-fabric', 'v1.4.0-rc.1+mc26.3-fabric'):
+            self.manifest['release'] = tag
+            self.assertEqual(tag, self.read()[0]['release'])
+        for tag in ('v1.4.0+mc26.3_fabric', 'v1.4.0+mc26.3-quilt', 'v1.4.0+mc26.2-fabric'):
+            self.manifest['release'] = tag
+            with self.subTest(tag=tag), self.assertRaises(EvidenceError):
+                self.read()
+
     def test_saved_runtime_candidates_without_inventory_remain_readable(self):
         del self.target['source_inventory']
         self.assertEqual(self.read()[1]['id'], '26.3-fabric')

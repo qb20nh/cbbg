@@ -62,7 +62,8 @@ class ReleasePlugin implements Plugin<Project> {
             String selection = project.providers.gradleProperty('targets').orElse(project.providers.gradleProperty('target')).orNull
             if (!selection) throw new GradleException('Release notes require an explicit target selection')
             List<Map> targets = TargetCatalog.read(new File(source(), 'targets.json')).select(selection)
-            String notes = ChangelogNotes.select(new File(source(), 'CHANGELOG.md'), tag.substring(1), targets)
+            CandidateFiles.releaseTargets(tag, targets)
+            String notes = ChangelogNotes.select(new File(source(), 'CHANGELOG.md'), CandidateFiles.releaseVersion(tag), targets)
             File output = input('output')
             output.parentFile.mkdirs()
             output.setText(notes, 'UTF-8')
@@ -104,7 +105,7 @@ class ReleasePlugin implements Plugin<Project> {
             if (!(dryRun in ['true', 'false'])) throw new GradleException('Expected -PdryRun=true or false')
             def arguments = [tag, required('repo'), source(), input('assets'), input('output'),
                              input('githubOutput'), project.providers.gradleProperty('services').getOrElse('both'), run]
-            if (tag.contains('+mc')) {
+            if (tag.contains('+mc') && !CandidateFiles.targetedRelease(tag)) {
                 ReleaseChecks.prepareLegacyPublication(*arguments)
             } else {
                 ReleaseChecks.preparePublication(*(arguments + [null, dryRun == 'true']))
