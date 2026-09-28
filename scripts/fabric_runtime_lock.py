@@ -46,9 +46,17 @@ def capture_runtime(runtime, profile, command):
         files.update(relative(path) for path in (runtime / directory).rglob('*') if path.is_file())
     digests = {}
     for name in sorted(files):
-        with (runtime / name).open('rb') as stream:
-            digests[name] = hashlib.file_digest(stream, 'sha256').hexdigest()
+        if name == f'versions/{profile}/{profile}.json':
+            metadata = json.loads((runtime / name).read_text(encoding='utf-8'))
+            metadata.pop('time', None)
+            metadata.pop('releaseTime', None)
+            content = json.dumps(metadata, sort_keys=True, separators=(',', ':')).encode('utf-8')
+            digests[name] = hashlib.sha256(content).hexdigest()
+        else:
+            with (runtime / name).open('rb') as stream:
+                digests[name] = hashlib.file_digest(stream, 'sha256').hexdigest()
     return {'schemaVersion': 1, 'scope': 'classpath-profiles-native-libraries',
+            'profileTimestampFieldsExcluded': ['time', 'releaseTime'],
             'profile': profile, 'profiles': profiles, 'classpath': classpath,
             'nativeDirectories': native_directories, 'files': digests}
 

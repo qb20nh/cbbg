@@ -13,7 +13,10 @@ class RuntimeLockTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
         for name, content in {
-            'versions/fabric/fabric.json': json.dumps({'id': 'fabric', 'inheritsFrom': 'base'}),
+            'versions/fabric/fabric.json': json.dumps({
+                'id': 'fabric', 'inheritsFrom': 'base',
+                'time': '2026-09-26T15:06:17+0000',
+                'releaseTime': '2026-09-26T15:06:17+0000'}),
             'versions/base/base.json': json.dumps({'id': 'base'}),
             'libraries/loader.jar': 'loader',
             'versions/base/base.jar': 'minecraft',
@@ -32,6 +35,19 @@ class RuntimeLockTests(unittest.TestCase):
         verify_runtime(self.root, 'fabric', self.command, lock)
         self.assertNotIn('must-not-be-recorded', json.dumps(lock))
         self.assertEqual(lock['classpath'], ['libraries/loader.jar', 'versions/base/base.jar'])
+
+    def test_loader_profile_timestamps_do_not_change_runtime_identity(self):
+        lock = capture_runtime(self.root, 'fabric', self.command)
+        path = self.root / 'versions/fabric/fabric.json'
+        profile = json.loads(path.read_text())
+        profile['time'] = '2026-09-28T15:06:18+0000'
+        profile['releaseTime'] = profile['time']
+        path.write_text(json.dumps(profile))
+        verify_runtime(self.root, 'fabric', self.command, lock)
+        profile['libraries'] = [{'name': 'different:library:1.0'}]
+        path.write_text(json.dumps(profile))
+        with self.assertRaises(ValueError):
+            verify_runtime(self.root, 'fabric', self.command, lock)
 
     def test_changed_library_metadata_native_and_added_native_fail(self):
         for name in ('libraries/loader.jar', 'versions/base/base.json',
