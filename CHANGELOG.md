@@ -13,7 +13,7 @@ This project uses [Keep a Changelog](https://keepachangelog.com/) and [Semantic 
 
 ### Changed
 
-- Smaller jar size by implementing our own ealry entry and removing the bundled AsmFabricLoader library.
+- Smaller jar size by implementing our own early entry and removing the bundled AsmFabricLoader library.
 - Even smaller jar size with ProGuard. Source mappings included in sources jar.
 
 ### Fixed
