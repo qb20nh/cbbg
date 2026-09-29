@@ -25,7 +25,7 @@ jobs:
         with:
           java-version: '25'
           distribution: temurin
-      - uses: gradle/actions/setup-gradle@v5.0.0
+      - uses: gradle/actions/setup-gradle@v6.3.0
       - name: Check Java formatting
         run: ./gradlew --no-daemon spotlessCheck
       - name: Select catalog targets
@@ -78,7 +78,7 @@ jobs:
         with:
           java-version: '25'
           distribution: temurin
-      - uses: gradle/actions/setup-gradle@v5.0.0
+      - uses: gradle/actions/setup-gradle@v6.3.0
       - name: Test core on selected runtime
         env:
           TEST_JAVA: ${{ matrix.java }}
@@ -117,7 +117,7 @@ jobs:
         with:
           java-version: '25'
           distribution: temurin
-      - uses: gradle/actions/setup-gradle@v5.0.0
+      - uses: gradle/actions/setup-gradle@v6.3.0
         with:
           cache-cleanup: on-success
       - name: Compile and check target packages
