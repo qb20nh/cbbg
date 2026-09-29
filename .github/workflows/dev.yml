@@ -61,7 +61,7 @@ jobs:
         run: |
           ./gradlew --no-daemon "-Ptarget=$TARGET_ID" ciCheck
           ./gradlew --no-daemon "-Ptarget=$TARGET_ID" dev
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         with:
           name: dev-${{ matrix.id }}
           path: ${{ matrix.buildProfile == 'fabric-upstream' && 'build/libs/*-dev-*.jar' || format('build/targets/{0}/dev/*.jar', matrix.id) }}
