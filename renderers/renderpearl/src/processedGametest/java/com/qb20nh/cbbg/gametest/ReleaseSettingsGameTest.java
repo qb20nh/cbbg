@@ -266,13 +266,22 @@ public final class ReleaseSettingsGameTest implements FabricClientGameTest {
     ReleaseSettingsUi.slide(ui.depth(), 0);
     ui.seed().setValue("123");
     ui.seed().setValue("12x");
-    check(ui.seed().getValue().equals("123"), "Invalid seed text accepted");
+    check(ui.seed().getValue().equals("12x"), "Invalid seed text was not editable");
+    check(!ui.generate().active, "Invalid seed enabled generation");
+    check(
+        ReleaseClient.settings().get("stbnSeed").getAsLong() == 123,
+        "Invalid seed changed saved value");
+    ui.seed().setValue("123");
     ui.seed().setCursorPosition(1);
     ui.seed().setHighlightPos(2);
     ui.seed().insertText("-");
-    check(ui.seed().getValue().equals("123"), "Invalid selected seed insertion accepted");
+    check(ui.seed().getValue().equals("1-3"), "Invalid seed insertion was not editable");
+    check(!ui.generate().active, "Invalid seed insertion enabled generation");
+    ui.seed().setCursorPosition(1);
+    ui.seed().setHighlightPos(2);
     ui.seed().insertText("9");
     check(ui.seed().getValue().equals("193"), "Seed selection replacement failed");
+    check(ui.generate().active, "Valid seed replacement did not enable generation");
     ui.seed().setValue("-42");
     check(ReleaseClient.settings().get("stbnSeed").getAsLong() == -42, "Negative seed not saved");
     ui.seed().moveCursorToEnd(false);
@@ -287,6 +296,7 @@ public final class ReleaseSettingsGameTest implements FabricClientGameTest {
     for (String invalid : List.of("-", "9223372036854775808", "-9223372036854775809")) {
       ui.seed().setValue(invalid);
       check(ui.seed().getValue().equals(invalid), "Intermediate seed text rejected");
+      check(!ui.generate().active, "Invalid seed enabled generation");
       ReleaseSettingsUi.click(ui.generate());
       check(
           ReleaseClient.settings().get("stbnSeed").getAsLong() == 123,
