@@ -19,11 +19,11 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Set up build Java 25
-        uses: actions/setup-java@v5.1.0
+        uses: actions/setup-java@v6.0.1
         with:
           java-version: '25'
           distribution: temurin
-      - uses: gradle/actions/setup-gradle@v5.0.0
+      - uses: gradle/actions/setup-gradle@v6.3.0
       - name: Select catalog targets
         id: targets
         env:
@@ -43,16 +43,16 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Set up target Java ${{ matrix.java }}
-        uses: actions/setup-java@v5.1.0
+        uses: actions/setup-java@v6.0.1
         with:
           java-version: ${{ matrix.java }}
           distribution: temurin
       - name: Set up build Java 25
-        uses: actions/setup-java@v5.1.0
+        uses: actions/setup-java@v6.0.1
         with:
           java-version: '25'
           distribution: temurin
-      - uses: gradle/actions/setup-gradle@v5.0.0
+      - uses: gradle/actions/setup-gradle@v6.3.0
         with:
           cache-cleanup: on-success
       - name: Check and build development jars
@@ -61,7 +61,7 @@ jobs:
         run: |
           ./gradlew --no-daemon "-Ptarget=$TARGET_ID" ciCheck
           ./gradlew --no-daemon "-Ptarget=$TARGET_ID" dev
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         with:
           name: dev-${{ matrix.id }}
           path: ${{ matrix.buildProfile == 'fabric-upstream' && 'build/libs/*-dev-*.jar' || format('build/targets/{0}/dev/*.jar', matrix.id) }}
