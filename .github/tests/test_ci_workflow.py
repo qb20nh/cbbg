@@ -37,6 +37,17 @@ class CiWorkflowTest(unittest.TestCase):
         self.assertIn("core/*/build/reports/", workflow)
         self.assertIn("build/reports/", workflow)
 
+    def test_dependency_graph_excludes_minecraft_origins(self):
+        workflow = WORKFLOW.read_text().split(
+            "- name: Generate and submit target dependency graph", 1
+        )[1]
+        self.assertIn("--init-script gradle/dependency-sbom.init.gradle", workflow)
+        self.assertIn(
+            "^(minecraft|minecraftClientLibraries|minecraftClientRuntimeLibraries|"
+            "minecraftServerLibraries|minecraftServerRuntimeLibraries|minecraftNatives)$",
+            workflow,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
