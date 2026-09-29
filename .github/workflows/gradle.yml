@@ -46,7 +46,7 @@ jobs:
           jq -e '.include | length > 0' build/batch-matrix.json
           printf 'matrix=%s\nbuild=true\ncore=true\n' \
             "$(jq -c . build/batch-matrix.json)" >> "$GITHUB_OUTPUT"
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         with:
           name: change-impact
           path: build/change-impact.json
@@ -90,7 +90,7 @@ jobs:
       - name: Check core quality
         if: matrix.java == 25
         run: ./gradlew -p core --no-daemon check
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: core-checks-java-${{ matrix.java }}
@@ -124,7 +124,7 @@ jobs:
         env:
           TARGET_ID: ${{ matrix.id }}
         run: ./gradlew --no-daemon "-Ptarget=$TARGET_ID" ciCheck
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: checks-${{ matrix.id }}
