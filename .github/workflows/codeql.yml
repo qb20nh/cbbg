@@ -33,7 +33,7 @@ jobs:
       with:
         java-version: '25'
         distribution: temurin
-    - uses: gradle/actions/setup-gradle@v5.0.0
+    - uses: gradle/actions/setup-gradle@v6.3.0
     - id: targets
       run: |
         ./gradlew --no-daemon -Poutput=build/codeql-matrix.json targetMatrix
