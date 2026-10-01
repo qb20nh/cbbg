@@ -159,4 +159,8 @@ jobs:
         uses: gradle/actions/dependency-submission@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
         with:
           build-root-directory: .
-          additional-arguments: -p build-config/${{ matrix.buildProfile }} -Ptarget=${{ matrix.id }}
+          additional-arguments: >-
+            -p build-config/${{ matrix.buildProfile }} -Ptarget=${{ matrix.id }}
+            --init-script gradle/dependency-sbom.init.gradle
+          dependency-graph-exclude-configurations: >-
+            ^(minecraft|minecraftClientLibraries|minecraftClientRuntimeLibraries|minecraftServerLibraries|minecraftServerRuntimeLibraries|minecraftNatives)$

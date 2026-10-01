@@ -36,10 +36,17 @@ class DependencySbomTest {
         assertTrue(components().contains('game-only'))
     }
 
+    @Test void graphSubmissionCutsGameOrigins() {
+        prepare(true)
+        def result = runner('--init-script', initScript(),
+                ':ForceDependencyResolutionPlugin_resolveAllDependencies').build()
+        assertTrue(result.output.contains('GRAPH_ORIGINS_FILTERED'))
+    }
+
     @Test void refusesOtherTasksBeforeChangingTheGraph() {
         prepare(true)
         def result = runner('--init-script', initScript(), 'verifyGameGraph').buildAndFail()
-        assertTrue(result.output.contains('requires only cyclonedxBom'))
+        assertTrue(result.output.contains('requires an inventory task'))
     }
 
     private void prepare(boolean loom) {
@@ -108,6 +115,14 @@ tasks.register('verifyGameGraph') {
     doLast {
         assert configurations.compileClasspath.files.any { it.name == 'game-only-1.jar' }
         println 'GAME_GRAPH_PRESERVED'
+    }
+}
+tasks.register('ForceDependencyResolutionPlugin_resolveAllDependencies') {
+    doLast {
+        def files = configurations.runtimeClasspath.files*.name as Set
+        assert !files.contains('game-only-1.jar')
+        assert files.containsAll(['own-1.jar', 'shared-3.jar', 'development-1.jar'])
+        println 'GRAPH_ORIGINS_FILTERED'
     }
 }
 ''')

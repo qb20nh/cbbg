@@ -9,12 +9,16 @@ initscript {
     }
     dependencies {
         classpath 'org.cyclonedx:cyclonedx-gradle-plugin:3.4.1'
+        classpath platform('com.fasterxml.jackson:jackson-bom:2.22.2')
     }
 }
 
-// This init script changes resolution only for a standalone security inventory.
-if (gradle.parent == null && gradle.startParameter.taskNames != ['cyclonedxBom']) {
-    throw new GradleException('dependency-sbom.init.gradle requires only cyclonedxBom')
+// This init script changes resolution only for security inventories.
+def requestedTasks = gradle.startParameter.taskNames
+def sbomRun = requestedTasks == ['cyclonedxBom']
+def graphRun = requestedTasks == [':ForceDependencyResolutionPlugin_resolveAllDependencies']
+if (gradle.parent == null && !sbomRun && !graphRun) {
+    throw new GradleException('dependency-sbom.init.gradle requires an inventory task')
 }
 
 // Cut Minecraft's library origins, preserving Loom wrappers which also carry
@@ -35,29 +39,33 @@ gradle.projectsEvaluated {
                     configuration.setExtendsFrom(retained)
                 }
             }
-            project.tasks.named('cyclonedxDirectBom', CyclonedxDirectTask) {
-                skipConfigs = minecraftOrigins.toList()
+            if (sbomRun) {
+                project.tasks.named('cyclonedxDirectBom', CyclonedxDirectTask) {
+                    skipConfigs = minecraftOrigins.toList()
+                }
             }
         }
     }
 }
 
-gradle.rootProject { root ->
-    root.pluginManager.apply(CyclonedxPlugin)
-    root.allprojects { project ->
-        project.tasks.named('cyclonedxDirectBom', CyclonedxDirectTask) {
-            includeLicenseText = false
-            includeBuildEnvironment = true
-            includeConfigs = [
-                'classpath', '.*Classpath', '.*[Aa]nnotationProcessor',
-                'errorprone', 'pmd', 'cpd', 'privateGsonInput', 'include'
-            ]
+if (sbomRun) {
+    gradle.rootProject { root ->
+        root.pluginManager.apply(CyclonedxPlugin)
+        root.allprojects { project ->
+            project.tasks.named('cyclonedxDirectBom', CyclonedxDirectTask) {
+                includeLicenseText = false
+                includeBuildEnvironment = true
+                includeConfigs = [
+                    'classpath', '.*Classpath', '.*[Aa]nnotationProcessor',
+                    'errorprone', 'pmd', 'cpd', 'privateGsonInput', 'include'
+                ]
+            }
         }
-    }
-    root.tasks.named('cyclonedxBom', CyclonedxAggregateTask) {
-        jsonOutput = root.layout.file(root.providers.provider {
-            new File(root.providers.gradleProperty('securitySbom').get())
-        })
-        xmlOutput.convention((org.gradle.api.file.RegularFile) null)
+        root.tasks.named('cyclonedxBom', CyclonedxAggregateTask) {
+            jsonOutput = root.layout.file(root.providers.provider {
+                new File(root.providers.gradleProperty('securitySbom').get())
+            })
+            xmlOutput.convention((org.gradle.api.file.RegularFile) null)
+        }
     }
 }
