@@ -75,7 +75,10 @@ modrinth {
     gameVersions = upload.game_versions
     loaders = upload.loaders
     uploadFile = uploadFiles.artifact
-    additionalFiles = [uploadFiles.sources] + (uploadFiles.evidence ? [uploadFiles.evidence] : [])
+    additionalFiles {
+        sourcesJar uploadFiles.sources
+        if (uploadFiles.evidence) signature uploadFiles.evidence
+    }
     detectLoaders = false
     autoAddDependsOn = false
     failSilently = false
@@ -122,7 +125,11 @@ tasks.named('modrinth') {
     doFirst { verifyInputs() }
     doLast {
         if (!uploadSettings.debugMode.get()) {
-            def result = planUpload()
+            def uploadedVersionId = newVersion?.id
+            if (!uploadedVersionId) throw new GradleException('Modrinth did not return an uploaded version ID')
+            verifyInputs()
+            def result = Publication.plan(candidateFile, metadataFile, targetId, sourceRoot,
+                    null, legacyAssets, uploadedVersionId)
             if (result.action != 'reuse') throw new GradleException('Uploaded Modrinth version was not found')
             def output = uploadResult.get().asFile
             output.parentFile.mkdirs()

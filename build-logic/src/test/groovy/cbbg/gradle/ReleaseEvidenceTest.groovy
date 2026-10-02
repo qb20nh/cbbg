@@ -23,6 +23,11 @@ class ReleaseEvidenceTest {
                     zip.entries().collect { it.name } as Set)
             assertArrayEquals(new File(fixture.bundle, 'provenance.jsonl').bytes,
                     zip.getInputStream(zip.getEntry('provenance.jsonl')).readAllBytes())
+            String checksums = zip.getInputStream(zip.getEntry('SHA256SUMS')).getText('UTF-8')
+            Set names = checksums.readLines().collect { it.substring(66) } as Set
+            assertEquals([fixture.record.artifact.path, fixture.record.sources.path, 'provenance.jsonl'] as Set, names)
+            assertFalse(names.contains('catalog.json'))
+            assertFalse(zip.entries().any { it.name == 'catalog.json' })
         }
         assertThrows(Exception) { ReleaseEvidence.assemble(candidate, fixture.target.id) }
     }
@@ -44,6 +49,23 @@ class ReleaseEvidenceTest {
         CandidateManifest candidate = new CandidateManifest(fixture.file)
         assertFalse(candidate.releaseFiles().keySet().any { it.endsWith('-evidence.zip') })
         assertThrows(Exception) { ReleaseEvidence.assemble(candidate, fixture.target.id) }
+    }
+
+    @Test void existingArchivesKeepTheirOriginalChecksumList() {
+        Map fixture = CandidateFixture.create(directory, true, true)
+        CandidateManifest candidate = new CandidateManifest(fixture.file)
+        Map reference = ReleaseEvidence.assemble(candidate, fixture.target.id)
+        File archive = CandidateFiles.checked(fixture.bundle, reference)
+        Map<String, byte[]> entries = [:]
+        new ZipFile(archive).withCloseable { zip ->
+            zip.entries().each { entry -> entries[entry.name] = zip.getInputStream(entry).readAllBytes() }
+        }
+        entries.SHA256SUMS = new File(fixture.bundle, 'SHA256SUMS').bytes
+        CandidateFixture.archive(archive, entries)
+        assertEquals(CandidateFiles.sha256(archive), ReleaseEvidence.reference(candidate, fixture.target.id).sha256)
+        entries.SHA256SUMS = 'incorrect checksum list\n'.bytes
+        CandidateFixture.archive(archive, entries)
+        assertThrows(Exception) { ReleaseEvidence.reference(candidate, fixture.target.id) }
     }
 
     @Test void sharedArtifactsHaveDistinctTargetEvidenceFiles() {
