@@ -183,7 +183,10 @@ class Publication {
     }
 
     static Map plan(File candidate, File metadataFile, String target, File sourceRoot,
-                    Closure fetch = null, File legacyAssets = null) {
+                    Closure fetch = null, File legacyAssets = null, String uploadedVersionId = null) {
+        if (uploadedVersionId != null && !(uploadedVersionId ==~ /[A-Za-z0-9]+/)) {
+            throw new GradleException('Invalid Modrinth version ID')
+        }
         if (candidate == null && legacyAssets == null) {
             throw new GradleException('Modrinth plan requires a candidate or legacy assets')
         }
@@ -202,7 +205,17 @@ class Publication {
                 !(project.slug ==~ /[\w-]+/)) {
             throw new GradleException('Unexpected Modrinth project')
         }
-        Object versionResponse = request(fetch, MODRINTH_API + '/project/' + segment(project.id) + '/version', [:])
+        Object versionResponse
+        if (uploadedVersionId != null) {
+            Object uploaded = request(fetch, MODRINTH_API + '/version/' + segment(uploadedVersionId), [:])
+            if (!(uploaded instanceof Map) || uploaded.id != uploadedVersionId ||
+                    uploaded.version_number != upload.version_number) {
+                throw new GradleException('Unexpected Modrinth upload response')
+            }
+            versionResponse = [uploaded]
+        } else {
+            versionResponse = request(fetch, MODRINTH_API + '/project/' + segment(project.id) + '/version', [:])
+        }
         if (!(versionResponse instanceof List) ||
                 versionResponse.any { !(it instanceof Map) || !(it.version_number instanceof String) }) {
             throw new GradleException('Invalid Modrinth version list')
@@ -256,8 +269,10 @@ class Publication {
                 }
                 Map item = fileMatches[0]
                 String sha512 = digest(file, 'SHA-512')
+                List fileTypes = kind == 'sources' ? ['sources-jar'] :
+                        (kind == 'evidence' ? [null, 'signature'] : [null])
                 if (item.hashes?.sha512 != sha512 || item.primary != (kind == 'artifact') ||
-                        item.file_type != (kind == 'sources' ? 'sources-jar' : null)) {
+                        !fileTypes.contains(item.file_type)) {
                     throw new GradleException('Existing Modrinth file differs from candidate: ' + kind)
                 }
             }

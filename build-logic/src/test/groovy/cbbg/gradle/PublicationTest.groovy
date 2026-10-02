@@ -335,6 +335,42 @@ class PublicationTest {
     }
 
     @Test
+    void uploadVerificationUsesReturnedVersionIdInsteadOfProjectList() {
+        Map value = metadata()
+        writeMetadata(value)
+        Map remote = existing(value.records[0])
+        List<String> urls = []
+        Closure lookup = { String url ->
+            urls.add(url)
+            if (url.endsWith('/version/Version1')) return remote
+            if (url.endsWith('/version')) fail('The project list can still omit a new upload')
+            if (url.endsWith('/fabric-api')) return [id: 'P7dR8mSH']
+            [id: 'UBlXUQbC', slug: 'cbbg']
+        }
+        Map result = Publication.plan(fixture.file, publication, '26.3-fabric', fixture.root,
+                lookup, null, 'Version1')
+        assertEquals('reuse', result.action)
+        assertEquals('Version1', result.version_id)
+        assertTrue(urls.any { it.endsWith('/version/Version1') })
+        assertFalse(urls.any { it.endsWith('/project/UBlXUQbC/version') })
+
+        for (Map change : [[id: 'OtherId'], [version_number: 'other']]) {
+            Map wrong = new LinkedHashMap(remote) + change
+            fails('Unexpected Modrinth upload response') {
+                Publication.plan(fixture.file, publication, '26.3-fabric', fixture.root,
+                        { String url -> url.endsWith('/version/Version1') ? wrong : lookup(url) }, null, 'Version1')
+            }
+        }
+        remote.files[0].hashes.sha512 = '0' * 128
+        fails('file differs') {
+            Publication.plan(fixture.file, publication, '26.3-fabric', fixture.root, lookup, null, 'Version1')
+        }
+        fails('Invalid Modrinth version ID') {
+            Publication.plan(fixture.file, publication, '26.3-fabric', fixture.root, lookup, null, '../other')
+        }
+    }
+
+    @Test
     void publishesEvidenceAndChecksItWhenRetrying() {
         fixture = CandidateFixture.create(new File(directory, 'with-evidence'), true, true)
         ReleaseEvidence.assemble(new CandidateManifest(fixture.file), fixture.target.id)
@@ -344,10 +380,18 @@ class PublicationTest {
         assertTrue(record.evidence.path.endsWith('-evidence.zip'))
         Map remote = existing(record)
         assertEquals(3, remote.files.size())
+        remote.files[2].file_type = 'signature'
         Map result = Publication.plan(fixture.file, publication, '26.3-fabric', fixture.root,
                 fetch([remote], []))
         assertEquals('reuse', result.action)
         assertEquals(record.evidence, result.evidence)
+        remote.files[2].file_type = 'sources-jar'
+        fails('file differs') {
+            Publication.plan(fixture.file, publication, '26.3-fabric', fixture.root, fetch([remote], []))
+        }
+        remote.files[2].file_type = null
+        assertEquals('reuse', Publication.plan(fixture.file, publication, '26.3-fabric', fixture.root,
+                fetch([remote], [])).action)
         remote.files[2].hashes.sha512 = '0' * 128
         fails('file differs') {
             Publication.plan(fixture.file, publication, '26.3-fabric', fixture.root, fetch([remote], []))

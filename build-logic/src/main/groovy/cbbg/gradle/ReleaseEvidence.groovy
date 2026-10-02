@@ -11,7 +11,6 @@ class ReleaseEvidence {
         Map record = candidate.records[target]
         if (!(record?.sbom instanceof Map)) throw new GradleException('Release evidence requires an SBOM')
         Map<String, File> files = ['candidate.json': candidate.file,
-                                  'SHA256SUMS': new File(candidate.file.parentFile, 'SHA256SUMS'),
                                   'provenance.jsonl': new File(candidate.file.parentFile, 'provenance.jsonl')]
         ['sbom', 'mapping'].each { kind ->
             File file = CandidateFiles.checked(candidate.file.parentFile, record[kind] as Map)
@@ -22,6 +21,12 @@ class ReleaseEvidence {
         files
     }
 
+    private static byte[] checksums(CandidateManifest candidate) {
+        Map<String, String> files = ReleaseChecks.publicFiles(candidate)
+        (files.keySet().findAll { it != 'SHA256SUMS' }.sort()
+                .collect { files[it] + '  ' + it }.join('\n') + '\n').getBytes('UTF-8')
+    }
+
     private static File archive(CandidateManifest candidate, String target) {
         new File(candidate.file.parentFile,
                 'cbbg-' + CandidateFiles.releaseVersion(candidate.data.release as String) + '-' + target + '-evidence.zip')
@@ -30,6 +35,7 @@ class ReleaseEvidence {
     static Map assemble(CandidateManifest candidate, String target) {
         Map<String, File> files = contents(candidate, target)
         Map<String, String> hashes = files.collectEntries { name, file -> [(name): CandidateFiles.sha256(file)] }
+        byte[] checksumList = checksums(candidate)
         File output = archive(candidate, target)
         if (output.exists()) throw new GradleException('Release evidence archive already exists')
         try {
@@ -37,18 +43,20 @@ class ReleaseEvidence {
                 ZipOutputStream zip = new ZipOutputStream(stream)
                 try {
                     zip.setLevel(9)
-                    files.keySet().sort().each { name ->
+                    (files.keySet() + ['SHA256SUMS']).sort().each { name ->
                         ZipEntry entry = new ZipEntry(name)
                         entry.time = 0
                         zip.putNextEntry(entry)
-                        files[name].withInputStream { input -> input.transferTo(zip) }
+                        if (name == 'SHA256SUMS') zip.write(checksumList)
+                        else files[name].withInputStream { input -> input.transferTo(zip) }
                         zip.closeEntry()
                     }
                 } finally {
                     zip.close()
                 }
             }
-            if (files.any { name, file -> CandidateFiles.sha256(file) != hashes[name] }) {
+            if (files.any { name, file -> CandidateFiles.sha256(file) != hashes[name] } ||
+                    !Arrays.equals(checksumList, checksums(candidate))) {
                 throw new GradleException('Release evidence changed while packaging')
             }
             reference(candidate, target)
@@ -64,7 +72,7 @@ class ReleaseEvidence {
         if (!output.isFile()) throw new GradleException('Missing release evidence archive')
         new ZipFile(output).withCloseable { zip ->
             List<String> names = zip.entries().collect { it.name }
-            if (names.size() != files.size() || names.toSet() != files.keySet()) {
+            if (names.size() != files.size() + 1 || names.toSet() != (files.keySet() + ['SHA256SUMS']) as Set) {
                 throw new GradleException('Release evidence archive has different entries')
             }
             files.each { name, file ->
@@ -72,6 +80,12 @@ class ReleaseEvidence {
                 if (!Arrays.equals(actual, file.bytes)) {
                     throw new GradleException('Release evidence archive differs: ' + name)
                 }
+            }
+            byte[] actualChecksums = zip.getInputStream(zip.getEntry('SHA256SUMS')).withCloseable { it.readAllBytes() }
+            // Already published archives contain the original candidate checksum list.
+            if (!Arrays.equals(actualChecksums, checksums(candidate)) &&
+                    !Arrays.equals(actualChecksums, new File(candidate.file.parentFile, 'SHA256SUMS').bytes)) {
+                throw new GradleException('Release evidence archive differs: SHA256SUMS')
             }
         }
         [path: output.name, sha256: CandidateFiles.sha256(output)]

@@ -10,6 +10,35 @@ import static org.junit.jupiter.api.Assertions.*
 class PublishingBuildTest {
     @TempDir File directory
 
+    @Test void evidenceIsConfiguredAsSignature() {
+        Map fixture = CandidateFixture.create(directory, true, true)
+        ReleaseEvidence.assemble(new CandidateManifest(fixture.file), fixture.target.id)
+        File metadata = new File(directory, 'publication.json')
+        metadata.text = JsonOutput.toJson(Publication.metadata(fixture.file, fixture.root, 'Release notes'))
+        File project = new File(fixture.root, 'build-config/publishing')
+        project.mkdirs()
+        new File(project, 'settings.gradle').text = '''pluginManagement {
+    repositories { mavenCentral(); gradlePluginPortal() }
+}
+rootProject.name = 'publishing-test'
+'''
+        new File(project, 'build.gradle').text = new File('../build-config/publishing/build.gradle').text + '''
+tasks.register('verifyFileTypes') {
+    doLast {
+        def files = project.extensions.getByName('modrinth').additionalFileDsl.namedAdditionalFilesAsList
+        assert files.collect { it.additionalFileType.toString() } == ['sources-jar', 'signature']
+        assert files[0].file.asFile.name.endsWith('-sources.jar')
+        assert files[1].file.asFile.name.endsWith('-evidence.zip')
+    }
+}
+'''
+        assertTrue(GradleRunner.create().withProjectDir(project).withPluginClasspath().withArguments(
+                'verifyUploadInputs', 'verifyFileTypes', '-Ptarget=' + fixture.target.id,
+                '-PpublicationMetadata=' + metadata.absolutePath, '-Pcandidate=' + fixture.file.absolutePath,
+                '-PsourceRoot=' + fixture.root.absolutePath, '--stacktrace').build().output
+                .contains(':verifyFileTypes'))
+    }
+
     @Test void sharedArtifactCanBeValidatedAndPlannedOnlyThroughItsOwner() {
         Map fixture = CandidateFixture.create(directory)
         Map quilt = fixture.target + [id: '26.3-quilt', loader: 'quilt', artifactOf: fixture.target.id]
