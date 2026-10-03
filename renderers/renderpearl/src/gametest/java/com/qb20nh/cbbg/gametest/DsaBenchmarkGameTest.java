@@ -7,6 +7,7 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.renderpearl.api.GpuFormat;
 import com.qb20nh.cbbg.config.CbbgConfig;
 import com.qb20nh.cbbg.render.DitherController;
+import com.qb20nh.cbbg.render.DitherPresentation;
 import java.lang.management.ManagementFactory;
 import java.lang.management.MemoryType;
 import java.nio.file.Files;
@@ -128,7 +129,7 @@ public final class DsaBenchmarkGameTest implements FabricClientGameTest {
   @SuppressWarnings("ReferenceEquality")
   private static void present(TextureTarget source) {
     var input = source.getColorTextureView();
-    if (DitherController.present(Objects.requireNonNull(input)) == input)
+    if (DitherPresentation.present(Objects.requireNonNull(input)) == input)
       throw new AssertionError("Benchmark effect fell back");
   }
 }

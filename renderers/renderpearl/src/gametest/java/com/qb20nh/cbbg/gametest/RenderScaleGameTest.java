@@ -13,6 +13,7 @@ import com.qb20nh.cbbg.compat.renderscale.RenderScaleCompat;
 import com.qb20nh.cbbg.config.CbbgConfig;
 import com.qb20nh.cbbg.render.DitherController;
 import com.qb20nh.cbbg.render.DitherPass;
+import com.qb20nh.cbbg.render.DitherPresentation;
 import java.nio.ByteOrder;
 import java.util.Arrays;
 import java.util.Objects;
@@ -226,7 +227,7 @@ public final class RenderScaleGameTest implements FabricClientGameTest {
                 pass.render(
                     Objects.requireNonNull(main.getColorTextureView()),
                     (GpuTextureView)
-                        Objects.requireNonNull(field(DitherController.class, "noiseView")),
+                        Objects.requireNonNull(field(DitherPresentation.class, "noiseView")),
                     1,
                     coordinateScale,
                     coordinateScale,

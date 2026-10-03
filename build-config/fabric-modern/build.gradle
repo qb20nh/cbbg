@@ -113,6 +113,7 @@ if (usesTextureFormat) {
     def notifications = objects.sourceDirectorySet('sharedNotifications', 'Generation notifications')
     notifications.srcDir(new File(repositoryRoot, 'renderers/modern/src/main/java'))
     notifications.include 'com/qb20nh/cbbg/render/GenerationNotifications.java',
+            'com/qb20nh/cbbg/render/DitherController.java',
             'com/qb20nh/cbbg/config/gui/CbbgConfigScreen.java'
     sourceSets.main.java.source(notifications)
 } else {

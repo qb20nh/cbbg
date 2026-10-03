@@ -10,13 +10,15 @@ import org.jspecify.annotations.Nullable;
 
 @NullMarked
 final class ReleaseShaderFailureTarget {
-  private static final String OWNER = "com.qb20nh.cbbg.render.DitherController";
+  private static final String CONTROLLER_OWNER = "com.qb20nh.cbbg.render.DitherController";
+  private static final String PRESENTATION_OWNER = "com.qb20nh.cbbg.render.DitherPresentation";
 
   private ReleaseShaderFailureTarget() {}
 
   static @Nullable TextureTarget render(Minecraft client) {
     return (TextureTarget)
         invoke(
+            PRESENTATION_OWNER,
             "com.mojang.blaze3d.pipeline.TextureTarget screenshot(com.mojang.blaze3d.textures.GpuTextureView)",
             new Class<?>[] {GpuTextureView.class},
             new Object[] {
@@ -26,13 +28,15 @@ final class ReleaseShaderFailureTarget {
 
   static boolean disabled(Minecraft client) {
     return (boolean)
-        Objects.requireNonNull(invoke("boolean isDisabled()", new Class<?>[0], new Object[0]));
+        Objects.requireNonNull(
+            invoke(CONTROLLER_OWNER, "boolean isDisabled()", new Class<?>[0], new Object[0]));
   }
 
-  private static @Nullable Object invoke(String member, Class<?>[] types, Object[] arguments) {
+  private static @Nullable Object invoke(
+      String owner, String member, Class<?>[] types, Object[] arguments) {
     try {
-      Class<?> type = Class.forName(ReleaseMapping.className(OWNER));
-      return type.getMethod(ReleaseMapping.memberName(OWNER, member), types)
+      Class<?> type = Class.forName(ReleaseMapping.className(owner));
+      return type.getMethod(ReleaseMapping.memberName(owner, member), types)
           .invoke(null, arguments);
     } catch (ClassNotFoundException | NoSuchMethodException | IllegalAccessException failure) {
       throw new LinkageError("Packaged shader failure API changed", failure);

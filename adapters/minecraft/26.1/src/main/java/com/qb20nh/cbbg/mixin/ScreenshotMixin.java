@@ -4,7 +4,7 @@ import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.platform.NativeImage;
-import com.qb20nh.cbbg.render.DitherController;
+import com.qb20nh.cbbg.render.DitherPresentation;
 import java.util.function.Consumer;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Screenshot;
@@ -22,7 +22,7 @@ public abstract class ScreenshotMixin {
     var input = target.getColorTextureView();
     var rendered =
         target == Minecraft.getInstance().getMainRenderTarget() && input != null
-            ? DitherController.screenshot(input)
+            ? DitherPresentation.screenshot(input)
             : null;
     original.call(rendered == null ? target : rendered, scale, result);
   }

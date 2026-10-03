@@ -37,7 +37,7 @@ final class ReleaseWorldTarget {
 
   static @Nullable GpuTexture noise() {
     try {
-      String owner = "com.qb20nh.cbbg.render.DitherController";
+      String owner = "com.qb20nh.cbbg.render.DitherPresentation";
       Class<?> type = Class.forName(ReleaseMapping.className(owner));
       Field field =
           type.getDeclaredField(

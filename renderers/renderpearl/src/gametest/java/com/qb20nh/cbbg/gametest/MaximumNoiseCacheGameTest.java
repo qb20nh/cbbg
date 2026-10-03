@@ -3,6 +3,7 @@ package com.qb20nh.cbbg.gametest;
 import com.mojang.blaze3d.platform.NativeImage;
 import com.qb20nh.cbbg.config.CbbgConfig;
 import com.qb20nh.cbbg.render.DitherController;
+import com.qb20nh.cbbg.render.DitherPresentation;
 import com.qb20nh.cbbg.render.stbn.STBNCache;
 import com.qb20nh.cbbg.render.stbn.STBNGenerator;
 import com.qb20nh.cbbg.render.stbn.STBNLoader;
@@ -65,7 +66,7 @@ public final class MaximumNoiseCacheGameTest implements FabricClientGameTest {
             boolean[] seen = new boolean[DEPTH];
             long before = DitherController.getPresentationCount();
             for (int frame = 0; frame < DEPTH; frame++) {
-              if (DitherController.present(Objects.requireNonNull(input)) == input
+              if (DitherPresentation.present(Objects.requireNonNull(input)) == input
                   || !DitherController.isReady()) {
                 throw new AssertionError("Maximum-size GPU presentation fell back");
               }

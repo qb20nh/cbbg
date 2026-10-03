@@ -4,6 +4,7 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.renderpearl.api.GpuFormat;
 import com.qb20nh.cbbg.config.CbbgConfig;
 import com.qb20nh.cbbg.render.DitherController;
+import com.qb20nh.cbbg.render.DitherPresentation;
 import com.qb20nh.cbbg.render.stbn.STBNCache;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -61,7 +62,7 @@ public final class PresentationGameTest implements FabricClientGameTest {
                   }
                 });
             var expected =
-                DitherController.screenshot(Objects.requireNonNull(main.getColorTextureView()));
+                DitherPresentation.screenshot(Objects.requireNonNull(main.getColorTextureView()));
             if (expected == null) {
               throw new AssertionError("Expected live dithering to be ready");
             }

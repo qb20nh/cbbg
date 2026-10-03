@@ -17,13 +17,13 @@ final class ReleaseShutdownResources {
   private ReleaseShutdownResources() {}
 
   static GpuTextureView @Nullable [] live() {
-    String controller = "com.qb20nh.cbbg.render.DitherController";
+    String presentation = "com.qb20nh.cbbg.render.DitherPresentation";
     GpuTextureView noise =
         (GpuTextureView)
             ReleaseShutdownGameTest.field(
-                controller, null, "com.mojang.blaze3d.textures.GpuTextureView noiseView");
+                presentation, null, "com.mojang.blaze3d.textures.GpuTextureView noiseView");
     Object pass =
-        ReleaseShutdownGameTest.field(controller, null, "com.qb20nh.cbbg.render.DitherPass PASS");
+        ReleaseShutdownGameTest.field(presentation, null, "com.qb20nh.cbbg.render.DitherPass PASS");
     TextureTarget output =
         (TextureTarget)
             ReleaseShutdownGameTest.field(
@@ -38,10 +38,11 @@ final class ReleaseShutdownResources {
 
   static Owned captureOwned() {
     String controller = "com.qb20nh.cbbg.render.DitherController";
+    String presentation = "com.qb20nh.cbbg.render.DitherPresentation";
     Object pass =
         Objects.requireNonNull(
             ReleaseShutdownGameTest.field(
-                controller, null, "com.qb20nh.cbbg.render.DitherPass PASS"));
+                presentation, null, "com.qb20nh.cbbg.render.DitherPass PASS"));
     MappableRingBuffer uniform =
         (MappableRingBuffer)
             Objects.requireNonNull(

@@ -6,6 +6,7 @@ import com.mojang.renderpearl.api.textures.GpuTextureView;
 import com.qb20nh.cbbg.config.CbbgConfig;
 import com.qb20nh.cbbg.render.DitherController;
 import com.qb20nh.cbbg.render.DitherPass;
+import com.qb20nh.cbbg.render.DitherPresentation;
 import java.lang.reflect.Field;
 import java.util.Arrays;
 import java.util.Objects;
@@ -122,7 +123,7 @@ public final class MenuStrengthGameTest implements FabricClientGameTest {
 
   private static GpuTextureView noiseView() {
     try {
-      Field field = DitherController.class.getDeclaredField("noiseView");
+      Field field = DitherPresentation.class.getDeclaredField("noiseView");
       field.setAccessible(true);
       return (GpuTextureView) Objects.requireNonNull(field.get(null));
     } catch (ReflectiveOperationException failure) {

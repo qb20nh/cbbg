@@ -3,6 +3,7 @@ package com.qb20nh.cbbg.mixin;
 import com.mojang.renderpearl.api.textures.GpuTextureView;
 import com.qb20nh.cbbg.compat.renderscale.RenderScaleTargets;
 import com.qb20nh.cbbg.render.DitherController;
+import com.qb20nh.cbbg.render.DitherPresentation;
 import com.qb20nh.cbbg.render.stbn.STBNGenerator;
 import net.minecraft.client.Minecraft;
 import org.jspecify.annotations.NullMarked;
@@ -29,7 +30,7 @@ public abstract class MinecraftMixin {
                   "Lcom/mojang/renderpearl/api/device/GpuSurface;blitFromTexture(Lcom/mojang/renderpearl/api/commands/CommandEncoder;Lcom/mojang/renderpearl/api/textures/GpuTextureView;)V"),
       index = 1)
   private GpuTextureView cbbg$present(GpuTextureView input) {
-    return DitherController.present(input);
+    return DitherPresentation.present(input);
   }
 
   @Inject(method = "close", at = @At("HEAD"))

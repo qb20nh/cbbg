@@ -3,7 +3,7 @@ package com.qb20nh.cbbg.mixin;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.renderpearl.api.GpuFormat;
-import com.qb20nh.cbbg.render.DitherController;
+import com.qb20nh.cbbg.render.DitherPresentation;
 import com.qb20nh.cbbg.render.Rgba8Readback;
 import java.util.function.Consumer;
 import net.minecraft.client.Minecraft;
@@ -28,7 +28,7 @@ public abstract class ScreenshotMixin {
       RenderTarget target, int downscale, Consumer<NativeImage> callback, CallbackInfo ci) {
     if (target == Minecraft.getInstance().gameRenderer.mainRenderTarget()
         && target.getColorTextureView() != null) {
-      var dithered = DitherController.screenshot(target.getColorTextureView());
+      var dithered = DitherPresentation.screenshot(target.getColorTextureView());
       if (dithered != null) {
         Screenshot.takeScreenshot(dithered, downscale, callback);
         ci.cancel();

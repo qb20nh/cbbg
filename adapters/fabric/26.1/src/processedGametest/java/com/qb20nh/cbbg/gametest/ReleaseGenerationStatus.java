@@ -24,10 +24,10 @@ final class ReleaseGenerationStatus {
 
   static boolean settled(int size) {
     try {
-      String owner = "com.qb20nh.cbbg.render.DitherController";
-      Class<?> controller = Class.forName(ReleaseMapping.className(owner));
+      String owner = "com.qb20nh.cbbg.render.DitherPresentation";
+      Class<?> presentation = Class.forName(ReleaseMapping.className(owner));
       var viewField =
-          controller.getDeclaredField(
+          presentation.getDeclaredField(
               ReleaseMapping.memberName(
                   owner, "com.mojang.blaze3d.textures.GpuTextureView noiseView"));
       viewField.setAccessible(true);
