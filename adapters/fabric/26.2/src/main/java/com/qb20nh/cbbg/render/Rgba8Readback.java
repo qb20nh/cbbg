@@ -7,11 +7,9 @@ import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.blaze3d.systems.RenderPass;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.textures.FilterMode;
-import com.mojang.blaze3d.textures.GpuTextureView;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Consumer;
-import net.minecraft.client.Screenshot;
 import net.minecraft.client.renderer.RenderPipelines;
 import org.jspecify.annotations.NullMarked;
 
@@ -22,46 +20,29 @@ public final class Rgba8Readback {
 
   public static void capture(
       RenderTarget source, int downscaleFactor, Consumer<NativeImage> callback) {
-    RenderSystem.assertOnRenderThread();
-    if (downscaleFactor <= 0
-        || source.width % downscaleFactor != 0
-        || source.height % downscaleFactor != 0) {
-      throw new IllegalArgumentException("Image size is not divisible by downscale factor");
-    }
-    GpuTextureView input = source.getColorTextureView();
-    if (input == null) {
-      throw new IllegalStateException("Tried to capture screenshot of an incomplete framebuffer");
-    }
-    TextureTarget output =
-        new TextureTarget(
-            "CBBG screenshot", source.width, source.height, false, GpuFormat.RGBA8_UNORM);
-    try {
-      try (RenderPass pass =
-          RenderSystem.getDevice()
-              .createCommandEncoder()
-              .createRenderPass(
-                  () -> "CBBG screenshot conversion",
-                  Objects.requireNonNull(output.getColorTextureView()),
-                  Optional.empty())) {
-        pass.setPipeline(RenderPipelines.TRACY_BLIT);
-        RenderSystem.bindDefaultUniforms(pass);
-        pass.bindTexture(
-            "InSampler", input, RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST));
-        pass.draw(3, 1, 0, 0);
-      }
-      Screenshot.takeScreenshot(
-          output,
-          downscaleFactor,
-          image -> {
-            try {
-              callback.accept(image);
-            } finally {
-              output.destroyBuffers();
-            }
-          });
-    } catch (RuntimeException | Error failure) {
-      output.destroyBuffers();
-      throw failure;
-    }
+    Rgba8Capture.capture(
+        source,
+        downscaleFactor,
+        callback,
+        () ->
+            new TextureTarget(
+                "CBBG screenshot", source.width, source.height, false, GpuFormat.RGBA8_UNORM),
+        output -> {
+          try (RenderPass pass =
+              RenderSystem.getDevice()
+                  .createCommandEncoder()
+                  .createRenderPass(
+                      () -> "CBBG screenshot conversion",
+                      Objects.requireNonNull(output.getColorTextureView()),
+                      Optional.empty())) {
+            pass.setPipeline(RenderPipelines.TRACY_BLIT);
+            RenderSystem.bindDefaultUniforms(pass);
+            pass.bindTexture(
+                "InSampler",
+                Objects.requireNonNull(source.getColorTextureView()),
+                RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST));
+            pass.draw(3, 1, 0, 0);
+          }
+        });
   }
 }
