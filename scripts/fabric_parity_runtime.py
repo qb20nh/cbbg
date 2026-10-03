@@ -77,7 +77,7 @@ def restart_state(game):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--target', choices=['26.1-fabric', '26.1.1-fabric', '26.1.2-fabric',
-                                            '26.3-fabric'], default='26.3-fabric')
+                                            '26.2-fabric', '26.3-fabric'], default='26.3-fabric')
     for name in ('runtime', 'java', 'game-dir', 'candidate', 'driver', 'gametest-api',
                  'runtime-lock', 'dependency-lock', 'xdg-runtime-dir'):
         parser.add_argument('--' + name, type=Path, required=True)

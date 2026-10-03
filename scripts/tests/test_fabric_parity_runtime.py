@@ -14,6 +14,14 @@ import zipfile
 import fabric_parity_runtime as launcher
 
 
+class TargetArgumentTests(unittest.TestCase):
+    def test_accepts_the_26_2_fabric_target(self):
+        result = subprocess.run(
+            [sys.executable, launcher.__file__, '--target', '26.2-fabric', '--help'],
+            capture_output=True, text=True, check=False)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+
 class SourceStatusTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
