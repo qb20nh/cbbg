@@ -1,6 +1,7 @@
 package cbbg.gradle
 
 import groovy.json.JsonOutput
+import groovy.json.JsonSlurper
 import org.gradle.api.GradleException
 
 import java.nio.charset.StandardCharsets
@@ -93,6 +94,31 @@ class FabricCompatibilitySearchTest {
         assertFalse(FabricCompatibilitySearch.cached(cache,
                 iris + [optionalDependencies: [iris: [sha512: 'b']]], test).cached)
         assertEquals(3, runs)
+    }
+
+    @Test void sulkanProfilesResolveTheirRequiredOptionalDependencies() {
+        File repository = new File(System.getProperty('cbbg.repository'))
+        String script = new File(repository, 'build-config/fabric-compatibility.gradle').text
+        int start = script.indexOf('Map<String, String> modNames =')
+        String resolution = script.substring(start, script.indexOf('def sha512 =', start))
+        Map catalog = new JsonSlurper().parse(new File(repository, 'targets.json')) as Map
+        Map target = catalog.targets.find { it.id == '26.3-fabric' }
+        List<String> profiles = target.compatibilityProfiles.keySet().findAll {
+            it.tokenize('+').contains('sulkan')
+        } as List
+        assertTrue(profiles.contains('sulkan'))
+        assertTrue(profiles.any { it.contains('+') })
+        for (String profile : profiles) {
+            Map resolved = new GroovyShell(new Binding([profile: profile])).evaluate(
+                    'import org.gradle.api.GradleException\n' + resolution +
+                            '\n[selected: selected, names: modNames]') as Map
+            Set expected = profile.tokenize('+') as Set
+            expected.add('sodium')
+            if (expected.contains('renderscale')) expected.add('clothconfig')
+            assertEquals(expected, resolved.selected)
+            assertEquals('sulkan', resolved.names.sulkan)
+            resolved.selected.each { assertNotNull(target.dependencies[resolved.names[it]]) }
+        }
     }
 
     @Test void retriesBlockedRuns() {
