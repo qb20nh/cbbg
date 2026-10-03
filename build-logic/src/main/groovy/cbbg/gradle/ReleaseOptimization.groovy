@@ -40,6 +40,10 @@ class ReleaseOptimization {
         }.map { it.metadata.installationPath })
     }
 
+    String getToolVersion() {
+        ProguardMapping.VERSION
+    }
+
     void targetJdk(Provider<Directory> targetHome) {
         jdkLibraries.from(JdkLibraries.select(project, targetHome,
                 'exportReleaseJdkLibraries', 'intermediates/proguard/jdk-runtime.jar'))
