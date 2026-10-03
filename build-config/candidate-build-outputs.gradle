@@ -1,7 +1,9 @@
 tasks.register('candidateBuildOutputs') {
     dependsOn tasks.named('ciCheck'), tasks.named('sourceInventory')
     dependsOn tasks.withType(Jar).matching { it.name.endsWith('DriverJar') }
-    def destination = layout.buildDirectory.file('candidate-build-outputs.json')
+    def destination = layout.file(providers.provider {
+        new File(rootProject.file('../..'), "build/targets/${candidateTargetId}/candidate-build-outputs.json")
+    })
     outputs.file(destination)
     outputs.upToDateWhen { false }
     doLast {
@@ -42,6 +44,7 @@ tasks.register('candidateBuildOutputs') {
                       sources: reference(tasks.named('releaseSourcesJar', Jar).get().archiveFile.get().asFile),
                       source_inventory: reference(layout.buildDirectory.file('source-inventory.json').get().asFile),
                       drivers: drivers]
+        destination.get().asFile.parentFile.mkdirs()
         destination.get().asFile.text = groovy.json.JsonOutput.prettyPrint(
                 groovy.json.JsonOutput.toJson(output)) + '\n'
     }

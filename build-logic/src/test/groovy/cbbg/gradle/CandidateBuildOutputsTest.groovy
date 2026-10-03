@@ -66,9 +66,11 @@ apply from: file('../fabric-startup-tests.gradle')
         def run = {
             GradleRunner.create().withProjectDir(profile).withPluginClasspath()
                     .withArguments('candidateBuildOutputs', '--offline', '--stacktrace').build()
-            new JsonSlurper().parse(new File(profile, 'build/candidate-build-outputs.json'))
+            new JsonSlurper().parse(new File(directory,
+                    'build/targets/26.2-fabric/candidate-build-outputs.json'))
         }
         def output = run()
+        assertFalse(new File(profile, 'build/candidate-build-outputs.json').exists())
         assertEquals('26.2-fabric', output.target)
         assertEquals('1.4.1+mc26.2', output.version)
         assertEquals(git('rev-parse', 'HEAD'), output.source_commit)
