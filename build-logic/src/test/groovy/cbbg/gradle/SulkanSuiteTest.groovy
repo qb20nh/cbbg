@@ -14,8 +14,9 @@ class SulkanSuiteTest {
         project.pluginManager.apply('java')
         project.sourceSets.create('gametest')
         project.sourceSets.create('processedGametest')
-        String processed = profile.substring(profile.indexOf('    [MaximumNoiseCache:'),
-                profile.indexOf("    tasks.register('prepareProcessedRuntime')"))
+        int processedStart = profile.indexOf('    [MaximumNoiseCache:')
+        String processed = profile.substring(processedStart,
+                profile.indexOf("    tasks.register('prepareProcessedRuntime')", processedStart))
         String development = profile.substring(profile.indexOf('// Startup-state and slow maximum-size'),
                 profile.indexOf("tasks.named('checkPackages', cbbg.gradle.CheckPackages)"))
         def binding = new Binding([tasks: project.tasks, layout: project.layout,

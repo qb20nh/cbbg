@@ -6,7 +6,8 @@ import java.util.zip.ZipOutputStream
 
 /** Small synthetic archives for packaging and release-tool tests. */
 class CandidateFixture {
-    static Map create(File directory, boolean implemented = true, boolean withSbom = false, String minecraft = '26.3') {
+    static Map create(File directory, boolean implemented = true, boolean withSbom = false,
+                      String minecraft = '26.3', String minecraftDependency = null) {
         File root = new File(directory, 'source')
         File bundle = new File(directory, 'candidate')
         root.mkdirs()
@@ -16,6 +17,7 @@ class CandidateFixture {
                 renderer: 'renderpearl', backends: ['opengl', 'vulkan'], implemented: implemented,
                 buildProfile: 'fabric-modern', sourceGroups: ['adapters/fabric/modern'],
                 dependencies: [loader: '0.19.5'], compatibilityProfiles: [none: ['opengl', 'vulkan']]]
+        if (minecraftDependency != null) target.minecraftDependency = minecraftDependency
         Map catalog = [schema: 1, ciTargets: [target.id], targets: [target],
                        projects: [modrinth: 'UBlXUQbC', curseforge: '1408371']]
         new File(root, 'gradle.properties').text = 'mod_version=1.4.0\narchives_base_name=cbbg\nmodrinth_project_id=UBlXUQbC\ncurseforge_project_id=1408371\n'
@@ -34,7 +36,8 @@ class CandidateFixture {
         }
         def metadata = [schemaVersion: 1, id: 'cbbg', version: '1.4.0+mc' + minecraft + '-fabric', environment: 'client',
                         entrypoints: [client: ['example.Client']], mixins: ['cbbg.mixins.json'],
-                        depends: [fabricloader: '>=0.19.5', minecraft: minecraft, java: '>=25', 'fabric-api': '*']]
+                        depends: [fabricloader: '>=0.19.5', minecraft: minecraftDependency ?: minecraft,
+                                  java: '>=25', 'fabric-api': '*']]
         def mixins = [required: true, 'package': 'example', compatibilityLevel: 'JAVA_25', client: ['Mixin']]
         Map artifact = ['fabric.mod.json': JsonOutput.toJson(metadata).getBytes('UTF-8'),
                         'cbbg.mixins.json': JsonOutput.toJson(mixins).getBytes('UTF-8')]

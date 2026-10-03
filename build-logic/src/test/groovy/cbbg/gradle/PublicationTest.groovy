@@ -139,8 +139,17 @@ class PublicationTest {
 
     @Test
     void sharedArtifactRuntimeAliasesPublishOnceWithUnionNotesAndLoaderLabels() {
+        fixture = CandidateFixture.create(new File(directory, 'shared-patch'), true, false,
+                '26.3', '>=26.3 <26.4')
+        fixture.target.compatibleMinecraft = ['26.3.1']
         Map quilt = fixture.target + [id: '26.3-quilt', loader: 'quilt', artifactOf: fixture.target.id]
+        quilt.remove('compatibleMinecraft')
+        quilt.remove('minecraftDependency')
+        Map patch = fixture.target + [id: '26.3.1-fabric', minecraft: '26.3.1', artifactOf: fixture.target.id]
+        patch.remove('compatibleMinecraft')
+        patch.remove('minecraftDependency')
         fixture.catalog.targets.add(quilt)
+        fixture.catalog.targets.add(patch)
         new File(fixture.root, 'targets.json').text = JsonOutput.toJson(fixture.catalog)
         File catalog = new File(fixture.bundle, fixture.record.client_tests.catalog.path)
         catalog.text = JsonOutput.toJson(fixture.catalog)
@@ -149,13 +158,20 @@ class PublicationTest {
         record.id = quilt.id
         fixture.manifest.selected_targets.add(quilt.id)
         fixture.manifest.targets.add(record)
+        record = CandidateFiles.parse(new StringReader(JsonOutput.toJson(fixture.record))) as Map
+        record.id = patch.id
+        fixture.manifest.selected_targets.add(patch.id)
+        fixture.manifest.targets.add(record)
         fixture.manifest.catalog_sha256 = CandidateFiles.canonicalHash(fixture.catalog)
         fixture.file.text = JsonOutput.toJson(fixture.manifest)
         Map value = Publication.metadata(fixture.file, fixture.root,
                 '### Fixed\n#### Fabric\n- Fabric fix.\n#### Quilt\n- Quilt fix.\n#### Forge\n- Other fix.\n')
         assertEquals(1, value.records.size())
-        assertEquals(['26.3-fabric', '26.3-quilt'], value.records[0].targets)
+        assertEquals(['26.3-fabric', '26.3-quilt', '26.3.1-fabric'], value.records[0].targets)
         assertEquals(['fabric', 'quilt'], value.records[0].modrinth.loaders)
+        assertEquals(['26.3', '26.3.1'], value.records[0].modrinth.game_versions)
+        assertEquals(['26.3', '26.3.1', 'Java 25', 'Fabric', 'Quilt', 'Environment:Client'],
+                value.records[0].curseforge.version_labels)
         assertTrue(value.records[0].modrinth.changelog.contains('Fabric fix.'))
         assertTrue(value.records[0].modrinth.changelog.contains('Quilt fix.'))
         assertFalse(value.records[0].modrinth.changelog.contains('Other fix.'))
@@ -254,6 +270,10 @@ class PublicationTest {
                          [id: 2, name: '26.3', gameVersionTypeID: 20]]
         List types = [[id: 10, slug: 'minecraft-release'], [id: 20, slug: 'modloader']]
         assertEquals(['1'], Publication.curseforgeVersionIds('26.3', ['26.3'], versions, types))
+        versions.addAll([[id: 4, name: '26.3.1', gameVersionTypeID: 10],
+                         [id: 5, name: '26.3.1', gameVersionTypeID: 20]])
+        assertEquals(['1', '4'], Publication.curseforgeVersionIds(
+                ['26.3', '26.3.1'], ['26.3', '26.3.1'], versions, types))
         versions << [id: 3, name: '26.3', gameVersionTypeID: 10]
         fails('resolved to 2 entries') {
             Publication.curseforgeVersionIds('26.3', ['26.3'], versions, types)

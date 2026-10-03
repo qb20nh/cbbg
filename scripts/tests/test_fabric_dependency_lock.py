@@ -44,6 +44,17 @@ class DependencyLockTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'Missing or extra'):
             verify_dependencies(self.target, 'sulkan', paths, self.lock)
 
+    def test_chatpatches_requires_yacl(self):
+        self.target['dependencies'].update(chatPatches='pin', yacl='pin')
+        self.target['compatibilityProfiles']['chatpatches'] = ['opengl']
+        for name in ('chatPatches', 'yacl'):
+            self.lock['dependencies'][name] = dict(self.lock['dependencies']['fabricApi'])
+        paths = dict.fromkeys(('fabricApi', 'chatPatches', 'yacl'), self.jar)
+        verify_dependencies(self.target, 'chatpatches', paths, self.lock)
+        del paths['yacl']
+        with self.assertRaisesRegex(ValueError, 'Missing or extra'):
+            verify_dependencies(self.target, 'chatpatches', paths, self.lock)
+
     def test_changed_bytes_fail(self):
         self.jar.write_bytes(b'changed')
         with self.assertRaises(ValueError):

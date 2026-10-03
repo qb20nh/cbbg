@@ -27,7 +27,7 @@ class TargetCatalogTest {
     @Test
     void actualCatalogSelectsRuntimeTargetsAndArtifactOwners() {
         TargetCatalog catalog = TargetCatalog.read(CATALOG)
-        assertEquals(31, catalog.select().size())
+        assertEquals(33, catalog.select().size())
         assertEquals(['26.3-fabric'], catalog.defaults()*.id)
         assertEquals(['26.3-fabric'], catalog.select().findAll { it.implemented }*.id)
         assertEquals(['26.3-fabric'], catalog.defaults(true)*.id)
@@ -42,6 +42,15 @@ class TargetCatalogTest {
                 runtimeTargets: ['26.3-fabric', '26.3-quilt']
         ]], catalog.matrix('26.3-quilt,26.3-fabric'))
         assertEquals(['26.3-quilt'], catalog.matrix('26.3-quilt')[0].runtimeTargets)
+        assertEquals(['26.1-fabric'], catalog.artifacts('26.1.2-fabric,26.1.1-fabric,26.1-fabric')*.id)
+        assertEquals(['26.1-fabric', '26.1.1-fabric', '26.1.2-fabric'],
+                catalog.matrix('26.1.2-fabric,26.1.1-fabric,26.1-fabric')[0].runtimeTargets)
+        assertEquals(['26.1-fabric'], catalog.artifacts('26.1.2-quilt')*.id)
+        assertEquals(['26.1-fabric', '26.1.1-fabric', '26.1.2-fabric'] as Set,
+                catalog.releaseTargets(['26.1-fabric', '26.1.1-fabric', '26.1.2-fabric']).keySet())
+        assertThrows(IllegalArgumentException) {
+            catalog.releaseTargets(['26.1.1-fabric', '26.1.2-fabric'])
+        }
     }
 
     @Test
@@ -99,6 +108,21 @@ class TargetCatalogTest {
         data = copyData()
         target(data, '1.20.1-quilt').artifactOf = '26.3-fabric'
         rejects(data, 'shared artifact')
+        data = copyData()
+        target(data, '26.1-fabric').compatibleMinecraft = ['26.1.1']
+        rejects(data, 'shared artifact')
+        data = copyData()
+        target(data, '26.1.1-fabric').java = 21
+        rejects(data, 'shared artifact')
+        data = copyData()
+        target(data, '26.1.2-fabric').artifactOf = '26.1.1-fabric'
+        rejects(data, 'shared artifact')
+        data = copyData()
+        target(data, '26.1-fabric').compatibleMinecraft = ['26.2']
+        rejects(data, 'compatible Minecraft')
+        data = copyData()
+        target(data, '26.1-fabric').minecraftDependency = '>=26.1 <26.3'
+        rejects(data, 'compatible Minecraft')
     }
 
     @Test

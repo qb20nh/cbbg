@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "id": "cbbg-renderer-test",
+  "version": "1.0.0",
+  "name": "CBBG TextureFormat release tests",
+  "environment": "client",
+  "mixins": ["cbbg.texture-format-test.mixins.json"],
+  "entrypoints": {
+    "fabric-client-gametest": ["com.qb20nh.cbbg.gametest.ReleaseLifecycleGameTest", "com.qb20nh.cbbg.gametest.ReleaseIrisGameTest", "com.qb20nh.cbbg.gametest.ReleaseModMenuGameTest"]
+  },
+  "depends": {
+    "cbbg": "*",
+    "fabricloader": ">=${loader_minimum}",
+    "minecraft": ">=26.1 <26.2",
+    "fabric-client-gametest-api-v1": "*"
+  }
+}

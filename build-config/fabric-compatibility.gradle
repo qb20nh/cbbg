@@ -7,12 +7,74 @@ def CandidateFiles = plugins.getPlugin('cbbg.packaging').class.classLoader.loadC
 def FabricCompatibilitySearch = CandidateFiles.classLoader.loadClass('cbbg.gradle.FabricCompatibilitySearch')
 def FabricRuntimeInstallation = CandidateFiles.classLoader.loadClass('cbbg.gradle.FabricRuntimeInstallation')
 def compatibilityCatalog = new File(compatibilityRoot, 'targets.json')
-def compatibilityTarget = new JsonSlurper().parse(compatibilityCatalog).targets.find {
+def compatibilityTargets = new JsonSlurper().parse(compatibilityCatalog).targets
+def compatibilityTarget = compatibilityTargets.find {
     it.id == providers.gradleProperty('target').getOrElse('26.3-fabric')
 }
+def compatibilityOwner = compatibilityTarget.artifactOf ?
+        compatibilityTargets.find { it.id == compatibilityTarget.artifactOf } :
+        compatibilityTarget
+def sharedArtifactFamily = compatibilityTarget.loader == 'fabric' &&
+        compatibilityOwner.compatibleMinecraft
+def familyTargets = sharedArtifactFamily ? compatibilityTargets.findAll {
+    it.loader == 'fabric' && (it.id == compatibilityOwner.id || it.artifactOf == compatibilityOwner.id)
+} : [compatibilityTarget]
 def compatibilityOutput = layout.buildDirectory.dir('fabric-compatibility')
 def compatibilityReport = compatibilityOutput.map { it.file('minimums.json') }
 def compatibilityLastSuccess = compatibilityOutput.map { it.file('last-successful.json') }
+def resolvePinnedGametest = { Map target ->
+    String version = fabricApi.moduleVersion('fabric-client-gametest-api-v1',
+            target.dependencies.fabricApi)
+    def configuration = configurations.detachedConfiguration(dependencies.create(
+            'net.fabricmc.fabric-api:fabric-client-gametest-api-v1:' + version))
+    configuration.transitive = false
+    configuration.singleFile
+}
+def completedFamilySearches = { boolean requireHistoricalDriver ->
+    List<String> expected = ([compatibilityOwner.minecraft] + compatibilityOwner.compatibleMinecraft)
+            .collect { it + '-fabric' }
+    if (familyTargets*.id != expected) {
+        throw new GradleException('Shared Fabric dependency search is missing a catalog runtime')
+    }
+    List<Map> reports = familyTargets.collect { target ->
+        File source = new File(compatibilityRoot,
+                "build/targets/${target.id}/fabric-compatibility/last-successful.json")
+        if (!source.isFile()) throw new GradleException('Missing completed Fabric search for ' + target.id)
+        Map found = (Map) CandidateFiles.read(source)
+        if (!found.complete || found.target != target.id || found.artifactOwner != compatibilityOwner.id ||
+                found.profile != 'none' || found.inputs?.minimumOverrides != true ||
+                !found.inputs?.candidate || !found.maximumLoader || !found.maximumFabricApi ||
+                !found.minimumLoader || !found.minimumFabricApi ||
+                !found.loaderUpperExclusive || !found.fabricApiUpperExclusive) {
+            throw new GradleException('Incomplete or mismatched Fabric search for ' + target.id)
+        }
+        File outputs = new File(compatibilityRoot, "build/targets/${target.id}")
+        File driver = new File(outputs, "libs/${project.base.archivesName.get()}-${project.version}-processed-driver.jar")
+        FabricCompatibilitySearch.requireCurrentInputs(found.inputs, driver,
+                new File(outputs, 'fabric-compatibility/initial-cbbg.json'),
+                resolvePinnedGametest(target), target.dependencies.fabricApi,
+                requireHistoricalDriver)
+        if (found.results.any { result ->
+            result.status in ['failed', 'dependency-rejected'] &&
+                    !FabricCompatibilitySearch.before(result.loader, found.minimumLoader) &&
+                    !FabricCompatibilitySearch.before(found.maximumLoader, result.loader) &&
+                    !FabricCompatibilitySearch.before(result.fabricApi, found.minimumFabricApi) &&
+                    !FabricCompatibilitySearch.before(found.maximumFabricApi, result.fabricApi)
+        }) {
+            throw new GradleException('A tested pair failed inside the proposed range for ' + target.id)
+        }
+        found
+    }
+    Map first = reports.first()
+    if (reports.any { it.inputs.candidate != first.inputs.candidate ||
+            it.inputs.files != first.inputs.files || it.latestLoader != first.latestLoader ||
+            it.latestFabricApi != first.latestFabricApi }) {
+        throw new GradleException('Fabric runtime searches used different candidate bytes or discovery inputs')
+    }
+    [reports: reports, bounds: FabricCompatibilitySearch.intersect(reports),
+     candidate: first.inputs.candidate, latestLoader: first.latestLoader,
+     latestFabricApi: first.latestFabricApi]
+}
 
 tasks.register('verifyFabricCompatibility') {
     group = 'verification'
@@ -42,6 +104,17 @@ tasks.register('verifyFabricCompatibility') {
         String strictOption = providers.gradleProperty('verifyDeclaredMinimums').getOrElse('false')
         if (!(strictOption in ['true', 'false'])) throw new GradleException('verifyDeclaredMinimums must be true or false')
         boolean strict = strictOption == 'true'
+        String buildOnlyOption = providers.gradleProperty('verifyBuildDependenciesOnly').getOrElse('false')
+        if (!(buildOnlyOption in ['true', 'false'])) {
+            throw new GradleException('verifyBuildDependenciesOnly must be true or false')
+        }
+        boolean buildOnly = buildOnlyOption == 'true'
+        String profile = providers.gradleProperty('compatibilityProfile').getOrElse('none')
+        List<String> profileBackends = compatibilityTarget.compatibilityProfiles[profile]
+        if (!profileBackends) throw new GradleException('Unknown compatibility profile: ' + profile)
+        if (profile != 'none' && !buildOnly) {
+            throw new GradleException('Optional compatibility profiles require -PverifyBuildDependenciesOnly=true')
+        }
         File output = compatibilityOutput.get().asFile
         output.mkdirs()
         File initialConfig = new File(output, 'initial-cbbg.json')
@@ -64,27 +137,95 @@ tasks.register('verifyFabricCompatibility') {
             log.text = execution.standardOutput.asText.get() + execution.standardError.asText.get()
             exit
         }
+        Map<String, String> modNames = [modmenu: 'modMenu', clothconfig: 'clothConfig', yacl: 'yacl',
+                sodium: 'sodium', iris: 'iris', renderscale: 'renderScale',
+                chatpatches: 'chatPatches', immediatelyfast: 'immediatelyFast',
+                threatengl: 'threatenGl', forcegl3: 'forceGl3']
+        Set<String> selected = profile == 'none' ? [] as Set : profile.tokenize('+') as Set
+        if (selected.contains('iris')) selected.add('sodium')
+        if (selected.contains('renderscale')) selected.add('clothconfig')
+        if (selected.contains('chatpatches')) selected.add('yacl')
+        if (selected.any { !modNames.containsKey(it) }) {
+            throw new GradleException('Unsupported optional compatibility dependency in ' + profile)
+        }
+        def sha512 = { File file ->
+            java.security.MessageDigest.getInstance('SHA-512').digest(file.bytes).encodeHex().toString()
+        }
+        Map<String, Map> optionalMods = [:]
+        selected.toList().sort().each { String token ->
+            String name = modNames[token]
+            String pin = compatibilityTarget.dependencies[name]
+            if (!pin) throw new GradleException('Missing catalog dependency pin: ' + name)
+            String endpoint = name == 'modMenu' ? 'project/modmenu/version/' + pin : 'version/' + pin
+            Map version = (Map) new JsonSlurper().parseText(readUrl('https://api.modrinth.com/v2/' + endpoint))
+            if ((name == 'modMenu' ? version.version_number : version.id) != pin ||
+                    !version.game_versions?.contains(compatibilityTarget.minecraft) ||
+                    !version.loaders?.contains('fabric')) {
+                throw new GradleException('Modrinth version does not match the catalog target: ' + name)
+            }
+            List<Map> primary = version.files?.findAll { it.primary == true && it.filename?.endsWith('.jar') } ?: []
+            if (primary.size() != 1 || !(primary[0].hashes?.sha512 ==~ /[0-9a-fA-F]{128}/)) {
+                throw new GradleException('Missing primary SHA-512 locked Modrinth jar: ' + name)
+            }
+            URI url = new URI(primary[0].url as String)
+            if (url.scheme != 'https' || url.host != 'cdn.modrinth.com') {
+                throw new GradleException('Unexpected Modrinth download URL: ' + name)
+            }
+            File jar = new File(output, 'optional-mods/' + name + '-' + pin + '.jar')
+            jar.parentFile.mkdirs()
+            String expected = primary[0].hashes.sha512.toLowerCase(Locale.ROOT)
+            if (!jar.isFile() || sha512(jar) != expected) {
+                File staged = File.createTempFile(name + '-', '.jar', jar.parentFile)
+                try {
+                    URLConnection connection = url.toURL().openConnection()
+                    connection.connectTimeout = 30000
+                    connection.readTimeout = 30000
+                    connection.getInputStream().withCloseable { input ->
+                        java.nio.file.Files.copy(input, staged.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+                    }
+                    if (sha512(staged) != expected) throw new GradleException('Modrinth SHA-512 mismatch: ' + name)
+                    java.nio.file.Files.move(staged.toPath(), jar.toPath(),
+                            java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+                } finally {
+                    staged.delete()
+                }
+            }
+            optionalMods[name] = [pin: pin, file: jar, sha256: CandidateFiles.sha256(jar), sha512: expected]
+        }
         String minecraft = compatibilityTarget.minecraft
         List<String> loaders = new JsonSlurper().parseText(
                 readUrl('https://meta.fabricmc.net/v2/versions/loader')).collect { it.version }
                 .findAll { it ==~ /\d+\.\d+\.\d+/ }
         String apiMetadata = readUrl('https://maven.fabricmc.net/net/fabricmc/fabric-api/fabric-api/maven-metadata.xml')
+        List<String> apiMinecraft = sharedArtifactFamily ?
+                [compatibilityOwner.minecraft] + compatibilityOwner.compatibleMinecraft : [minecraft]
         List<String> apis = (apiMetadata =~ /<version>([^<]+)<\/version>/).collect { it[1] }
-                .findAll { it.endsWith('+' + minecraft) && it.split('\\+', 2)[0] ==~ /\d+\.\d+\.\d+/ }
+                .findAll { version -> apiMinecraft.any { version.endsWith('+' + it) } &&
+                        version.split('\\+', 2)[0] ==~ /\d+\.\d+\.\d+/ }
         File candidate = releaseOptimization.outputJar.get().asFile
+        if (!project.version.toString().endsWith("+mc${compatibilityOwner.minecraft}-${compatibilityOwner.loader}")) {
+            throw new GradleException('Compatibility search requires the artifact owner package version')
+        }
         File driver = tasks.named('processedDriverJar', Jar).get().archiveFile.get().asFile
         def resolveJar = { String coordinate ->
             def configuration = configurations.detachedConfiguration(dependencies.create(coordinate))
             configuration.transitive = false
             configuration.singleFile
         }
+        File gametestJar = resolvePinnedGametest(compatibilityTarget)
         Map fixed = [candidate: CandidateFiles.sha256(candidate), driver: CandidateFiles.sha256(driver),
-                target: compatibilityTarget.id,
+                target: compatibilityTarget.id, artifactOwner: compatibilityOwner.id,
+                gametestApiPin: compatibilityTarget.dependencies.fabricApi,
+                gametestApiSha256: CandidateFiles.sha256(gametestJar),
+                profile: profile, optionalDependencies: optionalMods.collectEntries { name, mod ->
+                    [(name): [pin: mod.pin, sha256: mod.sha256, sha512: mod.sha512]]
+                },
                 initialConfig: CandidateFiles.sha256(initialConfig),
                 display: manageDisplay ? [managed: true] : [directory: displayDirectory.canonicalPath, wayland: display],
                 minimumOverrides: !strict, host: System.getProperty('os.name') + '/' +
                         System.getProperty('os.arch') + '/' + System.getProperty('os.version')]
         List<File> identityFiles = [new File(compatibilityRoot, 'build-config/fabric-compatibility.gradle'),
+                new File(compatibilityRoot, 'build-config/fabric-modern/build.gradle'),
                 new File(compatibilityRoot, 'build-logic/src/main/groovy/cbbg/gradle/FabricCompatibilitySearch.groovy'),
                 java, new File(java.parentFile.parentFile, 'release'),
                 new File(java.parentFile.parentFile, 'lib/modules'),
@@ -105,6 +246,22 @@ tasks.register('verifyFabricCompatibility') {
         identityFiles.addAll(fileTree(new File(compatibilityRoot, 'scripts')).matching {
             include 'fabric_*.py', 'runtime_catalog.py', 'install_fabric_parity_runtime.py'
         }.files)
+        identityFiles.addAll(fileTree(new File(compatibilityRoot,
+                'renderers/blaze-texture-format/src/processedGametest')).files)
+        identityFiles.addAll(fileTree(new File(compatibilityRoot,
+                'renderers/modern/src/gametest/java/com/qb20nh/cbbg/gametest')).matching {
+            include 'IrisFixture.java', 'RenderScaleTestAccess.java'
+        }.files)
+        identityFiles.addAll(fileTree(new File(compatibilityRoot,
+                'renderers/renderpearl/src/gametest/java/com/qb20nh/cbbg/gametest/mixin')).matching {
+            include 'ScenarioProgressMixin.java'
+        }.files)
+        identityFiles.addAll(fileTree(new File(compatibilityRoot,
+                'core/src/testSupport/java/com/qb20nh/cbbg/reference')).matching {
+            include 'DitherReference.java'
+        }.files)
+        identityFiles.addAll(fileTree(new File(compatibilityRoot,
+                'renderers/modern/src/gametest/resources/cbbg-iris-fixture')).files)
         // Driver/native-library changes invalidate graphics results on this machine.
         ['/usr/lib', '/usr/lib64'].each { directory ->
             File libraries = new File(directory)
@@ -117,9 +274,8 @@ tasks.register('verifyFabricCompatibility') {
         fixed.files = identityFiles.collectEntries { [(it.canonicalPath): CandidateFiles.sha256(it)] }
         Map runtimes = [:]
         Map apiFiles = [:]
-        Map gametestFiles = [:]
         // Completed local searches provide starting versions, never reusable passes for a new jar.
-        def catalogTargets = new JsonSlurper().parse(compatibilityCatalog).targets
+        def catalogTargets = compatibilityTargets
         def minecraftOrder = { String version ->
             FabricCompatibilitySearch.numbers(version.tokenize('.').size() == 2 ? version + '.0' : version)
                     .collect { it.toString().padLeft(10, '0') }.join('.')
@@ -145,7 +301,8 @@ tasks.register('verifyFabricCompatibility') {
         }
         Map previousMinimums = previousReports ? previousReports.first().report : [:]
         List results = []
-        Map report = [schemaVersion: 1, target: compatibilityTarget.id, inputs: fixed,
+        Map report = [schemaVersion: 1, target: compatibilityTarget.id, artifactOwner: compatibilityOwner.id,
+                profile: profile, inputs: fixed,
                 complete: false, policy: 'previous boundaries, exponential bracket, binary search over released SemVer versions',
                 upperPolicy: 'first failing release, or next major when the latest release passes',
                 latestLoader: FabricCompatibilitySearch.ordered(loaders).last(),
@@ -160,11 +317,9 @@ tasks.register('verifyFabricCompatibility') {
         def pairPasses = { String loaderVersion, String apiVersion ->
             if (!apiFiles.containsKey(apiVersion)) {
                 apiFiles[apiVersion] = resolveJar('net.fabricmc.fabric-api:fabric-api:' + apiVersion)
-                gametestFiles[apiVersion] = resolveJar('net.fabricmc.fabric-api:fabric-client-gametest-api-v1:' +
-                        fabricApi.moduleVersion('fabric-client-gametest-api-v1', apiVersion))
             }
             File api = apiFiles[apiVersion]
-            File gametest = gametestFiles[apiVersion]
+            File gametest = gametestJar
             Map apiMetadataEntry = new java.util.zip.ZipFile(api).withCloseable { archive ->
                 archive.getInputStream(archive.getEntry('fabric.mod.json')).withCloseable {
                     (Map) new JsonSlurper().parse(it)
@@ -201,7 +356,7 @@ tasks.register('verifyFabricCompatibility') {
             }
             Map runtime = runtimes[loaderVersion]
             boolean passes = true
-            for (String backend : compatibilityTarget.backends) {
+            for (String backend : profileBackends) {
                 Map inputs = fixed + [loader: loaderVersion, fabricApi: apiVersion,
                         apiSha256: CandidateFiles.sha256(api), gametest: CandidateFiles.sha256(gametest),
                         runtime: runtime.sha256, backend: backend]
@@ -231,18 +386,24 @@ tasks.register('verifyFabricCompatibility') {
                             }
                         }
                     File lock = new File(cell, 'dependencies.json')
+                    Map locked = [fabricApi: [pin: apiVersion, sha256: CandidateFiles.sha256(api)]]
+                    optionalMods.each { name, mod -> locked[name] = [pin: mod.pin, sha256: mod.sha256] }
                     lock.text = JsonOutput.toJson([schemaVersion: 1, target: compatibilityTarget.id,
-                            dependencies: [fabricApi: [pin: apiVersion, sha256: CandidateFiles.sha256(api)]],
-                            gametestApi: [fabricApiPin: apiVersion, sha256: CandidateFiles.sha256(gametest)]])
+                            dependencies: locked,
+                            gametestApi: [fabricApiPin: compatibilityTarget.dependencies.fabricApi,
+                                    sha256: CandidateFiles.sha256(gametest)]])
                     List command = [python, new File(compatibilityRoot, 'scripts/fabric_parity_runtime.py'),
                             '--target', compatibilityTarget.id, '--runtime', runtime.directory,
                             '--java', java, '--game-dir', new File(cell, 'game'), '--candidate', candidate,
                             '--driver', driver, '--gametest-api', gametest, '--runtime-lock', runtime.lock,
-                            '--dependency-lock', lock, '--dependency', 'fabricApi=' + api.absolutePath,
+                             '--dependency-lock', lock, '--dependency', 'fabricApi=' + api.absolutePath,
+                             '--compat', profile,
                             '--backend', backend, '--xdg-runtime-dir', cellDisplayDirectory,
                             '--wayland-display', cellDisplay, '--timeout', '600',
                             '--cbbg-config', initialConfig,
-                            '--loader-version', loaderVersion, '--fabric-api-version', apiVersion]
+                              '--loader-version', loaderVersion, '--fabric-api-version', apiVersion,
+                              '--gametest-api-version', compatibilityTarget.dependencies.fabricApi]
+                    optionalMods.each { name, mod -> command.addAll(['--dependency', name + '=' + mod.file.absolutePath]) }
                     if (!strict) command.add('--test-dependency-minimums')
                     File log = new File(cell, 'runner.log')
                     int exit = run(command, log)
@@ -287,11 +448,16 @@ tasks.register('verifyFabricCompatibility') {
             passes
         }
         try {
-            String loader = compatibilityTarget.dependencies.minimumLoader ?: compatibilityTarget.dependencies.loader
-            String api = compatibilityTarget.dependencies.minimumFabricApi ?: compatibilityTarget.dependencies.fabricApi
+            Map declared = strict && sharedArtifactFamily ? compatibilityOwner.dependencies : compatibilityTarget.dependencies
+            String loader = declared.minimumLoader ?: compatibilityTarget.dependencies.loader
+            String api = declared.minimumFabricApi ?: compatibilityTarget.dependencies.fabricApi
             // First establish that the currently built dependency pair runs normally.
             if (!pairPasses(compatibilityTarget.dependencies.loader, compatibilityTarget.dependencies.fabricApi)) {
                 throw new GradleException('Build-time dependency pair failed; fix the baseline before searching')
+            }
+            if (buildOnly) {
+                report.buildDependenciesVerified = true
+                return
             }
             if (strict) {
                 if (!pairPasses(loader, api)) throw new GradleException('Declared minimum dependency pair failed')
@@ -319,18 +485,55 @@ tasks.register('verifyFabricCompatibility') {
             Map loaderUpper
             Map apiUpper
             if (strict) {
-                if (!previousMinimums.maximumLoader || !previousMinimums.maximumFabricApi ||
-                        previousMinimums.latestLoader != report.latestLoader ||
-                        previousMinimums.latestFabricApi != report.latestFabricApi) {
-                    throw new GradleException('Dependency releases changed or upper boundaries are missing; rerun the search')
+                if (sharedArtifactFamily) {
+                    Map searches = completedFamilySearches(false)
+                    if (searches.latestLoader != report.latestLoader ||
+                            searches.latestFabricApi != report.latestFabricApi) {
+                        throw new GradleException('Dependency releases changed; rerun every Fabric runtime search')
+                    }
+                    if (declared.minimumLoader != searches.bounds.minimumLoader ||
+                            declared.minimumFabricApi != searches.bounds.minimumFabricApi ||
+                            declared.loaderUpperExclusive != searches.bounds.loaderUpperExclusive ||
+                            declared.fabricApiUpperExclusive != searches.bounds.fabricApiUpperExclusive) {
+                        throw new GradleException('Shared owner bounds differ from the completed runtime intersection')
+                    }
+                    File searchedJar = searches.reports.first().results.findAll {
+                        it.status == 'passed' && it.receipt
+                    }.collect { result ->
+                        new File(new File(result.receipt as String).parentFile, 'mods/candidate.jar')
+                    }.find { it.isFile() && CandidateFiles.sha256(it) == searches.candidate }
+                    if (searchedJar == null) {
+                        throw new GradleException('Missing tested Fabric artifact from the completed search')
+                    }
+                    FabricCompatibilitySearch.requireSameArtifactExceptBounds(
+                            searchedJar, searches.candidate, candidate, declared)
+                    List<String> validLoaders = FabricCompatibilitySearch.within(loaders, loader,
+                            declared.loaderUpperExclusive)
+                    List<String> validApis = FabricCompatibilitySearch.within(apis, api,
+                            declared.fabricApiUpperExclusive)
+                    if (!validLoaders || !validApis) {
+                        throw new GradleException('No released dependency pair inside shared owner bounds')
+                    }
+                    loaderUpper = [maximum: validLoaders.last(),
+                            firstIncompatible: loaders.contains(declared.loaderUpperExclusive) ?
+                                    declared.loaderUpperExclusive : null]
+                    apiUpper = [maximum: validApis.last(),
+                            firstIncompatible: apis.contains(declared.fabricApiUpperExclusive) ?
+                                    declared.fabricApiUpperExclusive : null]
+                } else {
+                    if (!previousMinimums.maximumLoader || !previousMinimums.maximumFabricApi ||
+                            previousMinimums.latestLoader != report.latestLoader ||
+                            previousMinimums.latestFabricApi != report.latestFabricApi) {
+                        throw new GradleException('Dependency releases changed or upper boundaries are missing; rerun the search')
+                    }
+                    loaderUpper = [maximum: previousMinimums.maximumLoader,
+                            firstIncompatible: previousMinimums.incompatibleLoader]
+                    apiUpper = [maximum: previousMinimums.maximumFabricApi,
+                            firstIncompatible: previousMinimums.incompatibleFabricApi]
                 }
-                loaderUpper = [maximum: previousMinimums.maximumLoader,
-                        firstIncompatible: previousMinimums.incompatibleLoader]
-                apiUpper = [maximum: previousMinimums.maximumFabricApi,
-                        firstIncompatible: previousMinimums.incompatibleFabricApi]
-                if (compatibilityTarget.dependencies.loaderUpperExclusive !=
+                if (declared.loaderUpperExclusive !=
                         FabricCompatibilitySearch.upperLimit(loaderUpper.maximum, loaderUpper.firstIncompatible) ||
-                        compatibilityTarget.dependencies.fabricApiUpperExclusive !=
+                        declared.fabricApiUpperExclusive !=
                         FabricCompatibilitySearch.upperLimit(apiUpper.maximum, apiUpper.firstIncompatible)) {
                     throw new GradleException('Declared upper limits differ from the completed search')
                 }
@@ -374,7 +577,9 @@ tasks.register('verifyFabricCompatibility') {
             }
             if (strict) report.declaredBoundsVerified = true
             report.complete = true
-            compatibilityLastSuccess.get().asFile.text = JsonOutput.prettyPrint(JsonOutput.toJson(report)) + '\n'
+            File success = strict && sharedArtifactFamily ?
+                    new File(output, 'strict-successful.json') : compatibilityLastSuccess.get().asFile
+            success.text = JsonOutput.prettyPrint(JsonOutput.toJson(report)) + '\n'
         } finally {
             save()
         }
@@ -385,34 +590,49 @@ tasks.register('verifyFabricCompatibility') {
 tasks.register('updateFabricMinimums') {
     group = 'verification'
     description = 'Write completed dependency-search results into the target catalog.'
-    dependsOn 'verifyFabricCompatibility'
+    if (!sharedArtifactFamily) dependsOn 'verifyFabricCompatibility'
     doLast {
-        Map report = (Map) CandidateFiles.read(compatibilityReport.get().asFile)
-        if (!report.complete) throw new GradleException('Dependency search is incomplete')
-        if (!report.maximumLoader || !report.maximumFabricApi) throw new GradleException('Upper boundaries are missing')
-        if (report.results.any { result ->
-            result.status in ['failed', 'dependency-rejected'] &&
-                    FabricCompatibilitySearch.ordered([report.minimumLoader, result.loader])[0] == report.minimumLoader &&
-                    FabricCompatibilitySearch.ordered([result.loader, report.maximumLoader])[0] == result.loader &&
-                    FabricCompatibilitySearch.ordered([report.minimumFabricApi, result.fabricApi])[0] == report.minimumFabricApi &&
-                    FabricCompatibilitySearch.ordered([result.fabricApi, report.maximumFabricApi])[0] == result.fabricApi
-        }) {
-            throw new GradleException('A tested pair failed inside the proposed dependency range')
+        Map bounds
+        if (sharedArtifactFamily) {
+            Map searches = completedFamilySearches(true)
+            File candidate = releaseOptimization.outputJar.get().asFile
+            if (!candidate.isFile() || CandidateFiles.sha256(candidate) != searches.candidate) {
+                throw new GradleException('Shared Fabric searches do not match the current artifact owner jar')
+            }
+            bounds = searches.bounds
+        } else {
+            Map report = (Map) CandidateFiles.read(compatibilityReport.get().asFile)
+            if (report.target != compatibilityTarget.id || report.artifactOwner != compatibilityOwner.id) {
+                throw new GradleException('Dependency search artifact owner changed')
+            }
+            if (!report.complete) throw new GradleException('Dependency search is incomplete')
+            if (!report.maximumLoader || !report.maximumFabricApi) throw new GradleException('Upper boundaries are missing')
+            if (report.results.any { result ->
+                result.status in ['failed', 'dependency-rejected'] &&
+                        !FabricCompatibilitySearch.before(result.loader, report.minimumLoader) &&
+                        !FabricCompatibilitySearch.before(report.maximumLoader, result.loader) &&
+                        !FabricCompatibilitySearch.before(result.fabricApi, report.minimumFabricApi) &&
+                        !FabricCompatibilitySearch.before(report.maximumFabricApi, result.fabricApi)
+            }) {
+                throw new GradleException('A tested pair failed inside the proposed dependency range')
+            }
+            bounds = [minimumLoader: report.minimumLoader, minimumFabricApi: report.minimumFabricApi,
+                    loaderUpperExclusive: FabricCompatibilitySearch.upperLimit(
+                            report.maximumLoader, report.incompatibleLoader),
+                    fabricApiUpperExclusive: FabricCompatibilitySearch.upperLimit(
+                            report.maximumFabricApi, report.incompatibleFabricApi)]
         }
         String before = compatibilityCatalog.text
         def data = new JsonSlurper().parseText(before)
-        Map selected = data.targets.find { it.id == compatibilityTarget.id }
-        selected.dependencies.minimumLoader = report.minimumLoader
-        selected.dependencies.minimumFabricApi = report.minimumFabricApi
-        selected.dependencies.loaderUpperExclusive = FabricCompatibilitySearch.upperLimit(report.maximumLoader, report.incompatibleLoader)
-        selected.dependencies.fabricApiUpperExclusive = FabricCompatibilitySearch.upperLimit(report.maximumFabricApi, report.incompatibleFabricApi)
+        Map selected = data.targets.find { it.id == compatibilityOwner.id }
+        selected.dependencies.putAll(bounds)
         // Preserve the catalog's compact, one-target-per-line convention.
         List lines = before.readLines()
-        int index = lines.findIndexOf { it.contains('"id":"' + compatibilityTarget.id + '"') }
+        int index = lines.findIndexOf { it.contains('"id":"' + compatibilityOwner.id + '"') }
         if (index < 0) throw new GradleException('Cannot locate target catalog row')
         lines[index] = '    ' + JsonOutput.toJson(selected) + (lines[index].trim().endsWith(',') ? ',' : '')
         String after = lines.join('\n') + '\n'
         if (after != before) compatibilityCatalog.text = after
-        logger.lifecycle('Updated ' + compatibilityTarget.id + ' dependency bounds; rebuild and test without overrides before release.')
+        logger.lifecycle('Updated ' + compatibilityOwner.id + ' dependency bounds; rebuild and test without overrides before release.')
     }
 }

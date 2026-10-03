@@ -80,5 +80,10 @@ class CandidateFilesTest {
             CandidateFiles.releaseTargets('v1.4.1+mc26.3-fabric',
                     [[minecraft: '26.3', loader: 'fabric'], [minecraft: '26.3', loader: 'quilt']])
         }
+        List<Map> shared = [[id: '26.1-fabric', minecraft: '26.1', loader: 'fabric'],
+                            [id: '26.1.1-fabric', minecraft: '26.1.1', loader: 'fabric', artifactOf: '26.1-fabric'],
+                            [id: '26.1.2-fabric', minecraft: '26.1.2', loader: 'fabric', artifactOf: '26.1-fabric']]
+        CandidateFiles.releaseTargets('v1.4.1+mc26.1-fabric', shared)
+        assertThrows(GradleException) { CandidateFiles.releaseTargets('v1.4.1+mc26.1.2-fabric', shared) }
     }
 }

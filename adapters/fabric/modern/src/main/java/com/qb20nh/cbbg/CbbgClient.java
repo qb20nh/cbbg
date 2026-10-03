@@ -2,7 +2,7 @@ package com.qb20nh.cbbg;
 
 import com.qb20nh.cbbg.command.CbbgClientCommands;
 import com.qb20nh.cbbg.compat.iris.IrisCompat;
-import com.qb20nh.cbbg.compat.sulkan.SulkanCompat;
+import com.qb20nh.cbbg.compat.sulkan.ShaderCompat;
 import com.qb20nh.cbbg.config.CbbgConfig;
 import com.qb20nh.cbbg.render.DitherController;
 import com.qb20nh.cbbg.render.GenerationNotifications;
@@ -22,7 +22,7 @@ public final class CbbgClient implements ClientModInitializer {
   }
 
   public static boolean areShadersActive() {
-    return IrisCompat.isShaderPackActive() || SulkanCompat.isShaderPackActive();
+    return IrisCompat.isShaderPackActive() || ShaderCompat.isSulkanActive();
   }
 
   public static boolean isEnabled() {

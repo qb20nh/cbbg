@@ -15,7 +15,9 @@ class ChangelogNotes {
         List<Integer> headings = (0..<lines.size()).findAll { levels[it] == 2 }
         Set<Integer> selected = []
         targets.each { target ->
-            String identifier = version + '-mc' + target.minecraft + '-' + target.loader
+            Map identity = target.loader == 'fabric' && target.artifactOf ?
+                    (targets.find { it.id == target.artifactOf } ?: target) : target
+            String identifier = version + '-mc' + identity.minecraft + '-' + identity.loader
             List<Integer> matches = headings.findAll { identifiers(lines[it]).contains(identifier) }
             if (matches.isEmpty()) {
                 matches = headings.findAll {
