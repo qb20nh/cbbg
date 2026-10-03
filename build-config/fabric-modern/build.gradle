@@ -15,6 +15,10 @@ if (target == null || target.buildProfile != 'fabric-modern') {
     throw new GradleException("Target ${targetId} is not configured for the modern Fabric profile")
 }
 def artifactOwner = target.artifactOf ? catalog.targets.find { it.id == target.artifactOf } : target
+def launchesClient = gradle.startParameter.taskNames.any {
+    it.tokenize(':').last() in ['runClient', 'runClientGameTest']
+}
+def gameTarget = launchesClient ? target : artifactOwner
 def modProperties = new Properties()
 new File(repositoryRoot, 'gradle.properties').withInputStream { modProperties.load(it) }
 version = "${modProperties.mod_version}+mc${artifactOwner.minecraft}-${artifactOwner.loader}"
@@ -37,9 +41,9 @@ if (!target.compatibilityProfiles.containsKey(testCompat)) {
 }
 
 dependencies {
-    minecraft "com.mojang:minecraft:${artifactOwner.minecraft}"
-    implementation "net.fabricmc:fabric-loader:${artifactOwner.dependencies.loader}"
-    implementation "net.fabricmc.fabric-api:fabric-api:${artifactOwner.dependencies.fabricApi}"
+    minecraft "com.mojang:minecraft:${gameTarget.minecraft}"
+    implementation "net.fabricmc:fabric-loader:${gameTarget.dependencies.loader}"
+    implementation "net.fabricmc.fabric-api:fabric-api:${gameTarget.dependencies.fabricApi}"
     testImplementation platform('org.junit:junit-bom:6.1.3')
     testImplementation 'org.junit.jupiter:junit-jupiter'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
@@ -333,6 +337,14 @@ releaseOptimization {
     })
 }
 tasks.named('optimizeReleaseJar') { dependsOn tasks.named('jar', Jar) }
+if (launchesClient && target.id != artifactOwner.id) {
+    gradle.taskGraph.whenReady { graph ->
+        if (graph.hasTask(tasks.named('jar').get()) ||
+                graph.hasTask(tasks.named('optimizeReleaseJar').get())) {
+            throw new GradleException('Use a dedicated invocation for building shared artifacts')
+        }
+    }
+}
 
 tasks.named('processResources') {
     def sharedDescriptor = new File(repositoryRoot, 'src/main/resources/fabric.mod.json')
