@@ -355,7 +355,7 @@ tasks.named('processResources') {
         include 'assets/cbbg/lang/*.json'
         if (usesTextureFormat) include 'assets/cbbg/shaders/core/*.fsh'
     }
-    def properties = [version: project.version, minecraft_version: artifactOwner.minecraftDependency ?: target.minecraft,
+    def properties = [version: project.version, minecraft_version: artifactOwner.minecraftDependency ?: artifactOwner.minecraft,
                       loader_version: artifactOwner.dependencies.minimumLoader ?: artifactOwner.dependencies.loader,
                       loader_upper_bound: artifactOwner.dependencies.loaderUpperExclusive ? ' <' + artifactOwner.dependencies.loaderUpperExclusive : '',
                       fabric_api_minimum: artifactOwner.dependencies.minimumFabricApi ?: '*',

@@ -487,6 +487,9 @@ tasks.register('verifyFabricCompatibility') {
             if (strict) {
                 if (sharedArtifactFamily) {
                     Map searches = completedFamilySearches(false)
+                    if (searches.reports.first().inputs.files != fixed.files) {
+                        throw new GradleException('Verification inputs changed; rerun every Fabric runtime search')
+                    }
                     if (searches.latestLoader != report.latestLoader ||
                             searches.latestFabricApi != report.latestFabricApi) {
                         throw new GradleException('Dependency releases changed; rerun every Fabric runtime search')

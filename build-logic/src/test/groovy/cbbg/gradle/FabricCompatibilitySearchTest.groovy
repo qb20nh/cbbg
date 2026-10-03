@@ -300,6 +300,31 @@ class FabricCompatibilitySearchTest {
                     '0.145.4+26.1.1', false)
         }
     }
+    @Test void strictSharedVerificationRequiresTheCurrentIdentityFileSet() {
+        File repository = new File(System.getProperty('cbbg.repository'))
+        String script = new File(repository, 'build-config/fabric-compatibility.gradle').text
+        int start = script.indexOf('Map searches = completedFamilySearches(false)')
+        String validation = script.substring(start, script.indexOf('File searchedJar =', start))
+        Map files = ['test.java': 'source-hash', 'test.json': 'resource-hash']
+        Map bounds = [minimumLoader: '0.18.4', minimumFabricApi: '0.143.12+26.1',
+                      loaderUpperExclusive: '1.0.0', fabricApiUpperExclusive: '1.0.0']
+        Map searches = [reports: [[inputs: [files: files]]], bounds: bounds,
+                        latestLoader: '0.19.5', latestFabricApi: '0.155.3+26.1.2']
+        Binding binding = new Binding([
+                completedFamilySearches: { boolean historical -> searches },
+                fixed: [files: new LinkedHashMap(files)], declared: bounds, report: searches])
+        GroovyShell shell = new GroovyShell(binding)
+        String code = 'import org.gradle.api.GradleException\n' + validation
+        shell.evaluate(code)
+        for (Map changed : [files + ['new.json': 'new-hash'],
+                            ['test.java': 'source-hash'],
+                            files + ['test.java': 'changed-hash']]) {
+            binding.setVariable('fixed', [files: changed])
+            GradleException failure = assertThrows(GradleException) { shell.evaluate(code) }
+            assertTrue(failure.message.contains('rerun every Fabric runtime search'))
+        }
+    }
+
     @Test void acceptsOnlyDependencyBoundsInTheRebuiltFabricArtifact() {
         File searched = new File(directory, 'searched.jar')
         File rebuilt = new File(directory, 'rebuilt.jar')
