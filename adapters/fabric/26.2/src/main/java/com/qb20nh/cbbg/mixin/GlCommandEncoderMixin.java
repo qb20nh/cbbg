@@ -114,6 +114,7 @@ public abstract class GlCommandEncoderMixin {
           mc.gameRenderer
               .mainRenderTarget()
               .resize(mc.getWindow().getWidth(), mc.getWindow().getHeight());
+          loggedOnce.set(false);
         });
   }
 
@@ -148,6 +149,7 @@ public abstract class GlCommandEncoderMixin {
           mc.gameRenderer
               .mainRenderTarget()
               .resize(mc.getWindow().getWidth(), mc.getWindow().getHeight());
+          loggedOnce.set(false);
         });
   }
 

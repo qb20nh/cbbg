@@ -199,6 +199,19 @@ class PackageChecksTest {
         fails('Dependencies differ') { PackageChecks.verifyFabricMetadata(s.artifact, s.target, '1.4.0') }
     }
 
+    @Test void sharedPatchArtifactRequiresItsDeclaredMinecraftRange() {
+        Map s = specimen()
+        s.target.minecraftDependency = '>=26.3 <26.4'
+        s.metadata.depends.minecraft = '>=26.3 <26.4'
+        s.binary['fabric.mod.json'] = json(s.metadata)
+        archive(s.artifact, s.binary)
+        PackageChecks.verifyFabricMetadata(s.artifact, s.target, '1.4.0')
+        s.metadata.depends.minecraft = '26.3'
+        s.binary['fabric.mod.json'] = json(s.metadata)
+        archive(s.artifact, s.binary)
+        fails('Dependencies differ') { PackageChecks.verifyFabricMetadata(s.artifact, s.target, '1.4.0') }
+    }
+
     @Test
     void inventoryRejectsTamperingExtraSourcesAndTraversal() {
         Map s = specimen()

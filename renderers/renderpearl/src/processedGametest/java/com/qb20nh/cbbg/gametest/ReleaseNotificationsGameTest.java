@@ -16,6 +16,7 @@ import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.ChatComponent;
 import net.minecraft.client.gui.components.toasts.SystemToast;
+import net.minecraft.client.gui.components.toasts.ToastManager;
 import net.minecraft.client.multiplayer.chat.GuiMessage;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.FormattedCharSequence;
@@ -89,23 +90,70 @@ public final class ReleaseNotificationsGameTest implements FabricClientGameTest 
               awaitCompletion(context, requestedSeed, chat, toast, chat ? 1 : 0);
             }
           }
-          ReleaseClient.assertNoDraws(context);
-
-          Gate failed = control.arm(true);
+          Gate hiding = control.arm(false);
           context.runOnClient(
               client -> {
                 preferences(dispatcher, source, true, true);
-                execute(dispatcher, source, "stbn seed 7200");
+                execute(dispatcher, source, "stbn seed 7500");
                 clear(client);
                 execute(dispatcher, source, "stbn generate");
+                checkToast(client, "generating");
               });
+          awaitGate(context, hiding);
+          SystemToast previous =
+              Objects.requireNonNull(
+                  context.computeOnClient(ReleaseNotificationsGameTest::activeToast));
+          context.runOnClient(client -> preferences(dispatcher, source, true, false));
+          hiding.release();
+          Gate retry = control.arm(false);
+          context.waitFor(
+              client -> {
+                if (!Boolean.TRUE.equals(field(SystemToast.class, "forceHide", previous))) {
+                  return false;
+                }
+                if (!previous.equals(
+                    client.gui.toastManager().getToast(SystemToast.class, previous.getToken()))) {
+                  throw new AssertionError("Hidden toast was removed before retry");
+                }
+                preferences(dispatcher, source, true, true);
+                client.gui.hud.getChat().clearMessages(false);
+                execute(dispatcher, source, "stbn seed 7501");
+                execute(dispatcher, source, "stbn generate");
+                SystemToast current = activeToast(client);
+                if (current == null || previous.equals(current)) {
+                  throw new AssertionError("Retry reused the force-hidden toast");
+                }
+                checkMessages(client, 1, 0);
+                checkToast(client, "generating");
+                return true;
+              },
+              WAIT_TICKS);
+          awaitGate(context, retry);
+          retry.release();
+          awaitCompletion(context, 7501, true, true, 1);
+          ReleaseClient.assertNoDraws(context);
+
+          Gate failed = control.arm(true);
+          SystemToast failedToast =
+              Objects.requireNonNull(
+                  context.computeOnClient(
+                      client -> {
+                        preferences(dispatcher, source, true, true);
+                        execute(dispatcher, source, "stbn seed 7200");
+                        clear(client);
+                        execute(dispatcher, source, "stbn generate");
+                        return activeToast(client);
+                      }));
           awaitGate(context, failed);
-          context.waitFor(client -> failed.workerIdle(), WAIT_TICKS);
-          context.waitTicks(5);
+          context.waitFor(
+              client ->
+                  failed.workerIdle()
+                      && Boolean.TRUE.equals(field(SystemToast.class, "forceHide", failedToast)),
+              WAIT_TICKS);
           context.runOnClient(
               client -> {
                 checkMessages(client, 1, 0);
-                checkToast(client, "generating");
+                checkToast(client, null);
               });
 
           Gate old = control.arm(false);
@@ -301,11 +349,7 @@ public final class ReleaseNotificationsGameTest implements FabricClientGameTest 
 
   @SuppressWarnings("unchecked")
   private static @Nullable String toastText(Minecraft client) {
-    SystemToast toast =
-        client
-            .gui
-            .toastManager()
-            .getToast(SystemToast.class, SystemToast.SystemToastId.PERIODIC_NOTIFICATION);
+    SystemToast toast = activeToast(client);
     if (toast == null) return null;
     List<FormattedCharSequence> lines =
         (List<FormattedCharSequence>)
@@ -319,6 +363,47 @@ public final class ReleaseNotificationsGameTest implements FabricClientGameTest 
           });
     }
     return normalized(text.toString());
+  }
+
+  private static @Nullable SystemToast activeToast(Minecraft client) {
+    ToastManager manager = client.gui.toastManager();
+    List<?> visible =
+        (List<?>) Objects.requireNonNull(field(ToastManager.class, "visibleToasts", manager));
+    java.util.Deque<?> queued =
+        (java.util.Deque<?>) Objects.requireNonNull(field(ToastManager.class, "queued", manager));
+    SystemToast found = null;
+    for (Object instance : visible) {
+      Object candidate = field(instance.getClass(), "toast", instance);
+      if (candidate instanceof SystemToast toast && isActiveCbbgToast(toast)) {
+        if (found != null) throw new AssertionError("Multiple active CBBG notification toasts");
+        found = toast;
+      }
+    }
+    for (Object candidate : queued) {
+      if (candidate instanceof SystemToast toast && isActiveCbbgToast(toast)) {
+        if (found != null) throw new AssertionError("Multiple active CBBG notification toasts");
+        found = toast;
+      }
+    }
+    return found;
+  }
+
+  @SuppressWarnings("unchecked")
+  private static boolean isActiveCbbgToast(SystemToast toast) {
+    if (Boolean.TRUE.equals(field(SystemToast.class, "forceHide", toast))) return false;
+    List<FormattedCharSequence> titleLines =
+        (List<FormattedCharSequence>)
+            Objects.requireNonNull(field(SystemToast.class, "titleLines", toast));
+    StringBuilder title = new StringBuilder();
+    for (FormattedCharSequence line : titleLines) {
+      line.accept(
+          (index, style, codePoint) -> {
+            title.appendCodePoint(codePoint);
+            return true;
+          });
+    }
+    return normalized(title.toString())
+        .equals(normalized(Component.translatable("cbbg.toast.stbn.title").getString()));
   }
 
   private static String normalized(String text) {

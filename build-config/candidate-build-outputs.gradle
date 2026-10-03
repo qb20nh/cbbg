@@ -1,0 +1,51 @@
+tasks.register('candidateBuildOutputs') {
+    dependsOn tasks.named('ciCheck'), tasks.named('sourceInventory')
+    dependsOn tasks.withType(Jar).matching { it.name.endsWith('DriverJar') }
+    def destination = layout.file(providers.provider {
+        new File(rootProject.file('../..'), "build/targets/${candidateTargetId}/candidate-build-outputs.json")
+    })
+    outputs.file(destination)
+    outputs.upToDateWhen { false }
+    doLast {
+        def root = rootProject.file('../..').canonicalFile.toPath()
+        def reference = { File file ->
+            def path = file.canonicalFile.toPath()
+            if (!path.startsWith(root) || !file.isFile()) {
+                throw new GradleException('Missing or invalid candidate output: ' + file.name)
+            }
+            [path: root.relativize(path).toString().replace('\\', '/'),
+             sha256: java.security.MessageDigest.getInstance('SHA-256').digest(file.bytes).encodeHex().toString(),
+             filename: file.name]
+        }
+        def gitOutput = { List<String> arguments ->
+            providers.exec {
+                workingDir root.toFile()
+                commandLine(['git'] + arguments)
+            }.standardOutput.asText.get().trim()
+        }
+        def processed = tasks.names.contains('processedDriverJar')
+        def drivers = new TreeMap<String, Map>()
+        tasks.withType(Jar).matching {
+            it.name.endsWith('DriverJar') && it.name.startsWith('processed') == processed
+        }.each { driver ->
+            def suite = driver.name in ['parityDriverJar', 'processedDriverJar'] ? 'ordinary' :
+                    driver.archiveClassifier.get().replaceFirst(/^processed-/, '').replaceFirst(/-driver$/, '')
+            if (drivers.containsKey(suite)) throw new GradleException('Duplicate driver suite: ' + suite)
+            drivers[suite] = reference(driver.archiveFile.get().asFile)
+        }
+        def output = [schema: 2, target: candidateTargetId, version: project.version.toString(),
+                      source_commit: gitOutput(['rev-parse', 'HEAD']),
+                      source_dirty: !gitOutput(['status', '--porcelain', '--untracked-files=all',
+                                               '--', '.', ':(top,exclude)docs/**']).isEmpty(),
+                      artifact: reference(releaseOptimization.outputJar.get().asFile),
+                      mapping: reference(releaseOptimization.mappingFile.get().asFile),
+                      sbom: reference(releaseSbomFile.get().asFile),
+                      processing: [tool: 'proguard', version: releaseOptimization.toolVersion],
+                      sources: reference(tasks.named('releaseSourcesJar', Jar).get().archiveFile.get().asFile),
+                      source_inventory: reference(layout.buildDirectory.file('source-inventory.json').get().asFile),
+                      drivers: drivers]
+        destination.get().asFile.parentFile.mkdirs()
+        destination.get().asFile.text = groovy.json.JsonOutput.prettyPrint(
+                groovy.json.JsonOutput.toJson(output)) + '\n'
+    }
+}

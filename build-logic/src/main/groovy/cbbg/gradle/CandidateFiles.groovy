@@ -128,9 +128,15 @@ class CandidateFiles {
     }
 
     static void releaseTargets(String tag, Collection<Map> targets) {
-        if (tag.contains('+') && (targets.size() != 1 ||
-                tag != 'v' + releaseVersion(tag) + '+mc' + targets.first().minecraft + '-' + targets.first().loader)) {
-            throw new GradleException('Release tag must match the single selected target')
+        if (tag.contains('+')) {
+            Set owners = targets.collect { it.artifactOf ?: (it.id ?: "${it.minecraft}-${it.loader}") } as Set
+            Map owner = owners.size() == 1 ? targets.find {
+                (it.id ?: "${it.minecraft}-${it.loader}") == owners.first()
+            } : null
+            if (owner == null ||
+                    tag != 'v' + releaseVersion(tag) + '+mc' + owner.minecraft + '-' + owner.loader) {
+                throw new GradleException('Release tag must match the single selected target')
+            }
         }
     }
 

@@ -14,6 +14,14 @@ import zipfile
 import fabric_parity_runtime as launcher
 
 
+class TargetArgumentTests(unittest.TestCase):
+    def test_accepts_the_26_2_fabric_target(self):
+        result = subprocess.run(
+            [sys.executable, launcher.__file__, '--target', '26.2-fabric', '--help'],
+            capture_output=True, text=True, check=False)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+
 class SourceStatusTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -70,7 +78,9 @@ class LauncherFailureTests(unittest.TestCase):
         # Isolate client execution, not receipt writing or scenario validation.
         command_module = types.ModuleType('minecraft_launcher_lib.command')
         self.launch_options = None
+        self.launch_identity = None
         def get_minecraft_command(*args):
+            self.launch_identity = args[0]
             self.launch_options = args[2]
             return ['java', 'fixture.Main']
         command_module.get_minecraft_command = get_minecraft_command
@@ -88,6 +98,26 @@ class LauncherFailureTests(unittest.TestCase):
     def receipt(self):
         return json.loads((self.game / 'probe.json').read_text())
 
+    def test_patch_target_uses_selected_runtime_and_dependencies(self):
+        self.run.side_effect = subprocess.TimeoutExpired(['java', 'fixture.Main'], 240)
+        with (patch.object(sys, 'argv', sys.argv + ['--target', '26.1.2-fabric']),
+              self.assertRaises(subprocess.TimeoutExpired)):
+            launcher.main()
+        self.assertEqual(self.launch_identity, 'fabric-loader-0.19.5-26.1.2')
+        self.assertEqual(self.receipt()['target'], '26.1.2-fabric')
+        self.assertEqual(self.receipt()['renderer'], 'blaze-texture-format')
+        selected = launcher.verify_dependencies.call_args.args[0]
+        self.assertEqual(selected['dependencies']['fabricApi'], '0.155.3+26.1.2')
+        self.assertEqual(self.launch_options['jvmArguments'][-2], '-Dcbbg.test.modmenu.version=18.0.2')
+
+    def test_26_1_patch_rejects_vulkan_before_launch(self):
+        arguments = sys.argv + ['--target', '26.1.2-fabric']
+        arguments[arguments.index('opengl')] = 'vulkan'
+        with patch.object(sys, 'argv', arguments), self.assertRaises(SystemExit):
+            launcher.main()
+        self.run.assert_not_called()
+        self.assertFalse(self.game.exists())
+
     def test_minimum_search_changes_only_cbbg_and_test_driver_requirements(self):
         def client(command, **kwargs):
             overrides = json.loads((self.game / 'config/fabric_loader_dependencies.json').read_text())
@@ -99,12 +129,23 @@ class LauncherFailureTests(unittest.TestCase):
             raise subprocess.TimeoutExpired(command, 240)
         self.run.side_effect = client
         with (patch.object(sys, 'argv', sys.argv + ['--loader-version', '0.19.3',
-                '--fabric-api-version', '0.153.1+26.3', '--test-dependency-minimums']),
+                '--fabric-api-version', '0.153.0+26.3', '--test-dependency-minimums']),
               self.assertRaises(subprocess.TimeoutExpired)):
             launcher.main()
         self.assertEqual(self.receipt()['loaderProfile'], 'fabric-loader-0.19.3-26.3')
         self.assertTrue(self.receipt()['dependencyMinimumTest'])
         self.assertFalse(self.receipt()['releaseAcceptance'])
+        selected = launcher.verify_dependencies.call_args.args[0]
+        framework = self.gametest_check.call_args.args[0]
+        self.assertEqual(selected['dependencies']['fabricApi'], '0.153.0+26.3')
+        self.assertNotEqual(framework['dependencies']['fabricApi'], '0.153.0+26.3')
+        self.assertEqual(self.receipt()['gametestApiVersion'], framework['dependencies']['fabricApi'])
+
+    def test_gametest_framework_cannot_change_with_runtime_api(self):
+        with (patch.object(sys, 'argv', sys.argv + ['--gametest-api-version', '0.144.1+26.1']),
+              self.assertRaises(SystemExit)):
+            launcher.main()
+        self.run.assert_not_called()
 
     def test_initial_config_is_installed_before_launch_and_retained(self):
         settings = self.root / 'settings.json'
@@ -150,6 +191,33 @@ class LauncherFailureTests(unittest.TestCase):
             launcher.main()
         self.assertIn('-DMC_DEBUG_ENABLED=true', self.launch_options['jvmArguments'])
         self.assertIn('-DMC_DEBUG_PREFER_WAYLAND=false', self.launch_options['jvmArguments'])
+
+    def test_native_extraction_uses_fresh_game_directory(self):
+        module = sys.modules['minecraft_launcher_lib.command']
+        original = module.get_minecraft_command
+
+        def command(*args):
+            return original(*args) + [
+                '-Dorg.lwjgl.system.SharedLibraryExtractPath=' + str(self.root / 'runtime-natives')]
+
+        def client(arguments, **kwargs):
+            extracts = [value for value in arguments
+                        if value.startswith('-Dorg.lwjgl.system.SharedLibraryExtractPath=')]
+            self.assertEqual(extracts, [
+                '-Dorg.lwjgl.system.SharedLibraryExtractPath=' + str(self.game / 'natives')])
+            native = Path(extracts[0].split('=', 1)[1])
+            self.assertTrue(native.is_dir())
+            (native / 'libglfw.so').write_bytes(b'generated native')
+            raise subprocess.TimeoutExpired(arguments, 240)
+
+        self.run.side_effect = client
+        with (patch.object(module, 'get_minecraft_command', command),
+              self.assertRaises(subprocess.TimeoutExpired)):
+            launcher.main()
+        self.assertFalse((self.root / 'runtime-natives').exists())
+        checked_command = self.runtime_check.call_args.args[2]
+        self.assertIn('-Dorg.lwjgl.system.SharedLibraryExtractPath=' +
+                      str(self.root / 'runtime-natives'), checked_command)
 
     def test_wayland_launch_prefers_wayland_in_minecraft(self):
         args = [arg for arg in sys.argv if arg not in ('--x-display', ':99')]

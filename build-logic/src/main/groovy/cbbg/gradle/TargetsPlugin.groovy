@@ -75,35 +75,58 @@ class TargetsPlugin implements Plugin<Project> {
             def value = project.providers.gradleProperty(key)
             if (value.present) localInputs[key] = value.get()
         }
-        def previousPhase = null
-        ['updateFabricMinimums', 'verifyFabricCompatibility'].each { operation ->
-            def phase = project.tasks.register('local_' + operation, TargetBuild) {
-                def target = selected.first()
-                repositoryDirectory.set(project.layout.projectDirectory)
-                targetId.set(target.id as String)
-                profile.set((target.buildProfile ?: '') as String)
-                delegate.operation.set(operation)
-                offline.set(project.gradle.startParameter.offline)
-                delegate.options.set(options)
-                buildProperties.set(localInputs + [verifyDeclaredMinimums:
-                        operation == 'verifyFabricCompatibility' ? 'true' : 'false'])
-                javaHome.set(toolchains.launcherFor {
-                    languageVersion = JavaLanguageVersion.of((target.buildJava ?: 25) as int)
-                }.map { it.metadata.installationPath })
-                usesService(serial)
-                doFirst {
-                    if (selected.size() != 1 || target.loader != 'fabric' || target.renderer != 'renderpearl') {
-                        throw new GradleException('determineFabricMinimums requires one RenderPearl Fabric target')
-                    }
-                }
+        Map owner = owners.size() == 1 ? owners.first() : null
+        List<Map> family = []
+        if (selected.size() == 1 && selected.first().loader == 'fabric' && owner != null) {
+            if (owner.renderer in ['renderpearl', 'blaze-gpu-format']) {
+                family = [selected.first()]
+            } else if (owner.renderer == 'blaze-texture-format' && owner.compatibleMinecraft) {
+                String ids = ([owner.minecraft] + owner.compatibleMinecraft).collect { it + '-fabric' }.join(',')
+                family = catalog.select(ids)
             }
-            if (previousPhase != null) {
-                def dependency = previousPhase
-                phase.configure { dependsOn(dependency) }
-            }
-            previousPhase = phase
         }
-        minimums.configure { dependsOn(previousPhase) }
+        if (family.isEmpty()) {
+            minimums.configure {
+                doLast { throw new GradleException('determineFabricMinimums requires one supported Fabric target') }
+            }
+        } else {
+            List<Map> phases = []
+            if (family.size() > 1) {
+                family.each { target -> phases.add([name: 'local_search_' + target.id,
+                        target: target, operation: 'verifyFabricCompatibility', strict: false]) }
+                phases.add([name: 'local_updateFabricMinimums', target: owner,
+                        operation: 'updateFabricMinimums', strict: false])
+                family.each { target -> phases.add([name: 'local_strict_' + target.id,
+                        target: target, operation: 'verifyFabricCompatibility', strict: true]) }
+            } else {
+                phases.add([name: 'local_updateFabricMinimums', target: family.first(),
+                        operation: 'updateFabricMinimums', strict: false])
+                phases.add([name: 'local_verifyFabricCompatibility', target: family.first(),
+                        operation: 'verifyFabricCompatibility', strict: true])
+            }
+            def previousPhase = null
+            phases.each { plan ->
+                def phase = project.tasks.register(plan.name as String, TargetBuild) {
+                    repositoryDirectory.set(project.layout.projectDirectory)
+                    targetId.set(plan.target.id as String)
+                    profile.set((plan.target.buildProfile ?: '') as String)
+                    operation.set(plan.operation as String)
+                    offline.set(project.gradle.startParameter.offline)
+                    delegate.options.set(options)
+                    buildProperties.set(localInputs + [verifyDeclaredMinimums: plan.strict.toString()])
+                    javaHome.set(toolchains.launcherFor {
+                        languageVersion = JavaLanguageVersion.of((plan.target.buildJava ?: 25) as int)
+                    }.map { it.metadata.installationPath })
+                    usesService(serial)
+                }
+                if (previousPhase != null) {
+                    def dependency = previousPhase
+                    phase.configure { dependsOn(dependency) }
+                }
+                previousPhase = phase
+            }
+            minimums.configure { dependsOn(previousPhase) }
+        }
         project.tasks.register('checkCatalog') {
             group = 'verification'
             description = 'Validate the distribution catalog.'

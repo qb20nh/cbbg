@@ -1,0 +1,191 @@
+{
+  "schemaVersion": 1,
+  "target": "26.1-fabric",
+  "ordinaryMetadata": "renderers/blaze-texture-format/src/processedGametest/resources/fabric.mod.json",
+  "additionalRuns": [
+    {
+      "suite": "generation",
+      "profiles": [
+        "none"
+      ],
+      "backends": [
+        "opengl"
+      ],
+      "restart": false,
+      "entrypoints": [
+        "ReleaseGenerationGameTest"
+      ]
+    },
+    {
+      "suite": "maximum-noise-cache",
+      "profiles": [
+        "none"
+      ],
+      "backends": [
+        "opengl"
+      ],
+      "restart": false,
+      "entrypoints": [
+        "ReleaseMaximumNoiseCacheGameTest"
+      ]
+    },
+    {
+      "suite": "shutdown",
+      "profiles": [
+        "none"
+      ],
+      "backends": [
+        "opengl"
+      ],
+      "restart": false,
+      "entrypoints": [
+        "ReleaseShutdownGameTest"
+      ]
+    },
+    {
+      "suite": "generating-shutdown",
+      "profiles": [
+        "none"
+      ],
+      "backends": [
+        "opengl"
+      ],
+      "restart": false,
+      "entrypoints": [
+        "ReleaseGeneratingShutdownGameTest"
+      ]
+    },
+    {
+      "suite": "allocation",
+      "profiles": [
+        "none"
+      ],
+      "backends": [
+        "opengl"
+      ],
+      "restart": false,
+      "entrypoints": [
+        "ReleaseAllocationGameTest"
+      ]
+    },
+    {
+      "suite": "world-pixels",
+      "profiles": [
+        "none"
+      ],
+      "backends": [
+        "opengl"
+      ],
+      "restart": false,
+      "entrypoints": [
+        "ReleaseWorldPixelsGameTest"
+      ]
+    },
+    {
+      "suite": "shader-failure",
+      "profiles": [
+        "none"
+      ],
+      "backends": [
+        "opengl"
+      ],
+      "restart": false,
+      "entrypoints": [
+        "ReleaseShaderFailureGameTest"
+      ]
+    },
+    {
+      "suite": "debug-overlay",
+      "profiles": [
+        "none"
+      ],
+      "backends": [
+        "opengl"
+      ],
+      "restart": false,
+      "entrypoints": [
+        "ReleaseDebugOverlayGameTest"
+      ]
+    },
+    {
+      "suite": "notifications",
+      "profiles": [
+        "none"
+      ],
+      "backends": [
+        "opengl"
+      ],
+      "restart": false,
+      "entrypoints": [
+        "ReleaseNotificationsGameTest"
+      ]
+    },
+    {
+      "suite": "iris-restart",
+      "requiresMod": "iris",
+      "backends": [
+        "opengl"
+      ],
+      "restart": true,
+      "entrypoints": [
+        "ReleaseIrisRestartGameTest"
+      ]
+    },
+    {
+      "suite": "startup-cold",
+      "profiles": [
+        "none"
+      ],
+      "backends": [
+        "opengl"
+      ],
+      "restart": false,
+      "startupMode": "cold",
+      "entrypoints": [
+        "ReleaseEarlyStartupGameTest"
+      ]
+    },
+    {
+      "suite": "startup-warm",
+      "profiles": [
+        "none"
+      ],
+      "backends": [
+        "opengl"
+      ],
+      "restart": false,
+      "startupMode": "warm",
+      "entrypoints": [
+        "ReleaseEarlyStartupGameTest"
+      ]
+    },
+    {
+      "suite": "startup-damaged",
+      "profiles": [
+        "none"
+      ],
+      "backends": [
+        "opengl"
+      ],
+      "restart": false,
+      "startupMode": "damaged",
+      "entrypoints": [
+        "ReleaseEarlyStartupGameTest"
+      ]
+    },
+    {
+      "suite": "startup-seed-mismatch",
+      "profiles": [
+        "none"
+      ],
+      "backends": [
+        "opengl"
+      ],
+      "restart": false,
+      "startupMode": "seed-mismatch",
+      "entrypoints": [
+        "ReleaseEarlyStartupGameTest"
+      ]
+    }
+  ]
+}

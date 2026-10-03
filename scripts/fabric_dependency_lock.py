@@ -25,6 +25,8 @@ def verify_dependencies(target, profile, paths, lock):
         selected.add('sodium')
     if 'renderscale' in selected:
         selected.add('clothconfig')
+    if 'chatpatches' in selected:
+        selected.add('yacl')
     selected.add('fabricapi')
     if not selected <= aliases.keys():
         raise ValueError('Missing dependency lock entries')

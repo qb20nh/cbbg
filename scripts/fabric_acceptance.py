@@ -52,7 +52,7 @@ def required_runs(target, contract, root=ROOT, metadata_path=None):
             raise EvidenceError('Invalid suite entrypoints: ' + name)
         startup_mode = suite.get('startupMode')
         if ((STARTUP_DRIVER in scenarios and
-             (scenarios != [STARTUP_DRIVER] or startup_mode not in ('cold', 'warm', 'damaged')
+             (scenarios != [STARTUP_DRIVER] or startup_mode not in ('cold', 'warm', 'damaged', 'seed-mismatch')
               or suite['restart']))
                 or (STARTUP_DRIVER not in scenarios and startup_mode is not None)):
             raise EvidenceError('Invalid startup suite: ' + name)
@@ -96,12 +96,24 @@ def verify_results(index_path, target, contract_path, driver_hashes, *, metadata
     results = []
     paths = set()
     for cell, requirement in expected.items():
-        receipt = checked_file(index_path.parent, supplied[cell]['receipt'])
+        row = supplied[cell]
+        receipt = checked_file(index_path.parent, row['receipt'])
         if receipt in paths:
             raise EvidenceError('Receipt reused for different required runs')
         paths.add(receipt)
         verifier = verify_restart if requirement['restart'] else verify_run
-        result = verifier(receipt, target, driver_sha256=driver_hashes[cell[0]], **inputs)
+        extra = {}
+        if requirement['restart']:
+            if 'control_receipt' not in row:
+                raise EvidenceError('Restart result requires an explicit control receipt')
+            control_receipt = checked_file(index_path.parent, row['control_receipt'])
+            if control_receipt in paths:
+                raise EvidenceError('Receipt reused for different required runs')
+            paths.add(control_receipt)
+            extra['control_receipt_path'] = control_receipt
+        elif 'control_receipt' in row:
+            raise EvidenceError('Ordinary result cannot include a control receipt')
+        result = verifier(receipt, target, driver_sha256=driver_hashes[cell[0]], **extra, **inputs)
         if (result['profile'] != cell[1] or result['backend'] != cell[2]
                 or result['scenarios'] != requirement['entrypoints']
                 or result.get('startupMode') != requirement['startupMode']):

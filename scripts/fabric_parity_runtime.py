@@ -34,6 +34,8 @@ def prepare_startup_cache(game, evidence, mode, source):
     cache = game / '.cbbg'
     cache.mkdir()
     if source is not None:
+        if mode == 'seed-mismatch' and not (source / 'stbn_16x16x8.sha256').read_text().startswith('# seed 0\n'):
+            raise ValueError('Seed mismatch requires a seed-zero cache')
         for name in STARTUP_CACHE_FILES:
             shutil.copyfile(source / name, cache / name)
         if mode == 'damaged':
@@ -43,6 +45,8 @@ def prepare_startup_cache(game, evidence, mode, source):
     evidence.mkdir(parents=True, exist_ok=True)
     record = {'mode': mode, 'files': {path.name: {'sha256': digest(path),
               'mtimeNs': path.stat().st_mtime_ns} for path in sorted(cache.iterdir())}}
+    if mode == 'seed-mismatch':
+        record['cachedSeed'] = 0
     (evidence / 'startup-input.json').write_text(json.dumps(record, indent=2) + '\n')
 
 
@@ -76,7 +80,8 @@ def restart_state(game):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--target', choices=['26.3-fabric'], default='26.3-fabric')
+    parser.add_argument('--target', choices=['26.1-fabric', '26.1.1-fabric', '26.1.2-fabric',
+                                            '26.2-fabric', '26.3-fabric'], default='26.3-fabric')
     for name in ('runtime', 'java', 'game-dir', 'candidate', 'driver', 'gametest-api',
                  'runtime-lock', 'dependency-lock', 'xdg-runtime-dir'):
         parser.add_argument('--' + name, type=Path, required=True)
@@ -85,6 +90,7 @@ def main():
     parser.add_argument('--compat', default='none')
     parser.add_argument('--loader-version', help='Loader under compatibility testing')
     parser.add_argument('--fabric-api-version', help='Fabric API under compatibility testing')
+    parser.add_argument('--gametest-api-version', help='Fabric API source version for the fixed test framework')
     parser.add_argument('--test-dependency-minimums', action='store_true',
                         help='Test CBBG dependency minimums without changing candidate bytes')
     parser.add_argument('--timeout', type=int, default=240)
@@ -92,7 +98,7 @@ def main():
     parser.add_argument('--restart-phase', choices=['prepare', 'verify', 'control'])
     parser.add_argument('--cbbg-config', type=Path,
                         help='Initial CBBG settings for a fresh, non-restart run')
-    parser.add_argument('--startup-mode', choices=['cold', 'warm', 'damaged'])
+    parser.add_argument('--startup-mode', choices=['cold', 'warm', 'damaged', 'seed-mismatch'])
     parser.add_argument('--startup-cache', type=Path,
                         help='Cache directory copied into a fresh warm/damaged startup test')
     display = parser.add_mutually_exclusive_group(required=True)
@@ -112,6 +118,10 @@ def main():
         except ValueError:
             parser.error('Initial CBBG config must be a JSON object')
     target = select_targets(load_catalog(), args.target)[0]
+    gametest_target = target
+    gametest_version = target['dependencies']['fabricApi']
+    if args.gametest_api_version and args.gametest_api_version != gametest_version:
+        parser.error('GameTest API must match the catalog build dependency')
     if args.loader_version or args.fabric_api_version:
         target = dict(target, dependencies=dict(target['dependencies']))
         if args.loader_version:
@@ -133,7 +143,7 @@ def main():
     dependency_bytes = args.dependency_lock.read_bytes()
     dependency_lock = json.loads(dependency_bytes)
     verify_dependencies(target, args.compat, dependencies, dependency_lock)
-    verify_gametest_api(target, args.gametest_api, dependency_lock)
+    verify_gametest_api(gametest_target, args.gametest_api, dependency_lock)
     with zipfile.ZipFile(args.driver) as jar:
         metadata = json.loads(jar.read('fabric.mod.json'))
         expected = metadata['entrypoints']['fabric-client-gametest']
@@ -164,7 +174,7 @@ def main():
     command = get_minecraft_command(identity, str(runtime), {
         'username': 'CbbgParity', 'uuid': '00000000000000000000000000000001', 'token': '0',
         'executablePath': str(args.java.resolve()), 'gameDirectory': str(game),
-        'jvmArguments': ['-Xmx2G', *display_jvm_arguments, '-Dfabric.client.gametest',
+        'jvmArguments': ['-Xmx2G', '-XX:-CreateCoredumpOnCrash', *display_jvm_arguments, '-Dfabric.client.gametest',
                         '-Dcbbg.test.dsa=' + (args.dsa_mode or 'auto'),
                         '-Dcbbg.test.restart=' + (args.restart_phase or ''),
                         '-Dfabric.client.gametest.modid=cbbg-renderer-test',
@@ -176,6 +186,11 @@ def main():
     command += ['--graphicsBackend', args.backend, '--vulkanValidation', '--renderDebugLabels']
     runtime_bytes = args.runtime_lock.read_bytes()
     verify_runtime(runtime, identity, command, json.loads(runtime_bytes))
+    # LWJGL extracts verified native jars on first use. Keep those generated files
+    # in the fresh game directory so launching cannot change the installed lock.
+    command = [argument for argument in command
+               if not argument.startswith('-Dorg.lwjgl.system.SharedLibraryExtractPath=')]
+    command.insert(1, '-Dorg.lwjgl.system.SharedLibraryExtractPath=' + str(game / 'natives'))
     java = java_identity(args.java)
     environment = dict(os.environ, XDG_RUNTIME_DIR=str(args.xdg_runtime_dir.resolve()),
                        ALSOFT_DRIVERS='null', DISABLE_MANGOHUD='1', DISABLE_VKBASALT='1',
@@ -194,10 +209,12 @@ def main():
     mods = game / 'mods'
     if args.restart_phase != 'verify':
         mods.mkdir()
+    (game / 'natives').mkdir(exist_ok=True)
     sources = {'candidate.jar': args.candidate, 'driver.jar': args.driver,
                'fabric-gametest-api.jar': args.gametest_api}
     sources.update({name + '.jar': path for name, path in dependencies.items()})
     receipt = {'target': args.target, 'backendRequested': args.backend, 'profile': args.compat,
+               'gametestApiVersion': gametest_version,
                'timeoutSeconds': args.timeout, 'releaseAcceptance': False,
                'java': java, 'host': {'system': platform.system(), 'machine': platform.machine()},
                'catalogSha256': digest(ROOT / 'targets.json'),
@@ -268,7 +285,7 @@ def main():
             receipt['artifacts'][name] = digest(mods / name)
         verify_dependencies(target, args.compat,
                             {name: mods / (name + '.jar') for name in dependencies}, dependency_lock)
-        verify_gametest_api(target, mods / 'fabric-gametest-api.jar', dependency_lock)
+        verify_gametest_api(gametest_target, mods / 'fabric-gametest-api.jar', dependency_lock)
         with log_path.open('w') as log:
             result = subprocess.run(command, cwd=game, env=environment, stdout=log,
                                     stderr=subprocess.STDOUT, timeout=args.timeout, check=False)
@@ -278,7 +295,7 @@ def main():
             (evidence / 'scenarios.tsv').read_text(), log_text,
             result.returncode, args.backend)
         validate_shutdown(expected, evidence / 'shutdown.json')
-        validate_startup(expected, args.startup_mode, evidence, game / '.cbbg', log_text, args.backend)
+        validate_startup(expected, args.startup_mode, evidence, game / '.cbbg', log_text, args.backend, args.target)
         receipt['graphics'] = graphics_identity(log_text, args.backend)
         context = json.loads((evidence / 'graphics-context.json').read_text())
         if context.get('backend') != args.backend:

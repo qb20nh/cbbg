@@ -22,10 +22,10 @@ public class STBNLoader {
   private static final String IMAGE_BASE_FMT = STBNCache.IMAGE_BASE_FMT;
 
   public static NativeImage @Nullable [] loadOrGenerate(
-      int width, int height, int frames, STBNGenerator.@Nullable STBNFields fields) {
+      int width, int height, int frames, long seed, STBNGenerator.@Nullable STBNFields fields) {
     // 1. Try Cache
     if (fields == null) {
-      NativeImage[] cached = loadFromCache(width, height, frames);
+      NativeImage[] cached = loadFromCache(width, height, frames, seed);
       if (cached.length == frames) {
         Cbbg.LOGGER.info("STBN Frames loaded from cache.");
         return cached;
@@ -36,7 +36,7 @@ public class STBNLoader {
     if (fields != null) {
       NativeImage[] generated = generateFramesFromFields(fields, width, height, frames);
       Cbbg.LOGGER.info("STBN Images generated from math fields.");
-      saveToCache(generated, width, height, frames);
+      saveToCache(generated, width, height, frames, seed);
       return generated;
     }
 
@@ -60,7 +60,7 @@ public class STBNLoader {
     return images;
   }
 
-  private static NativeImage[] loadFromCache(int w, int h, int d) {
+  private static NativeImage[] loadFromCache(int w, int h, int d, long seed) {
     try {
       if (!Files.exists(CACHE_DIR)) {
         return new NativeImage[0];
@@ -73,6 +73,7 @@ public class STBNLoader {
 
       Map<String, String> hashes = new HashMap<>();
       List<String> lines = Files.readAllLines(hashFile);
+      if (!NoiseCache.matchesSeed(lines, seed)) return new NativeImage[0];
       for (String line : lines) {
         String[] parts = line.trim().split("\\s+", 0);
         if (parts.length >= 2) {
@@ -124,10 +125,10 @@ public class STBNLoader {
     return NativeImage.read(new ByteArrayInputStream(imageBytes));
   }
 
-  private static void saveToCache(NativeImage[] images, int w, int h, int d) {
+  private static void saveToCache(NativeImage[] images, int w, int h, int d, long seed) {
     try {
       Files.createDirectories(CACHE_DIR);
-      StringBuilder hashContent = new StringBuilder();
+      StringBuilder hashContent = new StringBuilder(NoiseCache.seedHeader(seed));
 
       for (int z = 0; z < d; z++) {
         if (images[z] != null) {
@@ -165,6 +166,10 @@ public class STBNLoader {
 
   public static boolean isCacheValid(int w, int h, int d) {
     return STBNCache.isCacheValid(w, h, d);
+  }
+
+  public static boolean isCacheValid(int w, int h, int d, long seed) {
+    return STBNCache.isCacheValid(w, h, d, seed);
   }
 
   public static void clearCacheExceptDefaults() {

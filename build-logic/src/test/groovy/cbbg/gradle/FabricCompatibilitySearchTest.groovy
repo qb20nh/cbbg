@@ -1,6 +1,12 @@
 package cbbg.gradle
 
+import groovy.json.JsonOutput
+import groovy.json.JsonSlurper
 import org.gradle.api.GradleException
+
+import java.nio.charset.StandardCharsets
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 
@@ -58,6 +64,61 @@ class FabricCompatibilitySearchTest {
         assertFalse(FabricCompatibilitySearch.cached(cache, [jar: 'a'], test).cached)
         assertFalse(FabricCompatibilitySearch.cached(cache, [jar: 'b'], test).cached)
         assertEquals(3, runs)
+    }
+
+    @Test void sharedArtifactRuntimeTargetsKeepSeparateSearchResults() {
+        File evidence = new File(directory, 'receipt.json')
+        evidence.text = 'passed'
+        File cache = new File(directory, 'cache')
+        int runs = 0
+        Closure test = { runs++; [status: 'passed', files: [evidence]] }
+        Map owner = [target: '26.1-fabric', artifactOwner: '26.1-fabric', jar: 'same']
+        Map patch = [target: '26.1.2-fabric', artifactOwner: '26.1-fabric', jar: 'same']
+        assertFalse(FabricCompatibilitySearch.cached(cache, owner, test).cached)
+        assertFalse(FabricCompatibilitySearch.cached(cache, patch, test).cached)
+        assertTrue(FabricCompatibilitySearch.cached(cache, patch, test).cached)
+        assertEquals(2, runs)
+    }
+
+    @Test void optionalProfilesAndDependencyHashesKeepSeparateSearchResults() {
+        File evidence = new File(directory, 'receipt.json')
+        evidence.text = 'passed'
+        File cache = new File(directory, 'cache')
+        int runs = 0
+        Closure test = { runs++; [status: 'passed', files: [evidence]] }
+        Map base = [target: '26.1-fabric', jar: 'same', profile: 'none', optionalDependencies: [:]]
+        Map iris = base + [profile: 'iris', optionalDependencies: [iris: [sha512: 'a']]]
+        assertFalse(FabricCompatibilitySearch.cached(cache, base, test).cached)
+        assertFalse(FabricCompatibilitySearch.cached(cache, iris, test).cached)
+        assertTrue(FabricCompatibilitySearch.cached(cache, iris, test).cached)
+        assertFalse(FabricCompatibilitySearch.cached(cache,
+                iris + [optionalDependencies: [iris: [sha512: 'b']]], test).cached)
+        assertEquals(3, runs)
+    }
+
+    @Test void sulkanProfilesResolveTheirRequiredOptionalDependencies() {
+        File repository = new File(System.getProperty('cbbg.repository'))
+        String script = new File(repository, 'build-config/fabric-compatibility.gradle').text
+        int start = script.indexOf('Map<String, String> modNames =')
+        String resolution = script.substring(start, script.indexOf('def sha512 =', start))
+        Map catalog = new JsonSlurper().parse(new File(repository, 'targets.json')) as Map
+        Map target = catalog.targets.find { it.id == '26.3-fabric' }
+        List<String> profiles = target.compatibilityProfiles.keySet().findAll {
+            it.tokenize('+').contains('sulkan')
+        } as List
+        assertTrue(profiles.contains('sulkan'))
+        assertTrue(profiles.any { it.contains('+') })
+        for (String profile : profiles) {
+            Map resolved = new GroovyShell(new Binding([profile: profile])).evaluate(
+                    'import org.gradle.api.GradleException\n' + resolution +
+                            '\n[selected: selected, names: modNames]') as Map
+            Set expected = profile.tokenize('+') as Set
+            expected.add('sodium')
+            if (expected.contains('renderscale')) expected.add('clothconfig')
+            assertEquals(expected, resolved.selected)
+            assertEquals('sulkan', resolved.names.sulkan)
+            resolved.selected.each { assertNotNull(target.dependencies[resolved.names[it]]) }
+        }
     }
 
     @Test void retriesBlockedRuns() {
@@ -194,4 +255,256 @@ class FabricCompatibilitySearchTest {
             }
         }
     }
+
+    @Test void intersectsSharedRuntimeBoundsWithoutExpandingAnyInterval() {
+        def reports = [
+                [minimumLoader: '0.19.3', minimumFabricApi: '0.145.1+26.1',
+                 loaderUpperExclusive: '0.20.0', fabricApiUpperExclusive: '0.160.0+26.1'],
+                [minimumLoader: '0.19.5', minimumFabricApi: '0.145.4+26.1.1',
+                 loaderUpperExclusive: '0.19.8', fabricApiUpperExclusive: '0.161.0+26.1.1'],
+                [minimumLoader: '0.19.4', minimumFabricApi: '0.155.3+26.1.2',
+                 loaderUpperExclusive: '0.19.9', fabricApiUpperExclusive: '0.160.4+26.1.2']]
+        assertEquals([minimumLoader: '0.19.5', minimumFabricApi: '0.155.3+26.1.2',
+                      loaderUpperExclusive: '0.19.8', fabricApiUpperExclusive: '0.160.0+26.1'],
+                FabricCompatibilitySearch.intersect(reports))
+        assertEquals(['0.155.3+26.1.2', '0.156.0+26.1', '0.156.0+26.1.1'],
+                FabricCompatibilitySearch.within(
+                        ['0.145.1+26.1', '0.156.0+26.1.1', '0.155.3+26.1.2',
+                         '0.160.0+26.1', '0.156.0+26.1'],
+                        '0.155.3+26.1.2', '0.160.0+26.1'))
+    }
+
+    @Test void rejectsEmptySharedRuntimeIntervals() {
+        assertThrows(GradleException) {
+            FabricCompatibilitySearch.intersect([
+                    [minimumLoader: '0.19.5', minimumFabricApi: '0.155.0+26.1',
+                     loaderUpperExclusive: '0.19.5', fabricApiUpperExclusive: '0.160.0+26.1']])
+        }
+        assertThrows(GradleException) {
+            FabricCompatibilitySearch.intersect([
+                    [minimumLoader: '0.19.5', minimumFabricApi: '0.155.0+26.1',
+                     loaderUpperExclusive: '0.20.0', fabricApiUpperExclusive: '0.150.0+26.1']])
+        }
+    }
+
+    @Test void checksHistoricalDriverAtUpdateButAllowsItsMetadataRebuildForStrict() {
+        File script = new File(directory, 'compatibility.gradle')
+        File driver = new File(directory, 'processed-driver.jar')
+        File config = new File(directory, 'initial-cbbg.json')
+        File gametest = new File(directory, 'fabric-gametest-api.jar')
+        [script: script, driver: driver, config: config, gametest: gametest].each { name, file ->
+            file.text = name
+        }
+        Map inputs = [files: [(script.canonicalPath): CandidateFiles.sha256(script)],
+                      driver: CandidateFiles.sha256(driver),
+                      initialConfig: CandidateFiles.sha256(config),
+                      gametestApiPin: '0.145.1+26.1',
+                      gametestApiSha256: CandidateFiles.sha256(gametest)]
+        FabricCompatibilitySearch.requireCurrentInputs(inputs, driver, config, gametest,
+                '0.145.1+26.1')
+        driver.text = 'changed driver'
+        assertThrows(GradleException) {
+            FabricCompatibilitySearch.requireCurrentInputs(inputs, driver, config, gametest,
+                    '0.145.1+26.1')
+        }
+        FabricCompatibilitySearch.requireCurrentInputs(inputs, driver, config, gametest,
+                '0.145.1+26.1', false)
+        script.text = 'changed script'
+        assertThrows(GradleException) {
+            FabricCompatibilitySearch.requireCurrentInputs(inputs, driver, config, gametest,
+                    '0.145.1+26.1', false)
+        }
+        script.text = 'script'
+        config.text = 'changed config'
+        assertThrows(GradleException) {
+            FabricCompatibilitySearch.requireCurrentInputs(inputs, driver, config, gametest,
+                    '0.145.1+26.1', false)
+        }
+        config.text = 'config'
+        assertThrows(GradleException) {
+            FabricCompatibilitySearch.requireCurrentInputs(inputs, driver, config, gametest,
+                    '0.145.4+26.1.1', false)
+        }
+    }
+    @Test void strictSharedVerificationRequiresTheCurrentIdentityFileSet() {
+        File repository = new File(System.getProperty('cbbg.repository'))
+        String script = new File(repository, 'build-config/fabric-compatibility.gradle').text
+        int start = script.indexOf('Map searches = completedFamilySearches(false)')
+        String validation = script.substring(start, script.indexOf('File searchedJar =', start))
+        Map files = ['test.java': 'source-hash', 'test.json': 'resource-hash']
+        Map bounds = [minimumLoader: '0.18.4', minimumFabricApi: '0.143.12+26.1',
+                      loaderUpperExclusive: '1.0.0', fabricApiUpperExclusive: '1.0.0']
+        Map searches = [reports: [[inputs: [files: files]]], bounds: bounds,
+                        latestLoader: '0.19.5', latestFabricApi: '0.155.3+26.1.2']
+        Binding binding = new Binding([
+                completedFamilySearches: { boolean historical -> searches },
+                fixed: [files: new LinkedHashMap(files)], declared: bounds, report: searches])
+        GroovyShell shell = new GroovyShell(binding)
+        String code = 'import org.gradle.api.GradleException\n' + validation
+        shell.evaluate(code)
+        for (Map changed : [files + ['new.json': 'new-hash'],
+                            ['test.java': 'source-hash'],
+                            files + ['test.java': 'changed-hash']]) {
+            binding.setVariable('fixed', [files: changed])
+            GradleException failure = assertThrows(GradleException) { shell.evaluate(code) }
+            assertTrue(failure.message.contains('rerun every Fabric runtime search'))
+        }
+    }
+
+    @Test void discoversApiVersionsForTheSelectedMinecraftOnly() {
+        File repository = new File(System.getProperty('cbbg.repository'))
+        String script = new File(repository, 'build-config/fabric-compatibility.gradle').text
+        int start = script.indexOf('String apiMetadata =')
+        String discovery = script.substring(start, script.indexOf('File candidate =', start))
+        List<String> versions = ['0.145.1+26.1', '0.145.4+26.1.1', '0.155.3+26.1.2',
+                                 '0.143.12+26.1', '0.146.0-beta.1+26.1']
+        String metadata = versions.collect { '<version>' + it + '</version>' }.join('\n')
+        for (String minecraft : ['26.1', '26.1.1', '26.1.2']) {
+            Binding binding = new Binding([
+                    readUrl: { String url -> metadata }, minecraft: minecraft,
+                    sharedArtifactFamily: true,
+                    compatibilityOwner: [minecraft: '26.1', compatibleMinecraft: ['26.1.1', '26.1.2']]])
+            List found = (List) new GroovyShell(binding).evaluate(discovery + '\nreturn apis')
+            assertEquals(versions.findAll {
+                it.endsWith('+' + minecraft) && !it.contains('-beta')
+            }, found)
+        }
+    }
+
+    @Test void combinesRuntimeSearchesWithDifferentLatestApiVersions() {
+        File repository = new File(System.getProperty('cbbg.repository'))
+        String script = new File(repository, 'build-config/fabric-compatibility.gradle').text
+        int start = script.indexOf('def completedFamilySearches =')
+        String validation = script.substring(start, script.indexOf("tasks.register('verifyFabricCompatibility')", start))
+        File source = new File(directory, 'source.java')
+        source.text = 'source'
+        List<Map> targets = ['26.1', '26.1.1', '26.1.2'].collect { minecraft ->
+            [id: minecraft + '-fabric', minecraft: minecraft,
+             dependencies: [fabricApi: '0.145.1+' + minecraft]]
+        }
+        Map<String, File> gametests = [:]
+        targets.eachWithIndex { target, index ->
+            File outputs = new File(directory, 'build/targets/' + target.id)
+            File driver = new File(outputs, 'libs/cbbg-test-processed-driver.jar')
+            File config = new File(outputs, 'fabric-compatibility/initial-cbbg.json')
+            File gametest = new File(outputs, 'gametest.jar')
+            [driver, config, gametest].each { file ->
+                file.parentFile.mkdirs()
+                file.text = file.name
+            }
+            gametests[target.id] = gametest
+            Map report = [complete: true, target: target.id, artifactOwner: targets.first().id,
+                          profile: 'none', results: [], latestLoader: '0.19.5',
+                          latestFabricApi: "0.15${index}.0+${target.minecraft}".toString(),
+                          minimumLoader: '0.18.4', maximumLoader: '0.19.5',
+                          minimumFabricApi: '0.145.1+' + target.minecraft,
+                          maximumFabricApi: "0.15${index}.0+${target.minecraft}".toString(),
+                          loaderUpperExclusive: '1.0.0', fabricApiUpperExclusive: '1.0.0',
+                          inputs: [minimumOverrides: true, candidate: 'candidate-hash',
+                                   files: [(source.canonicalPath): CandidateFiles.sha256(source)],
+                                   driver: CandidateFiles.sha256(driver),
+                                   initialConfig: CandidateFiles.sha256(config),
+                                   gametestApiPin: target.dependencies.fabricApi,
+                                   gametestApiSha256: CandidateFiles.sha256(gametest)]]
+            new File(outputs, 'fabric-compatibility/last-successful.json').text = JsonOutput.toJson(report)
+        }
+        Binding binding = new Binding([
+                compatibilityRoot: directory,
+                compatibilityOwner: targets.first() + [compatibleMinecraft: ['26.1.1', '26.1.2']],
+                compatibilityTarget: targets[1], familyTargets: targets,
+                project: [base: [archivesName: new Expando(get: { -> 'cbbg' })], version: 'test'],
+                resolvePinnedGametest: { Map target -> gametests[target.id] }])
+        Map result = (Map) new GroovyShell(binding).evaluate(
+                'import cbbg.gradle.CandidateFiles\nimport cbbg.gradle.FabricCompatibilitySearch\n' +
+                'import org.gradle.api.GradleException\n' + validation + '\ncompletedFamilySearches(true)')
+        assertEquals('0.151.0+26.1.1', result.latestFabricApi)
+        assertEquals(3, result.reports.size())
+        assertEquals('candidate-hash', result.candidate)
+    }
+
+    @Test void strictFamilyMinimumUsesTheSelectedRuntimeApiInsideOwnerBounds() {
+        File repository = new File(System.getProperty('cbbg.repository'))
+        String script = new File(repository, 'build-config/fabric-compatibility.gradle').text
+        int start = script.indexOf('if (sharedArtifactFamily) {', script.indexOf('if (strict) {',
+                script.indexOf('if (buildOnly) {')))
+        String selection = script.substring(start, script.indexOf('if (!pairPasses(loader, api))', start))
+        Binding binding = new Binding([
+                sharedArtifactFamily: true, api: '0.145.4+26.1.1',
+                declared: [fabricApiUpperExclusive: '1.0.0'],
+                apis: ['0.143.12+26.1', '0.145.1+26.1', '0.146.0+26.1']])
+        GroovyShell shell = new GroovyShell(binding)
+        String code = 'import cbbg.gradle.FabricCompatibilitySearch\n' +
+                'import org.gradle.api.GradleException\n' + selection
+        shell.evaluate(code)
+        assertEquals('0.146.0+26.1', binding.getVariable('api'))
+        binding.setVariable('apis', ['0.143.12+26.1'])
+        assertThrows(GradleException) { shell.evaluate(code) }
+    }
+
+    @Test void acceptsOnlyDependencyBoundsInTheRebuiltFabricArtifact() {
+        File searched = new File(directory, 'searched.jar')
+        File rebuilt = new File(directory, 'rebuilt.jar')
+        Map bounds = [minimumLoader: '0.18.4', loaderUpperExclusive: '1.0.0',
+                      minimumFabricApi: '0.143.12+26.1', fabricApiUpperExclusive: '1.0.0']
+        Map oldMetadata = [id: 'cbbg', name: 'CBBG',
+                           depends: [fabricloader: '>=0.19.5', 'fabric-api': '>=0.145.1+26.1',
+                                     minecraft: '>=26.1 <26.2']]
+        Map newMetadata = [id: 'cbbg', name: 'CBBG',
+                           depends: [fabricloader: '>=0.18.4 <1.0.0',
+                                     'fabric-api': '>=0.143.12+26.1 <1.0.0',
+                                     minecraft: '>=26.1 <26.2']]
+        Map<String, String> code = ['pkg/Client.class': 'same']
+        writeArtifact(searched, oldMetadata, code)
+        String searchedSha256 = CandidateFiles.sha256(searched)
+        writeArtifact(rebuilt, newMetadata, code)
+        FabricCompatibilitySearch.requireSameArtifactExceptBounds(
+                searched, searchedSha256, rebuilt, bounds)
+
+        writeArtifact(rebuilt, newMetadata, ['pkg/Client.class': 'changed'])
+        assertThrows(GradleException) {
+            FabricCompatibilitySearch.requireSameArtifactExceptBounds(
+                    searched, searchedSha256, rebuilt, bounds)
+        }
+        writeArtifact(rebuilt, newMetadata, code + ['extra.txt': 'new'])
+        assertThrows(GradleException) {
+            FabricCompatibilitySearch.requireSameArtifactExceptBounds(
+                    searched, searchedSha256, rebuilt, bounds)
+        }
+        writeArtifact(rebuilt, newMetadata, [:])
+        assertThrows(GradleException) {
+            FabricCompatibilitySearch.requireSameArtifactExceptBounds(
+                    searched, searchedSha256, rebuilt, bounds)
+        }
+        writeArtifact(rebuilt, newMetadata + [name: 'Different'], code)
+        assertThrows(GradleException) {
+            FabricCompatibilitySearch.requireSameArtifactExceptBounds(
+                    searched, searchedSha256, rebuilt, bounds)
+        }
+        writeArtifact(rebuilt, newMetadata + [depends: newMetadata.depends +
+                [fabricloader: '>=0.19.5 <1.0.0']], code)
+        assertThrows(GradleException) {
+            FabricCompatibilitySearch.requireSameArtifactExceptBounds(
+                    searched, searchedSha256, rebuilt, bounds)
+        }
+        writeArtifact(rebuilt, newMetadata, code)
+        assertThrows(GradleException) {
+            FabricCompatibilitySearch.requireSameArtifactExceptBounds(
+                    searched, '0' * 64, rebuilt, bounds)
+        }
+        assertThrows(GradleException) {
+            FabricCompatibilitySearch.requireSameArtifactExceptBounds(
+                    new File(directory, 'missing.jar'), searchedSha256, rebuilt, bounds)
+        }
+    }
+
+    private static void writeArtifact(File jar, Map metadata, Map<String, String> contents) {
+        new ZipOutputStream(jar.newOutputStream()).withCloseable { output ->
+            (['fabric.mod.json': JsonOutput.toJson(metadata)] + contents).each { name, value ->
+                output.putNextEntry(new ZipEntry(name))
+                output.write(value.getBytes(StandardCharsets.UTF_8))
+                output.closeEntry()
+            }
+        }
+    }
+
 }

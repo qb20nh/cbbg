@@ -1,7 +1,7 @@
 package com.qb20nh.cbbg.config.gui;
 
 import com.qb20nh.cbbg.compat.iris.IrisCompat;
-import com.qb20nh.cbbg.compat.sulkan.SulkanCompat;
+import com.qb20nh.cbbg.compat.sulkan.ShaderCompat;
 import com.qb20nh.cbbg.config.CbbgConfig;
 import com.qb20nh.cbbg.render.DitherController;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
@@ -33,7 +33,7 @@ public final class CbbgConfigScreen extends Screen {
   @Override
   public void onClose() {
     if (this.parent != null) {
-      this.minecraft.gui.setScreen(this.parent);
+      ClientScreenAccess.setScreen(this.minecraft, this.parent);
     } else {
       super.onClose();
     }
@@ -67,7 +67,7 @@ public final class CbbgConfigScreen extends Screen {
               if (confirmed) {
                 DitherController.reloadStbn(true); // Force regeneration
               }
-              this.minecraft.gui.setScreen(this);
+              ClientScreenAccess.setScreen(this.minecraft, this);
             },
             Component.translatable("cbbg.config.confirm.regenerate_stbn.title"),
             Component.translatable(
@@ -93,7 +93,7 @@ public final class CbbgConfigScreen extends Screen {
             super.extractRenderState(context, mouseX, mouseY, partialTick);
           }
         };
-    this.minecraft.gui.setScreen(confirm);
+    ClientScreenAccess.setScreen(this.minecraft, confirm);
   }
 
   @Override
@@ -166,7 +166,7 @@ public final class CbbgConfigScreen extends Screen {
           cx,
           statusY,
           0xFFFFAA00);
-    } else if (SulkanCompat.isShaderPackActive()) {
+    } else if (ShaderCompat.isSulkanActive()) {
       context.centeredText(
           this.font,
           Component.translatable("cbbg.config.status.shader_active", "Sulkan"),

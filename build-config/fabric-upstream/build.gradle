@@ -8,6 +8,7 @@ plugins {
 }
 
 import java.util.Date
+import groovy.json.JsonSlurper
 
 def repositoryRoot = file('../..')
 layout.buildDirectory = new File(repositoryRoot, 'build')
@@ -64,6 +65,11 @@ dependencies {
 	testImplementation "org.junit.jupiter:junit-jupiter"
 }
 
+// Loader 0.19.3 and 0.19.4 need Redirect.at encoded as one annotation.
+configurations.matching { it.name in ['compileClasspath', 'annotationProcessor'] }.configureEach {
+	resolutionStrategy.force 'net.fabricmc:sponge-mixin:0.17.3+mixin.0.8.7'
+}
+
 // Fabric client GameTests ("e2e")
 fabricApi {
 	configureTests {
@@ -84,6 +90,54 @@ sourceSets {
 	gametest.resources.setSrcDirs([new File(repositoryRoot, 'src/gametest/resources')])
 }
 
+def sharedReadback = objects.sourceDirectorySet('sharedReadback', 'Shared screenshot readback lifecycle')
+sharedReadback.srcDir(new File(repositoryRoot, 'renderers/modern/src/main/java'))
+sharedReadback.include 'com/qb20nh/cbbg/render/Rgba8Capture.java'
+sourceSets.main.java.source(sharedReadback)
+
+def externalCompileClasspath = configurations.compileClasspath.incoming.artifactView {
+	componentFilter { it instanceof org.gradle.api.artifacts.component.ModuleComponentIdentifier }
+}.files
+sourceSets.create('processedGametest') {
+	java.setSrcDirs([new File(repositoryRoot, 'adapters/fabric/26.2/src/processedGametest/java')])
+	def sharedTests = objects.sourceDirectorySet('processedSharedTests', 'Shared packaged client scenarios')
+	sharedTests.srcDir(new File(repositoryRoot, 'renderers/renderpearl/src/gametest/java'))
+	sharedTests.srcDir(new File(repositoryRoot, 'renderers/modern/src/gametest/java'))
+	sharedTests.include 'com/qb20nh/cbbg/gametest/mixin/ScenarioProgressMixin.java',
+			'com/qb20nh/cbbg/gametest/IrisFixture.java',
+			'com/qb20nh/cbbg/gametest/RenderScaleTestAccess.java'
+	java.source(sharedTests)
+	def pixelReference = objects.sourceDirectorySet('processedPixelReference', 'Shared CPU pixel reference')
+	pixelReference.srcDir(new File(repositoryRoot, 'core/src/testSupport/java'))
+	pixelReference.include 'com/qb20nh/cbbg/reference/DitherReference.java'
+	java.source(pixelReference)
+	java.srcDir(new File(repositoryRoot, 'adapters/fabric/shared/src/processedGametest/java'))
+	resources.setSrcDirs([new File(repositoryRoot, 'adapters/fabric/26.2/src/processedGametest/resources')])
+	compileClasspath = files(releaseOptimization.outputJar, externalCompileClasspath)
+	runtimeClasspath = output + compileClasspath
+}
+tasks.named('compileProcessedGametestJava') { dependsOn tasks.named('optimizeReleaseJar') }
+tasks.named('processProcessedGametestResources') {
+	dependsOn tasks.named('optimizeReleaseJar')
+	from(releaseOptimization.mappingFile) { rename { 'cbbg-test.map' } }
+	from(new File(repositoryRoot, 'adapters/fabric/shared/src/processedGametest/resources'))
+	from(new File(repositoryRoot, 'renderers/modern/src/gametest/resources')) {
+		include 'cbbg-iris-fixture/**'
+	}
+}
+tasks.register('processedDriverJar', Jar) {
+	archiveClassifier = 'processed-driver'
+	from sourceSets.processedGametest.output
+}
+tasks.register('prepareProcessedRuntime') {
+	dependsOn tasks.named('optimizeReleaseJar'), tasks.named('processedDriverJar'), tasks.named('checkPackages')
+}
+apply from: new File(repositoryRoot, 'build-config/fabric-startup-tests.gradle')
+apply from: new File(repositoryRoot, 'build-config/source-inventory.gradle')
+ext.candidateTargetId = '26.2-fabric'
+apply from: new File(repositoryRoot, 'build-config/candidate-build-outputs.gradle')
+apply from: new File(repositoryRoot, 'build-config/fabric-compatibility.gradle')
+
 // Opt-in integration dependencies, excluded from the published mod.
 if (providers.gradleProperty("testRenderScale").isPresent()) {
 	dependencies {
@@ -96,11 +150,21 @@ processResources {
 	exclude 'licenses/LICENSE_AsmFabricLoader.txt'
 	inputs.property "version", project.version
 	inputs.property "minecraft_version", project.minecraft_version
+	def bounds = new JsonSlurper().parse(new File(repositoryRoot, 'targets.json')).targets
+			.find { it.id == '26.2-fabric' }.dependencies
+	def loaderRange = '>=' + (bounds.minimumLoader ?: '0.19.3') +
+			(bounds.loaderUpperExclusive ? ' <' + bounds.loaderUpperExclusive : '')
+	def apiRange = bounds.minimumFabricApi ? '>=' + bounds.minimumFabricApi +
+			(bounds.fabricApiUpperExclusive ? ' <' + bounds.fabricApiUpperExclusive : '') : '*'
+	inputs.property 'loaderRange', loaderRange
+	inputs.property 'apiRange', apiRange
 
 	filesMatching("fabric.mod.json") {
 		expand(
 			"version": inputs.properties.version,
-			"minecraft_version": inputs.properties.minecraft_version
+			"minecraft_version": inputs.properties.minecraft_version,
+			"loader_range": inputs.properties.loaderRange,
+			"fabric_api_range": inputs.properties.apiRange
 		)
 	}
 }

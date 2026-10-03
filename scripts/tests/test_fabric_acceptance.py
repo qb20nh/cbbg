@@ -56,7 +56,7 @@ class FabricAcceptanceTests(unittest.TestCase):
             suite['startupMode'] = mode
             with self.assertRaisesRegex(ValueError, 'Invalid startup suite'):
                 required_runs(self.target, self.contract)
-        for mode in ('cold', 'warm', 'damaged'):
+        for mode in ('cold', 'warm', 'damaged', 'seed-mismatch'):
             suite['startupMode'] = mode
             selected = [run for run in required_runs(self.target, self.contract)
                         if run['suite'] == 'startup']
@@ -98,6 +98,10 @@ class FabricResultMatrixTests(unittest.TestCase):
             path.write_text('{}')
             self.rows.append({key: run[key] for key in ('suite', 'profile', 'backend')})
             self.rows[-1]['receipt'] = {'path': path.name, 'sha256': digest(path)}
+            if run['restart']:
+                control = self.root / ('control-' + str(number) + '.json')
+                control.write_text('{}')
+                self.rows[-1]['control_receipt'] = {'path': control.name, 'sha256': digest(control)}
             self.results[path] = {'target': self.target['id'], 'profile': run['profile'],
                                   'startupMode': run.get('startupMode'),
                                   'backend': run['backend'], 'scenarios': run['entrypoints'],
@@ -143,6 +147,26 @@ class FabricResultMatrixTests(unittest.TestCase):
     def test_reused_receipt_rejected(self):
         self.rows[1]['receipt'] = self.rows[0]['receipt']
         with self.assertRaisesRegex(ValueError, 'Receipt reused'):
+            self.verify()
+
+    def test_restart_requires_explicit_control_receipt(self):
+        row = next(row for row in self.rows if row['suite'] == 'iris-restart')
+        row.pop('control_receipt')
+        with self.assertRaisesRegex(ValueError, 'requires an explicit control receipt'):
+            self.verify()
+
+    def test_control_receipt_hash_is_checked(self):
+        row = next(row for row in self.rows if row['suite'] == 'iris-restart')
+        control = self.root / row['control_receipt']['path']
+        control.write_text('{"tampered":true}')
+        with self.assertRaisesRegex(ValueError, 'Changed evidence file'):
+            self.verify()
+
+    def test_ordinary_row_rejects_control_receipt(self):
+        row = next(row for row in self.rows if row['suite'] == 'ordinary')
+        row['control_receipt'] = {'path': row['receipt']['path'],
+                                  'sha256': row['receipt']['sha256']}
+        with self.assertRaisesRegex(ValueError, 'Ordinary result cannot include'):
             self.verify()
 
     def test_wrong_backend_rejected(self):

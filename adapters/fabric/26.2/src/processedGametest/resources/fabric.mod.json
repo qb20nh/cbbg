@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "id": "cbbg-renderer-test",
+  "version": "1.0.0",
+  "name": "CBBG Minecraft 26.2 release tests",
+  "environment": "client",
+  "depends": {
+    "cbbg": "*",
+    "fabricloader": ">=0.19.3",
+    "minecraft": "26.2",
+    "fabric-client-gametest-api-v1": "*"
+  },
+  "entrypoints": {
+    "fabric-client-gametest": ["com.qb20nh.cbbg.gametest.ReleaseLifecycleGameTest", "com.qb20nh.cbbg.gametest.ReleaseCacheGameTest", "com.qb20nh.cbbg.gametest.ReleasePixelGameTest", "com.qb20nh.cbbg.gametest.ReleaseControlsGameTest", "com.qb20nh.cbbg.gametest.ReleaseSettingsGuiGameTest"]
+  },
+  "mixins": ["cbbg.gpu-format-test.mixins.json"]
+}

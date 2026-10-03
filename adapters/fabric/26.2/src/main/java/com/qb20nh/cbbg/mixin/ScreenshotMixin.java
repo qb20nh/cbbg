@@ -1,12 +1,15 @@
 package com.qb20nh.cbbg.mixin;
 
+import com.mojang.blaze3d.GpuFormat;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.pipeline.TextureTarget;
 import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.blaze3d.textures.GpuTexture;
 import com.mojang.blaze3d.textures.GpuTextureView;
 import com.qb20nh.cbbg.CbbgClient;
 import com.qb20nh.cbbg.render.CbbgDither;
+import com.qb20nh.cbbg.render.Rgba8Readback;
 import java.util.function.Consumer;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Screenshot;
@@ -42,43 +45,45 @@ public abstract class ScreenshotMixin {
     if (CAPTURE_DEPTH.get() > 0) {
       return;
     }
-    if (!CbbgClient.isEnabled()) {
-      return;
-    }
-
     if (target != Minecraft.getInstance().gameRenderer.mainRenderTarget()) {
       return;
     }
 
     RenderSystem.assertOnRenderThread();
-    GpuTextureView input = target.getColorTextureView();
-    if (input == null) {
+    GpuTexture color = target.getColorTexture();
+    if (color == null) {
       return;
     }
 
-    TextureTarget output =
-        CbbgClient.isDemoMode()
-            ? CbbgDither.renderDemoTarget(input)
-            : CbbgDither.renderDitheredTarget(input);
-    if (output == null) {
-      return;
-    }
-
-    CAPTURE_DEPTH.set(CAPTURE_DEPTH.get() + 1);
-    try {
-      // Re-enter vanilla screenshot code, but read from the dithered RGBA8 target
-      // instead of the
-      // HDR main target (which would otherwise get quantized without dithering during
-      // readback).
-      Screenshot.takeScreenshot(output, downscaleFactor, callback);
-      ci.cancel();
-    } finally {
-      int next = CAPTURE_DEPTH.get() - 1;
-      if (next <= 0) {
-        CAPTURE_DEPTH.remove();
-      } else {
-        CAPTURE_DEPTH.set(next);
+    if (CbbgClient.isEnabled()) {
+      GpuTextureView input = target.getColorTextureView();
+      if (input != null) {
+        TextureTarget output =
+            CbbgClient.isDemoMode()
+                ? CbbgDither.renderDemoTarget(input)
+                : CbbgDither.renderDitheredTarget(input);
+        if (output != null) {
+          CAPTURE_DEPTH.set(CAPTURE_DEPTH.get() + 1);
+          try {
+            Screenshot.takeScreenshot(output, downscaleFactor, callback);
+            ci.cancel();
+          } finally {
+            int next = CAPTURE_DEPTH.get() - 1;
+            if (next <= 0) {
+              CAPTURE_DEPTH.remove();
+            } else {
+              CAPTURE_DEPTH.set(next);
+            }
+          }
+          return;
+        }
       }
+    }
+
+    if (color.getFormat() == GpuFormat.RGBA16_FLOAT
+        || color.getFormat() == GpuFormat.RGBA32_FLOAT) {
+      Rgba8Readback.capture(target, downscaleFactor, callback);
+      ci.cancel();
     }
   }
 }

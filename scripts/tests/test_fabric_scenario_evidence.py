@@ -21,19 +21,77 @@ class StartupEvidenceTests(unittest.TestCase):
         self.early = dict(preLaunchMillis=10, preLaunchWorkers=1)
         self.log = 'Starting Async STBN Math Generation (16x16x8)...\nSTBN Math Complete in 2 ms\n'
 
-    def verify(self, mode='cold'):
+    def verify(self, mode='cold', target='26.3-fabric'):
         (self.evidence / 'startup.json').write_text(json.dumps(self.result))
         (self.evidence / 'startup-prelaunch.json').write_text(json.dumps(self.early))
-        validate_startup([STARTUP_DRIVER], mode, self.evidence, self.game / '.cbbg', self.log, 'opengl')
+        validate_startup([STARTUP_DRIVER], mode, self.evidence, self.game / '.cbbg', self.log, 'opengl', target)
 
     def test_complete_cold_startup(self):
         self.verify()
+
+    def test_26_2_startup_requires_one_preparation_of_the_expected_kind(self):
+        valid = 'Checking STBN cache (16x16x8)\nSTBN preparation complete in 2 ms (generated)\n'
+        self.log = valid
+        self.verify(target='26.2-fabric')
+        for log in ('', valid + valid, valid.replace('(generated)', '(cache)'),
+                    valid.replace('16x16x8', '32x32x8')):
+            with self.subTest(log=log), self.assertRaises(ValueError):
+                self.log = log
+                self.verify(target='26.2-fabric')
+
+    def test_26_2_warm_startup_requires_cache_reuse_without_rewrites(self):
+        from fabric_scenario_evidence import STARTUP_CACHE_FILES
+        source = self.game / 'source'
+        source.mkdir()
+        for name in STARTUP_CACHE_FILES:
+            (source / name).write_bytes(name.encode())
+        self.game = self.game / 'warm'
+        self.game.mkdir()
+        self.evidence = self.game / 'evidence'
+        prepare_startup_cache(self.game, self.evidence, 'warm', source)
+        self.log = 'Checking STBN cache (16x16x8)\nSTBN preparation complete in 2 ms (cache)\n'
+        self.verify('warm', '26.2-fabric')
+        self.log = self.log.replace('(cache)', '(generated)')
+        with self.assertRaisesRegex(ValueError, 'generation count'):
+            self.verify('warm', '26.2-fabric')
+        self.log = self.log.replace('(generated)', '(cache)')
+        (self.game / '.cbbg' / STARTUP_CACHE_FILES[-1]).touch()
+        with self.assertRaisesRegex(ValueError, 'rewrote cache'):
+            self.verify('warm', '26.2-fabric')
 
     def test_duplicate_or_missing_generation_rejected(self):
         for value in ('', self.log + self.log):
             with self.subTest(log=value), self.assertRaises(ValueError):
                 self.log = value
                 self.verify()
+
+    def test_different_seed_cache_requires_generation_and_updated_seed(self):
+        from fabric_scenario_evidence import STARTUP_CACHE_FILES
+        source = self.game / 'source'
+        source.mkdir()
+        for name in STARTUP_CACHE_FILES:
+            (source / name).write_bytes(name.encode())
+        (source / STARTUP_CACHE_FILES[0]).write_text('# seed 0\nold cache\n')
+        self.game = self.game / 'different-seed'
+        self.game.mkdir()
+        self.evidence = self.game / 'evidence'
+        prepare_startup_cache(self.game, self.evidence, 'seed-mismatch', source)
+        with self.assertRaisesRegex(ValueError, 'seed was not updated'):
+            self.verify('seed-mismatch')
+        (self.game / '.cbbg' / STARTUP_CACHE_FILES[0]).write_text('# seed 74123\nnew cache\n')
+        self.verify('seed-mismatch')
+        self.log = 'Valid STBN cache found for 16x16x8'
+        with self.assertRaisesRegex(ValueError, 'generation count'):
+            self.verify('seed-mismatch')
+
+    def test_different_seed_input_cannot_use_the_requested_seed(self):
+        source = self.game / 'source'
+        source.mkdir()
+        (source / 'stbn_16x16x8.sha256').write_text('# seed 74123\n')
+        game = self.game / 'different-seed'
+        game.mkdir()
+        with self.assertRaisesRegex(ValueError, 'seed-zero cache'):
+            prepare_startup_cache(game, game / 'evidence', 'seed-mismatch', source)
 
     def test_missing_workers_pixels_or_timing_rejected(self):
         original = self.result.copy()

@@ -7,6 +7,8 @@ import org.jspecify.annotations.NullMarked;
 
 @NullMarked
 final class NotificationPlatform {
+  private static SystemToast.SystemToastId toastId = new SystemToast.SystemToastId();
+
   private NotificationPlatform() {}
 
   static void chat(Component message) {
@@ -15,10 +17,11 @@ final class NotificationPlatform {
   }
 
   static void toast(Component title, Component message) {
-    SystemToast.addOrUpdate(
-        Minecraft.getInstance().gui.toastManager(),
-        SystemToast.SystemToastId.PERIODIC_NOTIFICATION,
-        title,
-        message);
+    SystemToast.addOrUpdate(Minecraft.getInstance().gui.toastManager(), toastId, title, message);
+  }
+
+  static void hideToast() {
+    SystemToast.forceHide(Minecraft.getInstance().gui.toastManager(), toastId);
+    toastId = new SystemToast.SystemToastId();
   }
 }

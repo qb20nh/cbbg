@@ -94,14 +94,34 @@ class TargetCatalog {
             }
         }
         Map byId = data.targets.collectEntries { [(it.id): it] }
+        for (Map owner : data.targets.findAll {
+            it.containsKey('compatibleMinecraft') || it.containsKey('minecraftDependency')
+        }) {
+            List versions = owner.compatibleMinecraft instanceof List ? owner.compatibleMinecraft : []
+            List<String> base = owner.minecraft.tokenize('.')
+            String dependency = base.size() == 2 && base.every { it ==~ /[0-9]+/ } ?
+                    ">=${owner.minecraft} <${base[0]}.${base[1].toInteger() + 1}" : null
+            if (owner.loader != 'fabric' || owner.artifactOf != null || versions.isEmpty() ||
+                    owner.minecraftDependency != dependency ||
+                    versions.size() != versions.toSet().size() ||
+                    versions.any { !(it instanceof String) ||
+                            !(it ==~ /${java.util.regex.Pattern.quote(owner.minecraft)}\.[0-9]+/) }) {
+                throw new IllegalArgumentException('Invalid compatible Minecraft versions: ' + owner.id)
+            }
+        }
         for (Map target : data.targets) {
             if (target.artifactOf == null) {
                 continue
             }
             Map owner = target.artifactOf instanceof String ? byId[target.artifactOf] : null
+            boolean sameMinecraft = owner != null && owner.minecraft == target.minecraft
+            boolean compatiblePatch = owner != null && owner.compatibleMinecraft instanceof List &&
+                    owner.compatibleMinecraft.contains(target.minecraft) && owner.java == target.java
+            boolean quiltAlias = target.loader == 'quilt' && (sameMinecraft || compatiblePatch)
+            boolean fabricAlias = target.loader == 'fabric' && compatiblePatch
             if (owner == null || owner.is(target) || owner.artifactOf != null ||
-                    target.loader != 'quilt' || owner.loader != 'fabric' ||
-                    owner.minecraft != target.minecraft || owner.java > target.java ||
+                    owner.loader != 'fabric' || !(quiltAlias || fabricAlias) ||
+                    owner.java > target.java ||
                     owner.renderer != target.renderer || owner.projectionApi != target.projectionApi ||
                     owner.backends.toSet() != target.backends.toSet()) {
                 throw new IllegalArgumentException('Invalid shared artifact reference: ' + target.id)

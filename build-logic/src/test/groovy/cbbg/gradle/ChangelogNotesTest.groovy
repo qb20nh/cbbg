@@ -37,9 +37,36 @@ Previous release.
                 '## [A readable title] - 2026-09-27 <!-- [1.4.1-mc26.3-fabric] -->\nNotes.\n'), '1.4.1', target))
     }
 
+    @Test void patchAliasesUseTheArtifactOwnersChangelogEntry() {
+        File file = changelog('## [Release] <!-- [1.4.1-mc26.1-fabric] -->\n#### Minecraft 26.1.2 — Fabric\n- Patch fix.\n')
+        List<Map> targets = [[id: '26.1-fabric', minecraft: '26.1', loader: 'fabric'],
+                             [id: '26.1.2-fabric', minecraft: '26.1.2', loader: 'fabric', artifactOf: '26.1-fabric']]
+        assertEquals('#### Minecraft 26.1.2 — Fabric\n- Patch fix.\n',
+                ChangelogNotes.select(file, '1.4.1', targets))
+    }
+
     @Test void supportsHistoricalVersionHeadings() {
         assertEquals('Historical notes.\n', ChangelogNotes.select(changelog(
                 '## [1.4.0] - 2026-09-22\nHistorical notes.\n'), '1.4.0', target))
+    }
+
+    @Test void crossVersionQuiltAliasesUseTheSelectedArtifactOwnersEntry() {
+        File file = changelog('## [Release] <!-- [1.4.1-mc26.1-fabric] -->\n#### Minecraft 26.1.2 — Quilt\n- Quilt fix.\n')
+        List<Map> targets = [[id: '26.1-fabric', minecraft: '26.1', loader: 'fabric'],
+                             [id: '26.1.2-quilt', minecraft: '26.1.2', loader: 'quilt', artifactOf: '26.1-fabric']]
+        assertEquals('#### Minecraft 26.1.2 — Quilt\n- Quilt fix.\n',
+                ChangelogNotes.select(file, '1.4.1', targets))
+    }
+
+    @Test void sameVersionQuiltAliasesKeepTheirOwnEntryIdentifier() {
+        File file = changelog('## [Release] <!-- [1.4.1-mc26.3-fabric] [1.4.1-mc26.3-quilt] -->\n- Shared fix.\n')
+        List<Map> targets = [[id: '26.3-fabric', minecraft: '26.3', loader: 'fabric'],
+                             [id: '26.3-quilt', minecraft: '26.3', loader: 'quilt', artifactOf: '26.3-fabric']]
+        assertEquals('- Shared fix.\n', ChangelogNotes.select(file, '1.4.1', targets))
+        assertThrows(GradleException) {
+            ChangelogNotes.select(changelog('## [Release] <!-- [1.4.1-mc26.3-fabric] -->\n- Fabric fix.\n'),
+                    '1.4.1', targets)
+        }
     }
 
     @Test void rejectsMissingDuplicateAndEmptyEntries() {

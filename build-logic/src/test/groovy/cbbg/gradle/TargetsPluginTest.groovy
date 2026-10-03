@@ -36,6 +36,21 @@ case "$*" in *-Pcompat=fail*) exit 7;; esac
                 .withArguments((arguments as List) + ['--stacktrace'])
     }
 
+    private void familyFixture() {
+        fixture()
+        def owner = [id: '26.1-fabric', minecraft: '26.1', loader: 'fabric', java: 25,
+                     renderer: 'blaze-texture-format', backends: ['opengl'],
+                     implemented: false, buildProfile: 'fixture',
+                     compatibleMinecraft: ['26.1.1', '26.1.2'], minecraftDependency: '>=26.1 <26.2']
+        def aliases = ['26.1.1', '26.1.2'].collect { minecraft ->
+            [id: minecraft + '-fabric', minecraft: minecraft, loader: 'fabric', java: 25,
+             renderer: 'blaze-texture-format', backends: ['opengl'], implemented: false,
+             buildProfile: 'fixture', artifactOf: owner.id]
+        }
+        new File(directory, 'targets.json').text = JsonOutput.toJson(
+                [schema: 1, ciTargets: [owner.id], targets: [owner] + aliases])
+    }
+
     @Test void defaultsBuildWithoutPythonOrImplementationFlag() {
         fixture()
         def result = runner('build', '--offline', '-Pbackend=vulkan').build()
@@ -82,10 +97,56 @@ case "$*" in *-Pcompat=fail*) exit 7;; esac
         assertFalse(new File(directory, 'build/arguments.txt').exists())
     }
 
+    @Test void upstreamFabricMinimumSearchUsesTheUpstreamBuild() {
+        fixture()
+        def target = [id: '26.2-fabric', minecraft: '26.2', loader: 'fabric', java: 25,
+                      renderer: 'blaze-gpu-format', backends: ['opengl', 'vulkan'],
+                      implemented: false, buildProfile: 'fabric-upstream']
+        new File(directory, 'targets.json').text = JsonOutput.toJson(
+                [schema: 1, ciTargets: [target.id], targets: [target]])
+        def profile = new File(directory, 'build-config/fabric-upstream')
+        profile.mkdirs()
+        new File(profile, 'build.gradle').text = '// Upstream build fixture\n'
+        def env = new HashMap(System.getenv())
+        env.remove('CI')
+        env.remove('GITHUB_ACTIONS')
+        runner('determineFabricMinimums', '-Ptarget=26.2-fabric', '-PcompatibilityRuntime=/local/runtime')
+                .withEnvironment(env).build()
+        List args = new File(directory, 'build/arguments.txt').readLines()
+        assertEquals(['updateFabricMinimums', 'verifyFabricCompatibility'],
+                args.findAll { it in ['updateFabricMinimums', 'verifyFabricCompatibility'] })
+        assertEquals(2, args.count('-p'))
+        assertEquals(2, args.count(profile.absolutePath))
+        assertEquals(2, args.count('-PcompatibilityRuntime=/local/runtime'))
+    }
+
+    @Test void sharedFabricMinimumSearchCoversEveryRuntimeThenUpdatesOwnerAndVerifiesEach() {
+        familyFixture()
+        def env = new HashMap(System.getenv())
+        env.remove('CI')
+        env.remove('GITHUB_ACTIONS')
+        runner('determineFabricMinimums', '-Ptarget=26.1.2-fabric', '-PcompatibilityRuntime=/local/runtime')
+                .withEnvironment(env).build()
+        List args = new File(directory, 'build/arguments.txt').readLines()
+        assertEquals(['verifyFabricCompatibility', 'verifyFabricCompatibility',
+                      'verifyFabricCompatibility', 'updateFabricMinimums',
+                      'verifyFabricCompatibility', 'verifyFabricCompatibility',
+                      'verifyFabricCompatibility'],
+                args.findAll { it in ['verifyFabricCompatibility', 'updateFabricMinimums'] })
+        assertEquals(['-Ptarget=26.1-fabric', '-Ptarget=26.1.1-fabric', '-Ptarget=26.1.2-fabric',
+                      '-Ptarget=26.1-fabric', '-Ptarget=26.1-fabric',
+                      '-Ptarget=26.1.1-fabric', '-Ptarget=26.1.2-fabric'],
+                args.findAll { it.startsWith('-Ptarget=') })
+        assertEquals((['-PverifyDeclaredMinimums=false'] * 4) +
+                     (['-PverifyDeclaredMinimums=true'] * 3),
+                args.findAll { it.startsWith('-PverifyDeclaredMinimums=') })
+        assertEquals(7, args.count('-PcompatibilityRuntime=/local/runtime'))
+    }
+
     @Test void minimumSearchRequiresASingleFabricTarget() {
         fixture()
         assertTrue(runner('determineFabricMinimums', '-Ptargets=26.3-fabric,26.3-quilt').buildAndFail()
-                .output.contains('determineFabricMinimums requires one RenderPearl Fabric target'))
+                .output.contains('determineFabricMinimums requires one supported Fabric target'))
         assertFalse(new File(directory, 'build/arguments.txt').exists())
     }
 

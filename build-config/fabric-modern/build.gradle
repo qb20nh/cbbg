@@ -14,9 +14,14 @@ def target = catalog.targets.find { it.id == targetId }
 if (target == null || target.buildProfile != 'fabric-modern') {
     throw new GradleException("Target ${targetId} is not configured for the modern Fabric profile")
 }
+def artifactOwner = target.artifactOf ? catalog.targets.find { it.id == target.artifactOf } : target
+def launchesClient = gradle.startParameter.taskNames.any {
+    it.tokenize(':').last() in ['runClient', 'runClientGameTest']
+}
+def gameTarget = launchesClient ? target : artifactOwner
 def modProperties = new Properties()
 new File(repositoryRoot, 'gradle.properties').withInputStream { modProperties.load(it) }
-version = "${modProperties.mod_version}+mc${target.minecraft}-${target.loader}"
+version = "${modProperties.mod_version}+mc${artifactOwner.minecraft}-${artifactOwner.loader}"
 group = modProperties.maven_group
 base.archivesName = modProperties.archives_base_name
 layout.buildDirectory = new File(repositoryRoot, "build/targets/${targetId}")
@@ -36,9 +41,9 @@ if (!target.compatibilityProfiles.containsKey(testCompat)) {
 }
 
 dependencies {
-    minecraft "com.mojang:minecraft:${target.minecraft}"
-    implementation "net.fabricmc:fabric-loader:${target.dependencies.loader}"
-    implementation "net.fabricmc.fabric-api:fabric-api:${target.dependencies.fabricApi}"
+    minecraft "com.mojang:minecraft:${gameTarget.minecraft}"
+    implementation "net.fabricmc:fabric-loader:${gameTarget.dependencies.loader}"
+    implementation "net.fabricmc.fabric-api:fabric-api:${gameTarget.dependencies.fabricApi}"
     testImplementation platform('org.junit:junit-bom:6.1.3')
     testImplementation 'org.junit.jupiter:junit-jupiter'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
@@ -85,8 +90,8 @@ tasks.withType(JavaCompile).configureEach {
     options.release = target.java as int
 }
 
-def sourceGroups = ["renderers/${target.renderer}", "adapters/minecraft/${target.minecraft}",
-                    "adapters/fabric/${target.minecraft}"]
+def sourceGroups = ["renderers/${target.renderer}", "adapters/minecraft/${artifactOwner.minecraft}",
+                    "adapters/fabric/${artifactOwner.minecraft}"]
 def usesTextureFormat = target.renderer == 'blaze-texture-format'
 sourceGroups.addAll(target.sourceGroups ?: [])
 sourceSets.main {
@@ -100,11 +105,17 @@ sourceSets.test.java.setSrcDirs([new File(repositoryRoot,
 def sharedModern = objects.sourceDirectorySet('sharedModern', 'Shared modern Fabric sources')
 sharedModern.srcDir(new File(repositoryRoot, 'adapters/fabric/shared/src/main/java'))
 if (usesTextureFormat) {
-    sharedModern.exclude 'com/qb20nh/cbbg/CbbgEarlyInit.java',
-            'com/qb20nh/cbbg/CbbgClient.java',
-            'com/qb20nh/cbbg/config/gui/CbbgConfigScreen.java',
-            'com/qb20nh/cbbg/render/BlazePlatform.java'
-    sourceSets.main.resources.srcDir(new File(repositoryRoot, 'src/main/resources'))
+    def startup = objects.sourceDirectorySet('sharedStartup', 'Fabric early noise preparation')
+    startup.srcDir(new File(repositoryRoot, 'adapters/fabric/modern/src/main/java'))
+    startup.include 'com/qb20nh/cbbg/CbbgClient.java',
+            'com/qb20nh/cbbg/CbbgEarlyInit.java', 'com/qb20nh/cbbg/CbbgLanguageAdapter.java'
+    sourceSets.main.java.source(startup)
+    def notifications = objects.sourceDirectorySet('sharedNotifications', 'Generation notifications')
+    notifications.srcDir(new File(repositoryRoot, 'renderers/modern/src/main/java'))
+    notifications.include 'com/qb20nh/cbbg/render/GenerationNotifications.java',
+            'com/qb20nh/cbbg/render/DitherController.java',
+            'com/qb20nh/cbbg/config/gui/CbbgConfigScreen.java'
+    sourceSets.main.java.source(notifications)
 } else {
     sharedModern.include 'com/qb20nh/cbbg/Cbbg.java',
             'com/qb20nh/cbbg/platform/LoaderPlatform.java',
@@ -174,6 +185,54 @@ if (usesTextureFormat) {
     sharedClientTests.include 'com/qb20nh/cbbg/gametest/CbbgConfigScreenGameTest.java'
 }
 sourceSets.gametest.java.source(sharedClientTests)
+
+if (usesTextureFormat) {
+    def externalCompileClasspath = configurations.compileClasspath.incoming.artifactView {
+        componentFilter { it instanceof org.gradle.api.artifacts.component.ModuleComponentIdentifier }
+    }.files
+    sourceSets.create('processedGametest') {
+        java.setSrcDirs([new File(repositoryRoot, "renderers/${target.renderer}/src/processedGametest/java")])
+        java.srcDir(new File(repositoryRoot, "adapters/fabric/${artifactOwner.minecraft}/src/processedGametest/java"))
+        java.srcDir(new File(repositoryRoot, 'adapters/fabric/shared/src/processedGametest/java'))
+        def progress = objects.sourceDirectorySet('processedProgress', 'Packaged scenario completion')
+        progress.srcDir(new File(repositoryRoot, 'renderers/renderpearl/src/gametest/java'))
+        progress.srcDir(new File(repositoryRoot, 'renderers/modern/src/gametest/java'))
+        progress.include 'com/qb20nh/cbbg/gametest/mixin/ScenarioProgressMixin.java',
+                'com/qb20nh/cbbg/gametest/IrisFixture.java',
+                'com/qb20nh/cbbg/gametest/RenderScaleTestAccess.java'
+        java.source(progress)
+        def pixelReference = objects.sourceDirectorySet('processedPixelReference', 'Shared CPU pixel reference')
+        pixelReference.srcDir(new File(repositoryRoot, 'core/src/testSupport/java'))
+        pixelReference.include 'com/qb20nh/cbbg/reference/DitherReference.java'
+        java.source(pixelReference)
+        resources.setSrcDirs([new File(repositoryRoot, "renderers/${target.renderer}/src/processedGametest/resources")])
+        compileClasspath = files(releaseOptimization.outputJar, externalCompileClasspath)
+        runtimeClasspath = output + compileClasspath
+    }
+    tasks.named('compileProcessedGametestJava') {
+        dependsOn tasks.named('optimizeReleaseJar')
+    }
+    tasks.named('processProcessedGametestResources') {
+        dependsOn tasks.named('optimizeReleaseJar')
+        from(releaseOptimization.mappingFile) { rename { 'cbbg-test.map' } }
+        from(new File(repositoryRoot, 'adapters/fabric/shared/src/processedGametest/resources'))
+        def loaderMinimum = artifactOwner.dependencies.minimumLoader ?: artifactOwner.dependencies.loader
+        inputs.property('loaderMinimum', loaderMinimum)
+        filesMatching('fabric.mod.json') { expand(loader_minimum: loaderMinimum) }
+        from(new File(repositoryRoot, 'renderers/modern/src/gametest/resources')) {
+            include 'cbbg-iris-fixture/**'
+        }
+    }
+    tasks.register('processedDriverJar', Jar) {
+        archiveClassifier = 'processed-driver'
+        from sourceSets.processedGametest.output
+    }
+    tasks.register('prepareProcessedRuntime') {
+        dependsOn tasks.named('optimizeReleaseJar'), tasks.named('processedDriverJar'),
+                tasks.named('checkPackages')
+    }
+    apply from: new File(repositoryRoot, 'build-config/fabric-startup-tests.gradle')
+}
 
 if (targetId == '26.3-fabric') {
     def processedSharedTests = objects.sourceDirectorySet('processedSharedTests', 'Shared processed-compatible tests')
@@ -285,22 +344,29 @@ releaseOptimization {
     })
 }
 tasks.named('optimizeReleaseJar') { dependsOn tasks.named('jar', Jar) }
+if (launchesClient && target.id != artifactOwner.id) {
+    gradle.taskGraph.whenReady { graph ->
+        if (graph.hasTask(tasks.named('jar').get()) ||
+                graph.hasTask(tasks.named('optimizeReleaseJar').get())) {
+            throw new GradleException('Use a dedicated invocation for building shared artifacts')
+        }
+    }
+}
 
 tasks.named('processResources') {
     def sharedDescriptor = new File(repositoryRoot, 'src/main/resources/fabric.mod.json')
     inputs.file(sharedDescriptor).withPropertyName('sharedFabricMetadata')
-    if (!usesTextureFormat) {
-        from(new File(repositoryRoot, 'src/main/resources')) {
-            include 'assets/cbbg/icon.png'
-            include 'assets/cbbg/shaders/include/dither.glsl'
-            include 'assets/cbbg/lang/*.json'
-        }
+    from(new File(repositoryRoot, 'src/main/resources')) {
+        include 'assets/cbbg/icon.png'
+        include 'assets/cbbg/shaders/include/dither.glsl'
+        include 'assets/cbbg/lang/*.json'
+        if (usesTextureFormat) include 'assets/cbbg/shaders/core/*.fsh'
     }
-    def properties = [version: project.version, minecraft_version: target.minecraft,
-                      loader_version: target.dependencies.minimumLoader ?: target.dependencies.loader,
-                      loader_upper_bound: target.dependencies.loaderUpperExclusive ? ' <' + target.dependencies.loaderUpperExclusive : '',
-                      fabric_api_minimum: target.dependencies.minimumFabricApi ?: '*',
-                      fabric_api_upper_bound: target.dependencies.fabricApiUpperExclusive ? ' <' + target.dependencies.fabricApiUpperExclusive : '',
+    def properties = [version: project.version, minecraft_version: artifactOwner.minecraftDependency ?: artifactOwner.minecraft,
+                      loader_version: artifactOwner.dependencies.minimumLoader ?: artifactOwner.dependencies.loader,
+                      loader_upper_bound: artifactOwner.dependencies.loaderUpperExclusive ? ' <' + artifactOwner.dependencies.loaderUpperExclusive : '',
+                      fabric_api_minimum: artifactOwner.dependencies.minimumFabricApi ?: '*',
+                      fabric_api_upper_bound: artifactOwner.dependencies.fabricApiUpperExclusive ? ' <' + artifactOwner.dependencies.fabricApiUpperExclusive : '',
                       java_version: target.java,
                       renderer_family: target.renderer,
                       shader_import: target.renderer == 'blaze-gpu-format' ? '#moj_import' : '#include']
@@ -314,13 +380,6 @@ tasks.named('processResources') {
     doLast {
         cbbg.gradle.FabricBranding.apply(sharedDescriptor, new File(destinationDir, 'fabric.mod.json'))
     }
-    if (usesTextureFormat) {
-        filesMatching('fabric.mod.json') {
-            filter { line -> line.replace('afl:prePrePreLaunch', 'preLaunch')
-                    .replace('>=21', ">=${properties.java_version}")
-                    .replace('>=0.18.2', ">=${properties.loader_version}") }
-        }
-    }
     if (target.renderer == 'blaze-gpu-format') {
         filesMatching('assets/cbbg/shaders/core/cbbg_dither.fsh') {
             filter { line -> line.replace('#include <', "${properties.shader_import} <") }
@@ -329,7 +388,7 @@ tasks.named('processResources') {
 }
 
 apply from: new File(repositoryRoot, 'build-config/source-inventory.gradle')
-if (target.renderer == 'renderpearl') {
+if (target.renderer == 'renderpearl' || usesTextureFormat) {
     apply from: new File(repositoryRoot, 'build-config/fabric-compatibility.gradle')
 }
 
@@ -438,54 +497,8 @@ tasks.register('ciCheck') {
     dependsOn tasks.withType(Jar).matching { it.name.endsWith('DriverJar') }
 }
 
-tasks.register('candidateBuildOutputs') {
-    dependsOn tasks.named('ciCheck')
-    def destination = layout.buildDirectory.file('candidate-build-outputs.json')
-    outputs.file(destination)
-    outputs.upToDateWhen { false }
-    doLast {
-        def root = repositoryRoot.canonicalFile.toPath()
-        def reference = { File file ->
-            def path = file.canonicalFile.toPath()
-            if (!path.startsWith(root) || !file.isFile()) {
-                throw new GradleException('Missing or invalid candidate output: ' + file.name)
-            }
-            [path: root.relativize(path).toString().replace('\\', '/'),
-             sha256: java.security.MessageDigest.getInstance('SHA-256').digest(file.bytes).encodeHex().toString(),
-             filename: file.name]
-        }
-        def gitOutput = { List<String> arguments ->
-            providers.exec {
-                workingDir repositoryRoot
-                commandLine(['git'] + arguments)
-            }.standardOutput.asText.get().trim()
-        }
-        def drivers = new TreeMap<String, Map>()
-        tasks.withType(Jar).matching {
-            it.name.endsWith('DriverJar') &&
-                    (targetId == '26.3-fabric' ? it.name.startsWith('processed') : !it.name.startsWith('processed'))
-        }.each { driver ->
-            def suite = (driver == parityDriverJar.get() || driver.name == 'processedDriverJar') ? 'ordinary' :
-                    driver.archiveClassifier.get().replaceFirst(/^processed-/, '').replaceFirst(/-driver$/, '')
-            if (drivers.containsKey(suite)) throw new GradleException('Duplicate driver suite: ' + suite)
-            drivers[suite] = reference(driver.archiveFile.get().asFile)
-        }
-        def artifact = reference(releaseOptimization.outputJar.get().asFile)
-        def output = [schema: 2, target: targetId, version: project.version.toString(),
-                      source_commit: gitOutput(['rev-parse', 'HEAD']),
-                      source_dirty: !gitOutput(['status', '--porcelain', '--untracked-files=all',
-                                               '--', '.', ':(top,exclude)docs/**']).isEmpty(),
-                      artifact: artifact,
-                      mapping: reference(releaseOptimization.mappingFile.get().asFile),
-                      sbom: reference(releaseSbomFile.get().asFile),
-                      processing: [tool: 'proguard', version: cbbg.gradle.ProguardMapping.VERSION],
-                      sources: reference(tasks.named('releaseSourcesJar', Jar).get().archiveFile.get().asFile),
-                      source_inventory: reference(layout.buildDirectory.file('source-inventory.json').get().asFile),
-                      drivers: drivers]
-        destination.get().asFile.text = groovy.json.JsonOutput.prettyPrint(
-                groovy.json.JsonOutput.toJson(output)) + '\n'
-    }
-}
+ext.candidateTargetId = targetId
+apply from: new File(repositoryRoot, 'build-config/candidate-build-outputs.gradle')
 
 tasks.register('dev', Sync) {
     group = 'build'

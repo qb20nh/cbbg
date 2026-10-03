@@ -19,6 +19,10 @@ public final class MainTargets {
     TARGETS.add(target);
   }
 
+  public static boolean contains(Object target) {
+    return TARGETS.contains(target);
+  }
+
   public static void refreshFormats() {
     RenderSystem.assertOnRenderThread();
     for (MainTarget target : TARGETS.toArray(MainTarget[]::new)) {

@@ -1,0 +1,7 @@
+{
+  "required": true,
+  "package": "com.qb20nh.cbbg.mixin",
+  "compatibilityLevel": "JAVA_25",
+  "client": ["DebugScreenEntriesMixin", "GlConstMixin", "MainTargetMixin", "RenderTargetMixin", "GameRendererMixin", "GlCommandEncoderMixin", "MinecraftMixin", "ScreenshotMixin"],
+  "injectors": { "defaultRequire": 1 }
+}

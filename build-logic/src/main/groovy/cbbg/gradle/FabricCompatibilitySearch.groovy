@@ -1,6 +1,11 @@
 package cbbg.gradle
 
+import groovy.json.JsonSlurper
 import org.gradle.api.GradleException
+
+import java.nio.charset.StandardCharsets
+import java.util.zip.ZipEntry
+import java.util.zip.ZipFile
 
 /** Searches released versions; results describe tested boundaries, not every intervening release. */
 class FabricCompatibilitySearch {
@@ -37,6 +42,98 @@ class FabricCompatibilitySearch {
 
     static String upperLimit(String maximum, String firstIncompatible) {
         firstIncompatible ?: (numbers(maximum)[0] + 1) + '.0.0'
+    }
+
+    static boolean before(String left, String right) {
+        left != right && ordered([left, right])[0] == left
+    }
+
+    static Map intersect(Collection<Map> reports) {
+        if (!reports) throw new GradleException('Shared Fabric dependency search has no runtime reports')
+        Map bounds = [minimumLoader: ordered(reports*.minimumLoader).last(),
+                      minimumFabricApi: ordered(reports*.minimumFabricApi).last(),
+                      loaderUpperExclusive: ordered(reports*.loaderUpperExclusive).first(),
+                      fabricApiUpperExclusive: ordered(reports*.fabricApiUpperExclusive).first()]
+        if (!before(bounds.minimumLoader, bounds.loaderUpperExclusive)) {
+            throw new GradleException('No common Fabric Loader interval across runtime reports')
+        }
+        if (!before(bounds.minimumFabricApi, bounds.fabricApiUpperExclusive)) {
+            throw new GradleException('No common Fabric API interval across runtime reports')
+        }
+        bounds
+    }
+
+    static List<String> within(Collection<String> available, String minimum, String upperExclusive) {
+        ordered(available).findAll { !before(it, minimum) && before(it, upperExclusive) }
+    }
+
+    static void requireCurrentInputs(Map inputs, File driver, File initialConfig,
+                                     File gametestApi, String gametestApiPin,
+                                     boolean requireHistoricalDriver = true) {
+        if (!(inputs.files instanceof Map) || inputs.files.isEmpty() ||
+                inputs.files.any { path, hash ->
+                    File source = new File((String) path)
+                    !source.isFile() || CandidateFiles.sha256(source) != hash
+                } || !driver.isFile() ||
+                (requireHistoricalDriver && CandidateFiles.sha256(driver) != inputs.driver) ||
+                !initialConfig.isFile() || CandidateFiles.sha256(initialConfig) != inputs.initialConfig ||
+                inputs.gametestApiPin != gametestApiPin || !gametestApi.isFile() ||
+                CandidateFiles.sha256(gametestApi) != inputs.gametestApiSha256) {
+            throw new GradleException('Completed Fabric search inputs changed; rerun every runtime search')
+        }
+    }
+
+    static void requireSameArtifactExceptBounds(File searched, String searchedSha256,
+                                                File rebuilt, Map bounds) {
+        if (!searched.isFile() || CandidateFiles.sha256(searched) != searchedSha256 ||
+                !rebuilt.isFile()) {
+            throw new GradleException('Missing or changed searched Fabric artifact')
+        }
+        new ZipFile(searched).withCloseable { previous ->
+            new ZipFile(rebuilt).withCloseable { current ->
+                Map<String, ZipEntry> oldEntries = indexedEntries(previous)
+                Map<String, ZipEntry> newEntries = indexedEntries(current)
+                if (oldEntries.keySet() != newEntries.keySet() ||
+                        !oldEntries.containsKey('fabric.mod.json')) {
+                    throw new GradleException('Fabric artifact entries changed after dependency search')
+                }
+                oldEntries.each { name, oldEntry ->
+                    byte[] oldBytes = previous.getInputStream(oldEntry).bytes
+                    byte[] newBytes = current.getInputStream(newEntries[name]).bytes
+                    if (name == 'fabric.mod.json') {
+                        Map oldMetadata = (Map) new JsonSlurper().parseText(
+                                new String(oldBytes, StandardCharsets.UTF_8))
+                        Map newMetadata = (Map) new JsonSlurper().parseText(
+                                new String(newBytes, StandardCharsets.UTF_8))
+                        if (!(oldMetadata.depends instanceof Map) ||
+                                !(newMetadata.depends instanceof Map) ||
+                                newMetadata.depends.fabricloader !=
+                                        '>=' + bounds.minimumLoader + ' <' + bounds.loaderUpperExclusive ||
+                                newMetadata.depends['fabric-api'] !=
+                                        '>=' + bounds.minimumFabricApi + ' <' + bounds.fabricApiUpperExclusive) {
+                            throw new GradleException('Rebuilt Fabric artifact has incorrect dependency bounds')
+                        }
+                        newMetadata.depends.fabricloader = oldMetadata.depends.fabricloader
+                        newMetadata.depends['fabric-api'] = oldMetadata.depends['fabric-api']
+                        if (oldMetadata != newMetadata) {
+                            throw new GradleException('Fabric artifact metadata changed beyond dependency bounds')
+                        }
+                    } else if (!Arrays.equals(oldBytes, newBytes)) {
+                        throw new GradleException('Fabric artifact entry changed after dependency search: ' + name)
+                    }
+                }
+            }
+        }
+    }
+
+    private static Map<String, ZipEntry> indexedEntries(ZipFile archive) {
+        Map<String, ZipEntry> entries = [:]
+        Collections.list(archive.entries()).each { ZipEntry entry ->
+            if (entries.put(entry.name, entry) != null) {
+                throw new GradleException('Fabric artifact has a duplicate entry: ' + entry.name)
+            }
+        }
+        entries
     }
 
     private static String boundary(List<String> versions, String current, Closure<Boolean> passes) {

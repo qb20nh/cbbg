@@ -14,15 +14,20 @@ public final class IrisFixture {
   private IrisFixture() {}
 
   public static void assertFinalShader(NativeImage image, String failureMessage) {
+    assertFinalShader(image, failureMessage, image.getHeight() / 4, image.getHeight() * 3 / 4);
+  }
+
+  public static void assertFinalShader(
+      NativeImage image, String failureMessage, int fromY, int toY) {
     int magenta = 0;
     int total = 0;
-    for (int y = image.getHeight() / 4; y < image.getHeight() * 3 / 4; y++) {
+    for (int y = fromY; y < toY; y++) {
       for (int x = image.getWidth() / 4; x < image.getWidth() * 3 / 4; x++) {
         total++;
         if ((image.getPixel(x, y) & 0xffffff) == 0xff00ff) magenta++;
       }
     }
-    if (magenta < total * 0.9) throw new AssertionError(failureMessage);
+    if (total == 0 || magenta < total * 0.9) throw new AssertionError(failureMessage);
   }
 
   public static void installPack() {

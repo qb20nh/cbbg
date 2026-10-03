@@ -9,6 +9,7 @@ import com.mojang.renderpearl.api.pipeline.ShaderType;
 import com.mojang.renderpearl.api.textures.GpuTexture;
 import com.qb20nh.cbbg.config.CbbgConfig;
 import com.qb20nh.cbbg.render.DitherController;
+import com.qb20nh.cbbg.render.DitherPresentation;
 import java.lang.reflect.Proxy;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -46,12 +47,14 @@ public final class ShaderFailureGameTest implements FabricClientGameTest {
                     new Vector4f(0.25f, 0.5f, 0.75f, 1));
             try {
               var healthy =
-                  DitherController.screenshot(Objects.requireNonNull(source.getColorTextureView()));
+                  DitherPresentation.screenshot(
+                      Objects.requireNonNull(source.getColorTextureView()));
               if (healthy == null)
                 throw new AssertionError("Healthy dither pipeline was unavailable");
               var oldOutput = healthy.getColorTexture();
               var oldNoise =
-                  (GpuTexture) Objects.requireNonNull(field(DitherController.class, null, "noise"));
+                  (GpuTexture)
+                      Objects.requireNonNull(field(DitherPresentation.class, null, "noise"));
               var fallback =
                   (PipelineCache)
                       Objects.requireNonNull(
@@ -91,7 +94,7 @@ public final class ShaderFailureGameTest implements FabricClientGameTest {
               var previous = RenderSystem.setCurrentPipelineCache(broken);
               try {
                 replaceFallback(broken);
-                if (DitherController.screenshot(
+                if (DitherPresentation.screenshot(
                         Objects.requireNonNull(source.getColorTextureView()))
                     != null) {
                   throw new AssertionError("Broken shader did not trigger fallback");
@@ -111,7 +114,7 @@ public final class ShaderFailureGameTest implements FabricClientGameTest {
                   || !CbbgConfig.get().equals(original)) {
                 throw new AssertionError("Shader failure lost state or leaked owned resources");
               }
-              if (DitherController.present(Objects.requireNonNull(source.getColorTextureView()))
+              if (DitherPresentation.present(Objects.requireNonNull(source.getColorTextureView()))
                   != source.getColorTextureView()) {
                 throw new AssertionError("Failed effect did not preserve the caller's input");
               }

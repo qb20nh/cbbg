@@ -51,18 +51,18 @@ class Publication {
             String artifactNotes = ChangelogNotes.forTargets(notes, specifications)
             List<String> loaders = specifications.collect { it.loader }.unique()
             boolean fabricApi = specification.loader == 'fabric'
-            String minecraft = specification.minecraft
+            List<String> minecraft = specifications.collect { it.minecraft }.unique()
             String version = CandidateManifest.packageVersion(manifest.data.release as String, specification)
             String channel = CandidateFiles.prerelease(manifest.data.release as String) ? 'beta' : 'release'
             records.add([
                     targets: runtimes, artifact: target.artifact, sources: target.sources,
                     modrinth: [project_id: projects.modrinth, version_number: version,
                                version_name: 'cbbg ' + version, version_type: channel,
-                               game_versions: [minecraft], loaders: loaders,
+                                game_versions: minecraft, loaders: loaders,
                                required_projects: fabricApi ? ['fabric-api'] : [], changelog: artifactNotes],
                     curseforge: [project_id: projects.curseforge, display_name: 'cbbg ' + version,
                                  release_type: channel,
-                                 version_labels: [minecraft, 'Java ' + specification.java] +
+                                  version_labels: minecraft + ['Java ' + specification.java] +
                                          loaders.collect { loaderLabels[it] } + ['Environment:Client'],
                                  relations: fabricApi ? 'fabric-api:requiredDependency' : '',
                                  changelog: artifactNotes, changelog_type: 'markdown']
@@ -150,7 +150,7 @@ class Publication {
             }
             if (services in ['both', 'curseforge']) {
                 record.curseforge.game_versions = curseforgeVersionIds(
-                        modrinth.game_versions[0], record.curseforge.version_labels,
+                        modrinth.game_versions, record.curseforge.version_labels,
                         curseforgeVersions, curseforgeTypes)
             }
         }
@@ -158,6 +158,10 @@ class Publication {
     }
 
     static List<String> curseforgeVersionIds(String mc, List labels, List versions, List types) {
+        curseforgeVersionIds([mc], labels, versions, types)
+    }
+
+    static List<String> curseforgeVersionIds(List<String> minecraft, List labels, List versions, List types) {
         List<String> ids = []
         for (String label : labels) {
             int colon = label.indexOf(':')
@@ -167,7 +171,7 @@ class Publication {
             if (typeName != null) {
                 Set typeIds = types.findAll { it.name == typeName || it.slug == typeName }.collect { it.id } as Set
                 matches = matches.findAll { typeIds.contains(it.gameVersionTypeID) }
-            } else if (name == mc) {
+            } else if (minecraft.contains(name)) {
                 Set typeIds = types.findAll { Map type ->
                     (type.slug instanceof String && type.slug.startsWith('minecraft-')) ||
                             (type.name instanceof String && type.name ==~ /^Minecraft(\s.*)?$/)
