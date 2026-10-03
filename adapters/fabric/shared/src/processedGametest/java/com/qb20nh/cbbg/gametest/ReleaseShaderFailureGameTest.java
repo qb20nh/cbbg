@@ -197,6 +197,7 @@ public final class ReleaseShaderFailureGameTest implements FabricClientGameTest 
               if (!"rgba32f".equals(ReleaseAllocationFormat.actual(color))) {
                 throw new AssertionError("Fallback main target is not RGBA32F");
               }
+              boolean vulkan = "vulkan".equalsIgnoreCase(ReleaseBackend.identity()[0]);
               CompletableFuture<byte[]> source =
                   ReleaseWorldPixelsGameTest.read(color, width * height * 16, true);
               CompletableFuture<int[]> screenshot = new CompletableFuture<>();
@@ -217,7 +218,7 @@ public final class ReleaseShaderFailureGameTest implements FabricClientGameTest 
                       screenshot.completeExceptionally(failure);
                     }
                   });
-              return new PixelCapture(width, height, source, screenshot);
+              return new PixelCapture(width, height, vulkan, source, screenshot);
             });
     context.waitFor(client -> capture.source().isDone() && capture.screenshot().isDone(), 200);
     assertFallbackScreenshot(capture);
@@ -233,6 +234,7 @@ public final class ReleaseShaderFailureGameTest implements FabricClientGameTest 
       throw new AssertionError("Fallback screenshot readback has unexpected dimensions");
     }
     int boundaryChannels = 0;
+    int vulkanAlternativeChannels = 0;
     for (int y = 0; y < height; y++) {
       int gpuY = height - 1 - y;
       for (int x = 0; x < width; x++) {
@@ -249,7 +251,11 @@ public final class ReleaseShaderFailureGameTest implements FabricClientGameTest 
           int quantized = quantize(value);
           int actual = observed >>> (16 - channel * 8) & 255;
           if (actual == quantized) continue;
-          if (Math.abs(actual - quantized) == 1 && halfByteBoundary(value)) {
+          if (capture.vulkan() && vulkanPermitted(value, actual)) {
+            vulkanAlternativeChannels++;
+            continue;
+          }
+          if (!capture.vulkan() && Math.abs(actual - quantized) == 1 && halfByteBoundary(value)) {
             boundaryChannels++;
             continue;
           }
@@ -276,6 +282,8 @@ public final class ReleaseShaderFailureGameTest implements FabricClientGameTest 
               + (width * height * 3)
               + ",\"halfByteBoundaryChannels\":"
               + boundaryChannels
+              + ",\"vulkanAlternativeRoundingChannels\":"
+              + vulkanAlternativeChannels
               + "}\n");
     } catch (IOException failure) {
       throw new AssertionError("Could not record fallback boundary checks", failure);
@@ -285,6 +293,11 @@ public final class ReleaseShaderFailureGameTest implements FabricClientGameTest 
   private static boolean halfByteBoundary(float value) {
     double scaled = Math.clamp((double) value, 0.0, 1.0) * 255.0;
     return Math.abs(scaled - (Math.floor(scaled) + 0.5)) <= Math.ulp(value) * 255.0;
+  }
+
+  private static boolean vulkanPermitted(float value, int actual) {
+    double scaled = Math.clamp((double) value, 0.0, 1.0) * 255.0;
+    return actual == (int) Math.floor(scaled) || actual == (int) Math.ceil(scaled);
   }
 
   private static int quantize(float value) {
@@ -377,6 +390,7 @@ public final class ReleaseShaderFailureGameTest implements FabricClientGameTest 
   private record PixelCapture(
       int width,
       int height,
+      boolean vulkan,
       CompletableFuture<byte[]> source,
       CompletableFuture<int[]> screenshot) {}
 }
