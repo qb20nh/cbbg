@@ -54,6 +54,10 @@ public final class DitherPass implements AutoCloseable {
       float scaleY,
       boolean demo) {
     RenderSystem.assertOnRenderThread();
+    RenderPipeline selected = demo ? DEMO : ENABLED;
+    if (!RenderSystem.getDevice().precompilePipeline(selected).isValid()) {
+      throw new IllegalStateException("CBBG dither shader could not be compiled");
+    }
     int width = input.getWidth(0);
     int height = input.getHeight(0);
     if (output == null || output.width != width || output.height != height) {
@@ -76,7 +80,7 @@ public final class DitherPass implements AutoCloseable {
             () -> "CBBG dither",
             Objects.requireNonNull(output.getColorTextureView()),
             OptionalInt.empty())) {
-      pass.setPipeline(demo ? DEMO : ENABLED);
+      pass.setPipeline(selected);
       pass.bindTexture(
           "InSampler", input, RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST));
       pass.bindTexture(

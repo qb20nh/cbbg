@@ -77,7 +77,7 @@ public class STBNGenerator {
             force,
             () -> {
               LOGGER.info("Checking STBN cache ({}x{}x{})", w, h, d);
-              return STBNCache.isCacheValid(w, h, d);
+              return STBNCache.isCacheValid(w, h, d, seed);
             });
     if (next != preparationFuture) {
       if (pendingFuture != null) pendingFuture.cancel(false);
@@ -97,6 +97,13 @@ public class STBNGenerator {
 
   public static synchronized @Nullable CompletableFuture<@Nullable STBNFields> get() {
     return pendingFuture;
+  }
+
+  public static synchronized void shutdown() {
+    if (pendingFuture != null) pendingFuture.cancel(false);
+    preparation.close();
+    preparationFuture = null;
+    pendingFuture = null;
   }
 
   public static boolean matches(int w, int h, int d, long seed) {

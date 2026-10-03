@@ -109,6 +109,8 @@ public final class CbbgDither {
 
   // Configurable state tracking
   private static boolean isGenerating = false;
+  private static boolean generatingToastVisible = false;
+  private static SystemToast.SystemToastId generationToastId = new SystemToast.SystemToastId();
   private static int currentWidth = 128;
   private static int currentHeight = 128;
 
@@ -202,6 +204,9 @@ public final class CbbgDither {
 
       if (!areShadersReady(fragmentShader)) {
         return null;
+      }
+      if (!RenderSystem.getDevice().precompilePipeline(pipeline).isValid()) {
+        throw new IllegalStateException("CBBG dither shader could not be compiled");
       }
 
       final int width = input.getWidth(0);
@@ -354,6 +359,7 @@ public final class CbbgDither {
 
     CbbgConfig cfg = CbbgConfig.get();
     if (force) {
+      if (!isGenerating) generatingToastVisible = false;
       // Clear cache for these params implies we want fresh ones
       STBNLoader.clearCacheExceptDefaults();
 
@@ -371,9 +377,10 @@ public final class CbbgDither {
                     .withStyle(ChatFormatting.YELLOW));
       }
       if (cfg.notifyToast()) {
+        generatingToastVisible = true;
         SystemToast.addOrUpdate(
             Minecraft.getInstance().gui.toastManager(),
-            SystemToast.SystemToastId.PERIODIC_NOTIFICATION,
+            generationToastId,
             Component.translatable("cbbg.toast.stbn.title"),
             Component.translatable("cbbg.toast.stbn.generating"));
       }
@@ -413,21 +420,42 @@ public final class CbbgDither {
       processedGeneration = pendingGen;
       try {
         STBNGenerator.STBNFields fields = pendingGen.join(); // Should be immediate
-        onStbnGenerationComplete(fields);
+        onStbnGenerationComplete(fields, cfg);
       } catch (Exception e) {
-        Cbbg.LOGGER.error("Failed to retrieve STBN fields", e);
+        if (!pendingGen.isCompletedExceptionally() && !pendingGen.isCancelled()) {
+          Cbbg.LOGGER.error("Failed to retrieve STBN fields", e);
+        }
+        clearGenerationReminder();
       }
-    } else if (stbnFrames == null && (pendingGen == null || pendingGen.isCancelled())) {
+    } else if (pendingGen != null && pendingGen.isCancelled()) {
+      if (pendingGen != processedGeneration) {
+        processedGeneration = pendingGen;
+        clearGenerationReminder();
+      }
+      if (stbnFrames == null) initAsync();
+    } else if (stbnFrames == null && pendingGen == null) {
       initAsync();
+    }
+  }
+
+  private static void clearGenerationReminder() {
+    if (!isGenerating) return;
+    isGenerating = false;
+    if (generatingToastVisible) {
+      Minecraft client = Minecraft.getInstance();
+      SystemToast.forceHide(client.gui.toastManager(), generationToastId);
+      generationToastId = new SystemToast.SystemToastId();
+      generatingToastVisible = false;
     }
   }
 
   // Array identity prevents closing the frames still owned by the active renderer.
   @SuppressWarnings("ReferenceEquality")
-  private static void onStbnGenerationComplete(STBNGenerator.@Nullable STBNFields fields) {
-    CbbgConfig cfg = CbbgConfig.get();
+  private static void onStbnGenerationComplete(
+      STBNGenerator.@Nullable STBNFields fields, CbbgConfig cfg) {
     NativeImage[] nextFrames =
-        STBNLoader.loadOrGenerate(cfg.stbnSize(), cfg.stbnSize(), cfg.stbnDepth(), fields);
+        STBNLoader.loadOrGenerate(
+            cfg.stbnSize(), cfg.stbnSize(), cfg.stbnDepth(), cfg.stbnSeed(), fields);
     NativeImage[] previousFrames = stbnFrames;
     stbnFrames = nextFrames;
     if (previousFrames != nextFrames) {
@@ -451,10 +479,14 @@ public final class CbbgDither {
       if (cfg.notifyToast()) {
         SystemToast.addOrUpdate(
             Minecraft.getInstance().gui.toastManager(),
-            SystemToast.SystemToastId.PERIODIC_NOTIFICATION,
+            generationToastId,
             Component.translatable("cbbg.toast.stbn.title"),
             Component.translatable("cbbg.toast.stbn.complete"));
+      } else if (generatingToastVisible) {
+        SystemToast.forceHide(Minecraft.getInstance().gui.toastManager(), generationToastId);
+        generationToastId = new SystemToast.SystemToastId();
       }
+      generatingToastVisible = false;
     }
   }
 

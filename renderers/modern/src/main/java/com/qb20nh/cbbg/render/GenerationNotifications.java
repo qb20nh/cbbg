@@ -12,12 +12,19 @@ import org.jspecify.annotations.Nullable;
 @NullMarked
 public final class GenerationNotifications {
   private static @Nullable CompletableFuture<?> pending;
+  private static boolean generatingToastVisible;
 
   private GenerationNotifications() {}
 
   public static void started(CompletableFuture<?> generation) {
+    if (pending == null) {
+      generatingToastVisible = false;
+    }
     pending = generation;
     notify("generating", ChatFormatting.YELLOW);
+    if (CbbgConfig.get().notifyToast()) {
+      generatingToastVisible = true;
+    }
   }
 
   public static void follow(CompletableFuture<?> generation) {
@@ -34,6 +41,12 @@ public final class GenerationNotifications {
     pending = null;
     if (succeeded) {
       notify("complete", ChatFormatting.GREEN);
+      if (generatingToastVisible && !CbbgConfig.get().notifyToast()) {
+        hideGeneratingToast();
+      }
+      generatingToastVisible = false;
+    } else {
+      clearGeneratingToast();
     }
   }
 
@@ -47,6 +60,7 @@ public final class GenerationNotifications {
 
   public static void close() {
     pending = null;
+    clearGeneratingToast();
   }
 
   private static void notify(String state, ChatFormatting color) {
@@ -60,5 +74,16 @@ public final class GenerationNotifications {
           Text.translatable("cbbg.toast.stbn.title"),
           Text.translatable("cbbg.toast.stbn." + state));
     }
+  }
+
+  private static void clearGeneratingToast() {
+    if (generatingToastVisible) {
+      hideGeneratingToast();
+      generatingToastVisible = false;
+    }
+  }
+
+  private static void hideGeneratingToast() {
+    NotificationPlatform.hideToast();
   }
 }

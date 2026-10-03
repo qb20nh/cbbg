@@ -1,5 +1,6 @@
 package com.qb20nh.cbbg.render.stbn;
 
+import com.qb20nh.cbbg.config.CbbgConfig;
 import java.nio.file.Path;
 import java.security.NoSuchAlgorithmException;
 import net.fabricmc.loader.api.FabricLoader;
@@ -18,7 +19,11 @@ public class STBNCache {
   private STBNCache() {}
 
   public static boolean isCacheValid(int w, int h, int d) {
-    return CACHE.isCacheValid(w, h, d);
+    return isCacheValid(w, h, d, CbbgConfig.get().stbnSeed());
+  }
+
+  public static boolean isCacheValid(int w, int h, int d, long seed) {
+    return CACHE.isCacheValid(w, h, d, seed);
   }
 
   public static String calculateSHA256(byte[] data) throws NoSuchAlgorithmException {

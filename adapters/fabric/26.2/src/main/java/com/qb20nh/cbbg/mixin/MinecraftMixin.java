@@ -7,6 +7,7 @@ import com.qb20nh.cbbg.CbbgClient;
 import com.qb20nh.cbbg.config.CbbgConfig;
 import com.qb20nh.cbbg.render.CbbgDither;
 import com.qb20nh.cbbg.render.MainTargetFormatSupport;
+import com.qb20nh.cbbg.render.stbn.STBNGenerator;
 import net.minecraft.client.Minecraft;
 import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
@@ -27,6 +28,7 @@ public abstract class MinecraftMixin {
   @Inject(method = "close", at = @At("HEAD"))
   private void cbbg$close(CallbackInfo ci) {
     CbbgDither.close();
+    STBNGenerator.shutdown();
   }
 
   @ModifyArg(
