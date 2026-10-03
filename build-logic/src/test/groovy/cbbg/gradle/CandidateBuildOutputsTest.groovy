@@ -46,9 +46,18 @@ apply from: file('../candidate-build-outputs.gradle')
 '''.replace('PROCESSED', processed ? '''
 tasks.register('processedDriverJar', Jar) { archiveClassifier = 'processed-driver' }
 tasks.register('processedEarlyStartupDriverJar', Jar) { archiveClassifier = 'processed-early-startup-driver' }
+sourceSets.create('processedGametest')
+apply from: file('../fabric-startup-tests.gradle')
 ''' : '')
+        if (processed) {
+            File resources = new File(profile, 'src/processedGametest/resources')
+            resources.mkdirs()
+            new File(resources, 'fabric.mod.json').text = '{"entrypoints":{},"mixins":[]}'
+        }
         new File(directory, 'build-config/candidate-build-outputs.gradle').text =
                 new File(System.getProperty('cbbg.repository'), 'build-config/candidate-build-outputs.gradle').text
+        new File(directory, 'build-config/fabric-startup-tests.gradle').text =
+                new File(System.getProperty('cbbg.repository'), 'build-config/fabric-startup-tests.gradle').text
         new File(directory, '.gitignore').text = '**/build/\n**/.gradle/\n'
         git('init')
         git('add', '.')
@@ -64,7 +73,14 @@ tasks.register('processedEarlyStartupDriverJar', Jar) { archiveClassifier = 'pro
         assertEquals('1.4.1+mc26.2', output.version)
         assertEquals(git('rev-parse', 'HEAD'), output.source_commit)
         assertFalse(output.source_dirty)
-        assertEquals(['ordinary', 'early-startup'].toSet(), output.drivers.keySet())
+        Set expected = ['ordinary', 'early-startup'] as Set
+        if (processed) {
+            expected.addAll(['startup-cold', 'startup-warm', 'startup-damaged', 'startup-seed-mismatch',
+                             'generation', 'maximum-noise-cache', 'shutdown', 'generating-shutdown',
+                             'iris-restart', 'allocation', 'world-pixels', 'shader-failure',
+                             'debug-overlay', 'notifications'])
+        }
+        assertEquals(expected, output.drivers.keySet())
         output.drivers.values().each { driver ->
             assertEquals(processed, driver.filename.contains('processed'))
         }

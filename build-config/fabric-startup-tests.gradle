@@ -1,6 +1,6 @@
-// Separate launches retain the initial cold, warm or damaged cache state.
-['Cold', 'Warm', 'Damaged'].each { mode ->
-    String classifier = 'startup-' + mode.toLowerCase(Locale.ROOT)
+// Separate launches retain each initial cache state.
+['Cold', 'Warm', 'Damaged', 'SeedMismatch'].each { mode ->
+    String classifier = 'startup-' + mode.replaceAll(/([a-z])([A-Z])/, '$1-$2').toLowerCase(Locale.ROOT)
     def metadata = tasks.register("processedEarlyStartup${mode}Metadata") {
         dependsOn tasks.named('processProcessedGametestResources')
         def source = layout.buildDirectory.file('resources/processedGametest/fabric.mod.json')

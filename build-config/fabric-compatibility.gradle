@@ -69,13 +69,12 @@ def completedFamilySearches = { boolean requireHistoricalDriver ->
     }
     Map first = reports.first()
     if (reports.any { it.inputs.candidate != first.inputs.candidate ||
-            it.inputs.files != first.inputs.files || it.latestLoader != first.latestLoader ||
-            it.latestFabricApi != first.latestFabricApi }) {
+            it.inputs.files != first.inputs.files || it.latestLoader != first.latestLoader }) {
         throw new GradleException('Fabric runtime searches used different candidate bytes or discovery inputs')
     }
     [reports: reports, bounds: FabricCompatibilitySearch.intersect(reports),
      candidate: first.inputs.candidate, latestLoader: first.latestLoader,
-     latestFabricApi: first.latestFabricApi]
+     latestFabricApi: reports.find { it.target == compatibilityTarget.id }.latestFabricApi]
 }
 
 tasks.register('verifyFabricCompatibility') {
@@ -199,10 +198,8 @@ tasks.register('verifyFabricCompatibility') {
                 readUrl('https://meta.fabricmc.net/v2/versions/loader')).collect { it.version }
                 .findAll { it ==~ /\d+\.\d+\.\d+/ }
         String apiMetadata = readUrl('https://maven.fabricmc.net/net/fabricmc/fabric-api/fabric-api/maven-metadata.xml')
-        List<String> apiMinecraft = sharedArtifactFamily ?
-                [compatibilityOwner.minecraft] + compatibilityOwner.compatibleMinecraft : [minecraft]
         List<String> apis = (apiMetadata =~ /<version>([^<]+)<\/version>/).collect { it[1] }
-                .findAll { version -> apiMinecraft.any { version.endsWith('+' + it) } &&
+                .findAll { version -> version.endsWith('+' + minecraft) &&
                         version.split('\\+', 2)[0] ==~ /\d+\.\d+\.\d+/ }
         File candidate = releaseOptimization.outputJar.get().asFile
         if (project.version.toString() != CandidateManifest.packageVersion(
@@ -470,6 +467,14 @@ tasks.register('verifyFabricCompatibility') {
                 return
             }
             if (strict) {
+                if (sharedArtifactFamily) {
+                    List<String> validApis = FabricCompatibilitySearch.within(apis, api,
+                            declared.fabricApiUpperExclusive)
+                    if (!validApis) {
+                        throw new GradleException('No released Fabric API for this runtime inside shared owner bounds')
+                    }
+                    api = validApis.first()
+                }
                 if (!pairPasses(loader, api)) throw new GradleException('Declared minimum dependency pair failed')
                 report.declaredMinimumsVerified = true
             } else {

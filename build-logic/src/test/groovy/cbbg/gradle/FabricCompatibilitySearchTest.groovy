@@ -351,6 +351,96 @@ class FabricCompatibilitySearchTest {
         }
     }
 
+    @Test void discoversApiVersionsForTheSelectedMinecraftOnly() {
+        File repository = new File(System.getProperty('cbbg.repository'))
+        String script = new File(repository, 'build-config/fabric-compatibility.gradle').text
+        int start = script.indexOf('String apiMetadata =')
+        String discovery = script.substring(start, script.indexOf('File candidate =', start))
+        List<String> versions = ['0.145.1+26.1', '0.145.4+26.1.1', '0.155.3+26.1.2',
+                                 '0.143.12+26.1', '0.146.0-beta.1+26.1']
+        String metadata = versions.collect { '<version>' + it + '</version>' }.join('\n')
+        for (String minecraft : ['26.1', '26.1.1', '26.1.2']) {
+            Binding binding = new Binding([
+                    readUrl: { String url -> metadata }, minecraft: minecraft,
+                    sharedArtifactFamily: true,
+                    compatibilityOwner: [minecraft: '26.1', compatibleMinecraft: ['26.1.1', '26.1.2']]])
+            List found = (List) new GroovyShell(binding).evaluate(discovery + '\nreturn apis')
+            assertEquals(versions.findAll {
+                it.endsWith('+' + minecraft) && !it.contains('-beta')
+            }, found)
+        }
+    }
+
+    @Test void combinesRuntimeSearchesWithDifferentLatestApiVersions() {
+        File repository = new File(System.getProperty('cbbg.repository'))
+        String script = new File(repository, 'build-config/fabric-compatibility.gradle').text
+        int start = script.indexOf('def completedFamilySearches =')
+        String validation = script.substring(start, script.indexOf("tasks.register('verifyFabricCompatibility')", start))
+        File source = new File(directory, 'source.java')
+        source.text = 'source'
+        List<Map> targets = ['26.1', '26.1.1', '26.1.2'].collect { minecraft ->
+            [id: minecraft + '-fabric', minecraft: minecraft,
+             dependencies: [fabricApi: '0.145.1+' + minecraft]]
+        }
+        Map<String, File> gametests = [:]
+        targets.eachWithIndex { target, index ->
+            File outputs = new File(directory, 'build/targets/' + target.id)
+            File driver = new File(outputs, 'libs/cbbg-test-processed-driver.jar')
+            File config = new File(outputs, 'fabric-compatibility/initial-cbbg.json')
+            File gametest = new File(outputs, 'gametest.jar')
+            [driver, config, gametest].each { file ->
+                file.parentFile.mkdirs()
+                file.text = file.name
+            }
+            gametests[target.id] = gametest
+            Map report = [complete: true, target: target.id, artifactOwner: targets.first().id,
+                          profile: 'none', results: [], latestLoader: '0.19.5',
+                          latestFabricApi: "0.15${index}.0+${target.minecraft}".toString(),
+                          minimumLoader: '0.18.4', maximumLoader: '0.19.5',
+                          minimumFabricApi: '0.145.1+' + target.minecraft,
+                          maximumFabricApi: "0.15${index}.0+${target.minecraft}".toString(),
+                          loaderUpperExclusive: '1.0.0', fabricApiUpperExclusive: '1.0.0',
+                          inputs: [minimumOverrides: true, candidate: 'candidate-hash',
+                                   files: [(source.canonicalPath): CandidateFiles.sha256(source)],
+                                   driver: CandidateFiles.sha256(driver),
+                                   initialConfig: CandidateFiles.sha256(config),
+                                   gametestApiPin: target.dependencies.fabricApi,
+                                   gametestApiSha256: CandidateFiles.sha256(gametest)]]
+            new File(outputs, 'fabric-compatibility/last-successful.json').text = JsonOutput.toJson(report)
+        }
+        Binding binding = new Binding([
+                compatibilityRoot: directory,
+                compatibilityOwner: targets.first() + [compatibleMinecraft: ['26.1.1', '26.1.2']],
+                compatibilityTarget: targets[1], familyTargets: targets,
+                project: [base: [archivesName: new Expando(get: { -> 'cbbg' })], version: 'test'],
+                resolvePinnedGametest: { Map target -> gametests[target.id] }])
+        Map result = (Map) new GroovyShell(binding).evaluate(
+                'import cbbg.gradle.CandidateFiles\nimport cbbg.gradle.FabricCompatibilitySearch\n' +
+                'import org.gradle.api.GradleException\n' + validation + '\ncompletedFamilySearches(true)')
+        assertEquals('0.151.0+26.1.1', result.latestFabricApi)
+        assertEquals(3, result.reports.size())
+        assertEquals('candidate-hash', result.candidate)
+    }
+
+    @Test void strictFamilyMinimumUsesTheSelectedRuntimeApiInsideOwnerBounds() {
+        File repository = new File(System.getProperty('cbbg.repository'))
+        String script = new File(repository, 'build-config/fabric-compatibility.gradle').text
+        int start = script.indexOf('if (sharedArtifactFamily) {', script.indexOf('if (strict) {',
+                script.indexOf('if (buildOnly) {')))
+        String selection = script.substring(start, script.indexOf('if (!pairPasses(loader, api))', start))
+        Binding binding = new Binding([
+                sharedArtifactFamily: true, api: '0.145.4+26.1.1',
+                declared: [fabricApiUpperExclusive: '1.0.0'],
+                apis: ['0.143.12+26.1', '0.145.1+26.1', '0.146.0+26.1']])
+        GroovyShell shell = new GroovyShell(binding)
+        String code = 'import cbbg.gradle.FabricCompatibilitySearch\n' +
+                'import org.gradle.api.GradleException\n' + selection
+        shell.evaluate(code)
+        assertEquals('0.146.0+26.1', binding.getVariable('api'))
+        binding.setVariable('apis', ['0.143.12+26.1'])
+        assertThrows(GradleException) { shell.evaluate(code) }
+    }
+
     @Test void acceptsOnlyDependencyBoundsInTheRebuiltFabricArtifact() {
         File searched = new File(directory, 'searched.jar')
         File rebuilt = new File(directory, 'rebuilt.jar')
