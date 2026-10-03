@@ -15,8 +15,11 @@ import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.loader.api.FabricLoader;
 import org.jspecify.annotations.NullMarked;
+import org.lwjgl.opengl.GL;
 import org.lwjgl.opengl.GL11;
+import org.lwjgl.opengl.GL20;
 import org.lwjgl.opengl.GL30;
+import org.lwjgl.opengl.GL32;
 import org.slf4j.LoggerFactory;
 
 @NullMarked
@@ -40,6 +43,28 @@ public final class ReleaseLifecycleGameTest implements FabricClientGameTest {
           record.addProperty("backend", expected);
           record.addProperty("device", info.name());
           record.addProperty("driver", info.driverInfo());
+          if (expected.equals("opengl")) {
+            var capabilities = GL.getCapabilities();
+            int major = GL11.glGetInteger(GL30.GL_MAJOR_VERSION);
+            int minor = GL11.glGetInteger(GL30.GL_MINOR_VERSION);
+            record.addProperty("version", GL11.glGetString(GL11.GL_VERSION));
+            record.addProperty("major", major);
+            record.addProperty("minor", minor);
+            record.addProperty("flags", GL11.glGetInteger(GL30.GL_CONTEXT_FLAGS));
+            int profile =
+                capabilities.OpenGL32 ? GL11.glGetInteger(GL32.GL_CONTEXT_PROFILE_MASK) : 0;
+            record.addProperty("profileMask", profile);
+            record.addProperty(
+                "profile",
+                (profile & GL32.GL_CONTEXT_CORE_PROFILE_BIT) != 0 ? "core" : "compatibility");
+            record.addProperty("glslVersion", GL11.glGetString(GL20.GL_SHADING_LANGUAGE_VERSION));
+            record.addProperty("directStateAccess", capabilities.GL_ARB_direct_state_access);
+            record.addProperty("bufferStorage", capabilities.GL_ARB_buffer_storage);
+            if ("forcegl3".equals(System.getProperty("cbbg.test.compat", "none"))
+                && (major != 3 || minor != 0)) {
+              throw new AssertionError("ForceGL3 did not provide an OpenGL 3.0 context");
+            }
+          }
           Path directory =
               Path.of(Objects.requireNonNull(System.getProperty("cbbg.test.evidence")));
           try {

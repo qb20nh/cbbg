@@ -78,7 +78,7 @@ class TargetsPlugin implements Plugin<Project> {
         Map owner = owners.size() == 1 ? owners.first() : null
         List<Map> family = []
         if (selected.size() == 1 && selected.first().loader == 'fabric' && owner != null) {
-            if (owner.renderer == 'renderpearl') {
+            if (owner.renderer in ['renderpearl', 'blaze-gpu-format']) {
                 family = [selected.first()]
             } else if (owner.renderer == 'blaze-texture-format' && owner.compatibleMinecraft) {
                 String ids = ([owner.minecraft] + owner.compatibleMinecraft).collect { it + '-fabric' }.join(',')

@@ -91,7 +91,7 @@ def _verify_run(receipt_path, target, *, source_commit, candidate_sha256,
     results = validate_scenarios(expected, paths[trace_name].read_text(),
                                  log, report['exitCode'], backend)
     validate_shutdown(expected, game / directory / 'shutdown.json')
-    validate_startup(expected, report.get('startupMode'), game / directory, game / '.cbbg', log, backend)
+    validate_startup(expected, report.get('startupMode'), game / directory, game / '.cbbg', log, backend, target['id'])
     if report.get('scenarios') != results:
         raise EvidenceError('Scenario summary differs from trace')
     graphics = graphics_identity(log, backend)
@@ -111,16 +111,21 @@ def verify_run(receipt_path, target, **inputs):
     return _verify_run(receipt_path, target, **inputs)
 
 
-def verify_restart(receipt_path, target, **inputs):
+def verify_restart(receipt_path, target, *, control_receipt_path, **inputs):
     receipt_path = Path(receipt_path)
     if receipt_path.name != 'verify-probe.json':
         raise EvidenceError('Restart validation requires the verify receipt')
+    control_receipt_path = Path(control_receipt_path)
+    if control_receipt_path.name != 'control-probe.json':
+        raise EvidenceError('Restart validation requires the control receipt')
     game = receipt_path.parent.resolve()
     prepare_path = game / 'prepare-probe.json'
     prepare = read_json(prepare_path)
     verified = read_json(receipt_path)
+    control = read_json(control_receipt_path)
     first = _verify_run(prepare_path, target, restart_phase='prepare', **inputs)
     second = _verify_run(receipt_path, target, restart_phase='verify', **inputs)
+    control_result = _verify_run(control_receipt_path, target, restart_phase='control', **inputs)
     scenarios = second['scenarios']
     shader = RESTART_DRIVERS.get((second['backend'], scenarios[0])) if len(scenarios) == 1 else None
     if shader is None:
@@ -134,6 +139,8 @@ def verify_restart(receipt_path, target, **inputs):
                 'sourceHead', 'sourceDirty', 'artifacts', 'scenarioSha256'):
         if key not in prepare or prepare[key] != verified.get(key):
             raise EvidenceError('Restart identity differs: ' + key)
+        if prepare[key] != control.get(key):
+            raise EvidenceError('Restart control identity differs: ' + key)
     before = prepare.get('persistedState')
     after = verified.get('persistedState')
     if (not isinstance(before, dict) or not before or not isinstance(after, dict)
@@ -145,8 +152,10 @@ def verify_restart(receipt_path, target, **inputs):
         checked_file(game, {'path': name, 'sha256': checksum})
     if restart_state(game) != after:
         raise EvidenceError('Restart saved state inventory differs')
-    second.update(prepare_receipt_sha256=first['receipt_sha256'], restart=True,
-                  evidence_files=first['evidence_files'] + second['evidence_files'])
+    second.update(prepare_receipt_sha256=first['receipt_sha256'],
+                  control_receipt_sha256=control_result['receipt_sha256'], restart=True,
+                  evidence_files=(first['evidence_files'] + second['evidence_files']
+                                  + control_result['evidence_files']))
     return second
 
 
@@ -154,6 +163,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--receipt', type=Path, required=True)
     parser.add_argument('--restart', action='store_true', help='Validate a prepare/verify pair')
+    parser.add_argument('--control-receipt', type=Path,
+                        help='Explicit control-phase receipt required with --restart')
     parser.add_argument('--target', required=True)
     parser.add_argument('--source-commit', required=True)
     parser.add_argument('--candidate-sha256', required=True)
@@ -163,12 +174,17 @@ def main():
     args = parser.parse_args()
     try:
         target = select_targets(load_catalog(args.catalog), args.target)[0]
+        if args.restart and args.control_receipt is None:
+            parser.error('--restart requires --control-receipt')
+        if not args.restart and args.control_receipt is not None:
+            parser.error('--control-receipt requires --restart')
         verifier = verify_restart if args.restart else verify_run
+        extra = {'control_receipt_path': args.control_receipt} if args.restart else {}
         result = verifier(args.receipt, target, source_commit=args.source_commit,
                             candidate_sha256=args.candidate_sha256,
                             driver_sha256=args.driver_sha256, catalog_path=args.catalog,
                             runtime_lock_path=args.runtime_lock,
-                            dependency_lock_path=args.dependency_lock)
+                            dependency_lock_path=args.dependency_lock, **extra)
     except (ValueError, KeyError, TypeError, OSError, zipfile.BadZipFile) as error:
         parser.error(str(error))
     print(json.dumps(result, indent=2))

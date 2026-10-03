@@ -191,6 +191,7 @@ if (usesTextureFormat) {
     }.files
     sourceSets.create('processedGametest') {
         java.setSrcDirs([new File(repositoryRoot, "renderers/${target.renderer}/src/processedGametest/java")])
+        java.srcDir(new File(repositoryRoot, "adapters/fabric/${artifactOwner.minecraft}/src/processedGametest/java"))
         java.srcDir(new File(repositoryRoot, 'adapters/fabric/shared/src/processedGametest/java'))
         def progress = objects.sourceDirectorySet('processedProgress', 'Packaged scenario completion')
         progress.srcDir(new File(repositoryRoot, 'renderers/renderpearl/src/gametest/java'))
@@ -211,6 +212,9 @@ if (usesTextureFormat) {
         dependsOn tasks.named('optimizeReleaseJar')
     }
     tasks.named('processProcessedGametestResources') {
+        dependsOn tasks.named('optimizeReleaseJar')
+        from(releaseOptimization.mappingFile) { rename { 'cbbg-test.map' } }
+        from(new File(repositoryRoot, 'adapters/fabric/shared/src/processedGametest/resources'))
         def loaderMinimum = artifactOwner.dependencies.minimumLoader ?: artifactOwner.dependencies.loader
         inputs.property('loaderMinimum', loaderMinimum)
         filesMatching('fabric.mod.json') { expand(loader_minimum: loaderMinimum) }
@@ -226,6 +230,7 @@ if (usesTextureFormat) {
         dependsOn tasks.named('optimizeReleaseJar'), tasks.named('processedDriverJar'),
                 tasks.named('checkPackages')
     }
+    apply from: new File(repositoryRoot, 'build-config/fabric-startup-tests.gradle')
 }
 
 if (targetId == '26.3-fabric') {

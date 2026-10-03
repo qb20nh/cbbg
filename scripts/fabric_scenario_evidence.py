@@ -8,13 +8,13 @@ STARTUP_DRIVER = 'com.qb20nh.cbbg.gametest.ReleaseEarlyStartupGameTest'
 STARTUP_CACHE_FILES = ['stbn_16x16x8.sha256'] + [f'stbn_16x16x8_{z}.png' for z in range(8)]
 
 
-def validate_startup(expected, mode, evidence, cache, log, backend):
+def validate_startup(expected, mode, evidence, cache, log, backend, target='26.3-fabric'):
     """Check initial cache use and work observed before Minecraft startup."""
     if STARTUP_DRIVER not in expected:
         if mode is not None:
             raise ValueError('Startup mode requires its dedicated driver')
         return
-    if expected != [STARTUP_DRIVER] or mode not in ('cold', 'warm', 'damaged'):
+    if expected != [STARTUP_DRIVER] or mode not in ('cold', 'warm', 'damaged', 'seed-mismatch'):
         raise ValueError('Startup requires a dedicated driver and cache mode')
     inputs = json.loads((evidence / 'startup-input.json').read_text())
     result = json.loads((evidence / 'startup.json').read_text())
@@ -32,15 +32,21 @@ def validate_startup(expected, mode, evidence, cache, log, backend):
     if (any(type(value) is not int or value <= 0 for value in times)
             or times[0] > times[1] or times[0] > times[2] or times[2] > times[3]):
         raise ValueError('Missing or inconsistent startup timing')
-    starts = log.count('Starting Async STBN Math Generation (16x16x8)')
-    finishes = log.count('STBN Math Complete in ')
-    if starts != (0 if mode == 'warm' else 1) or finishes != starts:
-        raise ValueError('Unexpected startup generation count')
+    if target == '26.2-fabric':
+        prepared = re.findall(r'STBN preparation complete in \d+ ms \((cache|generated)\)', log)
+        if (log.count('Checking STBN cache (16x16x8)') != 1
+                or prepared != ['cache' if mode == 'warm' else 'generated']):
+            raise ValueError('Unexpected startup generation count')
+    else:
+        starts = log.count('Starting Async STBN Math Generation (16x16x8)')
+        finishes = log.count('STBN Math Complete in ')
+        if starts != (0 if mode == 'warm' else 1) or finishes != starts:
+            raise ValueError('Unexpected startup generation count')
     files = inputs.get('files')
     if not isinstance(files, dict) or set(files) != (set() if mode == 'cold' else set(STARTUP_CACHE_FILES)):
         raise ValueError('Startup cache input inventory differs')
     if mode == 'warm':
-        if 'Valid STBN cache found for 16x16x8' not in log:
+        if target != '26.2-fabric' and 'Valid STBN cache found for 16x16x8' not in log:
             raise ValueError('Missing startup cache reuse')
         for name, previous in files.items():
             path = cache / name
@@ -53,6 +59,12 @@ def validate_startup(expected, mode, evidence, cache, log, backend):
             raise ValueError('Startup cache was not damaged before launch')
         if hashlib.sha256((cache / 'stbn_16x16x8_7.png').read_bytes()).hexdigest() == damaged:
             raise ValueError('Damaged startup cache was not repaired')
+    if mode == 'seed-mismatch':
+        if inputs.get('cachedSeed') != 0:
+            raise ValueError('Startup cache seed did not differ from the requested seed')
+        manifest = cache / 'stbn_16x16x8.sha256'
+        if not manifest.read_text().startswith('# seed 74123\n'):
+            raise ValueError('Startup cache seed was not updated')
 
 
 def validate_shutdown(expected, path):

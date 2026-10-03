@@ -1,0 +1,64 @@
+{
+  "schemaVersion": 1,
+  "target": "26.1-fabric",
+  "gametestApi": {
+    "fabricApiPin": "0.145.1+26.1",
+    "coordinate": "net.fabricmc.fabric-api:fabric-client-gametest-api-v1:5.0.13+ff4eae5a47",
+    "sha256": "99952fc7752a3213cf3fe2aee68ea47ff10ba9a88d07ca1859691fd6b87f0d9b",
+    "verification": "Resolved Fabric API module used by the packaged test driver; checksum captured from the actual jar used in the integrated matrix."
+  },
+  "verifiedDate": "2026-10-03",
+  "verification": "Local bytes matched the primary file SHA-512 in each referenced Modrinth version; SHA-256 recorded below.",
+  "dependencies": {
+    "fabricApi": {
+      "pin": "0.145.1+26.1",
+      "sha256": "f80ee0909d820649d5b1b31c74f2ebd503530a0ed163447a4a5779b9fbe8716e",
+      "source": "https://api.modrinth.com/v2/version/ddqzOW93"
+    },
+    "modMenu": {
+      "pin": "18.0.2",
+      "sha256": "87ab58f8907dad8346ecc4500a522d66dd4c907462df5bff23c60b07caca8c96",
+      "source": "https://api.modrinth.com/v2/version/ZJ6YTrMY"
+    },
+    "iris": {
+      "pin": "MwcLS51S",
+      "sha256": "aea0eefb174d19ad97a812b6de2e304f0d3abc50357b316908cf1035f1514b07",
+      "source": "https://api.modrinth.com/v2/version/MwcLS51S"
+    },
+    "sodium": {
+      "pin": "uGvVQBnw",
+      "sha256": "25ad95ba787bd7ff2a0deaf20a8f4642b91e23489d0e10933693d9963a6022f2",
+      "source": "https://api.modrinth.com/v2/version/uGvVQBnw"
+    },
+    "renderScale": {
+      "pin": "VOWPqRuK",
+      "sha256": "450c9b4a6aa4fa60c0e2608a8fd7692fab48e18bc8c70561a552a2220dadebd3",
+      "source": "https://api.modrinth.com/v2/version/VOWPqRuK"
+    },
+    "clothConfig": {
+      "pin": "GFM8zh9J",
+      "sha256": "fb7a5d869ce10eaac2c2fe9ab84b4fc011a1fbfa575a93be9845a386a7f0c7d3",
+      "source": "https://api.modrinth.com/v2/version/GFM8zh9J"
+    },
+    "chatPatches": {
+      "pin": "RaYtagQ5",
+      "sha256": "1909df5fe87fec9728bf887d2db1bd8b05c3761a44707d0a59c244ed0535c519",
+      "source": "https://api.modrinth.com/v2/version/RaYtagQ5"
+    },
+    "yacl": {
+      "pin": "IODousKT",
+      "sha256": "24da7d40ba70ad74440d1854ec90b3870e25b7e50eabe36770cc28793b8afca9",
+      "source": "https://api.modrinth.com/v2/version/IODousKT"
+    },
+    "immediatelyFast": {
+      "pin": "xOA9hbpf",
+      "sha256": "5329c19ea79fbeacce6c355eeb884dcdb1c5baed632c2f8e9e92d6a4ae233cba",
+      "source": "https://api.modrinth.com/v2/version/xOA9hbpf"
+    },
+    "threatenGl": {
+      "pin": "6MnRnn9M",
+      "sha256": "9ebfb8d2ab7be806f0b0ab8049be3a524f19b4723a70ca38428287bfb756f9d9",
+      "source": "https://api.modrinth.com/v2/version/6MnRnn9M"
+    }
+  }
+}

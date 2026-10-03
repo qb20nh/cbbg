@@ -2,6 +2,7 @@ import hashlib
 import copy
 import json
 from pathlib import Path
+import shutil
 import sys
 import tempfile
 import unittest
@@ -67,11 +68,12 @@ class FabricRunEvidenceTest(unittest.TestCase):
 
     def verify(self):
         verifier = verify_restart if self.restart else verify_run
+        extra = {'control_receipt_path': self.control_receipt} if self.restart else {}
         return verifier(self.receipt, self.target, source_commit='a' * 40,
                           candidate_sha256=self.report['artifacts']['candidate.jar'],
                           driver_sha256=self.report['artifacts']['driver.jar'],
                           catalog_path=self.catalog, runtime_lock_path=self.runtime,
-                          dependency_lock_path=self.lock)
+                          dependency_lock_path=self.lock, **extra)
 
     def test_complete_run(self):
         result = self.verify()
@@ -221,13 +223,69 @@ class FabricRunEvidenceTest(unittest.TestCase):
             path.write_text(json.dumps(report))
         self.receipt = path
         self.report = report
+        control_game = self.root / 'control-game'
+        control_game.mkdir()
+        shutil.copytree(self.game / 'mods', control_game / 'mods')
+        control = copy.deepcopy(json.loads((self.game / 'prepare-probe.json').read_text()))
+        control['restartPhase'] = 'control'
+        control['evidence'] = {}
+        control_log = control_game / 'control-launch.log'
+        control_log.write_text(self.log)
+        control_evidence = control_game / 'evidence-control'
+        control_evidence.mkdir()
+        (control_evidence / 'scenarios.tsv').write_text(trace)
+        (control_evidence / 'graphics-context.json').write_text(json.dumps(control['graphics']['context']))
+        control['evidence'] = {path.relative_to(control_game).as_posix(): digest(path)
+                               for path in [control_log, *control_evidence.iterdir()]}
+        self.control_receipt = control_game / 'control-probe.json'
+        self.control_receipt.write_text(json.dumps(control))
 
     def test_restart_pair_checks_both_runs(self):
         self.prepare_restart_pair()
         result = self.verify()
         self.assertTrue(result['restart'])
-        self.assertEqual(result['evidence_files'], 6)
+        self.assertEqual(result['evidence_files'], 9)
+        self.assertEqual(result['control_receipt_sha256'], digest(self.control_receipt))
         self.assertFalse(result['releaseAcceptance'])
+
+    def test_restart_requires_control_receipt(self):
+        self.prepare_restart_pair()
+        with self.assertRaises(TypeError):
+            verify_restart(self.receipt, self.target, source_commit='a' * 40,
+                           candidate_sha256=self.report['artifacts']['candidate.jar'],
+                           driver_sha256=self.report['artifacts']['driver.jar'],
+                           catalog_path=self.catalog, runtime_lock_path=self.runtime,
+                           dependency_lock_path=self.lock)
+
+    def test_restart_rejects_missing_control_receipt(self):
+        self.prepare_restart_pair()
+        self.control_receipt.unlink()
+        with self.assertRaises(FileNotFoundError):
+            self.verify()
+
+    def test_restart_rejects_tampered_control_receipt(self):
+        self.prepare_restart_pair()
+        control = json.loads(self.control_receipt.read_text())
+        control['exitCode'] = 2
+        self.control_receipt.write_text(json.dumps(control))
+        with self.assertRaisesRegex(ValueError, 'Client run failed'):
+            self.verify()
+
+    def test_restart_rejects_wrong_control_profile(self):
+        self.prepare_restart_pair()
+        control = json.loads(self.control_receipt.read_text())
+        control['profile'] = 'none'
+        self.control_receipt.write_text(json.dumps(control))
+        with self.assertRaisesRegex(ValueError, 'profile or backend'):
+            self.verify()
+
+    def test_restart_rejects_wrong_control_candidate(self):
+        self.prepare_restart_pair()
+        control = json.loads(self.control_receipt.read_text())
+        control['artifacts']['candidate.jar'] = '0' * 64
+        self.control_receipt.write_text(json.dumps(control))
+        with self.assertRaisesRegex(ValueError, 'Candidate or test driver differs'):
+            self.verify()
 
     def test_restart_rejects_changed_prepare_receipt(self):
         self.prepare_restart_pair()

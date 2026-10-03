@@ -8,6 +8,7 @@ plugins {
 }
 
 import java.util.Date
+import groovy.json.JsonSlurper
 
 def repositoryRoot = file('../..')
 layout.buildDirectory = new File(repositoryRoot, 'build')
@@ -101,6 +102,10 @@ sourceSets.create('processedGametest') {
 			'com/qb20nh/cbbg/gametest/IrisFixture.java',
 			'com/qb20nh/cbbg/gametest/RenderScaleTestAccess.java'
 	java.source(sharedTests)
+	def pixelReference = objects.sourceDirectorySet('processedPixelReference', 'Shared CPU pixel reference')
+	pixelReference.srcDir(new File(repositoryRoot, 'core/src/testSupport/java'))
+	pixelReference.include 'com/qb20nh/cbbg/reference/DitherReference.java'
+	java.source(pixelReference)
 	java.srcDir(new File(repositoryRoot, 'adapters/fabric/shared/src/processedGametest/java'))
 	resources.setSrcDirs([new File(repositoryRoot, 'adapters/fabric/26.2/src/processedGametest/resources')])
 	compileClasspath = files(releaseOptimization.outputJar, externalCompileClasspath)
@@ -108,6 +113,9 @@ sourceSets.create('processedGametest') {
 }
 tasks.named('compileProcessedGametestJava') { dependsOn tasks.named('optimizeReleaseJar') }
 tasks.named('processProcessedGametestResources') {
+	dependsOn tasks.named('optimizeReleaseJar')
+	from(releaseOptimization.mappingFile) { rename { 'cbbg-test.map' } }
+	from(new File(repositoryRoot, 'adapters/fabric/shared/src/processedGametest/resources'))
 	from(new File(repositoryRoot, 'renderers/modern/src/gametest/resources')) {
 		include 'cbbg-iris-fixture/**'
 	}
@@ -119,9 +127,11 @@ tasks.register('processedDriverJar', Jar) {
 tasks.register('prepareProcessedRuntime') {
 	dependsOn tasks.named('optimizeReleaseJar'), tasks.named('processedDriverJar'), tasks.named('checkPackages')
 }
+apply from: new File(repositoryRoot, 'build-config/fabric-startup-tests.gradle')
 apply from: new File(repositoryRoot, 'build-config/source-inventory.gradle')
 ext.candidateTargetId = '26.2-fabric'
 apply from: new File(repositoryRoot, 'build-config/candidate-build-outputs.gradle')
+apply from: new File(repositoryRoot, 'build-config/fabric-compatibility.gradle')
 
 // Opt-in integration dependencies, excluded from the published mod.
 if (providers.gradleProperty("testRenderScale").isPresent()) {
@@ -135,11 +145,21 @@ processResources {
 	exclude 'licenses/LICENSE_AsmFabricLoader.txt'
 	inputs.property "version", project.version
 	inputs.property "minecraft_version", project.minecraft_version
+	def bounds = new JsonSlurper().parse(new File(repositoryRoot, 'targets.json')).targets
+			.find { it.id == '26.2-fabric' }.dependencies
+	def loaderRange = '>=' + (bounds.minimumLoader ?: '0.19.3') +
+			(bounds.loaderUpperExclusive ? ' <' + bounds.loaderUpperExclusive : '')
+	def apiRange = bounds.minimumFabricApi ? '>=' + bounds.minimumFabricApi +
+			(bounds.fabricApiUpperExclusive ? ' <' + bounds.fabricApiUpperExclusive : '') : '*'
+	inputs.property 'loaderRange', loaderRange
+	inputs.property 'apiRange', apiRange
 
 	filesMatching("fabric.mod.json") {
 		expand(
 			"version": inputs.properties.version,
-			"minecraft_version": inputs.properties.minecraft_version
+			"minecraft_version": inputs.properties.minecraft_version,
+			"loader_range": inputs.properties.loaderRange,
+			"fabric_api_range": inputs.properties.apiRange
 		)
 	}
 }

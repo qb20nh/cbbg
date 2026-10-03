@@ -34,6 +34,8 @@ def prepare_startup_cache(game, evidence, mode, source):
     cache = game / '.cbbg'
     cache.mkdir()
     if source is not None:
+        if mode == 'seed-mismatch' and not (source / 'stbn_16x16x8.sha256').read_text().startswith('# seed 0\n'):
+            raise ValueError('Seed mismatch requires a seed-zero cache')
         for name in STARTUP_CACHE_FILES:
             shutil.copyfile(source / name, cache / name)
         if mode == 'damaged':
@@ -43,6 +45,8 @@ def prepare_startup_cache(game, evidence, mode, source):
     evidence.mkdir(parents=True, exist_ok=True)
     record = {'mode': mode, 'files': {path.name: {'sha256': digest(path),
               'mtimeNs': path.stat().st_mtime_ns} for path in sorted(cache.iterdir())}}
+    if mode == 'seed-mismatch':
+        record['cachedSeed'] = 0
     (evidence / 'startup-input.json').write_text(json.dumps(record, indent=2) + '\n')
 
 
@@ -94,7 +98,7 @@ def main():
     parser.add_argument('--restart-phase', choices=['prepare', 'verify', 'control'])
     parser.add_argument('--cbbg-config', type=Path,
                         help='Initial CBBG settings for a fresh, non-restart run')
-    parser.add_argument('--startup-mode', choices=['cold', 'warm', 'damaged'])
+    parser.add_argument('--startup-mode', choices=['cold', 'warm', 'damaged', 'seed-mismatch'])
     parser.add_argument('--startup-cache', type=Path,
                         help='Cache directory copied into a fresh warm/damaged startup test')
     display = parser.add_mutually_exclusive_group(required=True)
@@ -170,7 +174,7 @@ def main():
     command = get_minecraft_command(identity, str(runtime), {
         'username': 'CbbgParity', 'uuid': '00000000000000000000000000000001', 'token': '0',
         'executablePath': str(args.java.resolve()), 'gameDirectory': str(game),
-        'jvmArguments': ['-Xmx2G', *display_jvm_arguments, '-Dfabric.client.gametest',
+        'jvmArguments': ['-Xmx2G', '-XX:-CreateCoredumpOnCrash', *display_jvm_arguments, '-Dfabric.client.gametest',
                         '-Dcbbg.test.dsa=' + (args.dsa_mode or 'auto'),
                         '-Dcbbg.test.restart=' + (args.restart_phase or ''),
                         '-Dfabric.client.gametest.modid=cbbg-renderer-test',
@@ -291,7 +295,7 @@ def main():
             (evidence / 'scenarios.tsv').read_text(), log_text,
             result.returncode, args.backend)
         validate_shutdown(expected, evidence / 'shutdown.json')
-        validate_startup(expected, args.startup_mode, evidence, game / '.cbbg', log_text, args.backend)
+        validate_startup(expected, args.startup_mode, evidence, game / '.cbbg', log_text, args.backend, args.target)
         receipt['graphics'] = graphics_identity(log_text, args.backend)
         context = json.loads((evidence / 'graphics-context.json').read_text())
         if context.get('backend') != args.backend:

@@ -97,6 +97,29 @@ case "$*" in *-Pcompat=fail*) exit 7;; esac
         assertFalse(new File(directory, 'build/arguments.txt').exists())
     }
 
+    @Test void upstreamFabricMinimumSearchUsesTheUpstreamBuild() {
+        fixture()
+        def target = [id: '26.2-fabric', minecraft: '26.2', loader: 'fabric', java: 25,
+                      renderer: 'blaze-gpu-format', backends: ['opengl', 'vulkan'],
+                      implemented: false, buildProfile: 'fabric-upstream']
+        new File(directory, 'targets.json').text = JsonOutput.toJson(
+                [schema: 1, ciTargets: [target.id], targets: [target]])
+        def profile = new File(directory, 'build-config/fabric-upstream')
+        profile.mkdirs()
+        new File(profile, 'build.gradle').text = '// Upstream build fixture\n'
+        def env = new HashMap(System.getenv())
+        env.remove('CI')
+        env.remove('GITHUB_ACTIONS')
+        runner('determineFabricMinimums', '-Ptarget=26.2-fabric', '-PcompatibilityRuntime=/local/runtime')
+                .withEnvironment(env).build()
+        List args = new File(directory, 'build/arguments.txt').readLines()
+        assertEquals(['updateFabricMinimums', 'verifyFabricCompatibility'],
+                args.findAll { it in ['updateFabricMinimums', 'verifyFabricCompatibility'] })
+        assertEquals(2, args.count('-p'))
+        assertEquals(2, args.count(profile.absolutePath))
+        assertEquals(2, args.count('-PcompatibilityRuntime=/local/runtime'))
+    }
+
     @Test void sharedFabricMinimumSearchCoversEveryRuntimeThenUpdatesOwnerAndVerifiesEach() {
         familyFixture()
         def env = new HashMap(System.getenv())

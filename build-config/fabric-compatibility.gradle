@@ -4,12 +4,14 @@ import groovy.json.JsonSlurper
 // Local packaged-client tests. No launcher or publishing credentials are needed.
 def compatibilityRoot = file('../..')
 def CandidateFiles = plugins.getPlugin('cbbg.packaging').class.classLoader.loadClass('cbbg.gradle.CandidateFiles')
+def CandidateManifest = CandidateFiles.classLoader.loadClass('cbbg.gradle.CandidateManifest')
 def FabricCompatibilitySearch = CandidateFiles.classLoader.loadClass('cbbg.gradle.FabricCompatibilitySearch')
 def FabricRuntimeInstallation = CandidateFiles.classLoader.loadClass('cbbg.gradle.FabricRuntimeInstallation')
 def compatibilityCatalog = new File(compatibilityRoot, 'targets.json')
 def compatibilityTargets = new JsonSlurper().parse(compatibilityCatalog).targets
 def compatibilityTarget = compatibilityTargets.find {
-    it.id == providers.gradleProperty('target').getOrElse('26.3-fabric')
+    it.id == providers.gradleProperty('target').getOrElse(project.ext.has('candidateTargetId') ?
+            project.ext.candidateTargetId : '26.3-fabric')
 }
 def compatibilityOwner = compatibilityTarget.artifactOf ?
         compatibilityTargets.find { it.id == compatibilityTarget.artifactOf } :
@@ -203,7 +205,8 @@ tasks.register('verifyFabricCompatibility') {
                 .findAll { version -> apiMinecraft.any { version.endsWith('+' + it) } &&
                         version.split('\\+', 2)[0] ==~ /\d+\.\d+\.\d+/ }
         File candidate = releaseOptimization.outputJar.get().asFile
-        if (!project.version.toString().endsWith("+mc${compatibilityOwner.minecraft}-${compatibilityOwner.loader}")) {
+        if (project.version.toString() != CandidateManifest.packageVersion(
+                'v' + project.version.toString().split(/\+/, 2)[0], compatibilityOwner)) {
             throw new GradleException('Compatibility search requires the artifact owner package version')
         }
         File driver = tasks.named('processedDriverJar', Jar).get().archiveFile.get().asFile
@@ -225,7 +228,8 @@ tasks.register('verifyFabricCompatibility') {
                 minimumOverrides: !strict, host: System.getProperty('os.name') + '/' +
                         System.getProperty('os.arch') + '/' + System.getProperty('os.version')]
         List<File> identityFiles = [new File(compatibilityRoot, 'build-config/fabric-compatibility.gradle'),
-                new File(compatibilityRoot, 'build-config/fabric-modern/build.gradle'),
+                new File(compatibilityRoot, 'build-config/fabric-startup-tests.gradle'),
+                new File(compatibilityRoot, "build-config/${compatibilityOwner.buildProfile}/build.gradle"),
                 new File(compatibilityRoot, 'build-logic/src/main/groovy/cbbg/gradle/FabricCompatibilitySearch.groovy'),
                 java, new File(java.parentFile.parentFile, 'release'),
                 new File(java.parentFile.parentFile, 'lib/modules'),
@@ -246,8 +250,14 @@ tasks.register('verifyFabricCompatibility') {
         identityFiles.addAll(fileTree(new File(compatibilityRoot, 'scripts')).matching {
             include 'fabric_*.py', 'runtime_catalog.py', 'install_fabric_parity_runtime.py'
         }.files)
+        String testSources = compatibilityOwner.buildProfile == 'fabric-upstream' ?
+                'adapters/fabric/26.2/src/processedGametest' :
+                "renderers/${compatibilityOwner.renderer}/src/processedGametest"
+        identityFiles.addAll(fileTree(new File(compatibilityRoot, testSources)).files)
         identityFiles.addAll(fileTree(new File(compatibilityRoot,
-                'renderers/blaze-texture-format/src/processedGametest')).files)
+                "adapters/fabric/${compatibilityOwner.minecraft}/src/processedGametest")).files)
+        identityFiles.addAll(fileTree(new File(compatibilityRoot,
+                'adapters/fabric/shared/src/processedGametest')).files)
         identityFiles.addAll(fileTree(new File(compatibilityRoot,
                 'renderers/modern/src/gametest/java/com/qb20nh/cbbg/gametest')).matching {
             include 'IrisFixture.java', 'RenderScaleTestAccess.java'
