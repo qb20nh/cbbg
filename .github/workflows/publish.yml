@@ -191,7 +191,7 @@ jobs:
       - name: Upload to CurseForge
         if: ${{ !inputs.dry_run && inputs.services != 'modrinth' }}
         id: curseforge_upload
-        uses: itsmeow/curseforge-upload@v3.1.2
+        uses: qb20nh/curseforge-upload@ca94ed0392ea2a4d975f0eef5e02f7805aa30469
         with:
           token: ${{ secrets.CF_API_TOKEN }}
           project_id: ${{ steps.publication.outputs.cf_project_id }}
@@ -216,7 +216,7 @@ jobs:
       - name: Upload sources and mappings to CurseForge
         if: ${{ !inputs.dry_run && inputs.services != 'modrinth' }}
         id: curseforge_sources_upload
-        uses: itsmeow/curseforge-upload@v3.1.2
+        uses: qb20nh/curseforge-upload@ca94ed0392ea2a4d975f0eef5e02f7805aa30469
         with:
           token: ${{ secrets.CF_API_TOKEN }}
           project_id: ${{ steps.publication.outputs.cf_project_id }}
@@ -242,7 +242,7 @@ jobs:
       - name: Upload SBOM and provenance to CurseForge
         if: ${{ !inputs.dry_run && inputs.services != 'modrinth' && steps.publication.outputs.evidence != '' }}
         id: curseforge_evidence_upload
-        uses: itsmeow/curseforge-upload@v3.1.2
+        uses: qb20nh/curseforge-upload@ca94ed0392ea2a4d975f0eef5e02f7805aa30469
         with:
           token: ${{ secrets.CF_API_TOKEN }}
           project_id: ${{ steps.publication.outputs.cf_project_id }}

@@ -52,9 +52,11 @@ class CandidatePublishWorkflowTests(unittest.TestCase):
         workflow = (ROOT / '.github/workflows/publish.yml').read_text()
         prepare = next(step for step in workflow.split('\n      - ') if 'id: publication' in step)
         self.assertIn('DRY_RUN: ${{ inputs.dry_run }}', prepare)
-        for step in workflow.split('\n      - '):
-            if 'uses: itsmeow/curseforge-upload' in step:
-                self.assertIn('!inputs.dry_run', step)
+        uploads = [step for step in workflow.split('\n      - ')
+                   if 'uses: qb20nh/curseforge-upload@' in step]
+        self.assertEqual(len(uploads), 3)
+        for step in uploads:
+            self.assertIn('!inputs.dry_run', step)
         publisher = (ROOT / 'build-config/publishing/build.gradle').read_text()
         self.assertIn('Publication.requireUploadAllowed(CandidateFiles.read(metadataFile))', publisher)
 
@@ -114,7 +116,7 @@ class CandidatePublishWorkflowTests(unittest.TestCase):
         workflow = (ROOT / '.github/workflows/publish.yml').read_text()
         preflight, publish = workflow.split('\n  publish:', 1)
         self.assertIn('name: Check all Modrinth retry plans', preflight)
-        self.assertNotIn('uses: itsmeow/curseforge-upload', preflight)
+        self.assertNotIn('uses: qb20nh/curseforge-upload', preflight)
         self.assertIn('needs: preflight', publish)
         self.assertIn('matrix: ${{ fromJSON(needs.preflight.outputs.matrix) }}', publish)
         self.assertIn('fail-fast: false', publish)
