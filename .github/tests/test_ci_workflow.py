@@ -41,7 +41,10 @@ class CiWorkflowTest(unittest.TestCase):
         workflow = WORKFLOW.read_text().split(
             "- name: Generate and submit target dependency graph", 1
         )[1]
-        self.assertIn("--init-script gradle/dependency-sbom.init.gradle", workflow)
+        self.assertIn(
+            "--init-script ${{ github.workspace }}/gradle/dependency-sbom.init.gradle",
+            workflow,
+        )
         self.assertIn(
             "^(minecraft|minecraftClientLibraries|minecraftClientRuntimeLibraries|"
             "minecraftServerLibraries|minecraftServerRuntimeLibraries|minecraftNatives)$",

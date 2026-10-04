@@ -161,6 +161,6 @@ jobs:
           build-root-directory: .
           additional-arguments: >-
             -p build-config/${{ matrix.buildProfile }} -Ptarget=${{ matrix.id }}
-            --init-script gradle/dependency-sbom.init.gradle
+            --init-script ${{ github.workspace }}/gradle/dependency-sbom.init.gradle
           dependency-graph-exclude-configurations: >-
             ^(minecraft|minecraftClientLibraries|minecraftClientRuntimeLibraries|minecraftServerLibraries|minecraftServerRuntimeLibraries|minecraftNatives)$
