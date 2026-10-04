@@ -8,7 +8,7 @@ This project uses [Keep a Changelog](https://keepachangelog.com/) and [Semantic 
 
 ### Added
 
-- Support Minecraft 26.1, 26.1.1 and 26.1.2 on Fabric with one jar.
+- Minecraft 26.1.x Fabric support.
 
 ## [1.4.1 for Minecraft 26.3 Fabric] - 2026-09-27 <!-- [1.4.1-mc26.3-fabric] -->
 
