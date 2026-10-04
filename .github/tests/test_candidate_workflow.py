@@ -31,6 +31,12 @@ class CandidateWorkflowTest(unittest.TestCase):
             {'id': '26.3-fabric', 'java': 25, 'minecraft': '26.3', 'loader': 'fabric'},
             {'id': '26.2-fabric', 'java': 8, 'buildJava': 21, 'minecraft': '26.2', 'loader': 'fabric'},
             {'id': '26.3-quilt', 'java': 25, 'minecraft': '26.3', 'loader': 'quilt'},
+            {'id': '26.1-fabric', 'java': 25, 'minecraft': '26.1', 'loader': 'fabric',
+             'compatibleMinecraft': ['26.1.1', '26.1.2']},
+            {'id': '26.1.1-fabric', 'java': 25, 'minecraft': '26.1.1', 'loader': 'fabric',
+             'artifactOf': '26.1-fabric'},
+            {'id': '26.1.2-fabric', 'java': 25, 'minecraft': '26.1.2', 'loader': 'fabric',
+             'artifactOf': '26.1-fabric'},
         ]}))
         for suffix in ('scenarios', 'mods', 'linux-x86_64'):
             (locks / f'26.3-fabric-{suffix}.json').write_text('{}')
@@ -202,17 +208,33 @@ class CandidateWorkflowTest(unittest.TestCase):
         self.env['TARGETS'] = '26.3-fabric'
         public = self.public_fixture(self.candidate_fixture())
         (self.root / 'build/release-notes.md').write_text('Release notes\n')
-        for tag in ('v1.4.0', 'v1.4.0-rc.1', 'v1.4.0+mc26.3-fabric', 'v1.4.0-rc.1+mc26.3-fabric'):
-            with self.subTest(tag=tag):
+        cases = [(tag, '26.3-fabric', ' for Minecraft 26.3 Fabric' if '+mc' in tag else '')
+                 for tag in ('v1.4.0', 'v1.4.0-rc.1', 'v1.4.0+mc26.3-fabric',
+                             'v1.4.0-rc.1+mc26.3-fabric')]
+        cases.extend([
+            ('v1.4.1+mc26.1-fabric', '26.1-fabric,26.1.1-fabric,26.1.2-fabric',
+             ' for Minecraft 26.1.x Fabric'),
+            ('v1.4.1+mc26.1-fabric', '26.1.2-fabric,26.1.1-fabric,26.1-fabric',
+             ' for Minecraft 26.1.x Fabric'),
+            ('v1.4.1+mc26.1-fabric', '26.1-fabric,26.1.1-fabric',
+             ' for Minecraft 26.1, 26.1.1 Fabric'),
+            ('v1.4.1+mc26.1-fabric', '26.1-fabric,26.1.2-fabric',
+             ' for Minecraft 26.1, 26.1.2 Fabric'),
+            ('v1.4.1+mc26.1-fabric', '26.1.2-fabric', ' for Minecraft 26.1.2 Fabric'),
+            ('v1.4.0+mc26.3-fabric', '26.3-fabric,26.3-quilt',
+             ' for Minecraft 26.3 Fabric, Quilt'),
+        ])
+        for tag, targets, scope in cases:
+            with self.subTest(tag=tag, targets=targets):
                 self.env['GITHUB_REF_NAME'] = tag
+                self.env['TARGETS'] = targets
                 result = self.run_step('Create draft release', self.root)
                 self.assertEqual(result.returncode, 0, result.stderr)
                 arguments = json.loads((self.root / 'arguments.json').read_text())
                 self.assertEqual(arguments[:3], ['release', 'create', tag])
                 self.assertIn('--draft', arguments)
                 self.assertIn('--verify-tag', arguments)
-                expected_title = ('cbbg ' + tag[1:].split('+')[0] +
-                                  (' for Minecraft 26.3 Fabric' if '+mc' in tag else ''))
+                expected_title = 'cbbg ' + tag[1:].split('+')[0] + scope
                 self.assertEqual(arguments[arguments.index('--title') + 1], expected_title)
                 self.assertEqual(arguments[arguments.index('--notes-file') + 1], 'build/release-notes.md')
                 self.assertEqual('--prerelease' in arguments, '-rc.' in tag)
