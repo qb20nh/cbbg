@@ -4,11 +4,16 @@ This project uses [Keep a Changelog](https://keepachangelog.com/) and [Semantic 
 
 ## [Unreleased]
 
-## [1.4.1 for Minecraft 26.1–26.1.2 Fabric] - 2026-10-04 <!-- [1.4.1-mc26.1-fabric] [1.4.1-mc26.1.1-fabric] [1.4.1-mc26.1.2-fabric] -->
+## [1.4.2 for Minecraft 26.1.x Fabric] - 2026-10-05 <!-- [1.4.2-mc26.1-fabric] [1.4.2-mc26.1.1-fabric] [1.4.2-mc26.1.2-fabric] -->
 
 ### Added
 
 - Minecraft 26.1.x Fabric support.
+
+### Fixed
+
+- Clear generation toasts after cancellation or failure, and after completion if toast notifications were disabled during generation.
+- Prevent generation toasts from replacing Minecraft's other periodic notifications.
 
 ## [1.4.1 for Minecraft 26.3 Fabric] - 2026-09-27 <!-- [1.4.1-mc26.3-fabric] -->
 
