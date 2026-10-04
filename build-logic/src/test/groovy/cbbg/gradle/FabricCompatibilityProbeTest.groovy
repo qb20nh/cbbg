@@ -1,0 +1,157 @@
+package cbbg.gradle
+
+import groovy.json.JsonOutput
+import groovy.json.JsonSlurper
+import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.io.TempDir
+import org.gradle.testfixtures.ProjectBuilder
+
+import static org.junit.jupiter.api.Assertions.*
+
+class FabricCompatibilityProbeTest {
+    @TempDir File directory
+
+    @Test void runnerCapturesTheRealCommandExitAndOutput() {
+        File log = new File(directory, 'run/runner.log')
+        File java = new File(System.getProperty('java.home'), 'bin/java')
+        int exit = FabricCompatibilityProbe.run([java, '-version'], log,
+                ProjectBuilder.builder().withProjectDir(directory).build().providers, directory)
+        assertEquals(0, exit)
+        assertTrue(log.text.contains('version'))
+    }
+
+    @Test void cacheTracksProbeInputsButNotSearchPolicyOrOpenGlVulkanLoader() {
+        File coordinator = new File(directory, 'fabric-compatibility.gradle')
+        File search = new File(directory, 'FabricCompatibilitySearch.groovy')
+        File probe = new File(directory, 'FabricCompatibilityProbe.groovy')
+        File python = new File(directory, 'python')
+        File java = new File(directory, 'java')
+        Map sources = [(coordinator.canonicalPath): 'policy-1', (search.canonicalPath): 'search-1',
+                       (probe.canonicalPath): 'probe-1', '/usr/lib/libvulkan.so.1': 'vulkan-1',
+                       '/usr/lib/libGL.so.1': 'gl-1', '/usr/lib/libnvidia-glcore.so.1': 'gpu-1',
+                       (python.canonicalPath): 'python-1', (java.canonicalPath): 'jvm-1',
+                       (new File(directory, 'fabric_parity_runtime.py').canonicalPath): 'runner-1']
+        Map gl = FabricCompatibilityProbe.executionFiles(sources, coordinator, search, 'opengl')
+        assertFalse(gl.containsKey(coordinator.canonicalPath))
+        assertFalse(gl.containsKey(search.canonicalPath))
+        assertFalse(gl.containsKey('/usr/lib/libvulkan.so.1'))
+        assertEquals('gpu-1', gl['/usr/lib/libnvidia-glcore.so.1'])
+        Map vk = FabricCompatibilityProbe.executionFiles(sources, coordinator, search, 'vulkan')
+        assertEquals('vulkan-1', vk['/usr/lib/libvulkan.so.1'])
+
+        File evidence = new File(directory, 'receipt.json')
+        evidence.text = 'passed'
+        File cache = new File(directory, 'cache')
+        Map inputs = [candidate: 'jar', driver: 'driver', target: '26.1-fabric',
+                      gametestApiSha256: 'gametest', apiSha256: 'api', runtime: 'runtime',
+                      initialConfig: 'config', backend: 'opengl', files: gl]
+        int runs = 0
+        Closure run = { runs++; [status: 'passed', files: [evidence]] }
+        assertFalse(FabricCompatibilitySearch.cached(cache, inputs, run).cached)
+        assertTrue(FabricCompatibilitySearch.cached(cache, inputs, run).cached)
+        Map policyChanged = sources + [(coordinator.canonicalPath): 'policy-2',
+                                       (search.canonicalPath): 'search-2',
+                                       '/usr/lib/libvulkan.so.1': 'vulkan-2']
+        assertTrue(FabricCompatibilitySearch.cached(cache, inputs + [files:
+                FabricCompatibilityProbe.executionFiles(policyChanged, coordinator, search, 'opengl')], run).cached)
+        [probe.canonicalPath, '/usr/lib/libGL.so.1', '/usr/lib/libnvidia-glcore.so.1',
+         python.canonicalPath, java.canonicalPath,
+         new File(directory, 'fabric_parity_runtime.py').canonicalPath].each { path ->
+            Map changed = sources + [(path): 'changed']
+            assertFalse(FabricCompatibilitySearch.cached(cache, inputs + [files:
+                    FabricCompatibilityProbe.executionFiles(changed, coordinator, search, 'opengl')], run).cached)
+        }
+        ['candidate', 'driver', 'gametestApiSha256', 'apiSha256', 'runtime',
+         'initialConfig', 'backend'].each { key ->
+            assertFalse(FabricCompatibilitySearch.cached(cache, inputs + [(key): 'changed'], run).cached)
+        }
+        assertFalse(FabricCompatibilitySearch.cached(cache, inputs + [backend: 'vulkan', files: vk], run).cached)
+        assertFalse(FabricCompatibilitySearch.cached(cache, inputs + [backend: 'vulkan',
+                files: FabricCompatibilityProbe.executionFiles(policyChanged, coordinator, search, 'vulkan')], run).cached)
+        assertEquals(16, runs)
+    }
+
+    @Test void executesThePinnedRuntimeCommandAndClassifiesReceipts() {
+        File api = new File(directory, 'api.jar')
+        File gametest = new File(directory, 'gametest.jar')
+        File optional = new File(directory, 'optional.jar')
+        [api, gametest, optional].each { it.text = it.name }
+        File runtime = new File(directory, 'runtime')
+        runtime.mkdirs()
+        File runtimeLock = new File(runtime, 'cbbg-runtime-lock.json')
+        runtimeLock.text = '{}'
+        File display = new File(directory, 'display')
+        display.mkdirs()
+        Map spec = [root: directory, output: directory,
+                    target: [id: '26.1.1-fabric', dependencies: [fabricApi: '0.145.4+26.1.1']],
+                    loaderVersion: '0.18.4', apiVersion: '0.143.12+26.1',
+                    api: api, gametest: gametest,
+                    runtime: [directory: runtime, lock: runtimeLock],
+                    optionalMods: [sodium: [pin: 'pin', sha256: 'hash', file: optional]],
+                    candidate: new File(directory, 'candidate.jar'),
+                    driver: new File(directory, 'driver.jar'), profile: 'none', backend: 'opengl',
+                    config: new File(directory, 'initial-cbbg.json'), python: new File(directory, 'python'),
+                    java: new File(directory, 'java'), strict: false, manageDisplay: false,
+                    displayDirectory: display, display: 'wayland-test', weston: null, eglVendor: null]
+        [spec.candidate, spec.driver, spec.config, spec.python, spec.java].each {
+            (it as File).text = (it as File).name
+        }
+        File runner = new File(directory, 'scripts/fabric_parity_runtime.py')
+        runner.parentFile.mkdirs()
+        runner.text = 'runner'
+        File coordinator = new File(directory, 'fabric-compatibility.gradle')
+        File search = new File(directory, 'FabricCompatibilitySearch.groovy')
+        Map reportInputs = [files: [(coordinator.canonicalPath): 'policy-1',
+                                    (search.canonicalPath): 'search-1',
+                                    (runner.canonicalPath): 'runner-1']]
+        Map cacheInputs = FabricCompatibilityProbe.cacheInputs(reportInputs, spec, coordinator, search)
+        assertFalse(cacheInputs.files.containsKey(coordinator.canonicalPath))
+        assertEquals(CandidateFiles.sha256(spec.python as File), cacheInputs.python.sha256)
+        assertEquals(CandidateFiles.sha256(spec.java as File), cacheInputs.java.sha256)
+        (spec.python as File).text = 'changed interpreter'
+        assertNotEquals(cacheInputs, FabricCompatibilityProbe.cacheInputs(reportInputs, spec, coordinator, search))
+        (spec.python as File).text = 'python'
+        (spec.java as File).text = 'changed JVM'
+        assertNotEquals(cacheInputs, FabricCompatibilityProbe.cacheInputs(reportInputs, spec, coordinator, search))
+        List command = []
+        Map passed = FabricCompatibilityProbe.execute(spec) { List args, File log ->
+            command = args
+            File game = args[args.indexOf('--game-dir') + 1] as File
+            game.mkdirs()
+            new File(game, 'probe.json').text = JsonOutput.toJson([exitCode: 0, scenarios: [ok: true]])
+            log.text = 'runner completed'
+            0
+        }
+        assertEquals('passed', passed.status)
+        assertNull(passed.reason)
+        assertEquals('26.1.1-fabric', command[command.indexOf('--target') + 1])
+        assertEquals('0.145.4+26.1.1', command[command.indexOf('--gametest-api-version') + 1])
+        assertEquals(gametest, command[command.indexOf('--gametest-api') + 1])
+        assertEquals(runtimeLock, command[command.indexOf('--runtime-lock') + 1])
+        assertTrue(command.contains('--test-dependency-minimums'))
+        assertTrue(command.contains('sodium=' + optional.absolutePath))
+        File lock = command[command.indexOf('--dependency-lock') + 1] as File
+        Map recorded = new JsonSlurper().parse(lock) as Map
+        assertEquals('26.1.1-fabric', recorded.target)
+        assertEquals('0.145.4+26.1.1', recorded.gametestApi.fabricApiPin)
+        assertEquals('0.143.12+26.1', recorded.dependencies.fabricApi.pin)
+
+        Map blocked = FabricCompatibilityProbe.execute(spec + [strict: true]) { List args, File log ->
+            assertFalse(args.contains('--test-dependency-minimums'))
+            log.text = 'runner failed before receipt'
+            1
+        }
+        assertEquals('blocked', blocked.status)
+        Map failed = FabricCompatibilityProbe.execute(spec) { List args, File log ->
+            File game = args[args.indexOf('--game-dir') + 1] as File
+            game.mkdirs()
+            new File(game, 'probe.json').text = JsonOutput.toJson(
+                    [exitCode: 1, failure: [type: 'AssertionError', message: 'scenario failed']])
+            new File(game, 'launch.log').text = 'Caused by: broken shader\n'
+            log.text = 'runner failed'
+            1
+        }
+        assertEquals('failed', failed.status)
+        assertEquals('Caused by: broken shader', failed.reason)
+    }
+}

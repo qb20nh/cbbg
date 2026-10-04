@@ -120,7 +120,7 @@ case "$*" in *-Pcompat=fail*) exit 7;; esac
         assertEquals(2, args.count('-PcompatibilityRuntime=/local/runtime'))
     }
 
-    @Test void sharedFabricMinimumSearchCoversEveryRuntimeThenUpdatesOwnerAndVerifiesEach() {
+    @Test void sharedFabricMinimumSearchRunsOnceThenUpdatesOwnerAndVerifiesEachRuntime() {
         familyFixture()
         def env = new HashMap(System.getenv())
         env.remove('CI')
@@ -128,19 +128,17 @@ case "$*" in *-Pcompat=fail*) exit 7;; esac
         runner('determineFabricMinimums', '-Ptarget=26.1.2-fabric', '-PcompatibilityRuntime=/local/runtime')
                 .withEnvironment(env).build()
         List args = new File(directory, 'build/arguments.txt').readLines()
-        assertEquals(['verifyFabricCompatibility', 'verifyFabricCompatibility',
-                      'verifyFabricCompatibility', 'updateFabricMinimums',
+        assertEquals(['verifyFabricCompatibility', 'updateFabricMinimums',
                       'verifyFabricCompatibility', 'verifyFabricCompatibility',
                       'verifyFabricCompatibility'],
                 args.findAll { it in ['verifyFabricCompatibility', 'updateFabricMinimums'] })
-        assertEquals(['-Ptarget=26.1-fabric', '-Ptarget=26.1.1-fabric', '-Ptarget=26.1.2-fabric',
-                      '-Ptarget=26.1-fabric', '-Ptarget=26.1-fabric',
+        assertEquals(['-Ptarget=26.1-fabric', '-Ptarget=26.1-fabric', '-Ptarget=26.1-fabric',
                       '-Ptarget=26.1.1-fabric', '-Ptarget=26.1.2-fabric'],
                 args.findAll { it.startsWith('-Ptarget=') })
-        assertEquals((['-PverifyDeclaredMinimums=false'] * 4) +
+        assertEquals((['-PverifyDeclaredMinimums=false'] * 2) +
                      (['-PverifyDeclaredMinimums=true'] * 3),
                 args.findAll { it.startsWith('-PverifyDeclaredMinimums=') })
-        assertEquals(7, args.count('-PcompatibilityRuntime=/local/runtime'))
+        assertEquals(5, args.count('-PcompatibilityRuntime=/local/runtime'))
     }
 
     @Test void minimumSearchRequiresASingleFabricTarget() {

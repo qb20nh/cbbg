@@ -73,6 +73,15 @@ class FabricCompatibilitySearch {
         ordered(available).findAll { !before(it, minimum) && before(it, upperExclusive) }
     }
 
+    static boolean familyPasses(Collection<Map> targets, String loader, String api, Closure<Boolean> test) {
+        for (Map target : targets) {
+            Boolean passed = test.call(target, loader, api)
+            if (passed == null) throw new GradleException('Dependency test was inconclusive for ' + target.id)
+            if (!passed) return false
+        }
+        true
+    }
+
     static void requireCurrentInputs(Map inputs, File driver, File initialConfig,
                                      File gametestApi, String gametestApiPin,
                                      boolean requireHistoricalDriver = true) {

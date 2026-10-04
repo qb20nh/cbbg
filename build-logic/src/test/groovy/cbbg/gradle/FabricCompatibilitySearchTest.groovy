@@ -100,6 +100,102 @@ class FabricCompatibilitySearchTest {
         assertEquals(2, runs)
     }
 
+    @Test void familyPredicateStopsAtFirstFailedRuntimeAndPropagatesBlockedRuns() {
+        List<Map> targets = ['26.1', '26.1.1', '26.1.2'].collect { [id: it + '-fabric'] }
+        List<String> tested = []
+        Closure<Boolean> fails = { Map target, String loader, String api ->
+            tested.add(target.id)
+            target.id != '26.1.1-fabric'
+        }
+        assertFalse(FabricCompatibilitySearch.familyPasses(targets, '0.18.4', '0.143.12+26.1', fails))
+        assertEquals(['26.1-fabric', '26.1.1-fabric'], tested)
+        tested.clear()
+        assertThrows(GradleException) {
+            FabricCompatibilitySearch.familyPasses(targets, '0.18.4', '0.143.12+26.1') {
+                Map target, String loader, String api ->
+                tested.add(target.id)
+                if (target.id == '26.1.1-fabric') throw new GradleException('GPU blocked')
+                true
+            }
+        }
+        assertEquals(['26.1-fabric', '26.1.1-fabric'], tested)
+    }
+
+    @Test void sharedPredicateChecksEveryBuildInEachNumericBoundaryGroup() {
+        List<Map> targets = ['26.1', '26.1.1', '26.1.2'].collect { [id: it + '-fabric'] }
+        List<String> apis = ['0.143.11+26.1', '0.143.12+26.1',
+                             '0.143.12+26.1.1', '0.143.12+26.1.2', '0.143.13+26.1']
+        Set<String> tested = []
+        String minimum = FabricCompatibilitySearch.minimum(apis, '0.143.13+26.1') { String api ->
+            FabricCompatibilitySearch.familyPasses(targets, '0.18.4', api) {
+                Map target, String loader, String candidateApi ->
+                tested.add(target.id + '/' + candidateApi)
+                !candidateApi.startsWith('0.143.11')
+            }
+        }
+        assertEquals('0.143.12+26.1', minimum)
+        ['0.143.12+26.1', '0.143.12+26.1.1', '0.143.12+26.1.2'].each { api ->
+            targets.each { target -> assertTrue(tested.contains(target.id + '/' + api)) }
+        }
+    }
+
+    @Test void freshFamilyAliasReportSuppliesTheStartingHint() {
+        File repository = new File(System.getProperty('cbbg.repository'))
+        String script = new File(repository, 'build-config/fabric-compatibility.gradle').text
+        int eligibleStart = script.indexOf('boolean eligible = familySearch ?')
+        String eligibility = script.substring(eligibleStart,
+                script.indexOf('if (previous.complete', eligibleStart)) + '\nreturn eligible'
+        List<Map> family = ['26.1', '26.1.1', '26.1.2'].collect {
+            [id: it + '-fabric', minecraft: it, loader: 'fabric']
+        }
+        List<Map> candidates = [
+                [target: family[0], previous: [artifactOwner: family[0].id,
+                        minimumLoader: '0.18.4'], updated: 100],
+                [target: family[2], previous: [artifactOwner: family[0].id,
+                        minimumLoader: '0.18.5'], updated: 200],
+                [target: [id: '26.3-fabric', minecraft: '26.3', loader: 'fabric'],
+                 previous: [artifactOwner: '26.3-fabric', minimumLoader: '0.19.0'], updated: 300]]
+        List<Map> eligible = candidates.findAll { entry ->
+            Binding binding = new Binding([familySearch: true, familyTargets: family,
+                    compatibilityOwner: family[0], compatibilityTarget: family[0],
+                    minecraft: '26.1', minecraftOrder: { it },
+                    target: entry.target, previous: entry.previous])
+            new GroovyShell(binding).evaluate(eligibility)
+        }
+        int sortStart = script.indexOf('}.findAll { it != null }.sort { a, b ->', eligibleStart)
+        String sorting = script.substring(sortStart + 1,
+                script.indexOf('Map previousMinimums =', sortStart))
+        List<Map> reports = eligible.collect {
+            [report: it.previous, minecraft: it.target.minecraft, updated: it.updated]
+        }
+        Binding binding = new Binding([reports: reports, familySearch: true])
+        List<Map> sorted = (List<Map>) new GroovyShell(binding).evaluate('return reports' + sorting)
+        assertEquals('0.18.5', sorted.first().report.minimumLoader)
+        assertEquals(2, sorted.size())
+    }
+
+    @Test void familyProbeCacheInvalidatesEachChangedExecutionInput() {
+        File evidence = new File(directory, 'receipt.json')
+        evidence.text = 'passed'
+        File cache = new File(directory, 'cache')
+        Map inputs = [target: '26.1.1-fabric', candidate: 'jar', driver: 'driver',
+                      gametestApiPin: '0.145.4+26.1.1', gametestApiSha256: 'game-test',
+                      runtime: 'lock', apiSha256: 'api', initialConfig: 'config',
+                      backend: 'opengl', files: ['runner.py': 'source']]
+        int runs = 0
+        Closure test = { runs++; [status: 'passed', files: [evidence]] }
+        assertFalse(FabricCompatibilitySearch.cached(cache, inputs, test).cached)
+        assertTrue(FabricCompatibilitySearch.cached(cache, inputs, test).cached)
+        ['target', 'candidate', 'driver', 'gametestApiPin', 'gametestApiSha256',
+         'runtime', 'apiSha256', 'initialConfig', 'backend'].each { key ->
+            assertFalse(FabricCompatibilitySearch.cached(cache,
+                    inputs + [(key): 'changed-' + key], test).cached)
+        }
+        assertFalse(FabricCompatibilitySearch.cached(cache,
+                inputs + [files: ['runner.py': 'changed-source']], test).cached)
+        assertEquals(11, runs)
+    }
+
     @Test void optionalProfilesAndDependencyHashesKeepSeparateSearchResults() {
         File evidence = new File(directory, 'receipt.json')
         evidence.text = 'passed'
