@@ -275,7 +275,7 @@ class Publication {
                 String sha512 = digest(file, 'SHA-512')
                 List fileTypes = kind == 'sources' ? ['sources-jar'] :
                         (kind == 'evidence'
-                                ? (uploadedVersionId != null ? ['signature'] : [null, 'signature'])
+                                ? (uploadedVersionId != null ? [null] : [null, 'signature'])
                                 : [null])
                 if (item.hashes?.sha512 != sha512 || item.primary != (kind == 'artifact') ||
                         !fileTypes.contains(item.file_type)) {

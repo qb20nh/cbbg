@@ -415,13 +415,14 @@ class PublicationTest {
         Closure uploadedLookup = { String url ->
             url.endsWith('/version/Version1') ? remote : fetch([], []).call(url)
         }
+        assertEquals('reuse', Publication.plan(fixture.file, publication, '26.3-fabric', fixture.root,
+                uploadedLookup, null, 'Version1').action)
+        remote.files[2].file_type = 'signature'
         fails('file differs') {
             Publication.plan(fixture.file, publication, '26.3-fabric', fixture.root,
                     uploadedLookup, null, 'Version1')
         }
-        remote.files[2].file_type = 'signature'
-        assertEquals('reuse', Publication.plan(fixture.file, publication, '26.3-fabric', fixture.root,
-                uploadedLookup, null, 'Version1').action)
+        remote.files[2].file_type = null
         remote.files[2].hashes.sha512 = '0' * 128
         fails('file differs') {
             Publication.plan(fixture.file, publication, '26.3-fabric', fixture.root, fetch([remote], []))

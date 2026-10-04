@@ -77,7 +77,7 @@ modrinth {
     uploadFile = uploadFiles.artifact
     additionalFiles {
         sourcesJar uploadFiles.sources
-        if (uploadFiles.evidence) signature uploadFiles.evidence
+        if (uploadFiles.evidence) other uploadFiles.evidence
     }
     detectLoaders = false
     autoAddDependsOn = false
