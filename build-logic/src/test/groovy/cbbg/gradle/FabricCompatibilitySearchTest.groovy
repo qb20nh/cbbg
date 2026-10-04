@@ -46,6 +46,26 @@ class FabricCompatibilitySearchTest {
         assertEquals(['2.0.0+26.3', '1.10.0+26.3', '1.2.0+26.3', '0.19.9+26.3', '0.19.10+26.3'], visited)
     }
 
+    @Test void comparesAndFiltersApiVersionsWithoutBuildMetadata() {
+        assertFalse(FabricCompatibilitySearch.before('1.2.3+26.1', '1.2.3+26.2'))
+        assertFalse(FabricCompatibilitySearch.before('1.2.3+26.2', '1.2.3+26.1'))
+        assertTrue(FabricCompatibilitySearch.before('1.2.3+26.2', '1.2.4+26.1'))
+        assertEquals(['1.2.3+26.1', '1.2.3+26.2'], FabricCompatibilitySearch.within(
+                ['1.2.3+26.2', '1.2.4+26.1', '1.2.3+26.1'],
+                '1.2.3+26.2', '1.2.4+26.1'))
+    }
+
+    @Test void testsEveryApiBuildAtTheMinimumBoundary() {
+        List visited = []
+        List versions = ['1.0.0+26.1', '1.0.0+26.2', '1.0.1+26.1', '1.0.1+26.2']
+        assertEquals('1.0.1+26.2', FabricCompatibilitySearch.minimum(versions, '1.0.1+26.2') {
+            visited.add(it)
+            it != '1.0.0+26.2'
+        })
+        assertTrue(visited.containsAll(versions))
+        assertEquals(versions.size(), visited.size())
+    }
+
     @Test void doesNotFindAMinimumWhenCurrentFails() {
         assertThrows(GradleException) {
             FabricCompatibilitySearch.minimum(['0.19.3', '0.19.4'], '0.19.4') { false }
@@ -231,6 +251,41 @@ class FabricCompatibilitySearchTest {
                 FabricCompatibilitySearch.maximum(['1.9.0', '1.10.0', '2.0.0'], '1.9.0') { true })
     }
 
+    @Test void testsEveryApiBuildAndReportsTheNextNumericUpperBoundary() {
+        List visited = []
+        List versions = ['1.0.0+26.1', '1.0.0+26.2', '1.0.1+26.1', '1.0.1+26.2',
+                         '1.0.2+26.1', '1.0.2+26.2']
+        Map result = FabricCompatibilitySearch.maximum(versions, '1.0.1+26.2') {
+            visited.add(it)
+            it != '1.0.2+26.2'
+        }
+        assertEquals([maximum: '1.0.1+26.2', firstIncompatible: '1.0.2+26.1'], result)
+        assertTrue(visited.containsAll(versions))
+        assertEquals(versions.size(), visited.size())
+        assertTrue(FabricCompatibilitySearch.before(result.maximum,
+                FabricCompatibilitySearch.upperLimit(result.maximum, result.firstIncompatible)))
+    }
+
+    @Test void doesNotPutAnotherBuildOfTheMaximumAtTheExclusiveUpperBoundary() {
+        Map result = FabricCompatibilitySearch.maximum(
+                ['1.0.0+26.1', '1.0.1+26.1', '1.0.1+26.2'], '1.0.1+26.2') { true }
+        assertEquals([maximum: '1.0.1+26.2', firstIncompatible: null], result)
+        assertTrue(FabricCompatibilitySearch.before(result.maximum,
+                FabricCompatibilitySearch.upperLimit(result.maximum, result.firstIncompatible)))
+    }
+
+    @Test void aFailingApiBuildRejectsTheWholeMaximumGroup() {
+        List visited = []
+        Map result = FabricCompatibilitySearch.maximum(
+                ['1.0.0+26.1', '1.0.1+26.1', '1.0.1+26.2'], '1.0.1+26.1') {
+            visited.add(it)
+            it != '1.0.1+26.2'
+        }
+        assertEquals([maximum: '1.0.0+26.1', firstIncompatible: '1.0.1+26.1'], result)
+        assertTrue(visited.containsAll(['1.0.1+26.1', '1.0.1+26.2']))
+        assertTrue(FabricCompatibilitySearch.before(result.maximum, result.firstIncompatible))
+    }
+
     @Test void limitsLatestPassingVersionsToTheirCurrentMajor() {
         assertEquals('1.0.0', FabricCompatibilitySearch.upperLimit('0.19.5', null))
         assertEquals('1.0.0', FabricCompatibilitySearch.upperLimit('0.161.0+26.3', null))
@@ -351,7 +406,7 @@ class FabricCompatibilitySearchTest {
         }
     }
 
-    @Test void discoversApiVersionsForTheSelectedMinecraftOnly() {
+    @Test void discoversApiVersionsForTheWholeSharedMinecraftFamily() {
         File repository = new File(System.getProperty('cbbg.repository'))
         String script = new File(repository, 'build-config/fabric-compatibility.gradle').text
         int start = script.indexOf('String apiMetadata =')
@@ -359,19 +414,21 @@ class FabricCompatibilitySearchTest {
         List<String> versions = ['0.145.1+26.1', '0.145.4+26.1.1', '0.155.3+26.1.2',
                                  '0.143.12+26.1', '0.146.0-beta.1+26.1']
         String metadata = versions.collect { '<version>' + it + '</version>' }.join('\n')
-        for (String minecraft : ['26.1', '26.1.1', '26.1.2']) {
-            Binding binding = new Binding([
-                    readUrl: { String url -> metadata }, minecraft: minecraft,
-                    sharedArtifactFamily: true,
-                    compatibilityOwner: [minecraft: '26.1', compatibleMinecraft: ['26.1.1', '26.1.2']]])
-            List found = (List) new GroovyShell(binding).evaluate(discovery + '\nreturn apis')
-            assertEquals(versions.findAll {
-                it.endsWith('+' + minecraft) && !it.contains('-beta')
-            }, found)
+        for (boolean shared : [true, false]) {
+            for (String minecraft : ['26.1', '26.1.1', '26.1.2']) {
+                Binding binding = new Binding([
+                        readUrl: { String url -> metadata }, minecraft: minecraft,
+                        sharedArtifactFamily: shared,
+                        compatibilityOwner: [minecraft: '26.1', compatibleMinecraft: ['26.1.1', '26.1.2']]])
+                List found = (List) new GroovyShell(binding).evaluate(discovery + '\nreturn apis')
+                assertEquals(versions.findAll {
+                    !it.contains('-beta') && (shared || it.endsWith('+' + minecraft))
+                }, found)
+            }
         }
     }
 
-    @Test void combinesRuntimeSearchesWithDifferentLatestApiVersions() {
+    @Test void requiresSharedRuntimeSearchesToDiscoverTheSameLatestApi() {
         File repository = new File(System.getProperty('cbbg.repository'))
         String script = new File(repository, 'build-config/fabric-compatibility.gradle').text
         int start = script.indexOf('def completedFamilySearches =')
@@ -414,12 +471,61 @@ class FabricCompatibilitySearchTest {
                 compatibilityTarget: targets[1], familyTargets: targets,
                 project: [base: [archivesName: new Expando(get: { -> 'cbbg' })], version: 'test'],
                 resolvePinnedGametest: { Map target -> gametests[target.id] }])
-        Map result = (Map) new GroovyShell(binding).evaluate(
+        String code =
                 'import cbbg.gradle.CandidateFiles\nimport cbbg.gradle.FabricCompatibilitySearch\n' +
-                'import org.gradle.api.GradleException\n' + validation + '\ncompletedFamilySearches(true)')
-        assertEquals('0.151.0+26.1.1', result.latestFabricApi)
+                'import org.gradle.api.GradleException\n' + validation + '\ncompletedFamilySearches(true)'
+        GroovyShell shell = new GroovyShell(binding)
+        assertThrows(GradleException) { shell.evaluate(code) }
+        targets.each { target ->
+            File path = new File(directory,
+                    'build/targets/' + target.id + '/fabric-compatibility/last-successful.json')
+            Map report = (Map) CandidateFiles.read(path)
+            report.latestFabricApi = '0.155.3+26.1.2'
+            path.text = JsonOutput.toJson(report)
+        }
+        Map result = (Map) shell.evaluate(code)
+        assertEquals('0.155.3+26.1.2', result.latestFabricApi)
         assertEquals(3, result.reports.size())
         assertEquals('candidate-hash', result.candidate)
+    }
+
+    @Test void upperSearchIncludesEveryBuildOfTheMinimumApiVersion() {
+        File repository = new File(System.getProperty('cbbg.repository'))
+        String script = new File(repository, 'build-config/fabric-compatibility.gradle').text
+        int start = script.indexOf('List<String> eligibleApis =')
+        String selection = script.substring(start, script.indexOf('String upperLoader =', start))
+        List<String> apis = ['0.145.1+26.1', '0.145.4+26.1.1', '0.145.4+26.1.2',
+                             '0.155.3+26.1.2']
+        Binding binding = new Binding([apis: apis, api: '0.145.4+26.1.2'])
+        List found = (List) new GroovyShell(binding).evaluate(
+                'import cbbg.gradle.FabricCompatibilitySearch\n' + selection + '\nreturn eligibleApis')
+        assertEquals(apis.drop(1), found)
+    }
+
+    @Test void checksEveryApiBuildAtBothLoaderBoundaries() {
+        File repository = new File(System.getProperty('cbbg.repository'))
+        String script = new File(repository, 'build-config/fabric-compatibility.gradle').text
+        int start = script.indexOf('report.fabricApiUpperExclusive =')
+        String validation = script.substring(start,
+                script.indexOf('if (strict) report.declaredBoundsVerified', start))
+        List<String> apis = ['0.145.4+26.1.1', '0.145.4+26.1.2',
+                             '0.155.3+26.1.1', '0.155.3+26.1.2']
+        List tested = []
+        Binding binding = new Binding([
+                report: [:], apis: apis, api: '0.145.4+26.1.2',
+                apiUpper: [maximum: '0.155.3+26.1.2', firstIncompatible: null],
+                loader: '0.18.4', loaderUpper: [maximum: '0.19.5'],
+                pairPasses: { String loader, String api -> tested.add([loader, api]); true }])
+        GroovyShell shell = new GroovyShell(binding)
+        String code = 'import cbbg.gradle.FabricCompatibilitySearch\n' +
+                'import org.gradle.api.GradleException\n' + validation
+        shell.evaluate(code)
+        assertEquals(['0.18.4', '0.19.5'].collectMany { loader -> apis.collect { [loader, it] } }, tested)
+        shell.evaluate('Set<String> selected = [] as Set\n' + code)
+        binding.setVariable('pairPasses', { String loader, String api ->
+            loader != '0.19.5' || api != '0.145.4+26.1.1'
+        })
+        assertThrows(GradleException) { shell.evaluate(code) }
     }
 
     @Test void strictFamilyMinimumUsesTheSelectedRuntimeApiInsideOwnerBounds() {
