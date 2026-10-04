@@ -92,8 +92,8 @@ class TargetsPlugin implements Plugin<Project> {
         } else {
             List<Map> phases = []
             if (family.size() > 1) {
-                family.each { target -> phases.add([name: 'local_search_' + target.id,
-                        target: target, operation: 'verifyFabricCompatibility', strict: false]) }
+                phases.add([name: 'local_search_' + owner.id,
+                        target: owner, operation: 'verifyFabricCompatibility', strict: false])
                 phases.add([name: 'local_updateFabricMinimums', target: owner,
                         operation: 'updateFabricMinimums', strict: false])
                 family.each { target -> phases.add([name: 'local_strict_' + target.id,

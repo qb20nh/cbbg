@@ -30,14 +30,14 @@ class FabricCompatibilitySearch {
     }
 
     static String minimum(Collection<String> available, String current, Closure<Boolean> passes) {
-        boundary(ordered(available), current, passes)
+        boundary(grouped(available), current, passes)
     }
 
     static Map maximum(Collection<String> available, String current, Closure<Boolean> passes) {
-        List<String> versions = ordered(available)
-        String maximum = boundary(versions.reverse(), current, passes)
-        int index = versions.indexOf(maximum)
-        [maximum: maximum, firstIncompatible: index + 1 < versions.size() ? versions[index + 1] : null]
+        List<List<String>> groups = grouped(available)
+        String maximum = boundary(groups.reverse(), current, passes)
+        int index = groups.findIndexOf { it.contains(maximum) }
+        [maximum: maximum, firstIncompatible: index + 1 < groups.size() ? groups[index + 1][0] : null]
     }
 
     static String upperLimit(String maximum, String firstIncompatible) {
@@ -45,7 +45,13 @@ class FabricCompatibilitySearch {
     }
 
     static boolean before(String left, String right) {
-        left != right && ordered([left, right])[0] == left
+        List<Integer> leftNumbers = numbers(left)
+        List<Integer> rightNumbers = numbers(right)
+        for (int i = 0; i < 3; i++) {
+            int result = leftNumbers[i] <=> rightNumbers[i]
+            if (result != 0) return result < 0
+        }
+        false
     }
 
     static Map intersect(Collection<Map> reports) {
@@ -65,6 +71,15 @@ class FabricCompatibilitySearch {
 
     static List<String> within(Collection<String> available, String minimum, String upperExclusive) {
         ordered(available).findAll { !before(it, minimum) && before(it, upperExclusive) }
+    }
+
+    static boolean familyPasses(Collection<Map> targets, String loader, String api, Closure<Boolean> test) {
+        for (Map target : targets) {
+            Boolean passed = test.call(target, loader, api)
+            if (passed == null) throw new GradleException('Dependency test was inconclusive for ' + target.id)
+            if (!passed) return false
+        }
+        true
     }
 
     static void requireCurrentInputs(Map inputs, File driver, File initialConfig,
@@ -136,18 +151,30 @@ class FabricCompatibilitySearch {
         entries
     }
 
-    private static String boundary(List<String> versions, String current, Closure<Boolean> passes) {
-        int index = versions.indexOf(current)
+    private static List<List<String>> grouped(Collection<String> available) {
+        List<List<String>> groups = []
+        ordered(available).each { String version ->
+            if (!groups || numbers(groups.last()[0]) != numbers(version)) groups.add([])
+            groups.last().add(version)
+        }
+        groups
+    }
+
+    private static String boundary(List<List<String>> groups, String current, Closure<Boolean> passes) {
+        int index = groups.findIndexOf { it.contains(current) }
         if (index < 0) throw new GradleException('Current version is absent from discovery: ' + current)
-        Map<String, Boolean> tested = [:]
+        Map<Integer, Boolean> tested = [:]
         Closure<Boolean> test = { int position ->
-            String version = versions[position]
-            if (!tested.containsKey(version)) {
-                Boolean result = passes.call(version)
-                if (result == null) throw new GradleException('Dependency test was inconclusive: ' + version)
-                tested[version] = result
+            if (!tested.containsKey(position)) {
+                boolean groupPasses = true
+                groups[position].each { String version ->
+                    Boolean result = passes.call(version)
+                    if (result == null) throw new GradleException('Dependency test was inconclusive: ' + version)
+                    if (!result) groupPasses = false
+                }
+                tested[position] = groupPasses
             }
-            tested[version]
+            tested[position]
         }
         // Search one compatibility transition in the supplied direction.
         // Semantic versioning alone does not establish that assumption.
@@ -164,8 +191,8 @@ class FabricCompatibilitySearch {
             }
         } else {
             failed = index
-            while (failed < versions.size() - 1) {
-                int next = Math.min(versions.size() - 1, index + step)
+            while (failed < groups.size() - 1) {
+                int next = Math.min(groups.size() - 1, index + step)
                 if (test(next)) { passed = next; break }
                 failed = next
                 step *= 2
@@ -177,8 +204,8 @@ class FabricCompatibilitySearch {
             if (test(middle)) passed = middle
             else failed = middle
         }
-        if (passed + 1 < versions.size()) test(passed + 1)
-        versions[passed]
+        if (passed + 1 < groups.size()) test(passed + 1)
+        groups[passed].contains(current) ? current : groups[passed][0]
     }
 
     static String startingVersion(Collection<String> available, String previous) {

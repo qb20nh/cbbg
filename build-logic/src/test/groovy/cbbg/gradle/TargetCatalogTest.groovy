@@ -27,10 +27,12 @@ class TargetCatalogTest {
     @Test
     void actualCatalogSelectsRuntimeTargetsAndArtifactOwners() {
         TargetCatalog catalog = TargetCatalog.read(CATALOG)
+        List<String> implemented = ['26.1-fabric', '26.1.1-fabric', '26.1.2-fabric', '26.3-fabric']
         assertEquals(33, catalog.select().size())
-        assertEquals(['26.3-fabric'], catalog.defaults()*.id)
-        assertEquals(['26.3-fabric'], catalog.select().findAll { it.implemented }*.id)
-        assertEquals(['26.3-fabric'], catalog.defaults(true)*.id)
+        assertEquals(implemented, catalog.defaults()*.id)
+        assertEquals(implemented, catalog.select().findAll { it.implemented }*.id)
+        assertEquals(implemented, catalog.defaults(true)*.id)
+        assertEquals(['26.1-fabric', '26.3-fabric'], catalog.matrix(implemented.join(','), true)*.id)
         assertEquals(['26.3-fabric'], catalog.matrix('26.3-fabric', true)*.id)
         assertEquals(['1.21.11-neoforge', '26.1.2-neoforge', '26.2-neoforge'],
                 catalog.selectProfile('neoforge-modern')*.id)
