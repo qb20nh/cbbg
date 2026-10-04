@@ -160,17 +160,24 @@ jobs:
           version="${version%%+*}"
           title="cbbg $version"
           if [[ "$GITHUB_REF_NAME" == *+mc* ]]; then
-            read -r minecraft loader < <(jq -r --arg id "$TARGETS" \
-              '.targets[] | select(.id == $id) | [.minecraft, .loader] | @tsv' targets.json)
-            case "$loader" in
-              fabric) loader_title=Fabric ;;
-              quilt) loader_title=Quilt ;;
-              forge) loader_title=Forge ;;
-              neoforge) loader_title=NeoForge ;;
-              legacy-fabric) loader_title='Legacy Fabric' ;;
-              *) echo "Unknown release loader: $loader"; exit 1 ;;
-            esac
-            title="cbbg $version for Minecraft $minecraft $loader_title"
+            scope="$(jq -er --arg ids "$TARGETS" '
+              {fabric: "Fabric", quilt: "Quilt", forge: "Forge",
+               neoforge: "NeoForge", "legacy-fabric": "Legacy Fabric"} as $labels |
+              ($ids | split(",")) as $ids |
+              .targets as $catalog |
+              [$catalog[] | select(.id as $id | $ids | index($id))] as $selected |
+              ($selected | map(.minecraft) | unique) as $versions |
+              ($catalog[] | select(.id == ($selected[0].artifactOf // $selected[0].id))) as $owner |
+              ([$owner.minecraft] + ($owner.compatibleMinecraft // []) | unique) as $family |
+              (if ($family | length) > 1 and $versions == $family and
+                  all($family[]; . == $owner.minecraft or startswith($owner.minecraft + "."))
+               then $owner.minecraft + ".x" else $versions | join(", ") end) as $minecraft |
+              ($selected | map(.loader as $loader |
+                $labels[$loader] // error("Unknown release loader: " + $loader)) |
+                unique | join(", ")) as $loaders |
+              "Minecraft \($minecraft) \($loaders)"
+            ' targets.json)"
+            title="cbbg $version for $scope"
           fi
           flags=()
           if [[ "$version" == *-* ]]; then
