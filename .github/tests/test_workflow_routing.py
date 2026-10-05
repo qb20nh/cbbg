@@ -1,6 +1,9 @@
 """Check that hosted workflows invoke the native Gradle entry points."""
 
+import os
 from pathlib import Path
+import subprocess
+import tempfile
 import unittest
 
 import yaml
@@ -54,6 +57,25 @@ class WorkflowRoutingTest(unittest.TestCase):
         codeql = WORKFLOWS / "codeql.yml"
         self.assertIn("targetMatrix", codeql.read_text())
         self.assertIn("-Ptarget=26.2-fabric", codeql.read_text())
+
+    def test_codeql_compiles_catalog_targets_through_gradle(self):
+        compile_script = script("Compile target for CodeQL", WORKFLOWS / "codeql.yml")
+        for target, profile in (("26.2-fabric", "fabric-upstream"),
+                                ("26.3-fabric", "fabric-modern")):
+            with self.subTest(target=target), tempfile.TemporaryDirectory() as directory:
+                gradlew = Path(directory) / "gradlew"
+                gradlew.write_text('#!/bin/sh\nprintf "%s\\n" "$@"\n')
+                gradlew.chmod(0o755)
+                result = subprocess.run(
+                    ["bash", "-e", "-c", compile_script], cwd=directory,
+                    env={**os.environ, "TARGET": target, "BUILD_PROFILE": profile},
+                    capture_output=True, text=True, check=False,
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(result.stdout.splitlines(), [
+                    f"-Ptarget={target}", "compileJava", "--rerun-tasks",
+                    "--no-build-cache", "--no-daemon", "--no-watch-fs",
+                ])
 
     def test_publication_never_builds_artifact_and_retains_retry_gate(self):
         publish = WORKFLOWS / "publish.yml"

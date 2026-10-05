@@ -70,12 +70,7 @@ jobs:
     - name: Compile target for CodeQL
       env:
         TARGET: ${{ matrix.id }}
-        BUILD_PROFILE: ${{ matrix.buildProfile }}
       run: |
-        case "$BUILD_PROFILE" in
-          fabric-modern) ;;
-          *) echo "CodeQL build instructions needed for $BUILD_PROFILE" >&2; exit 1 ;;
-        esac
         ./gradlew -Ptarget="$TARGET" \
           compileJava --rerun-tasks --no-build-cache --no-daemon --no-watch-fs
     - uses: github/codeql-action/analyze@v4
