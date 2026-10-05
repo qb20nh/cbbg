@@ -4,6 +4,31 @@ This project uses [Keep a Changelog](https://keepachangelog.com/) and [Semantic 
 
 ## [Unreleased]
 
+## [1.4.2 for Minecraft 26.2 Fabric] - 2026-10-05 <!-- [1.4.2-mc26.2-fabric] -->
+
+### Added
+
+- Vulkan renderer support, including float render targets and dithered screenshots.
+- Suspend dithering while Sulkan shaderpacks are active.
+
+### Changed
+
+- Smaller jar by replacing AsmFabricLoader with our own early entry and using ProGuard. Source mappings and dependency information are included in the sources jar.
+- Require Fabric Loader `>=0.18.4 <1.0.0` and Fabric API `>=0.148.3+26.2 <1.0.0`.
+- Generate noise images and load/save their caches in the background. Cancel replaced calculations and pause dithering until the requested noise is ready.
+- Regenerate 1.4.0 noise caches on first use.
+
+### Fixed
+
+- Apply the requested noise dimensions and seed throughout generation and cache loading, including resets during generation and forced regeneration of cached defaults.
+- Restart the noise-frame sequence after reloading, and use the displayed noise frame in screenshots.
+- Convert float screenshots correctly when dithering is disabled or unavailable.
+- Clear generation toasts after cancellation or failure, and after completion if toast notifications were disabled during generation.
+- Prevent generation toasts from replacing Minecraft's other periodic notifications.
+- Fall back to Minecraft's rendering when the dither shader fails, and release noise images and GPU resources when replaced or closed.
+- Handle unnamed framebuffer targets used by other renderers.
+- Parse mode and pixel-format commands consistently across system languages.
+
 ## [1.4.2 for Minecraft 26.3 Fabric] - 2026-10-05 <!-- [1.4.2-mc26.3-fabric] -->
 
 ### Fixed
