@@ -59,7 +59,9 @@ final class ReleaseShutdownResources {
         (NativeImage[])
             Objects.requireNonNull(
                 ReleaseShutdownGameTest.field(
-                    controller, null, "com.mojang.blaze3d.platform.NativeImage[] stbnFrames"));
+                    "com.qb20nh.cbbg.render.DitherController",
+                    null,
+                    "com.mojang.blaze3d.platform.NativeImage[] frames"));
     return new Owned(
         List.copyOf(Arrays.asList(buffers(uniform).clone())),
         List.copyOf(Arrays.asList(frames.clone())));

@@ -19,6 +19,8 @@ def verify_dependencies(target, profile, paths, lock):
         raise ValueError('Dependency lock target/schema mismatch')
     if profile not in target['compatibilityProfiles']:
         raise ValueError('Unknown compatibility profile')
+    effective_pins = {**target['dependencies'],
+                      **target.get('compatibilityDependencyOverrides', {}).get(profile, {})}
     aliases = {name.lower(): name for name in lock['dependencies']}
     selected = set() if profile == 'none' else set(profile.split('+'))
     if 'iris' in selected or 'sulkan' in selected:
@@ -35,7 +37,7 @@ def verify_dependencies(target, profile, paths, lock):
         raise ValueError('Missing or extra selected mod dependencies')
     for name in sorted(required):
         entry = lock['dependencies'][name]
-        if entry['pin'] != target['dependencies'].get(name):
+        if entry['pin'] != effective_pins.get(name):
             raise ValueError('Dependency lock catalog pin mismatch: ' + name)
         with Path(paths[name]).open('rb') as stream:
             digest = hashlib.file_digest(stream, 'sha256').hexdigest()

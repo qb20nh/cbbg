@@ -14,6 +14,8 @@ import java.util.Objects;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.loader.api.FabricLoader;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.Screenshot;
 import org.jspecify.annotations.NullMarked;
 import org.lwjgl.opengl.GL;
 import org.lwjgl.opengl.GL11;
@@ -26,6 +28,9 @@ import org.slf4j.LoggerFactory;
 public final class ReleaseLifecycleGameTest implements FabricClientGameTest {
   @Override
   public void runTest(ClientGameTestContext context) {
+    if (FabricLoader.getInstance().isModLoaded("sulkan")) {
+      ReleaseSulkanGameTest.setShadersEnabled(context, false);
+    }
     context.runOnClient(
         client -> {
           var info = RenderSystem.getDevice().getDeviceInfo();
@@ -93,6 +98,7 @@ public final class ReleaseLifecycleGameTest implements FabricClientGameTest {
                   Objects.requireNonNull(client.gameRenderer.mainRenderTarget().getColorTexture()));
       command(context, "format set rgba32f");
       awaitFormat(context, GpuFormat.RGBA32_FLOAT);
+      checkScreenshotFrame(context);
       context.runOnClient(
           client -> {
             if (!previous.isClosed()) throw new AssertionError("Old color texture is still open");
@@ -100,6 +106,7 @@ public final class ReleaseLifecycleGameTest implements FabricClientGameTest {
       command(context, "mode set demo");
       context.waitTicks(10);
       context.takeScreenshot("release-demo-rgba32f");
+      checkScreenshotFrame(context);
       int[] size =
           context.computeOnClient(
               client -> new int[] {client.getWindow().getWidth(), client.getWindow().getHeight()});
@@ -206,7 +213,37 @@ public final class ReleaseLifecycleGameTest implements FabricClientGameTest {
     }
   }
 
-  private static void command(ClientGameTestContext context, String command) {
+  private static void checkScreenshotFrame(ClientGameTestContext context) {
+    context.waitFor(
+        client -> {
+          String frame = noiseFrame(client);
+          return frame.endsWith("/8") && !frame.equals("0/8");
+        },
+        600);
+    context.runOnClient(
+        client -> {
+          String before = noiseFrame(client);
+          Screenshot.takeScreenshot(client.gameRenderer.mainRenderTarget(), NativeImage::close);
+          String after = noiseFrame(client);
+          if (!after.equals(before)) {
+            throw new AssertionError(
+                "Taking a screenshot changed the displayed noise frame: "
+                    + before
+                    + " -> "
+                    + after);
+          }
+        });
+  }
+
+  private static String noiseFrame(Minecraft client) {
+    var match =
+        java.util.regex.Pattern.compile("stbn=(\\d+/\\d+)")
+            .matcher(String.join("\n", ReleaseDebugOverlayGameTest.output(client)));
+    if (!match.find()) throw new AssertionError("Missing displayed noise frame");
+    return Objects.requireNonNull(match.group(1));
+  }
+
+  static void command(ClientGameTestContext context, String command) {
     context.runOnClient(
         client -> Objects.requireNonNull(client.getConnection()).sendCommand("cbbg " + command));
   }

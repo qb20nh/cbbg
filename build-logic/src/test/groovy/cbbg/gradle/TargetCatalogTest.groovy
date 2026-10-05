@@ -27,12 +27,12 @@ class TargetCatalogTest {
     @Test
     void actualCatalogSelectsRuntimeTargetsAndArtifactOwners() {
         TargetCatalog catalog = TargetCatalog.read(CATALOG)
-        List<String> implemented = ['26.1-fabric', '26.1.1-fabric', '26.1.2-fabric', '26.3-fabric']
+        List<String> implemented = ['26.1-fabric', '26.1.1-fabric', '26.1.2-fabric', '26.2-fabric', '26.3-fabric']
         assertEquals(33, catalog.select().size())
         assertEquals(implemented, catalog.defaults()*.id)
         assertEquals(implemented, catalog.select().findAll { it.implemented }*.id)
         assertEquals(implemented, catalog.defaults(true)*.id)
-        assertEquals(['26.1-fabric', '26.3-fabric'], catalog.matrix(implemented.join(','), true)*.id)
+        assertEquals(['26.1-fabric', '26.2-fabric', '26.3-fabric'], catalog.matrix(implemented.join(','), true)*.id)
         assertEquals(['26.3-fabric'], catalog.matrix('26.3-fabric', true)*.id)
         assertEquals(['1.21.11-neoforge', '26.1.2-neoforge', '26.2-neoforge'],
                 catalog.selectProfile('neoforge-modern')*.id)
@@ -125,6 +125,27 @@ class TargetCatalogTest {
         data = copyData()
         target(data, '26.1-fabric').minecraftDependency = '>=26.1 <26.3'
         rejects(data, 'compatible Minecraft')
+    }
+
+    @Test
+    void compatibilityDependencyOverridesAreValidatedAndSelected() {
+        Map data = copyData()
+        Map fabric = target(data, '26.2-fabric')
+        assertEquals('xJZxADzI', TargetCatalog.effectiveDependencies(fabric, 'iris').sodium)
+        assertEquals('2Yom1N68', TargetCatalog.effectiveDependencies(fabric, 'sulkan').sodium)
+        assertEquals('2Yom1N68', TargetCatalog.effectiveDependencies(fabric,
+                'modmenu+sodium+sulkan+renderscale+chatpatches+immediatelyfast').sodium)
+        assertEquals('xJZxADzI', fabric.dependencies.sodium)
+        for (Object overrides : [[:], [], [unknown: [sodium: 'pin']], [sulkan: [:]],
+                [sulkan: []],
+                [sulkan: [loader: 'pin']], [sulkan: [fabricApi: 'pin']],
+                [sulkan: [minimumLoader: 'pin']], [sulkan: [fabricApiUpperExclusive: 'pin']],
+                [sulkan: [missing: 'pin']], [sulkan: [sodium: '']],
+                [sulkan: [sodium: '  ']], [sulkan: [sodium: 3]]]) {
+            data = copyData()
+            target(data, '26.2-fabric').compatibilityDependencyOverrides = overrides
+            rejects(data, 'compatibility dependency overrides')
+        }
     }
 
     @Test

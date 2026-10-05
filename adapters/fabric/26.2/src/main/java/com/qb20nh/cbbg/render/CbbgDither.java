@@ -13,29 +13,19 @@ import com.mojang.blaze3d.systems.CommandEncoder;
 import com.mojang.blaze3d.systems.RenderPass;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.textures.FilterMode;
-import com.mojang.blaze3d.textures.GpuTexture;
 import com.mojang.blaze3d.textures.GpuTextureView;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import com.qb20nh.cbbg.Cbbg;
 import com.qb20nh.cbbg.CbbgClient;
 import com.qb20nh.cbbg.compat.renderscale.RenderScaleCompat;
 import com.qb20nh.cbbg.config.CbbgConfig;
-import com.qb20nh.cbbg.render.stbn.STBNGenerator;
-import com.qb20nh.cbbg.render.stbn.STBNLoader;
 import com.qb20nh.cbbg.render.stbn.StbnTextureManager;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.concurrent.CancellationException;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
-import java.util.concurrent.atomic.AtomicBoolean;
-import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.components.toasts.SystemToast;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.renderer.MappableRingBuffer;
 import net.minecraft.client.renderer.ShaderManager;
-import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.NullMarked;
@@ -97,35 +87,24 @@ public final class CbbgDither {
           .withPrimitiveTopology(PrimitiveTopology.TRIANGLES)
           .build();
 
-  private static final AtomicBoolean loggedFailure = new AtomicBoolean(false);
-  private static volatile boolean disabled = false;
-
-  private static NativeImage @Nullable [] stbnFrames;
   private static final StbnTextureManager stbnManager = new StbnTextureManager();
-  private static int stbnFrameIndex = 0;
-  private static volatile @Nullable CompletableFuture<STBNGenerator.@Nullable STBNFields>
-      processedGeneration;
   private static @Nullable MappableRingBuffer ditherInfoUbo;
-
-  // Configurable state tracking
-  private static boolean isGenerating = false;
-  private static boolean generatingToastVisible = false;
-  private static SystemToast.SystemToastId generationToastId = new SystemToast.SystemToastId();
-  private static int currentWidth = 128;
-  private static int currentHeight = 128;
+  private static boolean presentationFailed;
 
   private static @Nullable TextureTarget ditherTarget;
 
   private CbbgDither() {}
 
   public static void resetAfterToggle() {
-    CbbgDither.initAsync();
-    disabled = false;
-    loggedFailure.set(false);
-    // Texture recreation happens lazily in ensureGpuTargets via manager
+    presentationFailed = false;
+    DitherController.resetAfterToggle();
   }
 
   public static void close() {
+    DitherController.close();
+  }
+
+  static void closeGpu() {
     if (ditherInfoUbo != null) {
       ditherInfoUbo.close();
       ditherInfoUbo = null;
@@ -135,124 +114,92 @@ public final class CbbgDither {
       ditherTarget = null;
     }
     stbnManager.close();
-    closeFrames(stbnFrames);
-    stbnFrames = null;
-  }
-
-  private static void closeFrames(NativeImage @Nullable [] frames) {
-    if (frames == null) {
-      return;
-    }
-    for (NativeImage frame : frames) {
-      if (frame != null) {
-        frame.close();
-      }
-    }
   }
 
   public static boolean isDisabled() {
-    return disabled;
+    return presentationFailed || DitherController.isDisabled();
   }
 
   public static int getStbnFrames() {
-    if (stbnFrames != null) {
-      return stbnFrames.length;
-    }
-    return CbbgConfig.get().stbnDepth();
+    return DitherController.getStbnFrames();
   }
 
-  /** 0..depth-1 (best-effort). */
   public static int getCurrentStbnFrameIndex() {
-    int idx = stbnFrameIndex;
-    if (idx <= 0) {
-      return 0;
-    }
-    int depth = getStbnFrames();
-    if (depth <= 0) return 0;
-    return Math.floorMod(idx - 1, depth);
+    return DitherController.getCurrentStbnFrameIndex();
   }
 
   /**
    * Renders the dithering pass into an RGBA8 {@link TextureTarget} and returns it.
    *
-   * <p>This is used both for final presentation and for screenshots, so screenshots match the
-   * dithered on-screen output.
+   * <p>Advances the noise frame for final presentation.
    */
   public static @Nullable TextureTarget renderDitheredTarget(GpuTextureView input) {
-    return renderToTarget(input, DITHER_PIPELINE, DITHER_SHADER, "cbbg dither");
+    return renderToTarget(input, DITHER_PIPELINE, DITHER_SHADER, "cbbg dither", true);
   }
 
   public static @Nullable TextureTarget renderDemoTarget(GpuTextureView input) {
-    return renderToTarget(input, DEMO_PIPELINE, DEMO_SHADER, "cbbg demo");
+    return renderToTarget(input, DEMO_PIPELINE, DEMO_SHADER, "cbbg demo", true);
+  }
+
+  public static @Nullable TextureTarget renderScreenshotTarget(GpuTextureView input) {
+    return CbbgClient.isDemoMode()
+        ? renderToTarget(input, DEMO_PIPELINE, DEMO_SHADER, "cbbg demo screenshot", false)
+        : renderToTarget(input, DITHER_PIPELINE, DITHER_SHADER, "cbbg screenshot", false);
   }
 
   private static @Nullable TextureTarget renderToTarget(
       GpuTextureView input,
       @NonNull RenderPipeline pipeline,
       @NonNull Identifier fragmentShader,
-      String passLabel) {
-    if (disabled) {
-      return null;
-    }
-
+      String passLabel,
+      boolean advanceFrame) {
+    RenderSystem.assertOnRenderThread();
     try {
-      RenderSystem.assertOnRenderThread();
-
-      if (!CbbgClient.isEnabled()) {
+      if (presentationFailed
+          || !areShadersReady(fragmentShader)
+          || input.getWidth(0) <= 0
+          || input.getHeight(0) <= 0) {
         return null;
       }
-
-      if (!areShadersReady(fragmentShader)) {
-        return null;
-      }
-      if (!RenderSystem.getDevice().precompilePipeline(pipeline).isValid()) {
-        throw new IllegalStateException("CBBG dither shader could not be compiled");
-      }
-
-      final int width = input.getWidth(0);
-      final int height = input.getHeight(0);
-      if (width <= 0 || height <= 0) {
-        return null;
-      }
-
-      ensureGpuTargets(width, height);
-
-      GpuTextureView ditherView = Objects.requireNonNull(ditherTarget).getColorTextureView();
-      if (ditherView == null) {
-        return null;
-      }
-      if (!stbnManager.isReady()) {
-        return null;
-      }
-
-      CommandEncoder encoder = RenderSystem.getDevice().createCommandEncoder();
-      GpuBuffer ditherInfo = ensureDitherInfoUbo();
-      uploadStbnFrame(encoder);
-
-      try (RenderPass pass =
-          encoder.createRenderPass(
-              () -> passLabel, ditherView, Objects.requireNonNull(Optional.empty()))) {
-        pass.setPipeline(pipeline);
-        RenderSystem.bindDefaultUniforms(pass);
-        pass.setUniform(U_DITHER_INFO, ditherInfo);
-
-        pass.bindTexture(
-            S_IN, input, RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST));
-        pass.bindTexture(
-            S_NOISE,
-            stbnManager.getView(),
-            RenderSystem.getSamplerCache().getRepeat(FilterMode.NEAREST));
-        pass.draw(3, 1, 0, 0);
-      }
-      if (ditherInfoUbo != null) {
-        ditherInfoUbo.rotate();
-      }
-
-      return ditherTarget;
-    } catch (Exception e) {
-      disableWithLog(e);
+      return DitherController.render(advanceFrame, () -> drawToTarget(input, pipeline, passLabel));
+    } catch (RuntimeException failure) {
+      disableWithLog(failure);
       return null;
     }
+  }
+
+  private static TextureTarget drawToTarget(
+      GpuTextureView input, RenderPipeline pipeline, String passLabel) {
+    if (!RenderSystem.getDevice().precompilePipeline(pipeline).isValid()) {
+      throw new IllegalStateException("CBBG dither shader could not be compiled");
+    }
+
+    ensureGpuTargets(input.getWidth(0), input.getHeight(0));
+    TextureTarget target = Objects.requireNonNull(ditherTarget);
+    GpuTextureView ditherView = Objects.requireNonNull(target.getColorTextureView());
+    CommandEncoder encoder = RenderSystem.getDevice().createCommandEncoder();
+    GpuBuffer ditherInfo = ensureDitherInfoUbo();
+
+    try (RenderPass pass =
+        encoder.createRenderPass(
+            () -> passLabel, ditherView, Objects.requireNonNull(Optional.empty()))) {
+      pass.setPipeline(pipeline);
+      RenderSystem.bindDefaultUniforms(pass);
+      pass.setUniform(U_DITHER_INFO, ditherInfo);
+
+      pass.bindTexture(
+          S_IN, input, RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST));
+      pass.bindTexture(
+          S_NOISE,
+          stbnManager.getView(),
+          RenderSystem.getSamplerCache().getRepeat(FilterMode.NEAREST));
+      pass.draw(3, 1, 0, 0);
+    }
+    if (ditherInfoUbo != null) {
+      ditherInfoUbo.rotate();
+    }
+
+    return target;
   }
 
   /**
@@ -329,165 +276,24 @@ public final class CbbgDither {
         ditherTarget.resize(width, height);
       }
     }
-
-    stbnManager.ensureTexture(currentWidth, currentHeight);
-  }
-
-  private static void uploadStbnFrame(CommandEncoder encoder) {
-    if (stbnFrames == null || stbnFrames.length == 0) {
-      return;
-    }
-
-    int idx = stbnFrameIndex++ % stbnFrames.length;
-    NativeImage frame = stbnFrames[idx];
-    GpuTexture texture = stbnManager.getTexture();
-    if (frame == null || texture == null) {
-      return;
-    }
-
-    encoder.writeToTexture(texture, frame);
-  }
-
-  public static void initAsync() {
-    CbbgConfig cfg = CbbgConfig.get();
-    STBNGenerator.generateAsync(cfg.stbnSize(), cfg.stbnSize(), cfg.stbnDepth(), cfg.stbnSeed())
-        .exceptionally(CbbgDither::observeGenerationFailure);
   }
 
   public static void reloadStbn(boolean force) {
-    if (isGenerating && !force) return;
-
-    CbbgConfig cfg = CbbgConfig.get();
-    if (force) {
-      if (!isGenerating) generatingToastVisible = false;
-      // Clear cache for these params implies we want fresh ones
-      STBNLoader.clearCacheExceptDefaults();
-
-      // Start generation
-      STBNGenerator.generateAsync(
-              cfg.stbnSize(), cfg.stbnSize(), cfg.stbnDepth(), cfg.stbnSeed(), true)
-          .exceptionally(CbbgDither::observeGenerationFailure);
-      isGenerating = true;
-
-      // Notify
-      if (cfg.notifyChat() && Minecraft.getInstance().level != null) {
-        Minecraft.getInstance()
-            .showDebugChat(
-                Component.translatable("cbbg.chat.stbn.generating")
-                    .withStyle(ChatFormatting.YELLOW));
-      }
-      if (cfg.notifyToast()) {
-        generatingToastVisible = true;
-        SystemToast.addOrUpdate(
-            Minecraft.getInstance().gui.toastManager(),
-            generationToastId,
-            Component.translatable("cbbg.toast.stbn.title"),
-            Component.translatable("cbbg.toast.stbn.generating"));
-      }
-
-    } else {
-      initAsync();
-    }
+    DitherController.reloadStbn(force);
   }
 
-  public static boolean isGenerating() {
-    return isGenerating;
+  static void allocateNoise(int size) {
+    stbnManager.ensureTexture(size, size);
   }
 
-  private static STBNGenerator.@Nullable STBNFields observeGenerationFailure(Throwable failure) {
-    Throwable cause =
-        failure instanceof CompletionException && failure.getCause() != null
-            ? failure.getCause()
-            : failure;
-    if (!(cause instanceof CancellationException)) {
-      Cbbg.LOGGER.error("Failed to prepare STBN generation", cause);
-    }
-    return null;
+  static boolean isNoiseReady() {
+    return stbnManager.isReady();
   }
 
-  // Future identity ensures each generation result is consumed only once.
-  @SuppressWarnings("ReferenceEquality")
-  public static void ensureStbnLoaded() {
-    CbbgConfig cfg = CbbgConfig.get();
-    if (!STBNGenerator.matches(cfg.stbnSize(), cfg.stbnSize(), cfg.stbnDepth(), cfg.stbnSeed())) {
-      initAsync();
-    }
-    CompletableFuture<STBNGenerator.@Nullable STBNFields> pendingGen = STBNGenerator.get();
-    if (pendingGen != null
-        && pendingGen.isDone()
-        && !pendingGen.isCancelled()
-        && pendingGen != processedGeneration) {
-      processedGeneration = pendingGen;
-      try {
-        STBNGenerator.STBNFields fields = pendingGen.join(); // Should be immediate
-        onStbnGenerationComplete(fields, cfg);
-      } catch (Exception e) {
-        if (!pendingGen.isCompletedExceptionally() && !pendingGen.isCancelled()) {
-          Cbbg.LOGGER.error("Failed to retrieve STBN fields", e);
-        }
-        clearGenerationReminder();
-      }
-    } else if (pendingGen != null && pendingGen.isCancelled()) {
-      if (pendingGen != processedGeneration) {
-        processedGeneration = pendingGen;
-        clearGenerationReminder();
-      }
-      if (stbnFrames == null) initAsync();
-    } else if (stbnFrames == null && pendingGen == null) {
-      initAsync();
-    }
-  }
-
-  private static void clearGenerationReminder() {
-    if (!isGenerating) return;
-    isGenerating = false;
-    if (generatingToastVisible) {
-      Minecraft client = Minecraft.getInstance();
-      SystemToast.forceHide(client.gui.toastManager(), generationToastId);
-      generationToastId = new SystemToast.SystemToastId();
-      generatingToastVisible = false;
-    }
-  }
-
-  // Array identity prevents closing the frames still owned by the active renderer.
-  @SuppressWarnings("ReferenceEquality")
-  private static void onStbnGenerationComplete(
-      STBNGenerator.@Nullable STBNFields fields, CbbgConfig cfg) {
-    NativeImage[] nextFrames =
-        STBNLoader.loadOrGenerate(
-            cfg.stbnSize(), cfg.stbnSize(), cfg.stbnDepth(), cfg.stbnSeed(), fields);
-    NativeImage[] previousFrames = stbnFrames;
-    stbnFrames = nextFrames;
-    if (previousFrames != nextFrames) {
-      closeFrames(previousFrames);
-    }
-
-    // Update state dims
-    if (stbnFrames != null && stbnFrames.length > 0) {
-      currentWidth = stbnFrames[0].getWidth();
-      currentHeight = stbnFrames[0].getHeight();
-    }
-
-    if (isGenerating) {
-      isGenerating = false;
-      // Only notify chat if IN-GAME
-      if (cfg.notifyChat() && Minecraft.getInstance().level != null) {
-        Minecraft.getInstance()
-            .showDebugChat(
-                Component.translatable("cbbg.chat.stbn.complete").withStyle(ChatFormatting.GREEN));
-      }
-      if (cfg.notifyToast()) {
-        SystemToast.addOrUpdate(
-            Minecraft.getInstance().gui.toastManager(),
-            generationToastId,
-            Component.translatable("cbbg.toast.stbn.title"),
-            Component.translatable("cbbg.toast.stbn.complete"));
-      } else if (generatingToastVisible) {
-        SystemToast.forceHide(Minecraft.getInstance().gui.toastManager(), generationToastId);
-        generationToastId = new SystemToast.SystemToastId();
-      }
-      generatingToastVisible = false;
-    }
+  static void uploadNoise(NativeImage frame) {
+    RenderSystem.getDevice()
+        .createCommandEncoder()
+        .writeToTexture(Objects.requireNonNull(stbnManager.getTexture()), frame);
   }
 
   private static boolean areShadersReady(@NonNull Identifier fragmentShader) {
@@ -551,9 +357,9 @@ public final class CbbgDither {
   }
 
   private static void disableWithLog(Exception e) {
-    if (loggedFailure.compareAndSet(false, true)) {
+    if (!presentationFailed) {
       Cbbg.LOGGER.error("Disabling cbbg due to rendering error", e);
-      disabled = true;
+      presentationFailed = true;
     }
   }
 }

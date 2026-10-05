@@ -120,7 +120,7 @@ public final class ReleaseDebugOverlayGameTest implements FabricClientGameTest {
     }
   }
 
-  private static List<String> output(Minecraft client) {
+  static List<String> output(Minecraft client) {
     List<String> lines = new ArrayList<>();
     DebugScreenDisplayer displayer =
         (DebugScreenDisplayer)

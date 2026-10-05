@@ -2,6 +2,16 @@ package cbbg.gradle
 
 class TargetCatalog {
     final Map data
+    private static final Set OPTIONAL_DEPENDENCIES = [
+            'modMenu', 'clothConfig', 'yacl', 'sodium', 'iris', 'sulkan', 'renderScale',
+            'chatPatches', 'immediatelyFast', 'threatenGl', 'forceGl3'
+    ] as Set
+
+    static Map effectiveDependencies(Map target, String profile) {
+        Map effective = new LinkedHashMap(target.dependencies)
+        effective.putAll(target.compatibilityDependencyOverrides?.get(profile) ?: [:])
+        effective
+    }
 
     static TargetCatalog read(File file) {
         Object parsed = CandidateFiles.read(file)
@@ -90,6 +100,20 @@ class TargetCatalog {
                 }
                 if (profiles.none.toSet() != backends.toSet()) {
                     throw new IllegalArgumentException('Base fixture must cover every backend: ' + id)
+                }
+            }
+            if (target.containsKey('compatibilityDependencyOverrides')) {
+                Map overrides = target.compatibilityDependencyOverrides instanceof Map ?
+                        target.compatibilityDependencyOverrides : [:]
+                if (overrides.isEmpty() || overrides.any { profile, pins ->
+                    !(profile instanceof String) || !target.compatibilityProfiles?.containsKey(profile) ||
+                            !(pins instanceof Map) || pins.isEmpty() || pins.any { name, pin ->
+                        !(name instanceof String) || !OPTIONAL_DEPENDENCIES.contains(name) ||
+                                !target.dependencies?.containsKey(name) ||
+                                !(pin instanceof String) || !pin.trim()
+                    }
+                }) {
+                    throw new IllegalArgumentException('Invalid compatibility dependency overrides: ' + id)
                 }
             }
         }
