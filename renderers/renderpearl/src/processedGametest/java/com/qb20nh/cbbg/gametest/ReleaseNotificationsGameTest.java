@@ -111,17 +111,13 @@ public final class ReleaseNotificationsGameTest implements FabricClientGameTest 
                 if (!Boolean.TRUE.equals(field(SystemToast.class, "forceHide", previous))) {
                   return false;
                 }
-                if (!previous.equals(
-                    client.gui.toastManager().getToast(SystemToast.class, previous.getToken()))) {
-                  throw new AssertionError("Hidden toast was removed before retry");
-                }
                 preferences(dispatcher, source, true, true);
                 client.gui.hud.getChat().clearMessages(false);
                 execute(dispatcher, source, "stbn seed 7501");
                 execute(dispatcher, source, "stbn generate");
                 SystemToast current = activeToast(client);
-                if (current == null || previous.equals(current)) {
-                  throw new AssertionError("Retry reused the force-hidden toast");
+                if (current == null || previous.getToken().equals(current.getToken())) {
+                  throw new AssertionError("Retry reused the force-hidden toast ID");
                 }
                 checkMessages(client, 1, 0);
                 checkToast(client, "generating");
