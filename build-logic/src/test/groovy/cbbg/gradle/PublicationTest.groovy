@@ -184,6 +184,21 @@ class PublicationTest {
     }
 
     @Test
+    void upstreamArtifactUsesLoaderSuffixWhenCatalogRequiresIt() {
+        fixture.target.buildProfile = 'fabric-upstream'
+        fixture.target.versionIncludesLoader = true
+        new File(fixture.root, 'targets.json').text = JsonOutput.toJson(fixture.catalog)
+        File catalog = new File(fixture.bundle, fixture.record.client_tests.catalog.path)
+        catalog.text = JsonOutput.toJson(fixture.catalog)
+        fixture.record.client_tests.catalog.sha256 = CandidateFiles.sha256(catalog)
+        fixture.manifest.catalog_sha256 = CandidateFiles.canonicalHash(fixture.catalog)
+        fixture.file.text = JsonOutput.toJson(fixture.manifest)
+        Map record = metadata().records[0]
+        assertEquals('1.4.0+mc26.3-fabric', record.modrinth.version_number)
+        assertEquals('cbbg 1.4.0+mc26.3-fabric', record.curseforge.display_name)
+    }
+
+    @Test
     void upstreamArtifactRetainsItsVersionAndUnimplementedTargetsAreRejected() {
         fixture.target.buildProfile = 'fabric-upstream'
         new File(fixture.root, 'targets.json').text = JsonOutput.toJson(fixture.catalog)

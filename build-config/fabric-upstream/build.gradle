@@ -25,7 +25,7 @@ apply from: new File(repositoryRoot, 'build-config/shared-code.gradle')
 // - jar filenames (archiveVersion)
 // - Modrinth versionNumber (default)
 //
-// Embed the Minecraft line into the version string as SemVer build metadata (+mc<MINECRAFT_VERSION>).
+// Embed the Minecraft version and loader as SemVer build metadata.
 // This keeps releases for different Minecraft versions from colliding.
 def artifactTarget = TargetCatalog.read(new File(repositoryRoot, 'targets.json')).select('26.2-fabric')[0]
 version = CandidateManifest.packageVersion('v' + project.mod_version, artifactTarget)

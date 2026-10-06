@@ -21,7 +21,7 @@ def launchesClient = gradle.startParameter.taskNames.any {
 def gameTarget = launchesClient ? target : artifactOwner
 def modProperties = new Properties()
 new File(repositoryRoot, 'gradle.properties').withInputStream { modProperties.load(it) }
-version = "${modProperties.mod_version}+mc${artifactOwner.minecraft}-${artifactOwner.loader}"
+version = cbbg.gradle.CandidateManifest.packageVersion('v' + modProperties.mod_version, artifactOwner)
 group = modProperties.maven_group
 base.archivesName = modProperties.archives_base_name
 layout.buildDirectory = new File(repositoryRoot, "build/targets/${targetId}")

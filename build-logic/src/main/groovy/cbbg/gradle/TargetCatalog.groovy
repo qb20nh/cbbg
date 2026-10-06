@@ -66,6 +66,9 @@ class TargetCatalog {
             if (target.buildProfile != null && !safeProfile(target.buildProfile)) {
                 throw new IllegalArgumentException('Invalid build profile: ' + id)
             }
+            if (target.containsKey('versionIncludesLoader') && !(target.versionIncludesLoader instanceof Boolean)) {
+                throw new IllegalArgumentException('Invalid package version format: ' + id)
+            }
             if (target.buildProfile in ['fabric-classic', 'forge-classic'] &&
                     (!(target.sourceGroups instanceof List) || target.sourceGroups.isEmpty())) {
                 throw new IllegalArgumentException('Classic build requires source groups: ' + id)

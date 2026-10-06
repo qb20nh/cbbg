@@ -89,6 +89,9 @@ class TargetCatalogTest {
         data = copyData()
         target(data, '1.19.2-fabric').sourceGroups = []
         rejects(data, 'source groups')
+        data = copyData()
+        target(data, '26.2-fabric').versionIncludesLoader = 'true'
+        rejects(data, 'version format')
     }
 
     @Test void selectionErrorsListValidTargetsAndRequiredAliases() {

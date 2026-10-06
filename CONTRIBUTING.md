@@ -37,9 +37,13 @@ For a prerelease, put `-rc.1` before `+mc`, for example
 it does not make the release a prerelease. Gradle expands the version and
 Minecraft requirement in mod metadata. Keep these values in properties and the catalog.
 
-The preserved 26.2 profile retains its `<mod_version>+mc<minecraft_version>`
-artifact names and root source resources. The publisher also accepts existing
+All current builds include the loader in their artifact versions. Older 26.2
+candidates keep the format recorded in their catalogs. The publisher also accepts
 historical `vX.Y.Z+mc<minecraft_version>` releases.
+
+Build profiles derive versions with `CandidateManifest.packageVersion` using the
+artifact owner. A shared Fabric/Quilt JAR keeps its owner's filename; publication
+lists every selected loader and Minecraft version.
 
 GitHub creates the dedicated Release attestation when an immutable release is
 published. Drafts show only the uploaded `provenance.jsonl` build attestation.

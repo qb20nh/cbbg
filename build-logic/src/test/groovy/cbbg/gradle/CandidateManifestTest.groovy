@@ -90,11 +90,39 @@ class CandidateManifestTest {
         }
     }
 
-    @Test void preservedUpstreamVersionHasNoLoaderSuffix() {
+    @Test void currentUpstreamVersionIncludesLoader() {
+        Map target = TargetCatalog.read(new File('../targets.json')).select('26.2-fabric')[0]
+        assertEquals('1.4.2+mc26.2-fabric',
+                CandidateManifest.packageVersion('v1.4.2+mc26.2-fabric', target))
+        assertEquals('1.4.3-rc.1+mc26.2-fabric',
+                CandidateManifest.packageVersion('v1.4.3-rc.1+mc26.2-fabric', target))
+    }
+
+    @Test void historicalUpstreamCatalogKeepsItsVersion() {
         assertEquals('1.4.0+mc26.2', CandidateManifest.packageVersion('v1.4.0',
                 [minecraft: '26.2', loader: 'fabric', buildProfile: 'fabric-upstream']))
         assertEquals('1.4.0+mc26.3-fabric', CandidateManifest.packageVersion('v1.4.0',
                 [minecraft: '26.3', loader: 'fabric', buildProfile: 'fabric-modern']))
+    }
+
+    @Test void everyCatalogTargetUsesItsArtifactOwnersMinecraftAndLoader() {
+        TargetCatalog catalog = TargetCatalog.read(new File('../targets.json'))
+        Map<String, Map> targets = catalog.select().collectEntries { [(it.id): it] }
+        targets.values().each { target ->
+            Map owner = targets[target.artifactOf ?: target.id]
+            for (String modVersion : ['1.5.0', '1.5.0-rc.1']) {
+                String expected = modVersion + '+mc' + owner.minecraft + '-' + owner.loader
+                assertEquals(expected, CandidateManifest.packageVersion('v' + modVersion, owner), target.id)
+            }
+        }
+    }
+
+    @Test void standaloneLoadersIncludeTheirOwnSuffix() {
+        for (String loader : ['fabric', 'quilt', 'forge', 'neoforge', 'legacy-fabric']) {
+            Map target = [minecraft: '1.20.1', loader: loader, buildProfile: loader + '-modern']
+            assertEquals('1.5.0+mc1.20.1-' + loader,
+                    CandidateManifest.packageVersion('v1.5.0+mc1.20.1-' + loader, target))
+        }
     }
 
     @Test void mappedCandidatesRejectMissingOrMismatchedEmbeddedMapping() {
