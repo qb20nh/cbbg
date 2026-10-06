@@ -26,7 +26,9 @@ class ChangelogNotes {
                             lines[it] ==~ /## \[${Pattern.quote(version)}\](?:\s+-\s+\d{4}-\d{2}-\d{2})?\s*/
                 }
             }
-            if (matches.size() != 1) throw new GradleException('Expected one changelog entry for ' + identifier)
+            if (matches.size() != 1) throw new GradleException('Expected one changelog entry for ' + identifier +
+                    ' in ' + changelog + '; found ' + matches.size() +
+                    '. Use one H2 release heading with <!-- [' + identifier + '] -->, or one shared ## [' + version + '] heading.')
             selected.add(matches.first())
         }
         if (selected.size() != 1) {

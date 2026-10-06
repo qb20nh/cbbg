@@ -77,7 +77,7 @@ class PublicationTest {
         assertEquals('release', result.records[0].curseforge.release_type)
         fixture.manifest.release = 'v1.4.0+mc26.3-quilt'
         fixture.file.text = JsonOutput.toJson(fixture.manifest)
-        fails('single selected target') { metadata() }
+        fails('selected artifact owner') { metadata() }
     }
 
     @Test

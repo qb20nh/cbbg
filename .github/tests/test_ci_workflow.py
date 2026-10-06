@@ -133,5 +133,40 @@ class CiWorkflowTest(unittest.TestCase):
         )
 
 
+    def run_batch(self, catalog, matrix):
+        import json
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'targets.json').write_text(json.dumps(catalog))
+            wrapper = root / 'gradlew'
+            wrapper.write_text('#!/bin/sh\nmkdir -p build\nprintf "%s" "$MATRIX" > build/batch-matrix.json\n')
+            wrapper.chmod(0o755)
+            return subprocess.run(
+                ['bash', '-euo', 'pipefail', '-c', script('Select full batch CI', WORKFLOW)],
+                cwd=root, env={**os.environ, 'MATRIX': json.dumps(matrix),
+                               'GITHUB_OUTPUT': str(root / 'output')},
+                text=True, capture_output=True,
+            )
+
+    def test_empty_batch_catalog_explains_the_required_selection(self):
+        result = self.run_batch({'ciTargets': []}, {'include': []})
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('::error::', result.stdout)
+        self.assertIn('ciTargets', result.stdout)
+        self.assertIn('targets.json', result.stdout)
+
+    def test_empty_batch_matrix_names_the_failed_output(self):
+        result = self.run_batch({'ciTargets': ['26.3-fabric']}, {'include': []})
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('::error::', result.stdout)
+        self.assertIn('build/batch-matrix.json', result.stdout)
+        self.assertIn('targetMatrix', result.stdout)
+
+    def test_valid_batch_selection_still_passes(self):
+        result = self.run_batch({'ciTargets': ['26.3-fabric']}, {'include': [{'id': '26.3-fabric'}]})
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+
 if __name__ == "__main__":
     unittest.main()

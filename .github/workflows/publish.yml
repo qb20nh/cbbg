@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Release tag (draft candidates allowed only for dry runs; historical vX.Y.Z+mcVERSION)"
+        description: "Exact GitHub release tag, e.g. v1.4.2+mc26.2-fabric (drafts allowed for dry runs)"
         required: true
         type: string
       dry_run:
@@ -41,7 +41,7 @@ jobs:
       - name: Require a new dispatch for CurseForge retries
         if: ${{ !inputs.dry_run && inputs.services != 'modrinth' && github.run_attempt != '1' }}
         run: |
-          echo "Check the CurseForge project files, then start a new dispatch for the intended service."
+          echo "::error::CurseForge uploads require a new dispatch: an earlier attempt may have uploaded files. Check the CurseForge project files, then dispatch only the services you still need."
           exit 1
 
       - name: Checkout publishing tools
@@ -49,6 +49,46 @@ jobs:
         with:
           ref: ${{ github.workflow_sha }}
           persist-credentials: false
+
+      - name: Validate release tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ inputs.tag }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          error() {
+            local message="${1//%/%25}"
+            message="${message//$'\r'/%0D}"
+            message="${message//$'\n'/%0A}"
+            printf '::error::%s\n' "$message"
+          }
+          encoded_tag="$(jq -rn --arg tag "$RELEASE_TAG" '$tag | @uri')"
+          error_file="$RUNNER_TEMP/release-tag-error.txt"
+          if ! gh api "repos/$GH_REPO/git/ref/tags/$encoded_tag" --silent 2>"$error_file"; then
+            details="$(<"$error_file")"
+            if [[ "$details" == *'HTTP 404'* ]]; then
+              error "Release tag '$RELEASE_TAG' was not found in $GH_REPO. Copy an exact tag from the list below, including any + character."
+              echo "Available release tags:"
+              gh release list --repo "$GH_REPO" --limit 10 --json tagName --jq '.[].tagName' || true
+            else
+              error "Could not verify release tag '$RELEASE_TAG' in $GH_REPO: $details"
+            fi
+            exit 1
+          fi
+          if ! release="$(gh release view --repo "$GH_REPO" --json isDraft -- "$RELEASE_TAG" 2>"$error_file")"; then
+            details="$(<"$error_file")"
+            if [[ "$details" == *'HTTP 404'* || "$details" == *'release not found'* ]]; then
+              error "Tag '$RELEASE_TAG' exists but has no GitHub release. Create its release before running Publish."
+            else
+              error "Could not read the GitHub release for '$RELEASE_TAG': $details"
+            fi
+            exit 1
+          fi
+          if [[ "$DRY_RUN" != 'true' ]] && jq -e '.isDraft == true' <<<"$release" >/dev/null; then
+            error "Release '$RELEASE_TAG' is a draft. Use dry_run=true to validate it, or publish the GitHub release after acceptance passes before uploading to mod platforms."
+            exit 1
+          fi
 
       - name: Checkout release source
         uses: actions/checkout@v7
@@ -109,7 +149,7 @@ jobs:
       - name: Require a new dispatch for CurseForge retries
         if: ${{ !inputs.dry_run && inputs.services != 'modrinth' && github.run_attempt != '1' }}
         run: |
-          echo "Check the CurseForge project files, then start a new dispatch for the intended service."
+          echo "::error::CurseForge uploads require a new dispatch: an earlier attempt may have uploaded files. Check the CurseForge project files, then dispatch only the services you still need."
           exit 1
 
       - name: Checkout publishing tools
@@ -181,7 +221,7 @@ jobs:
             task=planModrinthUpload
           else
             if [[ -z "$MODRINTH_TOKEN" ]]; then
-              echo "Missing MODRINTH_TOKEN for upload."
+              echo "::error::Missing MODRINTH_TOKEN for upload. Configure this secret in the build and publish GitHub environment, or select CurseForge only. dry_run=true checks inputs without uploading."
               exit 1
             fi
             task=modrinth

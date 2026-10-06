@@ -26,7 +26,9 @@ class ReleasePluginTest {
     }
 
     @Test void publicationRequiresExplicitInputsWithoutBuilding() {
-        assertTrue(runner('preparePublication').buildAndFail().output.contains('Missing -Prelease'))
+        String output = runner('preparePublication').buildAndFail().output
+        assertTrue(output.contains('Missing -Prelease'))
+        assertTrue(output.contains('preparePublication requires -Prelease=<value>'), output)
         assertTrue(runner('checkHotfix').buildAndFail().output.contains('Missing -Pbaselines'))
         def result = runner('preparePublication', '--dry-run').build()
         assertFalse(result.output.contains(':build '))
@@ -55,7 +57,7 @@ class ReleasePluginTest {
         assertEquals(single, new File(directory, 'notes.md').text)
         assertTrue(runner('releaseNotes', '-Prelease=v1.5.0+mc26.3-fabric',
                 '-Ptargets=26.3-fabric,26.3-neoforge', '-Poutput=notes.md').buildAndFail()
-                .output.contains('single selected target'))
+                .output.contains('selected artifact owner'))
         runner('releaseNotes', '-Prelease=v1.5.0', '-Ptargets=26.3-fabric,26.3-neoforge', '-Poutput=notes.md').build()
         assertTrue(new File(directory, 'notes.md').text.contains('NeoForge fix.'))
         assertTrue(runner('releaseNotes', '-Prelease=v1.5.0', '-Poutput=notes.md').buildAndFail()

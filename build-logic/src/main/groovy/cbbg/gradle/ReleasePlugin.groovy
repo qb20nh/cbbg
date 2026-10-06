@@ -16,7 +16,8 @@ class ReleasePlugin implements Plugin<Project> {
     void apply(Project project) {
         def required = { String name ->
             def value = project.providers.gradleProperty(name).orNull
-            if (!value) throw new GradleException('Missing -P' + name)
+            if (!value) throw new GradleException('Missing -P' + name + '. ' +
+                    project.gradle.startParameter.taskNames.join(', ') + ' requires -P' + name + '=<value>. See the release commands in CONTRIBUTING.md.')
             value
         }
         def input = { String name -> project.file(required(name)).canonicalFile }
@@ -40,7 +41,7 @@ class ReleasePlugin implements Plugin<Project> {
         }
         def local = {
             if ('true'.equalsIgnoreCase(System.getenv('CI'))) {
-                throw new GradleException('Candidate runtime acceptance and finalization run locally')
+                throw new GradleException('Candidate runtime acceptance and finalization run locally. Download the candidate and run this task from a local checkout with the packaged test results; CI only builds the candidate.')
             }
         }
         def task = { String name, String description, Closure action ->
@@ -60,7 +61,7 @@ class ReleasePlugin implements Plugin<Project> {
                 throw new GradleException('Use either -Ptarget or -Ptargets')
             }
             String selection = project.providers.gradleProperty('targets').orElse(project.providers.gradleProperty('target')).orNull
-            if (!selection) throw new GradleException('Release notes require an explicit target selection')
+            if (!selection) throw new GradleException('Release notes require an explicit target selection. Use -Ptarget=<id> for one runtime or -Ptargets=<id,id> for a shared release; IDs are listed in targets.json.')
             List<Map> targets = TargetCatalog.read(new File(source(), 'targets.json')).select(selection)
             CandidateFiles.releaseTargets(tag, targets)
             String notes = ChangelogNotes.select(new File(source(), 'CHANGELOG.md'), CandidateFiles.releaseVersion(tag), targets)
@@ -87,7 +88,7 @@ class ReleasePlugin implements Plugin<Project> {
         task('verifyCandidate', 'Check packaged candidate and complete local runtime results.') {
             local()
             File output = input('output')
-            if (output.exists()) throw new GradleException('Validation output already exists')
+            if (output.exists()) throw new GradleException("Validation output already exists: ${output}. Choose a new -Poutput=<file> for this verification.")
             CandidateFiles.writeNew(output, ReleaseChecks.verify(input('candidate'), results(), input('bundle'),
                     source(), required('repo'), run))
         }

@@ -109,10 +109,12 @@ class ReleaseChecksTest {
                 new File(fixture.bundle, 'provenance.jsonl'), fixture.root, 'owner/repo', run)
         assertEquals('preserved', report.targets[fixture.target.id].runtime.runs[0].raw)
         assertFalse(report.releaseAcceptance)
-        assertThrows(IllegalArgumentException) {
+        String missing = assertThrows(IllegalArgumentException) {
             ReleaseChecks.verify(fixture.file, [:], new File(fixture.bundle, 'provenance.jsonl'),
                     fixture.root, 'owner/repo', run)
-        }
+        }.message
+        assertTrue(missing.contains(fixture.target.id), missing)
+        assertTrue(missing.contains('-Presults.<target-id>=<index.json>'), missing)
         Closure wrongTarget = { List<String> command, File cwd ->
             if (command[0] == 'python3') {
                 return JsonOutput.toJson([target: 'wrong', manifest_sha256: CandidateFiles.sha256(fixture.file),

@@ -85,6 +85,34 @@ class CandidateWorkflowTest(unittest.TestCase):
             result = self.run_step('Validate release selection')
             self.assertEqual(result.returncode, 0, result.stderr)
 
+    def test_selection_errors_explain_the_required_tag_and_missing_files(self):
+        self.env['GITHUB_REF_TYPE'] = 'branch'
+        result = self.run_step('Validate release selection')
+        self.assertIn('::error::', result.stdout)
+        self.assertIn('Use workflow from', result.stdout)
+        self.assertIn('v1.4.2+mc26.2-fabric', result.stdout)
+        self.env['GITHUB_REF_TYPE'] = 'tag'
+        profile = self.root / 'build-config/fabric-modern/build.gradle'
+        profile.unlink()
+        result = self.run_step('Validate release selection')
+        self.assertIn('::error::', result.stdout)
+        self.assertIn('build-config/fabric-modern/build.gradle', result.stdout)
+        self.assertIn('26.3-fabric', result.stdout)
+        profile.write_text('')
+        (self.root / 'runtime-locks/26.3-fabric-mods.json').unlink()
+        result = self.run_step('Validate release selection')
+        self.assertIn('::error::', result.stdout)
+        self.assertIn('runtime-locks/26.3-fabric-mods.json', result.stdout)
+        self.assertIn('commit', result.stdout)
+
+    def test_selection_annotation_escapes_untrusted_ref(self):
+        self.env.update(GITHUB_REF_TYPE='branch', GITHUB_REF_NAME='bad%\n$(touch executed)')
+        result = self.run_step('Validate release selection')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(result.stdout.count('::error::'), 1)
+        self.assertIn('bad%25%0A$(touch executed)', result.stdout)
+        self.assertFalse((self.root / 'executed').exists())
+
     def test_build_and_bundle_use_recorded_outputs_without_python(self):
         self.env['TARGETS'] = '26.3-fabric'
         self.env['JAVA_HOME_25_X64'] = self.env.get('JAVA_HOME', '/tmp/java25')

@@ -34,13 +34,15 @@ abstract class TargetBuild extends DefaultTask {
         List<String> operations = [operation.get()] + additionalOperations.get()
         if (operations.any { it in ['runClient', 'updateFabricMinimums', 'verifyFabricCompatibility'] } &&
                 ('true'.equalsIgnoreCase(System.getenv('CI')) || System.getenv('GITHUB_ACTIONS') == 'true')) {
-            throw new GradleException('Minecraft runtime tests are local-only')
+            throw new GradleException('Minecraft runtime tests are local-only. Run ' + operation.get() +
+                    ' with -Ptarget=' + targetId.get() + ' from a local checkout with a test display; CI runs compilation and static checks.')
         }
         File root = repositoryDirectory.get().asFile
         File directory = new File(root, 'build-config/' + profile.get()).canonicalFile
         File profiles = new File(root, 'build-config').canonicalFile
         if (directory.parentFile != profiles || !new File(directory, 'build.gradle').isFile()) {
-            throw new GradleException('Invalid build profile: ' + profile.get())
+            throw new GradleException('Invalid build profile: ' + profile.get() + ' for ' + targetId.get() +
+                    '. Expected build.gradle inside ' + profiles + '. Check buildProfile in targets.json and restore the profile files.')
         }
         boolean windows = System.getProperty('os.name').toLowerCase(Locale.ROOT).contains('windows')
         List<String> args = wrapperCommand(root, directory, windows) + ['-p', directory.absolutePath] +
@@ -50,11 +52,15 @@ abstract class TargetBuild extends DefaultTask {
         if (offline.get()) args.add('--offline')
         args.addAll(options.get())
         buildProperties.get().each { key, value -> args.add('-P' + key + '=' + value) }
-        execOperations.exec {
+        def result = execOperations.exec {
             workingDir root
             environment 'JAVA_HOME', javaHome.get().asFile.absolutePath
             commandLine args
-        }.assertNormalExitValue()
+            ignoreExitValue = true
+        }
+        if (result.exitValue != 0) {
+            throw new GradleException("Target ${targetId.get()} failed (primary task ${operation.get()}, profile ${profile.get()}, exit value ${result.exitValue}). See the child Gradle failure above; build directory: ${directory}.")
+        }
     }
 
     static List<String> wrapperCommand(File root, File directory, boolean windows) {

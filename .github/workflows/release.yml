@@ -41,8 +41,15 @@ jobs:
         env:
           REQUESTED_TARGET: ${{ inputs.target }}
         run: |
+          error() {
+            local message="$1"
+            message="${message//'%'/'%25'}"
+            message="${message//$'\r'/'%0D'}"
+            message="${message//$'\n'/'%0A'}"
+            printf '::error::%s\n' "$message"
+          }
           if [[ "$GITHUB_REF_TYPE" != "tag" || ! "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z][0-9A-Za-z.-]*\.[1-9][0-9]*)?(\+mc[0-9][0-9A-Za-z.-]*-(fabric|quilt|forge|neoforge|legacy-fabric))?$ ]]; then
-            echo "Run this workflow from an explicit version release tag."
+            error "Release requires a version tag; selected '$GITHUB_REF_NAME' ($GITHUB_REF_TYPE). In Run workflow, choose a pushed tag under Use workflow from, e.g. v1.4.2+mc26.2-fabric or v1.4.2 for a shared release."
             exit 1
           fi
           mkdir -p build
@@ -50,7 +57,7 @@ jobs:
             -PrequireImplemented=true -Poutput=build/release-selection.json targetMatrix
           while IFS=$'\t' read -r target profile java; do
             if [[ ! -f "build-config/$profile/build.gradle" ]]; then
-              echo "Missing catalog build profile: $profile"
+              error "Missing build-config/$profile/build.gradle for target $target. Check its buildProfile in targets.json and commit the profile before creating a candidate."
               exit 1
             fi
           done < <(jq -r '.include[] | [.id, .buildProfile, .java] | @tsv' build/release-selection.json)
@@ -58,7 +65,7 @@ jobs:
           for target in "${targets[@]}"; do
             for suffix in scenarios mods linux-x86_64; do
               if [[ ! -f "runtime-locks/$target-$suffix.json" ]]; then
-                echo "Missing candidate test inputs for $target: $suffix"
+                error "Missing runtime-locks/$target-$suffix.json. Add and commit the target's test contract and dependency/runtime locks before creating a candidate."
                 exit 1
               fi
             done
@@ -83,7 +90,7 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
-            echo "Release already exists; its candidate files cannot be replaced."
+            echo "::error::A GitHub release already exists for this tag. Use its candidate, or choose a new version. To replace an unpublished draft, remove that draft explicitly before dispatching Release again."
             exit 1
           fi
 

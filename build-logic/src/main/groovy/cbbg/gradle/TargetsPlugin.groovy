@@ -69,7 +69,8 @@ class TargetsPlugin implements Plugin<Project> {
                     usesService(serial)
                     doFirst {
                         if (operation == 'runClient' && selected.size() != 1) {
-                            throw new GradleException('runClient requires exactly one target')
+                            throw new GradleException('runClient requires exactly one target; selected: ' +
+                                    selected.collect { it.id }.join(', ') + '. Launch with ./gradlew runClient -Ptarget=<id>; IDs are listed in targets.json.')
                         }
                     }
                 }
@@ -98,7 +99,7 @@ class TargetsPlugin implements Plugin<Project> {
         }
         if (family.isEmpty()) {
             minimums.configure {
-                doLast { throw new GradleException('determineFabricMinimums requires one supported Fabric target') }
+                doLast { throw new GradleException('determineFabricMinimums requires one supported Fabric target. Use -Ptarget=<fabric-id> from targets.json; this dependency search runs locally.') }
             }
         } else {
             List<Map> phases = []
