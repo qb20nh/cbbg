@@ -2,6 +2,7 @@ package cbbg.gradle
 
 import groovy.io.FileType
 import groovy.json.JsonOutput
+import groovy.json.JsonSlurper
 import org.gradle.api.GradleException
 
 import java.nio.file.Files
@@ -10,6 +11,27 @@ import java.util.concurrent.TimeUnit
 
 /** Runs one packaged-client dependency probe and classifies its recorded result. */
 class FabricCompatibilityProbe {
+    static void requireLocalInputs(boolean buildOnly, String startupMode, File config,
+                                   File startupCache, String profile) {
+        if (config != null && (!buildOnly || !config.isFile())) {
+            throw new GradleException('compatibilityConfig requires build-only verification and an existing file')
+        }
+        if (config != null && !(new JsonSlurper().parse(config) instanceof Map)) {
+            throw new GradleException('compatibilityConfig must be a JSON object')
+        }
+        if (startupMode != null && (!buildOnly || profile != 'none' ||
+                !(startupMode in ['cold', 'warm', 'damaged', 'seed-mismatch']))) {
+            throw new GradleException('Startup verification requires a dedicated build-only driver and profile none')
+        }
+        if (startupCache != null && (startupMode == null || startupMode == 'cold' ||
+                !startupCache.isDirectory())) {
+            throw new GradleException('compatibilityStartupCache requires a noncold startup driver and an existing directory')
+        }
+        if (startupMode != null && startupMode != 'cold' && startupCache == null) {
+            throw new GradleException('Noncold startup verification requires -PcompatibilityStartupCache')
+        }
+    }
+
     static Map graphicsEnvironment(Map environment = System.getenv()) {
         new TreeMap(environment.findAll { name, value ->
             ['MESA_', 'LIBGL_', 'GALLIUM_', '__GL', '__EGL'].any { name.startsWith(it) } ||
@@ -56,7 +78,17 @@ class FabricCompatibilityProbe {
             [(name): [pin: mod.pin, sha256: CandidateFiles.sha256(mod.file as File),
                       sha512: mod.sha512]]
         }
-        reportInputs + [files: executionFiles(reportInputs.files as Map, coordinator, search,
+        File startupCache = spec.startupCache as File
+        List<File> startupFiles = []
+        if (startupCache != null) {
+            startupCache.traverse(type: FileType.FILES) { File file -> startupFiles.add(file) }
+        }
+        reportInputs + [startupMode: spec.startupMode,
+                startupCache: startupCache == null ? null : [directory: startupCache.canonicalPath,
+                        files: startupFiles.sort { it.canonicalPath }.collectEntries {
+                            [(it.canonicalPath): CandidateFiles.sha256(it)]
+                        }],
+                files: executionFiles(reportInputs.files as Map, coordinator, search,
                         spec.backend as String),
                 target: spec.target.id, candidate: CandidateFiles.sha256(spec.candidate as File),
                 driver: CandidateFiles.sha256(spec.driver as File),
@@ -154,6 +186,8 @@ class FabricCompatibilityProbe {
             (spec.optionalMods as Map).each { name, mod ->
                 command.addAll(['--dependency', name + '=' + mod.file.absolutePath])
             }
+            if (spec.startupMode != null) command.addAll(['--startup-mode', spec.startupMode])
+            if (spec.startupCache != null) command.addAll(['--startup-cache', spec.startupCache])
             if (!spec.strict) command.add('--test-dependency-minimums')
             File log = new File(cell, 'runner.log')
             int exit = run.call(command, log)

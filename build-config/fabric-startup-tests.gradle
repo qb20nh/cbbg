@@ -28,6 +28,7 @@ def includesFixture = { String name ->
         }
     }
     tasks.register("processedEarlyStartup${mode}DriverJar", Jar) {
+        ext.startupMode = classifier.substring('startup-'.length())
         archiveClassifier = "processed-${classifier}-driver"
         from(sourceSets.processedGametest.output) { exclude 'fabric.mod.json' }
         from(metadata)

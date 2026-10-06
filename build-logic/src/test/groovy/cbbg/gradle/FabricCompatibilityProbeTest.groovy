@@ -5,11 +5,54 @@ import groovy.json.JsonSlurper
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import org.gradle.testfixtures.ProjectBuilder
+import org.gradle.api.GradleException
 
 import static org.junit.jupiter.api.Assertions.*
 
 class FabricCompatibilityProbeTest {
     @TempDir File directory
+
+    @Test void admitsOnlyMatchingStartupAndSuppliedConfigInputs() {
+        File config = new File(directory, 'settings.json')
+        config.text = '{"mode":"ENABLED","pixelFormat":"RGBA16F","stbnSize":16,' +
+                '"stbnDepth":8,"stbnSeed":74123,"strength":2}'
+        File cache = new File(directory, 'startup-cache')
+        cache.mkdirs()
+        FabricCompatibilityProbe.requireLocalInputs(true, null, config, null, 'none')
+        FabricCompatibilityProbe.requireLocalInputs(true, 'cold', config, null, 'none')
+        ['warm', 'damaged', 'seed-mismatch'].each { mode ->
+            FabricCompatibilityProbe.requireLocalInputs(true, mode, config, cache, 'none')
+            assertThrows(GradleException) {
+                FabricCompatibilityProbe.requireLocalInputs(true, mode, config, null, 'none')
+            }
+        }
+        [null, 'cold'].each { mode ->
+            assertThrows(GradleException) {
+                FabricCompatibilityProbe.requireLocalInputs(true, mode, config, cache, 'none')
+            }
+        }
+        assertThrows(GradleException) {
+            FabricCompatibilityProbe.requireLocalInputs(false, null, config, null, 'none')
+        }
+        assertThrows(GradleException) {
+            FabricCompatibilityProbe.requireLocalInputs(true, null, new File(directory, 'absent'), null, 'none')
+        }
+        assertThrows(GradleException) {
+            FabricCompatibilityProbe.requireLocalInputs(true, 'warm', config, config, 'none')
+        }
+        assertThrows(GradleException) {
+            FabricCompatibilityProbe.requireLocalInputs(true, 'cold', config, null, 'sodium')
+        }
+        assertThrows(GradleException) {
+            FabricCompatibilityProbe.requireLocalInputs(true, 'unknown', config, null, 'none')
+        }
+        assertEquals('ENABLED', (new JsonSlurper().parse(config) as Map).mode)
+        assertEquals(74123, (new JsonSlurper().parse(config) as Map).stbnSeed)
+        config.text = '[]'
+        assertThrows(GradleException) {
+            FabricCompatibilityProbe.requireLocalInputs(true, null, config, null, 'none')
+        }
+    }
 
     @Test void runnerCapturesTheRealCommandExitAndOutput() {
         File log = new File(directory, 'run/runner.log')
@@ -133,6 +176,45 @@ class FabricCompatibilityProbeTest {
                                     (search.canonicalPath): 'search-1',
                                     (runner.canonicalPath): 'runner-1']]
         Map cacheInputs = FabricCompatibilityProbe.cacheInputs(reportInputs, spec, coordinator, search)
+        File startupCache = new File(directory, 'startup-cache')
+        startupCache.mkdirs()
+        File cachedNoise = new File(startupCache, 'noise.png')
+        cachedNoise.text = 'noise'
+        Map startupSpec = spec + [startupMode: 'warm', startupCache: startupCache]
+        Map startupInputs = FabricCompatibilityProbe.cacheInputs(reportInputs, startupSpec, coordinator, search)
+        assertEquals('warm', startupInputs.startupMode)
+        assertEquals(startupCache.canonicalPath, startupInputs.startupCache.directory)
+        assertEquals(CandidateFiles.sha256(cachedNoise), startupInputs.startupCache.files[cachedNoise.canonicalPath])
+        File startupEvidence = new File(directory, 'startup-receipt.json')
+        startupEvidence.text = 'passed'
+        File resultCache = new File(directory, 'startup-results')
+        int startupRuns = 0
+        Closure startupRun = { startupRuns++; [status: 'passed', files: [startupEvidence]] }
+        assertFalse(FabricCompatibilitySearch.cached(resultCache, startupInputs, startupRun).cached)
+        assertTrue(FabricCompatibilitySearch.cached(resultCache, startupInputs, startupRun).cached)
+        ['damaged', 'seed-mismatch'].each { mode ->
+            assertFalse(FabricCompatibilitySearch.cached(resultCache,
+                    FabricCompatibilityProbe.cacheInputs(reportInputs, startupSpec + [startupMode: mode],
+                            coordinator, search), startupRun).cached)
+        }
+        cachedNoise.text = 'changed noise'
+        assertFalse(FabricCompatibilitySearch.cached(resultCache,
+                FabricCompatibilityProbe.cacheInputs(reportInputs, startupSpec, coordinator, search), startupRun).cached)
+        File added = new File(startupCache, 'nested/additional.png')
+        added.parentFile.mkdirs()
+        added.text = 'additional'
+        assertFalse(FabricCompatibilitySearch.cached(resultCache,
+                FabricCompatibilityProbe.cacheInputs(reportInputs, startupSpec, coordinator, search), startupRun).cached)
+        cachedNoise.delete()
+        assertFalse(FabricCompatibilitySearch.cached(resultCache,
+                FabricCompatibilityProbe.cacheInputs(reportInputs, startupSpec, coordinator, search), startupRun).cached)
+        File otherCache = new File(directory, 'other-startup-cache')
+        new File(otherCache, 'nested').mkdirs()
+        new File(otherCache, 'nested/additional.png').text = added.text
+        assertFalse(FabricCompatibilitySearch.cached(resultCache,
+                FabricCompatibilityProbe.cacheInputs(reportInputs, startupSpec + [startupCache: otherCache],
+                        coordinator, search), startupRun).cached)
+        assertEquals(7, startupRuns)
         Map environment = cacheInputs.graphicsEnvironment
         assertSame(environment, spec.graphicsEnvironment)
         assertFalse(cacheInputs.files.containsKey(coordinator.canonicalPath))
@@ -162,6 +244,19 @@ class FabricCompatibilityProbeTest {
         assertEquals(runtimeLock, command[command.indexOf('--runtime-lock') + 1])
         assertTrue(command.contains('--test-dependency-minimums'))
         assertTrue(command.contains('sodium=' + optional.absolutePath))
+        assertFalse(command.contains('--startup-mode'))
+        assertFalse(command.contains('--startup-cache'))
+        ['cold', 'warm', 'damaged', 'seed-mismatch'].each { mode ->
+            File selectedCache = mode == 'cold' ? null : startupCache
+            FabricCompatibilityProbe.execute(spec + [startupMode: mode, startupCache: selectedCache]) { List args, File log ->
+                assertEquals(mode, args[args.indexOf('--startup-mode') + 1])
+                assertEquals(selectedCache != null, args.contains('--startup-cache'))
+                if (selectedCache != null) assertEquals(selectedCache, args[args.indexOf('--startup-cache') + 1])
+                assertEquals(spec.config, args[args.indexOf('--cbbg-config') + 1])
+                log.text = 'forwarded startup inputs'
+                1
+            }
+        }
         File lock = command[command.indexOf('--dependency-lock') + 1] as File
         Map recorded = new JsonSlurper().parse(lock) as Map
         assertEquals('26.1.1-fabric', recorded.target)
