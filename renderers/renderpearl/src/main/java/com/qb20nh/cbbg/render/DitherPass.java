@@ -12,6 +12,7 @@ import com.mojang.renderpearl.api.pipeline.RenderPipeline;
 import com.mojang.renderpearl.api.pipeline.UniformType;
 import com.mojang.renderpearl.api.textures.FilterMode;
 import com.mojang.renderpearl.api.textures.GpuTextureView;
+import com.qb20nh.cbbg.api.DitherOptions;
 import java.nio.ByteOrder;
 import java.util.Objects;
 import java.util.Optional;
@@ -25,6 +26,12 @@ public final class DitherPass implements AutoCloseable {
   private static final RenderPipeline ENABLED = pipeline(false);
   private static final RenderPipeline DEMO = pipeline(true);
   private @Nullable TextureTarget output;
+
+  /** Render and close on Minecraft's render thread. The output is valid until resize or close. */
+  public TextureTarget render(GpuTextureView input, GpuTextureView noise, DitherOptions options) {
+    return render(
+        input, noise, options.strength(), options.scaleX(), options.scaleY(), options.demo());
+  }
 
   private static RenderPipeline pipeline(boolean demo) {
     var builder =
@@ -94,6 +101,7 @@ public final class DitherPass implements AutoCloseable {
 
   @Override
   public void close() {
+    RenderSystem.assertOnRenderThread();
     if (output != null) {
       output.destroyBuffers();
       output = null;

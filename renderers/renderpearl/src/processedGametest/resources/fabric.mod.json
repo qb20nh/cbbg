@@ -29,7 +29,8 @@
       "com.qb20nh.cbbg.gametest.ReleaseImmediatelyFastGameTest",
       "com.qb20nh.cbbg.gametest.ReleaseIrisGameTest",
       "com.qb20nh.cbbg.gametest.ReleaseRenderScaleGameTest",
-      "com.qb20nh.cbbg.gametest.ReleaseSulkanGameTest"
+      "com.qb20nh.cbbg.gametest.ReleaseSulkanGameTest",
+      "com.qb20nh.cbbg.gametest.ReleaseUtilitiesGameTest"
     ]
   },
   "depends": {

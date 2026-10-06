@@ -1,20 +1,17 @@
 package com.qb20nh.cbbg.render;
 
 import com.mojang.blaze3d.GpuFormat;
-import com.mojang.blaze3d.PrimitiveTopology;
 import com.mojang.blaze3d.buffers.GpuBuffer;
 import com.mojang.blaze3d.buffers.GpuBufferSlice;
 import com.mojang.blaze3d.buffers.Std140Builder;
 import com.mojang.blaze3d.pipeline.*;
 import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.blaze3d.shaders.ShaderType;
-import com.mojang.blaze3d.shaders.UniformType;
 import com.mojang.blaze3d.systems.CommandEncoder;
 import com.mojang.blaze3d.systems.RenderPass;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.textures.FilterMode;
 import com.mojang.blaze3d.textures.GpuTextureView;
-import com.mojang.blaze3d.vertex.VertexFormat;
 import com.qb20nh.cbbg.Cbbg;
 import com.qb20nh.cbbg.CbbgClient;
 import com.qb20nh.cbbg.compat.renderscale.RenderScaleCompat;
@@ -47,45 +44,8 @@ public final class CbbgDither {
   private static final @NonNull Identifier DEMO_SHADER =
       Identifier.fromNamespaceAndPath(Cbbg.MOD_ID, "core/cbbg_demo");
 
-  private static final @NonNull Identifier DITHER_PIPELINE_LOCATION =
-      Identifier.fromNamespaceAndPath(Cbbg.MOD_ID, "pipeline/cbbg_dither");
-  private static final @NonNull Identifier DEMO_PIPELINE_LOCATION =
-      Identifier.fromNamespaceAndPath(Cbbg.MOD_ID, "pipeline/cbbg_demo");
-
-  private static final @NonNull RenderPipeline DITHER_PIPELINE =
-      RenderPipeline.builder()
-          .withLocation(DITHER_PIPELINE_LOCATION)
-          .withVertexShader(SCREENQUAD_VERTEX)
-          .withFragmentShader(DITHER_SHADER)
-          .withBindGroupLayout(
-              BindGroupLayout.builder()
-                  .withSampler(S_IN)
-                  .withSampler(S_NOISE)
-                  .withUniform(U_DITHER_INFO, UniformType.UNIFORM_BUFFER)
-                  .build())
-          .withDepthStencilState(
-              Optional.empty()) // new DepthStencilState(CompareOp.ALWAYS_PASS, false)
-          .withColorTargetState(new ColorTargetState(Optional.empty(), GpuFormat.RGBA8_UNORM, 15))
-          .withVertexBinding(0, VertexFormat.builder(0).build())
-          .withPrimitiveTopology(PrimitiveTopology.TRIANGLES)
-          .build();
-
-  private static final @NonNull RenderPipeline DEMO_PIPELINE =
-      RenderPipeline.builder()
-          .withLocation(DEMO_PIPELINE_LOCATION)
-          .withVertexShader(SCREENQUAD_VERTEX)
-          .withFragmentShader(DEMO_SHADER)
-          .withBindGroupLayout(
-              BindGroupLayout.builder()
-                  .withSampler(S_IN)
-                  .withSampler(S_NOISE)
-                  .withUniform(U_DITHER_INFO, UniformType.UNIFORM_BUFFER)
-                  .build())
-          .withDepthStencilState(Optional.empty())
-          .withColorTargetState(new ColorTargetState(Optional.empty(), GpuFormat.RGBA8_UNORM, 15))
-          .withVertexBinding(0, VertexFormat.builder(0).build())
-          .withPrimitiveTopology(PrimitiveTopology.TRIANGLES)
-          .build();
+  private static final @NonNull RenderPipeline DITHER_PIPELINE = DitherPipelines.ENABLED;
+  private static final @NonNull RenderPipeline DEMO_PIPELINE = DitherPipelines.DEMO;
 
   private static final StbnTextureManager stbnManager = new StbnTextureManager();
   private static @Nullable MappableRingBuffer ditherInfoUbo;

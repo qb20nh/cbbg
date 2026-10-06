@@ -60,7 +60,8 @@ class FabricSources {
                     'Cbbg', 'platform/LoaderPlatform', 'command/CbbgClientCommands', 'platform/Text',
                     'command/CommandPlatform', 'config/gui/CbbgConfigWidgets', 'config/gui/WidgetPlatform',
                     'compat/iris/IrisCompat', 'compat/renderscale/RenderScaleCompat',
-                    'compat/modmenu/CbbgModMenuApi', 'render/stbn/STBNGenerator', 'render/stbn/STBNLoader',
+                    'compat/modmenu/CbbgModMenuApi',
+                    'render/stbn/STBNGenerator', 'render/stbn/STBNLoader',
                     'render/stbn/StbnImagePixels', 'render/stbn/STBNCache', 'render/MainTargets'))
             result.gametest.java << tree('adapters/fabric/shared/src/gametest/java',
                     textureFormat ? [] : classes('gametest/CbbgConfigScreenGameTest'),
@@ -103,6 +104,10 @@ class FabricSources {
             result.copies.processedGametest << tree('adapters/fabric/shared/src/processedGametest/resources')
         }
         result.copies.processedGametest << irisResources
+        if (owner.renderer == 'renderpearl') {
+            processed << tree('adapters/fabric/shared/src/processedGametest/java',
+                    classes('gametest/ReleaseUtilitiesGameTest'))
+        }
         result
     }
 

@@ -42,6 +42,10 @@ gradlePlugin {
             id = 'cbbg.packaging'
             implementationClass = 'cbbg.gradle.PackagingPlugin'
         }
+        utilities {
+            id = 'cbbg.utilities'
+            implementationClass = 'cbbg.gradle.UtilitiesPlugin'
+        }
         releaseSbom {
             id = 'cbbg.release-sbom'
             implementationClass = 'cbbg.gradle.ReleaseSbomPlugin'

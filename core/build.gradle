@@ -1,5 +1,6 @@
 plugins {
     id 'java-library'
+    id 'cbbg.utilities'
     id 'cbbg.private-gson'
     id 'cbbg.quality'
     id 'cbbg.formatting'
