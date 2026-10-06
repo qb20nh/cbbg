@@ -86,8 +86,8 @@ public final class CbbgDither {
                   DitherPresentation.texture(),
                   new DitherOptions(
                       strength,
-                      DitherScale.forDimension(scale, input.width),
-                      DitherScale.forDimension(scale, input.height),
+                      coordinateScale(scale, input.width),
+                      coordinateScale(scale, input.height),
                       demo));
           if (present) {
             var window = mc.getWindow();
@@ -95,6 +95,12 @@ public final class CbbgDither {
           }
           return output;
         });
+  }
+
+  // RenderScale 1.21.1 rounds its internal viewport dimensions up.
+  private static float coordinateScale(double scale, int size) {
+    if (!(scale > 0) || scale >= 1) return 1;
+    return (float) Math.max((int) Math.ceil(size * scale), 1) / size;
   }
 
   // Backport Screen.isInGameUi(): menu screens blur, while interactive world UI does not.

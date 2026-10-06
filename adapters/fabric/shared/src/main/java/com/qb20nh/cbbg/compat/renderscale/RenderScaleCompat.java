@@ -1,6 +1,7 @@
 package com.qb20nh.cbbg.compat.renderscale;
 
 import com.qb20nh.cbbg.platform.LoaderPlatform;
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.Objects;
 import java.util.function.Supplier;
@@ -25,6 +26,7 @@ public final class RenderScaleCompat {
   private static volatile boolean scaleReflectionFailed = false;
   private static volatile @Nullable Method commonGetConfig;
   private static volatile @Nullable Method configGetScale;
+  private static volatile @Nullable Field configScale;
   private static volatile @Nullable Method rendererGetInstance;
   private static volatile @Nullable Method rendererGetScale;
 
@@ -71,8 +73,7 @@ public final class RenderScaleCompat {
       Object renderer = rendererGetInstance == null ? null : rendererGetInstance.invoke(null);
       Object scale =
           renderer == null
-              ? Objects.requireNonNull(configGetScale)
-                  .invoke(Objects.requireNonNull(commonGetConfig).invoke(null))
+              ? configuredScale()
               : Objects.requireNonNull(rendererGetScale).invoke(renderer);
       if (scale instanceof Number n) {
         return n.doubleValue();
@@ -83,6 +84,13 @@ public final class RenderScaleCompat {
       scaleReflectionFailed = true;
       return 1.0F;
     }
+  }
+
+  private static @Nullable Object configuredScale() throws ReflectiveOperationException {
+    Object config = Objects.requireNonNull(commonGetConfig).invoke(null);
+    return configGetScale == null
+        ? Objects.requireNonNull(configScale).get(config)
+        : configGetScale.invoke(config);
   }
 
   private static void ensureScaleReflection() {
@@ -102,7 +110,11 @@ public final class RenderScaleCompat {
         }
         Class<?> config = Class.forName("dev.zelo.renderscale.config.RenderScaleConfig");
         commonGetConfig = common.getMethod("getConfig");
-        configGetScale = config.getMethod("getScale");
+        try {
+          configGetScale = config.getMethod("getScale");
+        } catch (NoSuchMethodException olderConfig) {
+          configScale = config.getField("scale");
+        }
         try {
           Class<?> renderer = Class.forName("dev.zelo.renderscale.RenderScale");
           rendererGetScale = renderer.getMethod("getRenderScaleFactor");
