@@ -16,7 +16,7 @@ import org.jspecify.annotations.Nullable;
 final class ReleaseShutdownResources {
   private ReleaseShutdownResources() {}
 
-  static GpuTextureView @Nullable [] live() {
+  static @Nullable Live live() {
     String controller = "com.qb20nh.cbbg.render.CbbgDither";
     Object manager =
         Objects.requireNonNull(
@@ -43,7 +43,18 @@ final class ReleaseShutdownResources {
     GpuTextureView view = output == null ? null : output.getColorTextureView();
     return noise == null || view == null || noise.isClosed() || view.isClosed()
         ? null
-        : new GpuTextureView[] {noise, view};
+        : new Live(noise, view);
+  }
+
+  static int liveCount(Live live) {
+    return 4;
+  }
+
+  static boolean liveClosed(Live live) {
+    return live.noise().isClosed()
+        && live.noise().texture().isClosed()
+        && live.output().isClosed()
+        && live.output().texture().isClosed();
   }
 
   static Owned captureOwned() {
@@ -90,6 +101,8 @@ final class ReleaseShutdownResources {
       throw new LinkageError("Minecraft uniform buffer layout changed", failure);
     }
   }
+
+  record Live(GpuTextureView noise, GpuTextureView output) {}
 
   record Owned(List<GpuBuffer> buffers, List<NativeImage> frames) {}
 }

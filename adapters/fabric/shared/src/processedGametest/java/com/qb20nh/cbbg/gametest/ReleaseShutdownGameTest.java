@@ -1,7 +1,6 @@
 package com.qb20nh.cbbg.gametest;
 
 import com.google.gson.JsonObject;
-import com.mojang.blaze3d.textures.GpuTextureView;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -16,7 +15,7 @@ import org.jspecify.annotations.Nullable;
 /** Checks the mod's resources before Minecraft closes its renderer. */
 @NullMarked
 public final class ReleaseShutdownGameTest implements FabricClientGameTest {
-  private static GpuTextureView @Nullable [] resources;
+  private static ReleaseShutdownResources.@Nullable Live resources;
   private static ReleaseShutdownResources.@Nullable Owned owned;
   private static @Nullable List<Thread> workers;
   private static boolean observing;
@@ -69,7 +68,8 @@ public final class ReleaseShutdownGameTest implements FabricClientGameTest {
     record.addProperty(
         "resourcesChecked",
         generation == null
-            ? 4 + ReleaseShutdownResources.ownedCount(Objects.requireNonNull(owned))
+            ? ReleaseShutdownResources.liveCount(Objects.requireNonNull(resources))
+                + ReleaseShutdownResources.ownedCount(Objects.requireNonNull(owned))
             : 0);
     record.addProperty("generationStarted", generation != null);
     Throwable failure = null;
@@ -78,9 +78,7 @@ public final class ReleaseShutdownGameTest implements FabricClientGameTest {
     try {
       closed = true;
       if (generation == null) {
-        for (GpuTextureView view : Objects.requireNonNull(resources)) {
-          closed &= view.isClosed() && view.texture().isClosed();
-        }
+        closed &= ReleaseShutdownResources.liveClosed(Objects.requireNonNull(resources));
         closed &= ReleaseShutdownResources.ownedClosed(Objects.requireNonNull(owned));
       } else {
         if (!generation.isCancelled())

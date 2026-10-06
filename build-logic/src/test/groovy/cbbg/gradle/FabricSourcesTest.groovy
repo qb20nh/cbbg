@@ -78,10 +78,29 @@ class FabricSourcesTest {
                         'com/qb20nh/cbbg/gametest/RenderScaleTargetFormat.java')
             })
         }
-        ['ReleaseShutdownGameTest', 'ReleaseGeneratingShutdownGameTest'].each { name ->
+        ['ReleaseEarlyStartupGameTest', 'ReleaseStartupPreLaunch', 'ReleaseStartupObservations',
+         'ReleaseShutdownGameTest', 'ReleaseGeneratingShutdownGameTest', 'mixin/ReleaseShutdownMixin'].each { name ->
+            assertEquals(1, layout.processedGametest.java.count {
+                FabricSources.contains(it, shared + name + '.java')
+            })
+            assertFalse(entrypoints.contains('com.qb20nh.cbbg.gametest.' + name))
+        }
+        ['ReleaseAllocationGameTest', 'ReleaseShaderFailureGameTest', 'ReleaseDebugOverlayGameTest'].each { name ->
             assertFalse(layout.processedGametest.java.any {
                 FabricSources.contains(it, shared + name + '.java')
             })
+        }
+        ['startup', 'shutdown'].each { kind ->
+            String resource = 'cbbg.release-' + kind + '.mixins.json'
+            assertFalse(layout.copies.processedGametest.any {
+                FabricSources.contains(it, 'adapters/fabric/shared/src/processedGametest/resources/' + resource)
+            })
+            assertTrue(layout.processedGametest.resources.any {
+                FabricSources.contains(it, 'renderers/gl3/src/processedGametest/resources/' + resource)
+            })
+            File nativeMetadata = new File(System.getProperty('cbbg.repository'),
+                    'renderers/gl3/src/processedGametest/resources/' + resource)
+            assertEquals('JAVA_21', new JsonSlurper().parse(nativeMetadata).compatibilityLevel)
         }
     }
 

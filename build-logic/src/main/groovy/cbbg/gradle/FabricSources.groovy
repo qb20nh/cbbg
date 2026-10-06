@@ -135,6 +135,9 @@ class FabricSources {
                             'gametest/ReleaseSodiumConfigGameTest', 'gametest/ReleaseControlsGameTest',
                             'gametest/ReleaseModMenuGameTest', 'gametest/ReleaseIrisGameTest',
                             'gametest/ReleaseGenerationGameTest', 'gametest/ReleaseNotificationsGameTest',
+                            'gametest/ReleaseEarlyStartupGameTest', 'gametest/ReleaseStartupPreLaunch',
+                            'gametest/ReleaseStartupObservations', 'gametest/ReleaseShutdownGameTest',
+                            'gametest/ReleaseGeneratingShutdownGameTest', 'gametest/mixin/ReleaseShutdownMixin',
                             'gametest/ReleaseWorldPixelsGameTest', 'gametest/ReleaseTransparencyGameTest',
                             'gametest/ReleaseRenderScaleGameTest', 'gametest/ReleaseCommands',
                             'gametest/ReleaseGraphics', 'gametest/ReleaseGameNames',
@@ -142,7 +145,9 @@ class FabricSources {
                     owner.renderer in ['gl3', 'blaze-texture-format'] ? [] :
                             classes('gametest/ReleaseModMenuGameTest', 'gametest/ReleaseIrisGameTest'))
             result.copies.processedGametest << tree('adapters/fabric/shared/src/processedGametest/resources', [],
-                    owner.renderer == 'gl3' ? ['cbbg.release-allocation.mixins.json'] : [])
+                    owner.renderer == 'gl3' ? ['cbbg.release-allocation.mixins.json',
+                                               'cbbg.release-startup.mixins.json',
+                                               'cbbg.release-shutdown.mixins.json'] : [])
         }
         result.copies.processedGametest << irisResources
         if (owner.renderer == 'renderpearl') {

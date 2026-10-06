@@ -19,7 +19,7 @@ public final class ReleaseObservations {
   @SuppressWarnings("ReferenceEquality")
   public static void present(GpuTextureView texture) {
     var live = ReleaseShutdownResources.live();
-    if (live != null && texture.texture() == live[1].texture()) {
+    if (live != null && texture.texture() == live.output().texture()) {
       output = texture;
       presentations++;
     }
