@@ -21,7 +21,7 @@ class FabricSources {
                       gametest: [java: [], resources: []], processedGametest: [java: [], resources: []],
                       copies: [main: [], gametest: [], processedGametest: []],
                       inputs: ['src/main/resources/fabric.mod.json'],
-                      legacyGametestApi: owner.dependencies.clientGametest?.startsWith('2.')]
+                      legacyGametestApi: owner.dependencies?.clientGametest?.startsWith('2.')]
         List<Map> processed = result.processedGametest.java
         List<String> progress = classes('gametest/mixin/ScenarioProgressMixin',
                 'gametest/IrisFixture', 'gametest/RenderScaleTestAccess')
@@ -45,6 +45,8 @@ class FabricSources {
             result.processedGametest.resources << tree(adapter + 'processedGametest/resources')
         } else {
             boolean textureFormat = target.renderer == 'blaze-texture-format'
+            boolean gl3 = target.renderer == 'gl3'
+            boolean sharedLifecycle = textureFormat || gl3
             List<String> groups = (["renderers/${target.renderer}", "adapters/minecraft/${owner.minecraft}",
                     "adapters/fabric/${owner.minecraft}"] + (target.sourceGroups ?: [])).unique()
             if (textureFormat) groups << 'adapters/minecraft/blaze-texture-format'
@@ -58,25 +60,36 @@ class FabricSources {
             result.test.java << tree('adapters/fabric/modern/src/test/java')
             result.test.resources << tree('build-config/fabric-modern/src/test/resources')
             result.gametest.java << tree('core/src/testSupport/java')
-            result.main.java << tree('adapters/fabric/shared/src/main/java', textureFormat ? [] : classes(
+            result.main.java << tree('adapters/fabric/shared/src/main/java', sharedLifecycle ? [] : classes(
                     'Cbbg', 'platform/LoaderPlatform', 'command/CbbgClientCommands', 'platform/Text',
                     'command/CommandPlatform', 'config/gui/CbbgConfigWidgets', 'config/gui/WidgetPlatform',
                     'compat/iris/IrisCompat', 'compat/renderscale/RenderScaleCompat',
                     'compat/modmenu/CbbgModMenuApi', 'compat/sodium/CbbgSodiumConfig',
                     'render/stbn/STBNGenerator', 'render/stbn/STBNLoader',
-                    'render/stbn/StbnImagePixels', 'render/stbn/STBNCache', 'render/MainTargets'))
+                    'render/stbn/StbnImagePixels', 'render/stbn/STBNCache', 'render/MainTargets'),
+                    gl3 ? classes('render/MainTargets', 'render/stbn/StbnImagePixels',
+                            'config/gui/WidgetPlatform') : [])
             result.gametest.java << tree('adapters/fabric/shared/src/gametest/java',
-                    textureFormat ? [] : classes('gametest/CbbgConfigScreenGameTest'),
-                    textureFormat ? classes('gametest/ClientTestAccess') : [])
-            if (textureFormat) {
+                    sharedLifecycle ? [] : classes('gametest/CbbgConfigScreenGameTest'),
+                    sharedLifecycle ? classes('gametest/ClientTestAccess') : [])
+            if (sharedLifecycle) {
                 result.main.java << tree('adapters/fabric/modern/src/main/java', classes(
-                        'CbbgClient', 'CbbgEarlyInit', 'CbbgLanguageAdapter'))
+                        'CbbgClient', 'CbbgEarlyInit', 'CbbgLanguageAdapter'),
+                        gl3 ? classes('CbbgClient') : [])
+                if (gl3) {
+                    result.main.java << tree('adapters/minecraft/blaze-texture-format/src/main/java',
+                            classes('config/gui/ClientScreenAccess'))
+                    result.main.java << tree('adapters/minecraft/blaze-texture-format/src/main/java',
+                            classes('mixin/package-info'))
+                    result.main.java << tree('renderers/blaze-texture-format/src/main/java',
+                            classes('compat/sulkan/ShaderCompat'))
+                }
                 result.main.java << tree('renderers/modern/src/main/java', classes(
                         'render/GenerationNotifications', 'render/DitherController',
                         'config/gui/CbbgConfigScreen', 'config/gui/ConfigCanvas'))
                 result.gametest.java << tree('renderers/modern/src/gametest/java', classes(
-                        'gametest/ModMenuGameTest', 'gametest/IrisFixture', 'gametest/RenderScaleTestAccess',
-                        'gametest/OptionalModsGameTest'))
+                        'gametest/ModMenuGameTest', 'gametest/OptionalModsGameTest') +
+                        (gl3 ? [] : classes('gametest/IrisFixture', 'gametest/RenderScaleTestAccess')))
                 processed << tree("renderers/${owner.renderer}/src/processedGametest/java", [],
                         (owner.java as int) < 25 ? classes('gametest/mixin/ReleaseNoiseMixin') : [])
                 processed << tree("adapters/fabric/${owner.minecraft}/src/processedGametest/java")
@@ -101,11 +114,17 @@ class FabricSources {
             if (textureFormat) resources << 'assets/cbbg/shaders/core/*.fsh'
             result.copies.main << tree('src/main/resources', resources)
         }
-        if (owner.buildProfile == 'fabric-upstream' || owner.renderer == 'blaze-texture-format') {
-            processed << tree('renderers/renderpearl/src/gametest/java', progress)
-            processed << tree('renderers/modern/src/gametest/java', progress)
+        if (owner.buildProfile == 'fabric-upstream' || owner.renderer in ['blaze-texture-format', 'gl3']) {
+            if (owner.renderer != 'gl3') {
+                processed << tree('renderers/renderpearl/src/gametest/java', progress)
+                processed << tree('renderers/modern/src/gametest/java', progress)
+            }
             processed << tree('core/src/testSupport/java', classes('reference/DitherReference'))
-            processed << tree('adapters/fabric/shared/src/processedGametest/java')
+            processed << tree('adapters/fabric/shared/src/processedGametest/java',
+                    owner.renderer == 'gl3' ? classes('gametest/ReleaseCacheGameTest',
+                            'gametest/ReleaseSettingsGuiGameTest', 'gametest/ReleaseUtilitiesGameTest',
+                            'gametest/ReleaseGraphics', 'gametest/ReleaseGameNames',
+                            'gametest/ReleaseMapping') : [])
             result.copies.processedGametest << tree('adapters/fabric/shared/src/processedGametest/resources')
         }
         result.copies.processedGametest << irisResources

@@ -24,7 +24,8 @@ def remappedGame = gameTarget.java < 25
 apply plugin: remappedGame ? 'net.fabricmc.fabric-loom-remap' : 'net.fabricmc.fabric-loom'
 def modProperties = new Properties()
 new File(repositoryRoot, 'gradle.properties').withInputStream { modProperties.load(it) }
-version = cbbg.gradle.CandidateManifest.packageVersion('v' + modProperties.mod_version, artifactOwner)
+version = cbbg.gradle.CandidateManifest.packageVersion(
+        'v' + providers.gradleProperty('mod_version').getOrElse(modProperties.mod_version), artifactOwner)
 group = modProperties.maven_group
 base.archivesName = modProperties.archives_base_name
 layout.buildDirectory = new File(repositoryRoot, "build/targets/${targetId}")
@@ -77,7 +78,15 @@ dependencies {
     }
     if (testCompat.tokenize('+').contains('chatpatches')) {
         add(remappedGame ? 'modRuntimeOnly' : 'runtimeOnly', "maven.modrinth:chatpatches:${effectiveDependencies.chatPatches}") { transitive = false }
+    }
+    if (testCompat.tokenize('+').any { it in ['chatpatches', 'yacl'] }) {
         add(remappedGame ? 'modRuntimeOnly' : 'runtimeOnly', "maven.modrinth:yacl:${effectiveDependencies.yacl}") { transitive = false }
+    }
+    [forcegl2: 'forceGl2', threatengl: 'threatenGl'].each { token, dependency ->
+        if (testCompat.tokenize('+').contains(token)) {
+            add(remappedGame ? 'modRuntimeOnly' : 'runtimeOnly',
+                    "maven.modrinth:${token == 'forcegl2' ? 'forcegl2.0-remapped' : token}:${effectiveDependencies[dependency]}") { transitive = false }
+        }
     }
     if (testCompat.tokenize('+').contains('renderscale')) {
         add(remappedGame ? 'modRuntimeOnly' : 'runtimeOnly', "maven.modrinth:renderscale:${effectiveDependencies.renderScale}") { transitive = false }
@@ -110,6 +119,8 @@ tasks.withType(ProcessResources).configureEach {
 }
 
 def usesTextureFormat = target.renderer == 'blaze-texture-format'
+def usesGl3 = target.renderer == 'gl3'
+def usesSharedLifecycle = usesTextureFormat || usesGl3
 def sourceLayout = cbbg.gradle.FabricSources.layout(target, artifactOwner)
 ['main', 'test'].each { name ->
     cbbg.gradle.FabricSources.configure(project, repositoryRoot, sourceLayout, name)
@@ -138,7 +149,7 @@ if (!target.compatibilityProfiles[testCompat].contains(testBackend)) {
     throw new GradleException("Compatibility fixture ${testCompat} does not support ${testBackend} for ${targetId}")
 }
 loom.runs.named('clientGameTest') {
-    if (!usesTextureFormat) {
+    if (!remappedGame && !usesTextureFormat) {
         programArgs '--graphicsBackend', testBackend
     }
     vmArg "-Dcbbg.test.backend=${testBackend}"
@@ -151,7 +162,7 @@ loom.runs.named('clientGameTest') {
 
 cbbg.gradle.FabricSources.configure(project, repositoryRoot, sourceLayout, 'gametest')
 
-if (usesTextureFormat) {
+if (usesSharedLifecycle) {
     if (remappedGame) {
         def testMappings = tasks.register('gameTestMappings', cbbg.gradle.GameTestMappings) {
             mappings.set(layout.file(providers.provider { loom.mappingConfiguration.tinyMappings.toFile() }))
@@ -164,6 +175,11 @@ if (usesTextureFormat) {
     def externalCompileClasspath = configurations.compileClasspath.incoming.artifactView {
         componentFilter { it instanceof org.gradle.api.artifacts.component.ModuleComponentIdentifier }
     }.files
+    if (gameTarget.dependencies.clientGametest) {
+        externalCompileClasspath += configurations.gametestCompileClasspath.incoming.artifactView {
+            componentFilter { it instanceof org.gradle.api.artifacts.component.ModuleComponentIdentifier }
+        }.files
+    }
     sourceSets.create('processedGametest') {
         compileClasspath = files(releaseOptimization.optimizedJar, externalCompileClasspath)
         runtimeClasspath = output + compileClasspath
@@ -312,6 +328,12 @@ tasks.named('processResources') {
     def sharedDescriptor = new File(repositoryRoot, 'src/main/resources/fabric.mod.json')
     inputs.file(sharedDescriptor).withPropertyName('sharedFabricMetadata')
     cbbg.gradle.FabricSources.copyResources(project, repositoryRoot, sourceLayout, 'main', delegate)
+    if (usesGl3) {
+        from(new File(repositoryRoot, 'src/main/resources/assets/cbbg/shaders/include/dither.glsl')) {
+            into 'assets/minecraft/shaders/include'
+            rename { 'cbbg_dither.glsl' }
+        }
+    }
     def properties = [version: project.version, minecraft_version: artifactOwner.minecraftDependency ?: artifactOwner.minecraft,
                       loader_version: artifactOwner.dependencies.minimumLoader ?: artifactOwner.dependencies.loader,
                       loader_upper_bound: artifactOwner.dependencies.loaderUpperExclusive ? ' <' + artifactOwner.dependencies.loaderUpperExclusive : '',
@@ -338,7 +360,7 @@ tasks.named('processResources') {
 }
 
 apply from: new File(repositoryRoot, 'build-config/source-inventory.gradle')
-if (target.renderer == 'renderpearl' || usesTextureFormat) {
+if (target.renderer == 'renderpearl' || usesSharedLifecycle) {
     apply from: new File(repositoryRoot, 'build-config/fabric-compatibility.gradle')
 }
 
@@ -467,7 +489,7 @@ tasks.register('dev', Sync) {
     }
 }
 
-if (usesTextureFormat) {
+if (usesSharedLifecycle) {
     tasks.named('processGametestResources') {
         cbbg.gradle.FabricSources.copyResources(project, repositoryRoot, sourceLayout, 'gametest', delegate)
         def minecraftRequirement = artifactOwner.minecraftDependency ?: artifactOwner.minecraft
