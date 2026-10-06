@@ -27,6 +27,9 @@ def compatibilityOutput = layout.buildDirectory.dir('fabric-compatibility')
 def compatibilityReport = compatibilityOutput.map { it.file('minimums.json') }
 def compatibilityLastSuccess = compatibilityOutput.map { it.file('last-successful.json') }
 def resolvePinnedGametest = { Map target ->
+    if (target.minecraft == '1.21.1' && project.ext.has('clientGametestBackport')) {
+        return project.ext.clientGametestBackport.get().archiveFile.get().asFile
+    }
     String version = target.dependencies.clientGametest ?: fabricApi.moduleVersion('fabric-client-gametest-api-v1',
             target.dependencies.fabricApi)
     def configuration = configurations.detachedConfiguration(dependencies.create(
@@ -85,6 +88,7 @@ tasks.register('verifyFabricCompatibility') {
     group = 'verification'
     description = 'Find cached Loader/API compatibility boundaries using the processed release jar.'
     dependsOn 'prepareProcessedRuntime'
+    if (project.ext.has('clientGametestBackport')) dependsOn project.ext.clientGametestBackport
     doLast {
         if (System.getenv('CI')?.equalsIgnoreCase('true') || System.getenv('GITHUB_ACTIONS') == 'true') {
             throw new GradleException('Packaged graphics tests require a local test display')
