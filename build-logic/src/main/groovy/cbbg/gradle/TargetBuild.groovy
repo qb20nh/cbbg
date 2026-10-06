@@ -19,14 +19,20 @@ abstract class TargetBuild extends DefaultTask {
     @Input abstract Property<String> getTargetId()
     @Input abstract Property<String> getProfile()
     @Input abstract Property<String> getOperation()
+    @Input abstract ListProperty<String> getAdditionalOperations()
     @Input abstract Property<Boolean> getOffline()
     @Input abstract ListProperty<String> getOptions()
     @Input abstract MapProperty<String, String> getBuildProperties()
     @Inject abstract ExecOperations getExecOperations()
 
+    TargetBuild() {
+        additionalOperations.convention([])
+    }
+
     @TaskAction
     void runBuild() {
-        if (operation.get() in ['runClient', 'updateFabricMinimums', 'verifyFabricCompatibility'] &&
+        List<String> operations = [operation.get()] + additionalOperations.get()
+        if (operations.any { it in ['runClient', 'updateFabricMinimums', 'verifyFabricCompatibility'] } &&
                 ('true'.equalsIgnoreCase(System.getenv('CI')) || System.getenv('GITHUB_ACTIONS') == 'true')) {
             throw new GradleException('Minecraft runtime tests are local-only')
         }
@@ -37,8 +43,8 @@ abstract class TargetBuild extends DefaultTask {
             throw new GradleException('Invalid build profile: ' + profile.get())
         }
         boolean windows = System.getProperty('os.name').toLowerCase(Locale.ROOT).contains('windows')
-        List<String> args = wrapperCommand(root, directory, windows) + ['-p', directory.absolutePath,
-                             operation.get(), '--no-daemon', '--no-watch-fs',
+        List<String> args = wrapperCommand(root, directory, windows) + ['-p', directory.absolutePath] +
+                operations + ['--no-daemon', '--no-watch-fs',
                              '--project-cache-dir', new File(root, '.gradle/dispatch/' + targetId.get()).absolutePath]
         if (profile.get() != 'fabric-upstream') args.add('-Ptarget=' + targetId.get())
         if (offline.get()) args.add('--offline')

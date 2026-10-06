@@ -58,9 +58,7 @@ jobs:
       - name: Check and build development jars
         env:
           TARGET_ID: ${{ matrix.id }}
-        run: |
-          ./gradlew --no-daemon "-Ptarget=$TARGET_ID" ciCheck
-          ./gradlew --no-daemon "-Ptarget=$TARGET_ID" dev
+        run: ./gradlew --no-daemon --build-cache "-Ptarget=$TARGET_ID" ciCheck dev
       - uses: actions/upload-artifact@v7
         with:
           name: dev-${{ matrix.id }}

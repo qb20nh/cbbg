@@ -467,13 +467,14 @@ class BatchWorkflowTest(unittest.TestCase):
             self.assertEqual(json.loads(values['matrix'])['include'], [{'id': 'one'}, {'id': 'two'}])
             self.assertEqual(values['build'], 'true')
             self.assertEqual(values['core'], 'true')
+            self.assertEqual(values['tooling'], 'true')
             self.assertIn('-Ptargets=one,two', (root / 'args').read_text().splitlines())
         routing = yaml.load(workflow.read_text(), Loader=yaml.BaseLoader)
-        plan = routing['jobs']['plan']
+        plan = routing['jobs']['selection']
         selection = next(s for s in plan['steps'] if s.get('id') == 'batch')
         self.assertIn("github.event_name == 'pull_request'", selection['if'])
         self.assertIn(batch.PREFIX, selection['if'])
-        for name in ('matrix', 'build', 'core'):
+        for name in ('matrix', 'build', 'core', 'tooling'):
             self.assertEqual(plan['outputs'][name],
                              '${{ steps.batch.outputs.' + name + ' || steps.targets.outputs.' + name + ' }}')
         self.assertEqual(routing['jobs']['core']['strategy']['matrix']['java'], ['8', '17', '21', '25'])

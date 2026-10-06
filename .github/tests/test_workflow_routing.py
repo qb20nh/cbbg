@@ -28,6 +28,34 @@ class WorkflowRoutingTest(unittest.TestCase):
         self.assertIn("build/libs/*-dev-*.jar", dev.read_text())
         self.assertNotIn("scripts/build_targets.py", ci.read_text() + dev.read_text())
 
+    def test_dev_checks_and_builds_in_one_cached_root_invocation(self):
+        command = script("Check and build development jars", WORKFLOWS / "dev.yml")
+        with tempfile.TemporaryDirectory() as directory:
+            gradlew = Path(directory) / "gradlew"
+            gradlew.write_text('#!/bin/sh\nprintf "%s\\n" "$@"\n')
+            gradlew.chmod(0o755)
+            result = subprocess.run(
+                ["bash", "-e", "-c", command], cwd=directory,
+                env=dict(os.environ, TARGET_ID="26.3-fabric"),
+                capture_output=True, text=True, check=True,
+            )
+            self.assertEqual(result.stdout.splitlines(), [
+                "--no-daemon", "--build-cache", "-Ptarget=26.3-fabric", "ciCheck", "dev",
+            ])
+
+    def test_release_initializes_gradle_cache_once_before_validation(self):
+        release = yaml.safe_load((WORKFLOWS / "release.yml").read_text())
+        steps = release["jobs"]["candidate"]["steps"]
+        setups = [(index, step) for index, step in enumerate(steps)
+                  if step.get("uses", "").startswith("gradle/actions/setup-gradle@")]
+        self.assertEqual(len(setups), 1)
+        setup_index, setup = setups[0]
+        validation_index = next(index for index, step in enumerate(steps)
+                                if step.get("name") == "Validate release selection")
+        self.assertLess(setup_index, validation_index)
+        self.assertEqual(setup["with"], {"cache-read-only": False, "cache-cleanup": "on-success"})
+        self.assertIn("--build-cache", script("Test candidate tooling", WORKFLOWS / "release.yml"))
+
     def test_dependency_submission_uses_java_25_build_jvm(self):
         job = (WORKFLOWS / "gradle.yml").read_text().split("  dependency-submission:", 1)[1]
         self.assertIn("java-version: ${{ matrix.java }}", job)
@@ -53,29 +81,68 @@ class WorkflowRoutingTest(unittest.TestCase):
         self.assertIn("gh release create", script("Create draft release", release))
         self.assertIn("--draft", script("Create draft release", release))
 
-    def test_codeql_selects_old_upstream_target_explicitly(self):
-        codeql = WORKFLOWS / "codeql.yml"
-        self.assertIn("targetMatrix", codeql.read_text())
-        self.assertIn("-Ptarget=26.2-fabric", codeql.read_text())
+    def test_codeql_has_one_java_job_and_keeps_historical_coverage(self):
+        workflow = yaml.safe_load((WORKFLOWS / "codeql.yml").read_text())
+        jobs = workflow["jobs"]
+        self.assertEqual(set(jobs), {"analyze-targets", "analyze"})
+        java = jobs["analyze-targets"]
+        self.assertNotIn("strategy", java)
+        steps = java["steps"]
+        setup = next(step for step in steps if step.get("id") == "codeql")
+        self.assertEqual(setup["name"], "Install CodeQL CLI")
+        self.assertNotIn("uses", setup)
+        self.assertRegex(setup["env"]["CODEQL_BUNDLE_VERSION"], r"^\d+\.\d+\.\d+$")
+        self.assertRegex(setup["env"]["CODEQL_BUNDLE_SHA256"], r"^[0-9a-f]{64}$")
+        install = setup["run"]
+        self.assertIn('gh release download "codeql-bundle-v$CODEQL_BUNDLE_VERSION"', install)
+        self.assertIn("--repo github/codeql-action", install)
+        self.assertLess(install.index("sha256sum --check"), install.index("tar --zstd"))
+        self.assertIn('"$install_dir/codeql/codeql" version', install)
+        self.assertIn('printf \'codeql-path=%s\\n\'', install)
+        self.assertIn('>> "$GITHUB_OUTPUT"', install)
+        build = script("Analyze Java artifact builds", WORKFLOWS / "codeql.yml")
+        self.assertIn("codeqlScan", build)
+        self.assertIn('"-PcodeqlExecutable=$CODEQL_EXECUTABLE"', build)
+        self.assertIn("-PcodeqlLegacyTarget=26.2-fabric", build)
+        upload = next(step for step in steps if step.get("name") == "Upload Java analyses")
+        self.assertEqual(upload["with"]["sarif_file"], ".gradle/codeql-results/sarif")
+        self.assertNotIn("category", upload["with"])
+        self.assertNotIn("if", upload)
+        self.assertEqual(jobs["analyze"]["strategy"]["matrix"]["language"], ["actions", "python"])
 
-    def test_codeql_compiles_catalog_targets_through_gradle(self):
-        compile_script = script("Compile target for CodeQL", WORKFLOWS / "codeql.yml")
-        for target, profile in (("26.2-fabric", "fabric-upstream"),
-                                ("26.3-fabric", "fabric-modern")):
-            with self.subTest(target=target), tempfile.TemporaryDirectory() as directory:
-                gradlew = Path(directory) / "gradlew"
-                gradlew.write_text('#!/bin/sh\nprintf "%s\\n" "$@"\n')
-                gradlew.chmod(0o755)
-                result = subprocess.run(
-                    ["bash", "-e", "-c", compile_script], cwd=directory,
-                    env={**os.environ, "TARGET": target, "BUILD_PROFILE": profile},
-                    capture_output=True, text=True, check=False,
-                )
-                self.assertEqual(result.returncode, 0, result.stderr)
-                self.assertEqual(result.stdout.splitlines(), [
-                    f"-Ptarget={target}", "compileJava", "--rerun-tasks",
-                    "--no-build-cache", "--no-daemon", "--no-watch-fs",
-                ])
+    def test_codeql_restores_gradle_dependencies_before_analysis(self):
+        workflow = yaml.safe_load((WORKFLOWS / "codeql.yml").read_text())
+        steps = workflow["jobs"]["analyze-targets"]["steps"]
+        cache_index = next(
+            i for i, step in enumerate(steps)
+            if step.get("uses", "").startswith("gradle/actions/setup-gradle@")
+        )
+        build_index = next(
+            i for i, step in enumerate(steps)
+            if step.get("name") == "Analyze Java artifact builds"
+        )
+        self.assertLess(cache_index, build_index)
+        cache = steps[cache_index]
+        self.assertEqual(cache["name"], "Cache Gradle dependencies")
+        self.assertNotIn("cache-read-only", cache.get("with", {}))
+        self.assertFalse(cache.get("with", {}).get("cache-disabled", False))
+
+    def test_codeql_passes_cli_path_to_gradle(self):
+        scan_script = script("Analyze Java artifact builds", WORKFLOWS / "codeql.yml")
+        with tempfile.TemporaryDirectory() as directory:
+            gradlew = Path(directory) / "gradlew"
+            gradlew.write_text('#!/bin/sh\nprintf "%s\\n" "$@"\n')
+            gradlew.chmod(0o755)
+            result = subprocess.run(
+                ["bash", "-e", "-c", scan_script], cwd=directory,
+                env={**os.environ, "CODEQL_EXECUTABLE": "/local/codeql with spaces"},
+                capture_output=True, text=True, check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(result.stdout.splitlines(), [
+                "--no-daemon", "codeqlScan", "-PcodeqlExecutable=/local/codeql with spaces",
+                "-PcodeqlLegacyTarget=26.2-fabric",
+            ])
 
     def test_publication_never_builds_artifact_and_retains_retry_gate(self):
         publish = WORKFLOWS / "publish.yml"

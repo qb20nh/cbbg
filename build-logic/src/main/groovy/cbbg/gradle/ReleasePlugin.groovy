@@ -165,13 +165,17 @@ class ReleasePlugin implements Plugin<Project> {
                 String commit = run(['git', 'rev-parse', '--verify', '--end-of-options', head + '^{commit}'], project.rootDir).trim()
                 def catalog = new TargetCatalog(CandidateFiles.parse(new StringReader(
                         run(['git', 'show', commit + ':targets.json'], project.rootDir))) as Map)
-                report = [base: null, head: commit] + ChangeImpact.select(catalog, ['<initial-push>'])
+                report = [base: null, head: commit] + ChangeImpact.select(catalog, ['<initial-push>'], true)
             } else {
-                report = ChangeImpact.compare(project.rootDir, base, head)
+                report = ChangeImpact.compare(project.rootDir, base, head, true)
             }
             def catalog = new TargetCatalog(CandidateFiles.parse(new StringReader(
                     run(['git', 'show', report.head + ':targets.json'], project.rootDir))) as Map)
             report.ci = ChangeImpact.ci(catalog, report)
+            List<String> selectedBuilds = report.ci.matrix.include*.id
+            List<String> availableBuilds = catalog.matrix(catalog.defaults()*.id.join(','))*.id
+            project.logger.lifecycle('Selected target builds: {}', selectedBuilds.join(', ') ?: 'none')
+            project.logger.lifecycle('Skipped target builds: {}', (availableBuilds - selectedBuilds).join(', ') ?: 'none')
             File output = input('output')
             output.parentFile.mkdirs()
             output.setText(JsonOutput.prettyPrint(JsonOutput.toJson(report)) + '\n', 'UTF-8')

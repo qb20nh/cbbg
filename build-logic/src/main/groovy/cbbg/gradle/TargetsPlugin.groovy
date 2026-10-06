@@ -31,7 +31,13 @@ class TargetsPlugin implements Plugin<Project> {
         }
         List<String> options = []
         if (project.gradle.startParameter.rerunTasks) options.add('--rerun-tasks')
-        if (!project.gradle.startParameter.buildCacheEnabled) options.add('--no-build-cache')
+        options.add(project.gradle.startParameter.buildCacheEnabled ? '--build-cache' : '--no-build-cache')
+        List<String> requested = project.gradle.startParameter.taskNames
+        int checkIndex = requested.findIndexOf { it in ['ciCheck', ':ciCheck'] }
+        int devIndex = requested.findIndexOf { it in ['dev', ':dev'] }
+        boolean checkedDev = checkIndex >= 0 && devIndex == checkIndex + 1 &&
+                !project.gradle.startParameter.continueOnFailure &&
+                project.gradle.startParameter.excludedTaskNames.empty
         ['build', 'check', 'ciCheck', 'qualityCheck', 'runClient', 'genSources', 'dev', 'compileJava',
          'checkPackages', 'optimizeReleaseJar', 'candidateBuildOutputs'].each { operation ->
             def parent = project.tasks.names.contains(operation)
@@ -40,6 +46,10 @@ class TargetsPlugin implements Plugin<Project> {
                 group = operation in ['check', 'ciCheck', 'qualityCheck'] ? 'verification' : 'build'
                 description = "Run ${operation} for the selected targets."
             }
+            if (operation == 'dev' && checkedDev) {
+                parent.configure { dependsOn(project.tasks.named('ciCheck')) }
+                return
+            }
             def targets = operation == 'runClient' ? selected : owners
             targets.each { target ->
                 def child = project.tasks.register("${operation}_${target.id}", TargetBuild) {
@@ -47,6 +57,7 @@ class TargetsPlugin implements Plugin<Project> {
                     targetId.set(target.id as String)
                     profile.set((target.buildProfile ?: '') as String)
                     delegate.operation.set(operation)
+                    if (operation == 'ciCheck' && checkedDev) additionalOperations.set(['dev'])
                     offline.set(project.gradle.startParameter.offline)
                     delegate.options.set(options)
                     buildProperties.set(forwarded)
@@ -150,6 +161,18 @@ class TargetsPlugin implements Plugin<Project> {
                     println(json)
                 }
             }
+        }
+        project.tasks.register('codeqlScan', CodeqlScan) {
+            group = 'verification'
+            description = 'Analyze each supported artifact in a separate CodeQL database.'
+            repositoryDirectory.set(project.layout.projectDirectory)
+            catalogFile.set(project.layout.projectDirectory.file('targets.json'))
+            codeqlExecutable.set(project.layout.file(project.providers.gradleProperty('codeqlExecutable')
+                    .map { project.file(it) }))
+            legacyTarget.set(project.providers.gradleProperty('codeqlLegacyTarget').orElse(''))
+            // The historical upstream profile's clean task deletes repository-level build/.
+            outputDirectory.set(project.layout.projectDirectory.dir('.gradle/codeql-results'))
+            outputs.upToDateWhen { false }
         }
         project.tasks.named('check') { dependsOn('checkCatalog') }
         project.tasks.register('bundleCandidate', BundleCandidate) {

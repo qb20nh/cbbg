@@ -167,6 +167,7 @@ class ReleasePluginTest {
         assertTrue(report.ci.build)
         assertTrue(report.ci.core)
         assertTrue(new File(directory, 'build/github.txt').text.contains('core=true\n'))
+        assertTrue(new File(directory, 'build/github.txt').text.contains('tooling=true\n'))
         runner('selectChecks', '-Pbase=missing-commit', '-Poutput=build/missing.json').buildAndFail()
         assertFalse(new File(directory, 'build/missing.json').exists())
 
@@ -181,5 +182,15 @@ class ReleasePluginTest {
         assertFalse(publication.ci.build)
         assertFalse(publication.ci.core)
         assertEquals(['publication'], publication.checks)
+        assertTrue(publication.ci.tooling)
+
+        current = git('rev-parse', 'HEAD')
+        new File(directory, 'README.md').text = 'Updated documentation\n'
+        git('add', 'README.md')
+        git('commit', '-m', 'Update documentation')
+        runner('selectChecks', '-Pbase=' + current, '-Poutput=build/docs.json',
+                '-PgithubOutput=build/docs-github.txt').build()
+        assertFalse(CandidateFiles.read(new File(directory, 'build/docs.json')).ci.tooling)
+        assertTrue(new File(directory, 'build/docs-github.txt').text.contains('tooling=false\n'))
     }
 }

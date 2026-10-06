@@ -70,6 +70,72 @@ case "$*" in *-Pcompat=fail*) exit 7;; esac
         assertEquals(1, new File(directory, 'build/arguments.txt').readLines().count('build'))
     }
 
+    @Test void forwardsBothBuildCacheChoices() {
+        fixture()
+        File arguments = new File(directory, 'build/arguments.txt')
+        runner('build', '--build-cache').build()
+        assertTrue(arguments.readLines().contains('--build-cache'))
+        assertFalse(arguments.readLines().contains('--no-build-cache'))
+        arguments.delete()
+        runner('build', '--no-build-cache').build()
+        assertTrue(arguments.readLines().contains('--no-build-cache'))
+        assertFalse(arguments.readLines().contains('--build-cache'))
+    }
+
+    @Test void checksAndDevelopmentArtifactsUseOneChildBuildPerOwner() {
+        fixture()
+        runner(':ciCheck', ':dev', '-Ptargets=26.3-fabric,26.3-quilt').build()
+        List<String> args = new File(directory, 'build/arguments.txt').readLines()
+        assertEquals(1, args.count('-p'))
+        assertEquals(['ciCheck', 'dev'], args.findAll { it in ['ciCheck', 'dev'] })
+        assertTrue(runner('ciCheck', 'dev', '-Pcompat=fail').buildAndFail().output.contains('exit value 7'))
+    }
+
+    @Test void developmentArtifactsAloneKeepTheirOwnBuild() {
+        fixture()
+        runner('dev').build()
+        List<String> args = new File(directory, 'build/arguments.txt').readLines()
+        assertEquals(1, args.count('-p'))
+        assertTrue(args.contains('dev'))
+        assertFalse(args.contains('ciCheck'))
+    }
+
+    @Test void developmentArtifactsRequestedFirstKeepTheirOrder() {
+        fixture()
+        runner('dev', 'ciCheck').build()
+        List<String> args = new File(directory, 'build/arguments.txt').readLines()
+        assertEquals(2, args.count('-p'))
+        assertEquals(['dev', 'ciCheck'], args.findAll { it in ['ciCheck', 'dev'] })
+    }
+
+    @Test void intermediateTasksKeepDevelopmentBuildSeparate() {
+        fixture()
+        File wrapper = new File(directory, 'gradlew')
+        wrapper.text = wrapper.text.replace('build/arguments.txt', 'arguments.txt')
+        runner('ciCheck', 'clean', 'dev').build()
+        List<String> args = new File(directory, 'arguments.txt').readLines()
+        assertEquals(2, args.count('-p'))
+        assertEquals(['ciCheck', 'dev'], args.findAll { it in ['ciCheck', 'dev'] })
+    }
+
+    @Test void continueRunsDevelopmentBuildAfterFailedCheck() {
+        fixture()
+        runner('ciCheck', 'dev', '--continue', '-Pcompat=fail').buildAndFail()
+        List<String> args = new File(directory, 'build/arguments.txt').readLines()
+        assertEquals(2, args.count('-p'))
+        assertEquals(['ciCheck', 'dev'], args.findAll { it in ['ciCheck', 'dev'] })
+    }
+
+    @Test void excludedTasksKeepDevelopmentBuildSeparate() {
+        fixture()
+        runner('ciCheck', 'dev', '-x', 'ciCheck').build()
+        File arguments = new File(directory, 'build/arguments.txt')
+        assertEquals(['dev'], arguments.readLines().findAll { it in ['ciCheck', 'dev'] })
+        arguments.delete()
+        runner('ciCheck', 'dev', '-x', 'dev').build()
+        assertEquals(['ciCheck'], arguments.readLines().findAll { it in ['ciCheck', 'dev'] })
+    }
+
     @Test void minimumSearchUpdatesThenVerifiesInFreshBuilds() {
         fixture()
         def env = new HashMap(System.getenv())
