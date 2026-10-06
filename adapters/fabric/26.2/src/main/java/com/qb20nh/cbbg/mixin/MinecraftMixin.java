@@ -1,12 +1,15 @@
 package com.qb20nh.cbbg.mixin;
 
+import com.mojang.blaze3d.pipeline.MainTarget;
 import com.mojang.blaze3d.pipeline.TextureTarget;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.textures.GpuTextureView;
 import com.qb20nh.cbbg.CbbgClient;
 import com.qb20nh.cbbg.config.CbbgConfig;
 import com.qb20nh.cbbg.render.CbbgDither;
+import com.qb20nh.cbbg.render.DitherController;
 import com.qb20nh.cbbg.render.MainTargetFormatSupport;
+import com.qb20nh.cbbg.render.MainTargets;
 import com.qb20nh.cbbg.render.stbn.STBNGenerator;
 import net.minecraft.client.Minecraft;
 import org.jspecify.annotations.NullMarked;
@@ -24,6 +27,14 @@ public abstract class MinecraftMixin {
 
   @Unique private static CbbgConfig.@Nullable Mode lastMode;
   @Unique private static CbbgConfig.@Nullable PixelFormat lastPixelFormat;
+
+  @Inject(method = "renderFrame", at = @At("HEAD"))
+  private void cbbg$prepareFrame(boolean advanceGameTime, CallbackInfo ci) {
+    if (Minecraft.getInstance().gameRenderer.mainRenderTarget() instanceof MainTarget target) {
+      MainTargets.track(target);
+    }
+    DitherController.beginFrame();
+  }
 
   @Inject(method = "close", at = @At("HEAD"))
   private void cbbg$close(CallbackInfo ci) {

@@ -13,11 +13,13 @@ final class ReleaseGenerationStatus {
   static CompletableFuture<?> pending() {
     try {
       String owner = "com.qb20nh.cbbg.render.stbn.STBNGenerator";
-      Object result =
-          Class.forName(ReleaseMapping.className(owner))
-              .getMethod(
-                  ReleaseMapping.memberName(owner, "java.util.concurrent.CompletableFuture get()"))
-              .invoke(null);
+      Class<?> type = Class.forName(ReleaseMapping.className(owner));
+      var field =
+          type.getDeclaredField(
+              ReleaseMapping.memberName(
+                  owner, "java.util.concurrent.CompletableFuture pendingFuture"));
+      field.setAccessible(true);
+      Object result = field.get(null);
       return (CompletableFuture<?>)
           Objects.requireNonNull(result, "Packaged generator has no pending future");
     } catch (ReflectiveOperationException error) {
@@ -29,12 +31,6 @@ final class ReleaseGenerationStatus {
     try {
       String owner = "com.qb20nh.cbbg.render.CbbgDither";
       Class<?> controller = Class.forName(ReleaseMapping.className(owner));
-      boolean busy =
-          (boolean)
-              Objects.requireNonNull(
-                  controller
-                      .getMethod(ReleaseMapping.memberName(owner, "boolean isGenerating()"))
-                      .invoke(null));
       var managerField =
           controller.getDeclaredField(
               ReleaseMapping.memberName(
@@ -50,7 +46,7 @@ final class ReleaseGenerationStatus {
                           "com.qb20nh.cbbg.render.stbn.StbnTextureManager",
                           "com.mojang.blaze3d.textures.GpuTextureView getView()"))
                   .invoke(manager);
-      return !busy
+      return ReleaseNotificationUi.settled()
           && view != null
           && !view.isClosed()
           && view.getWidth(0) == size

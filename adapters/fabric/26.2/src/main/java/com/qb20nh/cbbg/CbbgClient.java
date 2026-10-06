@@ -2,13 +2,13 @@ package com.qb20nh.cbbg;
 
 import com.qb20nh.cbbg.command.CbbgClientCommands;
 import com.qb20nh.cbbg.compat.iris.IrisCompat;
+import com.qb20nh.cbbg.compat.sulkan.SulkanCompat;
 import com.qb20nh.cbbg.config.CbbgConfig;
-import com.qb20nh.cbbg.render.CbbgDither;
+import com.qb20nh.cbbg.render.GenerationNotifications;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
-import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.network.chat.Component;
@@ -21,7 +21,7 @@ public final class CbbgClient implements ClientModInitializer {
   /**
    * Main runtime gate for all cbbg rendering changes.
    *
-   * <p>Must be {@code false} when an Iris shaderpack is active to avoid conflicts.
+   * <p>Shaderpacks take control of the render pipeline.
    */
   public static boolean isEnabled() {
     return getEffectiveMode().isActive();
@@ -32,8 +32,7 @@ public final class CbbgClient implements ClientModInitializer {
   }
 
   public static CbbgConfig.Mode getEffectiveMode() {
-    // Iris shaderpacks must take full control of the pipeline.
-    if (IrisCompat.isShaderPackActive()) {
+    if (IrisCompat.isShaderPackActive() || SulkanCompat.isShaderPackActive()) {
       return CbbgConfig.Mode.DISABLED;
     }
     return CbbgConfig.get().mode();
@@ -78,18 +77,9 @@ public final class CbbgClient implements ClientModInitializer {
 
     CbbgClientCommands.register();
 
-    // Ensure generation progress is checked even if not rendering
-    ClientTickEvents.END_CLIENT_TICK.register(_ -> CbbgDither.ensureStbnLoaded());
-
-    // Notify if generation is still ongoing when joining a world
+    ClientTickEvents.END_CLIENT_TICK.register(_ -> GenerationNotifications.tick());
     ClientPlayConnectionEvents.JOIN.register(
-        (_, _, client) -> {
-          if (CbbgDither.isGenerating()) {
-            client.showDebugChat(
-                Component.translatable("cbbg.chat.stbn.generating")
-                    .withStyle(ChatFormatting.YELLOW));
-          }
-        });
+        (_, _, client) -> GenerationNotifications.onWorldJoin());
 
     Cbbg.LOGGER.info("cbbg loaded");
   }

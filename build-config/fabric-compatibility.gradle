@@ -4,6 +4,7 @@ import groovy.json.JsonSlurper
 // Local packaged-client tests. No launcher or publishing credentials are needed.
 def compatibilityRoot = file('../..')
 def CandidateFiles = plugins.getPlugin('cbbg.packaging').class.classLoader.loadClass('cbbg.gradle.CandidateFiles')
+def TargetCatalog = CandidateFiles.classLoader.loadClass('cbbg.gradle.TargetCatalog')
 def CandidateManifest = CandidateFiles.classLoader.loadClass('cbbg.gradle.CandidateManifest')
 def FabricCompatibilitySearch = CandidateFiles.classLoader.loadClass('cbbg.gradle.FabricCompatibilitySearch')
 def FabricCompatibilityProbe = CandidateFiles.classLoader.loadClass('cbbg.gradle.FabricCompatibilityProbe')
@@ -152,9 +153,10 @@ tasks.register('verifyFabricCompatibility') {
             java.security.MessageDigest.getInstance('SHA-512').digest(file.bytes).encodeHex().toString()
         }
         Map<String, Map> optionalMods = [:]
+        Map effectiveDependencies = TargetCatalog.effectiveDependencies(compatibilityTarget, profile)
         selected.toList().sort().each { String token ->
             String name = modNames[token]
-            String pin = compatibilityTarget.dependencies[name]
+            String pin = effectiveDependencies[name]
             if (!pin) throw new GradleException('Missing catalog dependency pin: ' + name)
             String endpoint = name == 'modMenu' ? 'project/modmenu/version/' + pin : 'version/' + pin
             Map version = (Map) new JsonSlurper().parseText(readUrl('https://api.modrinth.com/v2/' + endpoint))
@@ -313,9 +315,12 @@ tasks.register('verifyFabricCompatibility') {
             FabricCompatibilitySearch.numbers(version.tokenize('.').size() == 2 ? version + '.0' : version)
                     .collect { it.toString().padLeft(10, '0') }.join('.')
         }
-        List previousReports = fileTree(new File(compatibilityRoot, 'build/targets')).matching {
+        Set<File> previousReportFiles = fileTree(new File(compatibilityRoot, 'build/targets')).matching {
             include '*/fabric-compatibility/minimums.json', '*/fabric-compatibility/last-successful.json'
-        }.files.collect { source ->
+        }.files + ['minimums.json', 'last-successful.json'].collect {
+            new File(output, it)
+        }.findAll { it.isFile() }
+        List previousReports = previousReportFiles.collect { source ->
             try {
                 Map previous = (Map) CandidateFiles.read(source)
                 def target = catalogTargets.find { it.id == previous.target }

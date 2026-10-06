@@ -37,12 +37,34 @@ class DependencyLockTests(unittest.TestCase):
     def test_sulkan_requires_sodium(self):
         self.target['dependencies']['sulkan'] = 'pin'
         self.target['compatibilityProfiles']['sulkan'] = ['vulkan']
+        self.target['compatibilityDependencyOverrides'] = {'sulkan': {'sodium': 'old-pin'}}
         self.lock['dependencies']['sulkan'] = dict(self.lock['dependencies']['sodium'])
+        self.lock['dependencies']['sodium']['pin'] = 'old-pin'
         paths = dict.fromkeys(('fabricApi', 'sulkan', 'sodium'), self.jar)
         verify_dependencies(self.target, 'sulkan', paths, self.lock)
         del paths['sodium']
         with self.assertRaisesRegex(ValueError, 'Missing or extra'):
             verify_dependencies(self.target, 'sulkan', paths, self.lock)
+
+    def test_profile_pin_does_not_apply_to_iris_or_plain_sodium(self):
+        self.target['compatibilityDependencyOverrides'] = {'sulkan': {'sodium': 'old-pin'}}
+        iris_paths = dict.fromkeys(('fabricApi', 'iris', 'sodium', 'renderScale', 'clothConfig'), self.jar)
+        self.target['compatibilityProfiles']['sodium'] = ['opengl']
+        sodium_paths = dict.fromkeys(('fabricApi', 'sodium'), self.jar)
+        verify_dependencies(self.target, 'iris+renderscale', iris_paths, self.lock)
+        verify_dependencies(self.target, 'sodium', sodium_paths, self.lock)
+        self.lock['dependencies']['sodium']['pin'] = 'old-pin'
+        for profile, paths in [('iris+renderscale', iris_paths), ('sodium', sodium_paths)]:
+            with self.assertRaisesRegex(ValueError, 'catalog pin mismatch: sodium'):
+                verify_dependencies(self.target, profile, paths, self.lock)
+        self.target['compatibilityProfiles']['sulkan'] = ['vulkan']
+        self.target['dependencies']['sulkan'] = 'pin'
+        self.lock['dependencies']['sulkan'] = dict(self.lock['dependencies']['iris'])
+        sulkan_paths = dict.fromkeys(('fabricApi', 'sulkan', 'sodium'), self.jar)
+        verify_dependencies(self.target, 'sulkan', sulkan_paths, self.lock)
+        self.lock['dependencies']['sodium']['pin'] = 'pin'
+        with self.assertRaisesRegex(ValueError, 'catalog pin mismatch: sodium'):
+            verify_dependencies(self.target, 'sulkan', sulkan_paths, self.lock)
 
     def test_chatpatches_requires_yacl(self):
         self.target['dependencies'].update(chatPatches='pin', yacl='pin')
