@@ -29,21 +29,28 @@ class OsvWorkflowTest(unittest.TestCase):
             )
 
     def test_missing_current_results_fail(self):
-        self.assertNotEqual(0, self.run_gate({}).returncode)
+        result = self.run_gate({})
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn('::error::', result.stdout)
+        self.assertIn('new-results.json', result.stdout)
+        self.assertIn('Scan proposed dependencies', result.stdout)
 
     def test_missing_base_results_fail(self):
-        self.assertNotEqual(
-            0, self.run_gate({"new-results.json": {"results": []}}, compare=True).returncode
-        )
+        result = self.run_gate({"new-results.json": {"results": []}}, compare=True)
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn('old-results.json', result.stdout)
+        self.assertIn('Scan base dependencies', result.stdout)
 
     def test_invalid_result_schema_fails(self):
-        self.assertNotEqual(0, self.run_gate({"new-results.json": {}}).returncode)
+        result = self.run_gate({"new-results.json": {}})
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn('results array', result.stdout)
 
     def test_completed_clean_scans_pass(self):
         results = {name: {"results": []} for name in ("new-results.json", "old-results.json")}
         self.assertEqual(0, self.run_gate(results, compare=True).returncode)
 
-    def generate(self, bom, compare=False):
+    def generate(self, bom, compare=False, fail_build=False, build_profile='fabric-modern'):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             current = root / "current"
@@ -57,12 +64,13 @@ class OsvWorkflowTest(unittest.TestCase):
             (publishing / "settings.gradle").touch()
             (current / "targets.json").write_text(json.dumps({
                 "ciTargets": ["26.3-fabric"],
-                "targets": [{"id": "26.3-fabric", "buildProfile": "fabric-modern"}],
+                "targets": [{"id": "26.3-fabric", "buildProfile": build_profile}],
             }))
             wrapper = current / "gradlew"
             wrapper.write_text(
                 "#!/usr/bin/env python3\n"
                 "import os, pathlib, sys\n"
+                "if os.environ['FAIL_BUILD'] == 'true': sys.exit(42)\n"
                 "directory = pathlib.Path(sys.argv[sys.argv.index('-p') + 1])\n"
                 "assert (directory / 'settings.gradle').is_file()\n"
                 "output = next(a.split('=', 1)[1] for a in sys.argv if a.startswith('-PsecuritySbom='))\n"
@@ -79,7 +87,7 @@ class OsvWorkflowTest(unittest.TestCase):
                 ["bash", "-c", script("Resolve Gradle dependencies", WORKFLOW)],
                 cwd=directory,
                 env={**os.environ, "GITHUB_WORKSPACE": directory, "GITHUB_OUTPUT": str(output),
-                     "TEST_SBOM": json.dumps(bom)},
+                     "TEST_SBOM": json.dumps(bom), "FAIL_BUILD": str(fail_build).lower()},
                 capture_output=True,
                 text=True,
                 check=False,
@@ -89,6 +97,26 @@ class OsvWorkflowTest(unittest.TestCase):
     def test_empty_dependency_inventory_fails(self):
         result, _ = self.generate({"bomFormat": "CycloneDX", "components": []})
         self.assertNotEqual(0, result.returncode)
+        self.assertIn('::error::', result.stdout)
+        self.assertIn('CycloneDX', result.stdout)
+        self.assertIn('osv-dependencies', result.stdout)
+
+    def test_failed_build_names_the_dependency_report(self):
+        result, _ = self.generate({}, fail_build=True)
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn('::error::', result.stdout)
+        self.assertIn('root.cdx.json', result.stdout)
+        self.assertIn('Gradle failure above', result.stdout)
+
+    def test_invalid_profile_has_an_escaped_annotation(self):
+        result, _ = self.generate(
+            {'bomFormat': 'CycloneDX', 'components': [{'purl': 'pkg:maven/example/library@1.0'}]},
+            build_profile='bad%profile/path',
+        )
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn('::error::', result.stdout)
+        self.assertIn('bad%25profile/path', result.stdout)
+        self.assertIn('26.3-fabric', result.stdout)
 
     def test_unidentified_components_alone_fail(self):
         result, _ = self.generate({"bomFormat": "CycloneDX", "components": [{"name": "project"}]})

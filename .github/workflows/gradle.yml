@@ -40,10 +40,16 @@ jobs:
         id: batch
         if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'automation/dependabot-major-batch/')
         run: |
-          targets="$(jq -er '.ciTargets | select(length > 0) | join(",")' targets.json)"
+          if ! targets="$(jq -er '.ciTargets | select(length > 0) | join(",")' targets.json)"; then
+            echo "::error::Could not select full batch CI targets. targets.json must contain a nonempty ciTargets list of target IDs."
+            exit 1
+          fi
           ./gradlew --no-daemon "-Ptargets=$targets" \
             -Poutput=build/batch-matrix.json targetMatrix
-          jq -e '.include | length > 0' build/batch-matrix.json
+          if ! jq -e '.include | length > 0' build/batch-matrix.json; then
+            echo "::error::build/batch-matrix.json is missing, invalid, or empty. Check the targetMatrix output above and the ciTargets selection in targets.json before retrying full batch CI."
+            exit 1
+          fi
           printf 'matrix=%s\nbuild=true\ncore=true\n' \
             "$(jq -c . build/batch-matrix.json)" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@v7

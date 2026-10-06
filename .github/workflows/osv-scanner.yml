@@ -43,6 +43,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          error() {
+            local message="${1//%/%25}"
+            message="${message//$'\r'/%0D}"
+            message="${message//$'\n'/%0A}"
+            printf '::error::%s\n' "$message"
+          }
           init="$GITHUB_WORKSPACE/current/gradle/dependency-sbom.init.gradle"
           generate() {
             local checkout="$GITHUB_WORKSPACE/$1" output="$GITHUB_WORKSPACE/.osv/$1"
@@ -51,23 +57,38 @@ jobs:
               if [[ -f "$checkout/$build/settings.gradle" ]]; then
                 local label="${build//\//-}"
                 [[ "$build" != . ]] || label=root
-                "$checkout/gradlew" -p "$checkout/$build" --init-script "$init" \
-                  cyclonedxBom "-PsecuritySbom=$output/$label.cdx.json" --no-daemon
+                if ! "$checkout/gradlew" -p "$checkout/$build" --init-script "$init" \
+                  cyclonedxBom "-PsecuritySbom=$output/$label.cdx.json" --no-daemon; then
+                  error "Could not generate $output/$label.cdx.json for $checkout/$build. See the Gradle failure above; OSV needs resolved dependencies before scanning."
+                  exit 1
+                fi
               fi
             done
             if [[ -f "$checkout/targets.json" ]]; then
-              jq -er '.ciTargets[] as $id | .targets[] | select(.id == $id) | [.id, .buildProfile] | @tsv' \
-                "$checkout/targets.json" > "$output/targets.tsv"
+              if ! jq -er '.ciTargets[] as $id | .targets[] | select(.id == $id) | [.id, .buildProfile] | @tsv' \
+                "$checkout/targets.json" > "$output/targets.tsv"; then
+                error "Could not select OSV targets from $checkout/targets.json. Check that ciTargets selects catalog entries with buildProfile values."
+                exit 1
+              fi
               while IFS=$'\t' read -r target profile; do
-                [[ "$target" =~ ^[a-zA-Z0-9._-]+$ && "$profile" =~ ^[a-zA-Z0-9_-]+$ ]]
-                "$checkout/gradlew" -p "$checkout/build-config/$profile" "-Ptarget=$target" \
-                  --init-script "$init" cyclonedxBom "-PsecuritySbom=$output/$target.cdx.json" --no-daemon
+                if [[ ! "$target" =~ ^[a-zA-Z0-9._-]+$ || ! "$profile" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+                  error "Invalid OSV target '$target' or build profile '$profile' in $checkout/targets.json. Use target IDs containing letters, digits, dots, underscores or hyphens; build profiles allow letters, digits, underscores or hyphens."
+                  exit 1
+                fi
+                if ! "$checkout/gradlew" -p "$checkout/build-config/$profile" "-Ptarget=$target" \
+                  --init-script "$init" cyclonedxBom "-PsecuritySbom=$output/$target.cdx.json" --no-daemon; then
+                  error "Could not generate $output/$target.cdx.json for target $target (profile $profile). See the Gradle failure above; OSV needs resolved dependencies before scanning."
+                  exit 1
+                fi
               done < "$output/targets.tsv"
             fi
             local sboms=("$output"/*.cdx.json)
-            jq -e --slurp 'all(.[]; .bomFormat == "CycloneDX") and
+            if ! jq -e --slurp 'all(.[]; .bomFormat == "CycloneDX") and
               ([.[] | .components[]? | select((.purl // "") | startswith("pkg:maven/"))] | length > 0)' \
-              "${sboms[@]}"
+              "${sboms[@]}"; then
+              error "Dependency reports in $output must be valid CycloneDX JSON with at least one Maven component across the reports. Check the cyclonedxBom output above and the osv-dependencies artifact."
+              exit 1
+            fi
             {
               echo "$1-args<<SBOM_ARGS"
               for sbom in "${sboms[@]}"; do echo "--sbom=${sbom#"$GITHUB_WORKSPACE/"}"; done
@@ -99,9 +120,15 @@ jobs:
           COMPARE: ${{ steps.dependencies.outputs.baseline-args != '' }}
         run: |
           set -euo pipefail
-          jq -e '.results | type == "array"' new-results.json
+          if ! jq -e '.results | type == "array"' new-results.json; then
+            echo "::error::new-results.json is missing, invalid JSON, or has no results array. Inspect Scan proposed dependencies and the osv-dependencies artifact; scan results are required even when no vulnerabilities are found."
+            exit 1
+          fi
           if [[ "$COMPARE" == true ]]; then
-            jq -e '.results | type == "array"' old-results.json
+            if ! jq -e '.results | type == "array"' old-results.json; then
+              echo "::error::old-results.json is missing, invalid JSON, or has no results array. Inspect Scan base dependencies and the osv-dependencies artifact; PR comparisons require both scans."
+              exit 1
+            fi
           fi
       - name: Report vulnerabilities
         uses: google/osv-scanner-action/osv-reporter-action@a345acffa64b0eaede81a3d9aae6141214d9c8fc # v2.6.0
