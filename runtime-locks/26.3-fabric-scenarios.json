@@ -61,6 +61,20 @@
       "restart": false,
       "startupMode": "damaged",
       "entrypoints": ["ReleaseEarlyStartupGameTest"]
+    },
+    {
+      "suite": "transparency",
+      "profiles": ["none", "sodium"],
+      "backends": ["opengl", "vulkan"],
+      "restart": false,
+      "entrypoints": ["ReleaseTransparencyGameTest"]
+    },
+    {
+      "suite": "renderscale",
+      "profiles": ["renderscale"],
+      "backends": ["opengl", "vulkan"],
+      "restart": false,
+      "entrypoints": ["ReleaseRenderScaleGameTest"]
     }
   ]
 }

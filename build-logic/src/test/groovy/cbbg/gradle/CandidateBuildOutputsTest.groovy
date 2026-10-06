@@ -80,7 +80,7 @@ apply from: file('../fabric-startup-tests.gradle')
             expected.addAll(['startup-cold', 'startup-warm', 'startup-damaged', 'startup-seed-mismatch',
                              'generation', 'maximum-noise-cache', 'shutdown', 'generating-shutdown',
                              'iris-restart', 'allocation', 'world-pixels', 'shader-failure',
-                             'debug-overlay', 'notifications'])
+                             'debug-overlay', 'notifications', 'transparency', 'render-scale'])
         }
         assertEquals(expected, output.drivers.keySet())
         output.drivers.values().each { driver ->

@@ -186,6 +186,33 @@
       "entrypoints": [
         "ReleaseEarlyStartupGameTest"
       ]
+    },
+    {
+      "suite": "transparency",
+      "profiles": [
+        "none",
+        "sodium"
+      ],
+      "backends": [
+        "opengl"
+      ],
+      "restart": false,
+      "entrypoints": [
+        "ReleaseTransparencyGameTest"
+      ]
+    },
+    {
+      "suite": "render-scale",
+      "profiles": [
+        "renderscale"
+      ],
+      "backends": [
+        "opengl"
+      ],
+      "restart": false,
+      "entrypoints": [
+        "ReleaseRenderScaleGameTest"
+      ]
     }
   ]
 }

@@ -37,6 +37,27 @@ class FabricAcceptanceTests(unittest.TestCase):
                 profile for profile in self.target['compatibilityProfiles'] if mod in profile.split('+')})
             self.assertTrue(all(run['restart'] and run['backend'] == backend for run in selected))
 
+    def test_rendering_regressions_cover_all_released_runtimes(self):
+        catalog = load_catalog()
+        for target_id in ('26.1-fabric', '26.1.1-fabric', '26.1.2-fabric',
+                          '26.2-fabric', '26.3-fabric'):
+            with self.subTest(target=target_id):
+                target = select_targets(catalog, target_id)[0]
+                contract = read_json(ROOT / ('runtime-locks/' + target_id + '-scenarios.json'))
+                runs = required_runs(target, contract)
+                for suite, profiles, entrypoint in (
+                        ('transparency', ('none', 'sodium'), 'ReleaseTransparencyGameTest'),
+                        ('renderscale' if target_id == '26.3-fabric' else 'render-scale',
+                         ('renderscale',), 'ReleaseRenderScaleGameTest')):
+                    selected = [run for run in runs if run['suite'] == suite]
+                    self.assertEqual(
+                        {(run['profile'], run['backend']) for run in selected},
+                        {(profile, backend) for profile in profiles
+                         for backend in target['compatibilityProfiles'][profile]})
+                    self.assertTrue(all(
+                        run['entrypoints'] == ['com.qb20nh.cbbg.gametest.' + entrypoint]
+                        and not run['restart'] for run in selected))
+
     def test_added_shader_profile_requires_restart_runs(self):
         self.target['compatibilityProfiles']['iris+modmenu'] = ['opengl']
         selected = [run['suite'] for run in required_runs(self.target, self.contract)
