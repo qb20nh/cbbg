@@ -25,7 +25,12 @@ public abstract class RenderTargetCreateBuffersMixin {
     if (!main && scoped == null && !cbbg$isRenderScaleTarget(width, height)) return;
     var requested = scoped != null ? scoped : CbbgConfig.get().pixelFormat();
     if (MainTargetFormatSupport.getEffective(requested) == CbbgConfig.PixelFormat.RGBA8) return;
-    MainTargetFormatSupport.allocate(target, requested, main);
+    try {
+      MainTargetFormatSupport.allocate(target, requested, main);
+    } catch (RuntimeException failure) {
+      target.destroyBuffers();
+      throw failure;
+    }
     // Reallocation discards vanilla's initial clear. Preserve its per-target alpha/depth values.
     target.clear(clearError);
     target.unbindRead();

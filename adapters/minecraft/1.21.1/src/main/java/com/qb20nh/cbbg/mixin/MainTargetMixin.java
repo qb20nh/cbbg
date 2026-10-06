@@ -15,9 +15,14 @@ public abstract class MainTargetMixin {
   @Inject(method = "<init>", at = @At("RETURN"))
   private void cbbg$format(int width, int height, CallbackInfo info) {
     var target = (MainTarget) (Object) this;
-    MainTargets.track(target);
     if (CbbgClient.isEnabled()) {
-      MainTargetFormatSupport.allocate(target, CbbgConfig.get().pixelFormat(), true);
+      try {
+        MainTargetFormatSupport.allocate(target, CbbgConfig.get().pixelFormat(), true);
+      } catch (RuntimeException failure) {
+        target.destroyBuffers();
+        throw failure;
+      }
     }
+    MainTargets.track(target);
   }
 }
