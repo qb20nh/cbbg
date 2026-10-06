@@ -8,7 +8,7 @@ plugins {
 }
 
 import java.util.Date
-import groovy.json.JsonSlurper
+import cbbg.gradle.CandidateManifest
 import cbbg.gradle.PackageChecks
 import cbbg.gradle.TargetCatalog
 
@@ -27,7 +27,8 @@ apply from: new File(repositoryRoot, 'build-config/shared-code.gradle')
 //
 // Embed the Minecraft line into the version string as SemVer build metadata (+mc<MINECRAFT_VERSION>).
 // This keeps releases for different Minecraft versions from colliding.
-version = "${project.mod_version}+mc${project.minecraft_version}"
+def artifactTarget = TargetCatalog.read(new File(repositoryRoot, 'targets.json')).select('26.2-fabric')[0]
+version = CandidateManifest.packageVersion('v' + project.mod_version, artifactTarget)
 group = project.maven_group
 
 base {
@@ -35,9 +36,7 @@ base {
 }
 
 def artifactVersion = project.version
-def sourceTarget = TargetCatalog.read(new File(repositoryRoot, 'targets.json')).select('26.2-fabric').first()
-def fabricBounds = sourceTarget.dependencies
-def sourceLayout = cbbg.gradle.FabricSources.layout(sourceTarget, sourceTarget)
+def fabricBounds = artifactTarget.dependencies
 
 repositories {
 	// Add repositories to retrieve artifacts from in here.
@@ -86,6 +85,7 @@ fabricApi {
 	}
 }
 
+def sourceLayout = cbbg.gradle.FabricSources.layout(artifactTarget, artifactTarget)
 ['main', 'test', 'gametest'].each { name ->
     cbbg.gradle.FabricSources.configure(project, repositoryRoot, sourceLayout, name)
 }
