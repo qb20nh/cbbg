@@ -53,8 +53,7 @@ final class RenderScaleTestAccess {
   static @Nullable Object call(
       @Nullable Object target, String name, Class<?>[] types, @Nullable Object... args) {
     try {
-      Class<?> type =
-          target == null ? apiType() : target.getClass();
+      Class<?> type = target == null ? apiType() : target.getClass();
       return type.getMethod(name, types).invoke(target, args);
     } catch (ReflectiveOperationException failure) {
       throw new LinkageError("RenderScale call failed: " + name, failure);

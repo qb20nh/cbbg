@@ -8,8 +8,8 @@ import java.nio.file.Files;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
-import java.util.regex.Pattern;
 import java.util.concurrent.CompletableFuture;
+import java.util.regex.Pattern;
 import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
@@ -276,7 +276,8 @@ public final class ReleaseNotificationsGameTest implements FabricClientGameTest 
     String start = Component.translatable("cbbg.chat.stbn.generating").getString();
     String complete = Component.translatable("cbbg.chat.stbn.complete").getString();
     long actualStarts = messages.stream().mapToLong(text -> messageCount(text, start)).sum();
-    long actualCompletions = messages.stream().mapToLong(text -> messageCount(text, complete)).sum();
+    long actualCompletions =
+        messages.stream().mapToLong(text -> messageCount(text, complete)).sum();
     if (actualStarts != starts || actualCompletions != completions) {
       throw new AssertionError(
           "Wrong generation chat notifications: "
