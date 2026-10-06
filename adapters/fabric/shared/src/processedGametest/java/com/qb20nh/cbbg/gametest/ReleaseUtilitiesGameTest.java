@@ -6,11 +6,9 @@ import com.qb20nh.cbbg.api.Dithering;
 import com.qb20nh.cbbg.api.NoiseVolume;
 import com.qb20nh.cbbg.render.DitherPass;
 import java.util.Arrays;
-import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
-import net.minecraft.client.Screenshot;
 import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 
@@ -31,39 +29,24 @@ public final class ReleaseUtilitiesGameTest implements FabricClientGameTest {
             DitherOptions options = new DitherOptions(strength, scale, 1, demo);
             TextureTarget output =
                 context.computeOnClient(
-                    client ->
-                        pass.render(
-                            Objects.requireNonNull(source.getColorTextureView()),
-                            noise.view(),
-                            options));
+                    client -> ReleaseUtilityCalls.render(pass, source, noise, options));
             compare(context, output, volume, options);
           }
         }
       }
       context.runOnClient(
           client -> {
-            source.resize(3, 2);
+            ReleaseUtilityCalls.resize(source, 3, 2);
             UtilitiesBackend.clear(source);
           });
       DitherOptions options = new DitherOptions(2, 1, 1, false);
       TextureTarget output =
           context.computeOnClient(
-              client ->
-                  pass.render(
-                      Objects.requireNonNull(source.getColorTextureView()), noise.view(), options));
+              client -> ReleaseUtilityCalls.render(pass, source, noise, options));
       compare(context, output, volume, options);
       context.runOnClient(
           client -> {
-            var owned = Objects.requireNonNull(output.getColorTexture());
-            pass.close();
-            if (!owned.isClosed()) {
-              throw new AssertionError("Utility pass retained its output");
-            }
-            if (noise.texture().isClosed()
-                || noise.view().isClosed()
-                || Objects.requireNonNull(source.getColorTexture()).isClosed()) {
-              throw new AssertionError("Utility pass closed externally owned input textures");
-            }
+            ReleaseUtilityCalls.checkClosed(pass, output, source, noise);
           });
     } finally {
       context.runOnClient(
@@ -89,14 +72,14 @@ public final class ReleaseUtilitiesGameTest implements FabricClientGameTest {
     var completion = new CompletableFuture<@Nullable Void>();
     context.runOnClient(
         client ->
-            Screenshot.takeScreenshot(
+            ReleaseUtilityCalls.capture(
                 output,
                 image -> {
                   try (image) {
                     for (int y = 0; y < height; y++) {
                       for (int x = 0; x < width; x++) {
                         int offset = ((height - 1 - y) * width + x) * 4;
-                        int pixel = image.getPixel(x, y);
+                        int pixel = ReleaseImagePixels.argb(image, x, y);
                         for (int channel = 0; channel < 4; channel++) {
                           int shift = channel == 3 ? 24 : (2 - channel) * 8;
                           int actual = pixel >>> shift & 255;

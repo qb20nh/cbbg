@@ -112,7 +112,8 @@ class FabricSources {
             result.main.java << tree('adapters/minecraft/26.1/src/main/java',
                     classes('config/gui/ConfigScreenPlatform', 'render/HudPlatform'))
             processed << tree('adapters/fabric/shared/src/processedGametest/java',
-                    classes('gametest/ReleaseSodiumConfigGameTest', 'gametest/ReleaseUtilitiesGameTest'))
+                    classes('gametest/ReleaseSodiumConfigGameTest', 'gametest/ReleaseUtilitiesGameTest',
+                            'gametest/ReleaseUtilityCalls', 'gametest/ReleaseImagePixels'))
         }
         result
     }

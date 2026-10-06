@@ -99,7 +99,7 @@ public final class ReleaseCacheGameTest implements FabricClientGameTest {
             throw new AssertionError("Noise cache has incorrect dimensions");
           }
           for (int y = 0; y < 16; y++) {
-            for (int x = 0; x < 16; x++) pixels.putInt(image.getPixel(x, y));
+            for (int x = 0; x < 16; x++) pixels.putInt(ReleaseImagePixels.argb(image, x, y));
           }
         }
       }

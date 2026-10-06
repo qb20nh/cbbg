@@ -23,17 +23,13 @@ import net.minecraft.client.gui.components.CycleButton;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.ConfirmScreen;
 import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.client.input.MouseButtonEvent;
-import net.minecraft.client.input.MouseButtonInfo;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.Identifier;
 import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 
 @NullMarked
 public final class ReleaseSettingsGuiGameTest implements FabricClientGameTest {
   private static final int WAIT_TICKS = 600;
-  private static final int LEFT_BUTTON = 0;
   private static final String SCREEN_CLASS = "com.qb20nh.cbbg.config.gui.CbbgConfigScreen";
   private static final String GENERATION_STARTED = "Starting Async STBN Math Generation (16x16x8)";
   private static final String CACHE_HIT = "Valid STBN cache found for 16x16x8.";
@@ -297,12 +293,11 @@ public final class ReleaseSettingsGuiGameTest implements FabricClientGameTest {
                     id -> id.getNamespace().equals("cbbg") && id.getPath().endsWith(".json"))
                 .keySet()
                 .stream()
-                .map(ReleaseSettingsGuiGameTest::localeName)
+                .map(id -> localeName(id.getPath()))
                 .collect(Collectors.toSet()));
   }
 
-  private static String localeName(Identifier id) {
-    String path = id.getPath();
+  private static String localeName(String path) {
     return path.substring("lang/".length(), path.length() - ".json".length());
   }
 
@@ -376,20 +371,13 @@ public final class ReleaseSettingsGuiGameTest implements FabricClientGameTest {
   }
 
   private static void click(AbstractWidget widget) {
-    widget.onClick(
-        new MouseButtonEvent(
-            widget.getX() + widget.getWidth() / 2.0,
-            widget.getY() + widget.getHeight() / 2.0,
-            new MouseButtonInfo(LEFT_BUTTON, 0)),
-        false);
+    ReleaseGuiInput.click(
+        widget, widget.getX() + widget.getWidth() / 2.0, widget.getY() + widget.getHeight() / 2.0);
   }
 
   private static void slide(AbstractSliderButton widget, double fraction) {
     double x = widget.getX() + 4 + fraction * (widget.getWidth() - 8);
-    widget.onClick(
-        new MouseButtonEvent(
-            x, widget.getY() + widget.getHeight() / 2.0, new MouseButtonInfo(LEFT_BUTTON, 0)),
-        false);
+    ReleaseGuiInput.click(widget, x, widget.getY() + widget.getHeight() / 2.0);
   }
 
   private static double log2(double value) {
