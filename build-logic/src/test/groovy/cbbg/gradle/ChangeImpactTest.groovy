@@ -64,6 +64,117 @@ class ChangeImpactTest {
     }
 
     @Test
+    void selectsOnlyCiBuildsConsumingVersionSpecificSources() {
+        TargetCatalog catalog = TargetCatalog.read(new File('../targets.json'))
+        assertEquals(['26.3-fabric'], ChangeImpact.ci(catalog,
+                ChangeImpact.select(catalog, ['renderers/renderpearl/src/main/java/com/qb20nh/cbbg/render/FloatAttachments.java'], true))
+                .matrix.include*.id)
+        assertEquals(['26.2-fabric'], ChangeImpact.ci(catalog,
+                ChangeImpact.select(catalog, ['adapters/fabric/26.2/src/main/java/com/qb20nh/cbbg/mixin/ScreenshotMixin.java'], true))
+                .matrix.include*.id)
+        assertEquals(['26.1-fabric'], ChangeImpact.ci(catalog,
+                ChangeImpact.select(catalog, ['adapters/minecraft/26.1/src/main/java/com/qb20nh/cbbg/mixin/ScreenshotMixin.java'], true))
+                .matrix.include*.id)
+    }
+
+    @Test
+    void includesFilteredSharedSourcesOnlyWhereConsumed() {
+        TargetCatalog catalog = TargetCatalog.read(new File('../targets.json'))
+        Map<String, List<String>> cases = [
+                'renderers/renderpearl/src/gametest/java/com/qb20nh/cbbg/gametest/mixin/ScenarioProgressMixin.java':
+                        ['26.1-fabric', '26.2-fabric', '26.3-fabric'],
+                'renderers/modern/src/main/java/com/qb20nh/cbbg/render/Rgba8Capture.java':
+                        ['26.2-fabric', '26.3-fabric'],
+                'adapters/fabric/shared/src/main/java/com/qb20nh/cbbg/render/stbn/STBNLoader.java':
+                        ['26.1-fabric', '26.3-fabric'],
+                'adapters/fabric/shared/src/gametest/java/com/qb20nh/cbbg/gametest/ClientTestAccess.java': [],
+                'src/main/resources/assets/cbbg/icon.png': ['26.1-fabric', '26.2-fabric', '26.3-fabric'],
+                'src/main/resources/assets/cbbg/shaders/core/cbbg_dither.fsh': ['26.1-fabric', '26.2-fabric']
+        ]
+        cases.each { String path, List<String> ids ->
+            assertEquals(ids, ChangeImpact.ci(catalog, ChangeImpact.select(catalog, [path], true)).matrix.include*.id, path)
+        }
+        assertEquals(['26.1-fabric', '26.3-fabric'], ChangeImpact.ci(catalog,
+                ChangeImpact.select(catalog, ['renderers/renderpearl/src/main/java/com/qb20nh/cbbg/render/FloatAttachments.java']))
+                .matrix.include*.id)
+    }
+
+    @Test
+    void developmentToolingSkipsTargetBuildsWithoutNarrowingReleaseChecks() {
+        TargetCatalog catalog = TargetCatalog.read(new File('../targets.json'))
+        for (String path : ['scripts/fabric_dependency_lock.py', 'runtime-locks/26.2-fabric-mods.json',
+                '.github/workflows/codeql.yml', 'build-logic/src/test/groovy/cbbg/gradle/ChangeImpactTest.groovy']) {
+            Map report = ChangeImpact.select(catalog, [path], true)
+            assertFalse(ChangeImpact.ci(catalog, report).build, path)
+            assertFalse(ChangeImpact.ci(catalog, report).core, path)
+            assertTrue(ChangeImpact.ci(catalog, ChangeImpact.select(catalog, [path])).build, path)
+        }
+        for (String path : ['.github/workflows/gradle.yml', 'gradle.properties', 'build-config/shared-code.gradle',
+                'build-logic/src/main/groovy/cbbg/gradle/QualityPlugin.groovy', 'unknown/file',
+                '.github/new-build-config.gradle', 'scripts/generated-shader.py']) {
+            assertEquals(['26.1-fabric', '26.2-fabric', '26.3-fabric'],
+                    ChangeImpact.ci(catalog, ChangeImpact.select(catalog, [path], true)).matrix.include*.id, path)
+        }
+    }
+
+    @Test
+    void developmentCatalogChangesSelectOnlyChangedArtifacts() {
+        git('init')
+        Map data = catalogData()
+        data.ciTargets << '1-forge'
+        write('targets.json', JsonOutput.toJson(data))
+        git('add', '.')
+        git('commit', '-m', 'base')
+        String base = git('rev-parse', 'HEAD')
+        data.targets.find { it.id == '1-fabric' }.dependencies = [loader: 'new']
+        write('targets.json', JsonOutput.toJson(data))
+        git('add', '.')
+        git('commit', '-m', 'head')
+        Map report = ChangeImpact.compare(root, base, 'HEAD', true)
+        assertEquals(['1-fabric', '1-quilt'], report.targets)
+        assertEquals(['1-fabric'], ChangeImpact.ci(new TargetCatalog(data), report).matrix.include*.id)
+        assertFalse(ChangeImpact.ci(new TargetCatalog(data), report).core)
+        assertEquals(['1-fabric', '1-forge', '1-quilt'], ChangeImpact.compare(root, base, 'HEAD').targets)
+    }
+
+    @Test
+    void coreUnitTestsNeedCoreJobsButSharedGameTestSupportNeedsTargetBuilds() {
+        TargetCatalog catalog = TargetCatalog.read(new File('../targets.json'))
+        for (String path : ['core/src/test/java/ConfigTest.java', 'core/rendering/src/test/resources/input.png']) {
+            Map plan = ChangeImpact.ci(catalog, ChangeImpact.select(catalog, [path], true))
+            assertFalse(plan.build, path)
+            assertTrue(plan.core, path)
+        }
+        Map plan = ChangeImpact.ci(catalog,
+                ChangeImpact.select(catalog, ['core/src/testSupport/java/com/qb20nh/cbbg/reference/DitherReference.java'], true))
+        assertTrue(plan.build)
+        assertTrue(plan.core)
+    }
+
+    @Test
+    void developmentCatalogChangesIncludeNewCiTargetsButIgnoreOrdering() {
+        git('init')
+        Map data = catalogData()
+        write('targets.json', JsonOutput.toJson(data))
+        git('add', '.')
+        git('commit', '-m', 'base')
+        String base = git('rev-parse', 'HEAD')
+        data.ciTargets << '1-forge'
+        write('targets.json', JsonOutput.toJson(data))
+        git('add', '.')
+        git('commit', '-m', 'enable forge')
+        Map report = ChangeImpact.compare(root, base, 'HEAD', true)
+        assertEquals(['1-forge'], report.targets)
+        base = git('rev-parse', 'HEAD')
+        data.ciTargets.reverse(true)
+        data.targets.reverse(true)
+        write('targets.json', JsonOutput.toJson(data))
+        git('add', '.')
+        git('commit', '-m', 'reorder')
+        assertEquals([], ChangeImpact.compare(root, base, 'HEAD', true).targets)
+    }
+
+    @Test
     void baselineBeforeCatalogCreationSelectsAllCurrentTargets() {
         git('init')
         write('README.md', 'Existing mod')

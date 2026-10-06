@@ -35,8 +35,9 @@ base {
 }
 
 def artifactVersion = project.version
-def fabricBounds = new JsonSlurper().parse(new File(repositoryRoot, 'targets.json')).targets
-		.find { it.id == '26.2-fabric' }.dependencies
+def sourceTarget = TargetCatalog.read(new File(repositoryRoot, 'targets.json')).select('26.2-fabric').first()
+def fabricBounds = sourceTarget.dependencies
+def sourceLayout = cbbg.gradle.FabricSources.layout(sourceTarget, sourceTarget)
 
 repositories {
 	// Add repositories to retrieve artifacts from in here.
@@ -85,64 +86,26 @@ fabricApi {
 	}
 }
 
-sourceSets {
-	main.java.setSrcDirs([new File(repositoryRoot, 'adapters/fabric/26.2/src/main/java')])
-	main.resources.setSrcDirs([new File(repositoryRoot, 'src/main/resources')])
-	test.java.setSrcDirs([new File(repositoryRoot, 'adapters/fabric/26.2/src/test/java')])
-	test.resources.setSrcDirs([new File(repositoryRoot, 'src/test/resources')])
-	gametest.java.setSrcDirs([new File(repositoryRoot, 'adapters/fabric/26.2/src/gametest/java')])
-	gametest.resources.setSrcDirs([new File(repositoryRoot, 'src/gametest/resources')])
+['main', 'test', 'gametest'].each { name ->
+    cbbg.gradle.FabricSources.configure(project, repositoryRoot, sourceLayout, name)
 }
-
-def sharedRenderLifecycle = objects.sourceDirectorySet('sharedRenderLifecycle', 'Shared render lifecycle')
-sharedRenderLifecycle.srcDir(new File(repositoryRoot, 'renderers/modern/src/main/java'))
-sharedRenderLifecycle.include 'com/qb20nh/cbbg/render/Rgba8Capture.java',
-		'com/qb20nh/cbbg/render/DitherController.java',
-		'com/qb20nh/cbbg/render/GenerationNotifications.java',
-		'com/qb20nh/cbbg/render/NotificationPlatform.java'
-sourceSets.main.java.source(sharedRenderLifecycle)
-
-def sharedShaderCompatibility = objects.sourceDirectorySet('sharedShaderCompatibility', 'Shared optional shader detection')
-sharedShaderCompatibility.srcDir(new File(repositoryRoot, 'adapters/fabric/shared/src/main/java'))
-sharedShaderCompatibility.srcDir(new File(repositoryRoot, 'adapters/fabric/modern/src/main/java'))
-sharedShaderCompatibility.include 'com/qb20nh/cbbg/platform/LoaderPlatform.java',
-		'com/qb20nh/cbbg/compat/sulkan/SulkanCompat.java',
-		'com/qb20nh/cbbg/platform/Text.java',
-		'com/qb20nh/cbbg/render/MainTargets.java'
-sourceSets.main.java.source(sharedShaderCompatibility)
 
 def externalCompileClasspath = configurations.compileClasspath.incoming.artifactView {
 	componentFilter { it instanceof org.gradle.api.artifacts.component.ModuleComponentIdentifier }
 }.files
 sourceSets.create('processedGametest') {
-	java.setSrcDirs([new File(repositoryRoot, 'adapters/fabric/26.2/src/processedGametest/java')])
-	def sharedTests = objects.sourceDirectorySet('processedSharedTests', 'Shared packaged client scenarios')
-	sharedTests.srcDir(new File(repositoryRoot, 'renderers/renderpearl/src/gametest/java'))
-	sharedTests.srcDir(new File(repositoryRoot, 'renderers/modern/src/gametest/java'))
-	sharedTests.include 'com/qb20nh/cbbg/gametest/mixin/ScenarioProgressMixin.java',
-			'com/qb20nh/cbbg/gametest/IrisFixture.java',
-			'com/qb20nh/cbbg/gametest/RenderScaleTestAccess.java'
-	java.source(sharedTests)
-	def pixelReference = objects.sourceDirectorySet('processedPixelReference', 'Shared CPU pixel reference')
-	pixelReference.srcDir(new File(repositoryRoot, 'core/src/testSupport/java'))
-	pixelReference.include 'com/qb20nh/cbbg/reference/DitherReference.java'
-	java.source(pixelReference)
-	java.srcDir(new File(repositoryRoot, 'adapters/fabric/shared/src/processedGametest/java'))
-	resources.setSrcDirs([new File(repositoryRoot, 'adapters/fabric/26.2/src/processedGametest/resources')])
 	compileClasspath = files(releaseOptimization.outputJar, externalCompileClasspath)
 	runtimeClasspath = output + compileClasspath
 }
+cbbg.gradle.FabricSources.configure(project, repositoryRoot, sourceLayout, 'processedGametest')
 tasks.named('compileProcessedGametestJava') { dependsOn tasks.named('optimizeReleaseJar') }
 tasks.named('processProcessedGametestResources') {
 	dependsOn tasks.named('optimizeReleaseJar')
 	from(releaseOptimization.mappingFile) { rename { 'cbbg-test.map' } }
-	from(new File(repositoryRoot, 'adapters/fabric/shared/src/processedGametest/resources'))
+    cbbg.gradle.FabricSources.copyResources(project, repositoryRoot, sourceLayout, 'processedGametest', delegate)
 	def loaderMinimum = fabricBounds.minimumLoader ?: fabricBounds.loader
 	inputs.property('loaderMinimum', loaderMinimum)
 	filesMatching('fabric.mod.json') { expand(loader_minimum: loaderMinimum) }
-	from(new File(repositoryRoot, 'renderers/modern/src/gametest/resources')) {
-		include 'cbbg-iris-fixture/**'
-	}
 }
 tasks.register('processedDriverJar', Jar) {
 	archiveClassifier = 'processed-driver'

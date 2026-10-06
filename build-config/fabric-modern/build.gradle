@@ -91,50 +91,11 @@ tasks.withType(JavaCompile).configureEach {
     options.release = target.java as int
 }
 
-def sourceGroups = ["renderers/${target.renderer}", "adapters/minecraft/${artifactOwner.minecraft}",
-                    "adapters/fabric/${artifactOwner.minecraft}"]
 def usesTextureFormat = target.renderer == 'blaze-texture-format'
-sourceGroups.addAll(target.sourceGroups ?: [])
-sourceSets.main {
-    java.setSrcDirs(sourceGroups.collect { new File(repositoryRoot, "${it}/src/main/java") })
-    resources.setSrcDirs(sourceGroups.collect { new File(repositoryRoot, "${it}/src/main/resources") })
+def sourceLayout = cbbg.gradle.FabricSources.layout(target, artifactOwner)
+['main', 'test'].each { name ->
+    cbbg.gradle.FabricSources.configure(project, repositoryRoot, sourceLayout, name)
 }
-sourceSets.test.java.setSrcDirs([new File(repositoryRoot,
-        'adapters/fabric/modern/src/test/java')])
-
-// Reuse compatible Fabric commands and noise sources without copies.
-def sharedModern = objects.sourceDirectorySet('sharedModern', 'Shared modern Fabric sources')
-sharedModern.srcDir(new File(repositoryRoot, 'adapters/fabric/shared/src/main/java'))
-if (usesTextureFormat) {
-    def startup = objects.sourceDirectorySet('sharedStartup', 'Fabric early noise preparation')
-    startup.srcDir(new File(repositoryRoot, 'adapters/fabric/modern/src/main/java'))
-    startup.include 'com/qb20nh/cbbg/CbbgClient.java',
-            'com/qb20nh/cbbg/CbbgEarlyInit.java', 'com/qb20nh/cbbg/CbbgLanguageAdapter.java'
-    sourceSets.main.java.source(startup)
-    def notifications = objects.sourceDirectorySet('sharedNotifications', 'Generation notifications')
-    notifications.srcDir(new File(repositoryRoot, 'renderers/modern/src/main/java'))
-    notifications.include 'com/qb20nh/cbbg/render/GenerationNotifications.java',
-            'com/qb20nh/cbbg/render/DitherController.java',
-            'com/qb20nh/cbbg/config/gui/CbbgConfigScreen.java'
-    sourceSets.main.java.source(notifications)
-} else {
-    sharedModern.include 'com/qb20nh/cbbg/Cbbg.java',
-            'com/qb20nh/cbbg/platform/LoaderPlatform.java',
-            'com/qb20nh/cbbg/command/CbbgClientCommands.java',
-            'com/qb20nh/cbbg/platform/Text.java',
-            'com/qb20nh/cbbg/command/CommandPlatform.java',
-            'com/qb20nh/cbbg/config/gui/CbbgConfigWidgets.java',
-            'com/qb20nh/cbbg/config/gui/WidgetPlatform.java',
-            'com/qb20nh/cbbg/compat/iris/IrisCompat.java',
-            'com/qb20nh/cbbg/compat/renderscale/RenderScaleCompat.java',
-            'com/qb20nh/cbbg/compat/modmenu/CbbgModMenuApi.java',
-            'com/qb20nh/cbbg/render/stbn/STBNGenerator.java',
-            'com/qb20nh/cbbg/render/stbn/STBNLoader.java',
-            'com/qb20nh/cbbg/render/stbn/StbnImagePixels.java',
-            'com/qb20nh/cbbg/render/stbn/STBNCache.java'
-    sharedModern.include 'com/qb20nh/cbbg/render/MainTargets.java'
-}
-sourceSets.main.java.source(sharedModern)
 
 fabricApi {
     configureTests {
@@ -164,65 +125,27 @@ loom.runs.named('clientGameTest') {
     vmArg "-Dcbbg.test.evidence=${layout.buildDirectory.get().asFile}/evidence/${evidenceProfile}"
 }
 
-sourceSets.gametest {
-    java.setSrcDirs(sourceGroups.collect { new File(repositoryRoot, "${it}/src/gametest/java") })
-    java.srcDirs(sourceGroups.collect { new File(repositoryRoot, "${it}/src/parity/java") })
-    java.srcDir(new File(repositoryRoot, 'core/src/testSupport/java'))
-    resources.setSrcDirs(sourceGroups.collect { new File(repositoryRoot, "${it}/src/gametest/resources") })
-}
-
-def sharedClientTests = objects.sourceDirectorySet('sharedClientTests', 'Shared Fabric UI scenarios')
-sharedClientTests.srcDir(new File(repositoryRoot, 'adapters/fabric/shared/src/gametest/java'))
-if (usesTextureFormat) {
-    sharedClientTests.exclude 'com/qb20nh/cbbg/gametest/ClientTestAccess.java'
-    def sharedCompatTests = objects.sourceDirectorySet('sharedCompatTests', 'Shared optional-mod scenarios')
-    sharedCompatTests.srcDir(new File(repositoryRoot, 'renderers/modern/src/gametest/java'))
-    sharedCompatTests.include 'com/qb20nh/cbbg/gametest/ModMenuGameTest.java',
-            'com/qb20nh/cbbg/gametest/IrisFixture.java',
-            'com/qb20nh/cbbg/gametest/RenderScaleTestAccess.java',
-            'com/qb20nh/cbbg/gametest/OptionalModsGameTest.java'
-    sourceSets.gametest.java.source(sharedCompatTests)
-} else {
-    sharedClientTests.include 'com/qb20nh/cbbg/gametest/CbbgConfigScreenGameTest.java'
-}
-sourceSets.gametest.java.source(sharedClientTests)
+cbbg.gradle.FabricSources.configure(project, repositoryRoot, sourceLayout, 'gametest')
 
 if (usesTextureFormat) {
     def externalCompileClasspath = configurations.compileClasspath.incoming.artifactView {
         componentFilter { it instanceof org.gradle.api.artifacts.component.ModuleComponentIdentifier }
     }.files
     sourceSets.create('processedGametest') {
-        java.setSrcDirs([new File(repositoryRoot, "renderers/${target.renderer}/src/processedGametest/java")])
-        java.srcDir(new File(repositoryRoot, "adapters/fabric/${artifactOwner.minecraft}/src/processedGametest/java"))
-        java.srcDir(new File(repositoryRoot, 'adapters/fabric/shared/src/processedGametest/java'))
-        def progress = objects.sourceDirectorySet('processedProgress', 'Packaged scenario completion')
-        progress.srcDir(new File(repositoryRoot, 'renderers/renderpearl/src/gametest/java'))
-        progress.srcDir(new File(repositoryRoot, 'renderers/modern/src/gametest/java'))
-        progress.include 'com/qb20nh/cbbg/gametest/mixin/ScenarioProgressMixin.java',
-                'com/qb20nh/cbbg/gametest/IrisFixture.java',
-                'com/qb20nh/cbbg/gametest/RenderScaleTestAccess.java'
-        java.source(progress)
-        def pixelReference = objects.sourceDirectorySet('processedPixelReference', 'Shared CPU pixel reference')
-        pixelReference.srcDir(new File(repositoryRoot, 'core/src/testSupport/java'))
-        pixelReference.include 'com/qb20nh/cbbg/reference/DitherReference.java'
-        java.source(pixelReference)
-        resources.setSrcDirs([new File(repositoryRoot, "renderers/${target.renderer}/src/processedGametest/resources")])
         compileClasspath = files(releaseOptimization.outputJar, externalCompileClasspath)
         runtimeClasspath = output + compileClasspath
     }
+    cbbg.gradle.FabricSources.configure(project, repositoryRoot, sourceLayout, 'processedGametest')
     tasks.named('compileProcessedGametestJava') {
         dependsOn tasks.named('optimizeReleaseJar')
     }
     tasks.named('processProcessedGametestResources') {
         dependsOn tasks.named('optimizeReleaseJar')
         from(releaseOptimization.mappingFile) { rename { 'cbbg-test.map' } }
-        from(new File(repositoryRoot, 'adapters/fabric/shared/src/processedGametest/resources'))
+        cbbg.gradle.FabricSources.copyResources(project, repositoryRoot, sourceLayout, 'processedGametest', delegate)
         def loaderMinimum = artifactOwner.dependencies.minimumLoader ?: artifactOwner.dependencies.loader
         inputs.property('loaderMinimum', loaderMinimum)
         filesMatching('fabric.mod.json') { expand(loader_minimum: loaderMinimum) }
-        from(new File(repositoryRoot, 'renderers/modern/src/gametest/resources')) {
-            include 'cbbg-iris-fixture/**'
-        }
     }
     tasks.register('processedDriverJar', Jar) {
         archiveClassifier = 'processed-driver'
@@ -236,32 +159,16 @@ if (usesTextureFormat) {
 }
 
 if (targetId == '26.3-fabric') {
-    def processedSharedTests = objects.sourceDirectorySet('processedSharedTests', 'Shared processed-compatible tests')
-    processedSharedTests.srcDir(new File(repositoryRoot, 'renderers/renderpearl/src/gametest/java'))
-    processedSharedTests.srcDir(new File(repositoryRoot, 'renderers/modern/src/gametest/java'))
-    processedSharedTests.srcDir(new File(repositoryRoot, 'core/src/testSupport/java'))
-    processedSharedTests.include 'com/qb20nh/cbbg/gametest/mixin/ScenarioProgressMixin.java',
-            'com/qb20nh/cbbg/reference/DitherReference.java',
-            'com/qb20nh/cbbg/gametest/FloatPrecisionGameTest.java',
-            'com/qb20nh/cbbg/gametest/IrisFixture.java',
-            'com/qb20nh/cbbg/gametest/RenderScaleTestAccess.java',
-            'com/qb20nh/cbbg/gametest/EarlyStartupGameTest.java',
-            'com/qb20nh/cbbg/gametest/mixin/EarlyPipelineCacheMixin.java',
-            'com/qb20nh/cbbg/gametest/mixin/EarlyRenderPassMixin.java',
-            'com/qb20nh/cbbg/gametest/WindowResizeGameTest.java'
-
     // Select resolved external artifacts, including Loom's Minecraft jar, without
     // carrying unprocessed main classes or the shared project outputs into compilation.
     def externalCompileClasspath = configurations.compileClasspath.incoming.artifactView {
         componentFilter { it instanceof org.gradle.api.artifacts.component.ModuleComponentIdentifier }
     }.files
     sourceSets.create('processedGametest') {
-        java.setSrcDirs([new File(repositoryRoot, 'renderers/renderpearl/src/processedGametest/java')])
-        java.source(processedSharedTests)
-        resources.setSrcDirs([new File(repositoryRoot, 'renderers/renderpearl/src/processedGametest/resources')])
         compileClasspath = files(releaseOptimization.outputJar, externalCompileClasspath)
         runtimeClasspath = output + compileClasspath
     }
+    cbbg.gradle.FabricSources.configure(project, repositoryRoot, sourceLayout, 'processedGametest')
     tasks.named('compileProcessedGametestJava') {
         dependsOn tasks.named('optimizeReleaseJar')
     }
@@ -269,12 +176,7 @@ if (targetId == '26.3-fabric') {
         def loaderMinimum = target.dependencies.minimumLoader ?: target.dependencies.loader
         inputs.property('loaderMinimum', loaderMinimum)
         filesMatching('fabric.mod.json') { expand(loader_minimum: loaderMinimum) }
-        from(new File(repositoryRoot, 'renderers/modern/src/gametest/resources')) {
-            include 'cbbg-iris-fixture/**'
-        }
-        from(new File(repositoryRoot, 'renderers/renderpearl/src/gametest/resources')) {
-            include 'cbbg-world-goldens/**', 'cbbg.early-startup-test.mixins.json'
-        }
+        cbbg.gradle.FabricSources.copyResources(project, repositoryRoot, sourceLayout, 'processedGametest', delegate)
     }
     tasks.register('processedDriverJar', Jar) {
         archiveClassifier = 'processed-driver'
@@ -357,12 +259,7 @@ if (launchesClient && target.id != artifactOwner.id) {
 tasks.named('processResources') {
     def sharedDescriptor = new File(repositoryRoot, 'src/main/resources/fabric.mod.json')
     inputs.file(sharedDescriptor).withPropertyName('sharedFabricMetadata')
-    from(new File(repositoryRoot, 'src/main/resources')) {
-        include 'assets/cbbg/icon.png'
-        include 'assets/cbbg/shaders/include/dither.glsl'
-        include 'assets/cbbg/lang/*.json'
-        if (usesTextureFormat) include 'assets/cbbg/shaders/core/*.fsh'
-    }
+    cbbg.gradle.FabricSources.copyResources(project, repositoryRoot, sourceLayout, 'main', delegate)
     def properties = [version: project.version, minecraft_version: artifactOwner.minecraftDependency ?: artifactOwner.minecraft,
                       loader_version: artifactOwner.dependencies.minimumLoader ?: artifactOwner.dependencies.loader,
                       loader_upper_bound: artifactOwner.dependencies.loaderUpperExclusive ? ' <' + artifactOwner.dependencies.loaderUpperExclusive : '',
@@ -516,8 +413,6 @@ tasks.register('dev', Sync) {
 
 if (usesTextureFormat) {
     tasks.named('processGametestResources') {
-        from(new File(repositoryRoot, 'renderers/modern/src/gametest/resources')) {
-            include 'cbbg-iris-fixture/**'
-        }
+        cbbg.gradle.FabricSources.copyResources(project, repositoryRoot, sourceLayout, 'gametest', delegate)
     }
 }

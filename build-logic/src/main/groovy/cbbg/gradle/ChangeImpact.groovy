@@ -3,13 +3,16 @@ package cbbg.gradle
 import java.nio.charset.StandardCharsets
 
 class ChangeImpact {
-    static Map select(TargetCatalog catalog, List<String> paths) {
+    static Map select(TargetCatalog catalog, List<String> paths, boolean development = false) {
         List<Map> targets = (List<Map>) catalog.data.targets
         Set<String> allIds = targets.collect { it.id as String } as Set
         Map<String, Map> byId = targets.collectEntries { [(it.id as String): it] }
         Map<String, String> owners = targets.collectEntries {
             [(it.id as String): (it.artifactOf ?: it.id) as String]
         }
+        Map<String, Map> layouts = development ? owners.values().toSet().collectEntries { String id ->
+            [(id): FabricSources.layout(byId[id], byId[id])]
+        } : [:]
         Set<String> affected = [] as Set
         Set<String> checks = [] as Set
         List<Map> changes = []
@@ -20,9 +23,16 @@ class ChangeImpact {
             }
             Set<String> selected = [] as Set
             String reason
-            if (path.startsWith('docs/') || path in ['README.md', 'CHANGELOG.md']) {
+            if (path.startsWith('docs/') || path in ['README.md', 'CHANGELOG.md'] ||
+                    development && path in ['CONTRIBUTING.md', 'SECURITY.md', 'build-config/README.md']) {
                 reason = 'documentation'
                 checks.add('documentation')
+            } else if (development && developmentTooling(path)) {
+                reason = 'development tooling; checked in the planning job'
+                checks.add('tooling')
+            } else if (development && path ==~ /core\/(legacy\/|rendering\/)?src\/test\/.+/) {
+                reason = 'core tests'
+                checks.add('core-java-8-17-21-25')
             } else if (path.startsWith('build-config/publishing/') ||
                     path ==~ /build-logic\/src\/(main|test)\/groovy\/cbbg\/gradle\/(Publication|LegacyPublication|ReleaseChecks|ReleasePlugin)(Test)?\.groovy/ ||
                     path.startsWith('.github/scripts/') || path.startsWith('.github/tests/')) {
@@ -35,17 +45,27 @@ class ChangeImpact {
                     selected.addAll(allIds)
                     checks.add('core-java-8-17-21-25')
                 } else {
+                    boolean knownSource = false
                     for (Map target : targets) {
                         Map owner = byId[owners[target.id]]
-                        List<String> prefixes = (owner.sourceGroups ?: []) as List<String>
-                        prefixes = prefixes + ["renderers/${owner.renderer}"]
+                        Map layout = layouts[owner.id]
+                        List<Map> inputs = layout ? FabricSources.inputs(layout) : []
+                        if (inputs.any { it.file ? path == it.path : path.startsWith(it.path + '/') }) {
+                            knownSource = true
+                        }
+                        if (inputs.any { FabricSources.contains(it, path) }) selected.add(target.id as String)
+                        List<String> prefixes = layout ? [] :
+                                ((owner.sourceGroups ?: []) + ["renderers/${owner.renderer}"])
                         if (owner.buildProfile) prefixes += "build-config/${owner.buildProfile}"
                         if (prefixes.any { path.startsWith(it + '/') }) selected.add(target.id as String)
                     }
-                    if (selected) {
-                        selected.addAll(targets.findAll { !byId[owners[it.id]].sourceGroups }
+                    if (selected || knownSource) {
+                        selected.addAll(targets.findAll {
+                            !layouts[owners[it.id]] && !byId[owners[it.id]].sourceGroups
+                        }
                                 .collect { it.id as String })
-                        reason = 'catalog dependencies; includes targets with undeclared sources'
+                        reason = development ? 'build source selections; includes targets with undeclared sources' :
+                                'catalog dependencies; includes targets with undeclared sources'
                     } else {
                         selected.addAll(allIds)
                         reason = 'unknown dependency; all targets selected'
@@ -61,6 +81,20 @@ class ChangeImpact {
         [changes: changes, targets: affected.sort(), checks: checks.sort()]
     }
 
+    private static boolean developmentTooling(String path) {
+        path.startsWith('scripts/tests/') || path.startsWith('runtime-locks/') ||
+                path.startsWith('build-logic/src/test/') || path.startsWith('.github/scripts/') ||
+                path.startsWith('.github/tests/') || path.startsWith('.github/ISSUE_TEMPLATE/') ||
+                path in ['scripts/candidate_manifest.py', 'scripts/fabric_acceptance.py',
+                         'scripts/fabric_dependency_lock.py', 'scripts/fabric_parity_runtime.py',
+                         'scripts/fabric_run_evidence.py', 'scripts/fabric_runtime_lock.py',
+                         'scripts/fabric_scenario_evidence.py', 'scripts/install_fabric_parity_runtime.py',
+                         'scripts/parity_evidence.py', 'scripts/runtime_catalog.py',
+                         'build-logic/src/main/groovy/cbbg/gradle/CodeqlScan.groovy',
+                         '.github/FUNDING.yml', '.github/dependabot.yml', '.github/DEPENDABOT_BATCH.md'] ||
+                path ==~ /\.github\/workflows\/(codeql|osv-scanner|scorecard|dev|release|publish|dependabot-major-batch)\.yml/
+    }
+
     static Map ci(TargetCatalog catalog, Map report) {
         List<String> selected = catalog.defaults().collect { it.id as String }
                 .findAll { it in report.targets }
@@ -69,10 +103,10 @@ class ChangeImpact {
          core: 'core-java-8-17-21-25' in report.checks]
     }
 
-    static Map compare(File root, String base, String head) {
+    static Map compare(File root, String base, String head, boolean development = false) {
         String baseCommit = resolve(root, base)
         String headCommit = resolve(root, head)
-        compareResolved(root, baseCommit, headCommit)
+        compareResolved(root, baseCommit, headCommit, development)
     }
 
     static Map hotfix(File root, String head, List<File> previousManifests, List<String> selection) {
@@ -146,23 +180,50 @@ class ChangeImpact {
         }
     }
 
-    private static Map compareResolved(File root, String base, String head) {
+    private static Map compareResolved(File root, String base, String head, boolean development = false) {
         byte[] changed = git(root, ['diff', '--name-only', '--no-renames', '-z', base, head, '--'])
         List<String> paths = changed.length ? new String(changed, StandardCharsets.UTF_8)
                 .split('\\u0000', -1).findAll { it } : []
         TargetCatalog current = catalogAt(root, head)
         boolean previousCatalogExists = git(root, ['ls-tree', '--name-only', base, '--', 'targets.json']).length > 0
+        TargetCatalog previous = previousCatalogExists ? catalogAt(root, base) : null
+        List<String> sourcePaths = development && previousCatalogExists ?
+                paths.findAll { it != 'targets.json' } : paths
         Map before
         if (previousCatalogExists) {
-            before = select(catalogAt(root, base), paths)
+            before = select(previous, sourcePaths, development)
         } else {
-            before = select(current, ['targets.json'])
+            before = select(current, ['targets.json'], development)
             before.changes[0].reason = 'baseline predates the target catalog; all current targets selected'
         }
-        Map after = select(current, paths)
+        Map after = select(current, sourcePaths, development)
+        if (development && previousCatalogExists && 'targets.json' in paths) {
+            Set<String> changedIds = changedCatalogTargets(previous, current)
+            for (Map pair : [[catalog: previous, report: before], [catalog: current, report: after]]) {
+                List<Map> entries = pair.catalog.data.targets
+                Set<String> changedOwners = entries.findAll { it.id in changedIds }
+                        .collect { (it.artifactOf ?: it.id) as String } as Set
+                List<String> affected = entries.findAll { (it.artifactOf ?: it.id) in changedOwners }*.id.sort()
+                pair.report.targets = ((pair.report.targets + affected) as Set).sort()
+                pair.report.checks = ((pair.report.checks + ['catalog']) as Set).sort()
+                pair.report.changes << [path: 'targets.json', reason: 'changed catalog targets', targets: affected]
+            }
+        }
         [base: base, head: head, targets: ((before.targets + after.targets) as Set).sort(),
          checks: ((before.checks + after.checks) as Set).sort(),
          before: before.changes, after: after.changes]
+    }
+
+    private static Set<String> changedCatalogTargets(TargetCatalog before, TargetCatalog after) {
+        Map previous = before.data.targets.collectEntries { [(it.id): it] }
+        Map current = after.data.targets.collectEntries { [(it.id): it] }
+        Set<String> ids = (previous.keySet() + current.keySet()) as Set
+        if (before.data.findAll { !(it.key in ['targets', 'ciTargets']) } !=
+                after.data.findAll { !(it.key in ['targets', 'ciTargets']) }) return ids
+        Set<String> changed = ids.findAll { previous[it] != current[it] } as Set
+        Set oldCi = before.defaults()*.id as Set
+        Set newCi = after.defaults()*.id as Set
+        changed + (oldCi - newCi) + (newCi - oldCi)
     }
 
     private static TargetCatalog catalogAt(File root, String commit) {

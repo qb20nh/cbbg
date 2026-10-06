@@ -14,6 +14,12 @@ configuration and FFT code; `core:rendering` contains rendering helpers, and
 `core:legacy` contains legacy commands and language support. Add only the modules
 a target uses. Split a module when a target needs only part of it.
 
+Ordinary CI selects target builds from changed files. Fabric profiles and the
+selector use `FabricSources` for source directories, file filters and resource
+copies. Catalog edits select changed artifacts, including their runtime aliases.
+Shared core or unknown inputs select every CI target. The selection report and
+logs list the selected and skipped builds. Release acceptance keeps its full checks.
+
 | Task | Inputs and result |
 | --- | --- |
 | `build`, `check`, `dev`, `genSources` | Optional `-Ptarget=id` or `-Ptargets=id,id`; defaults to `ciTargets`. |
