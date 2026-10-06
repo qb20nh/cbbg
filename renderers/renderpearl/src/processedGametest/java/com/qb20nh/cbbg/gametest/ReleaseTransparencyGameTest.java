@@ -10,7 +10,8 @@ public final class ReleaseTransparencyGameTest implements FabricClientGameTest {
   @Override
   public void runTest(ClientGameTestContext context) {
     ReleaseClient.checkArtifactAndBackend(context);
-    boolean previous = context.computeOnClient(client -> client.options.improvedTransparency().get());
+    boolean previous =
+        context.computeOnClient(client -> client.options.improvedTransparency().get());
     try {
       for (boolean enabled : new boolean[] {false, true}) {
         context.runOnClient(client -> client.options.improvedTransparency().set(enabled));

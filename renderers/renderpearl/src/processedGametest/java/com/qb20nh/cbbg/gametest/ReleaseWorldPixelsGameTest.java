@@ -296,7 +296,14 @@ public final class ReleaseWorldPixelsGameTest implements FabricClientGameTest {
                       actual,
                       (floats, pixels) -> {
                         compare(
-                            directory, width, height, tileSize, noise, floats, pixels, demo,
+                            directory,
+                            width,
+                            height,
+                            tileSize,
+                            noise,
+                            floats,
+                            pixels,
+                            demo,
                             translucent);
                         return null;
                       });
@@ -355,7 +362,8 @@ public final class ReleaseWorldPixelsGameTest implements FabricClientGameTest {
             int noiseByte = noisePixel >>> shift & 255;
             float input = source[(gpuY * width + x) * 4 + channel];
             if (!Float.isFinite(input)) throw new AssertionError("Nonfinite world source");
-            if (input > 0 && input < 1
+            if (input > 0
+                && input < 1
                 && Math.abs(input * 255 - Math.round(input * 255)) > 0.002f) {
               fractionalChannels++;
             }
@@ -406,8 +414,11 @@ public final class ReleaseWorldPixelsGameTest implements FabricClientGameTest {
               + goldenMismatches
               + ",\"goldenResource\":"
               + (translucent ? "null" : "\"" + goldenPath + "\"")
-              + ",\"approvedGolden\":" + !translucent
-              + ",\"fractionalChannels\":" + fractionalChannels + "}\n");
+              + ",\"approvedGolden\":"
+              + !translucent
+              + ",\"fractionalChannels\":"
+              + fractionalChannels
+              + "}\n");
       if (translucent && fractionalChannels == 0)
         throw new AssertionError("Transparency quantized the world before dithering");
       if (changed == 0) throw new AssertionError("World fixture cannot detect a missing effect");

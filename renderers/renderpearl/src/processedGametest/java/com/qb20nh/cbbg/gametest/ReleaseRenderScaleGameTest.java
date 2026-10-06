@@ -221,12 +221,22 @@ public final class ReleaseRenderScaleGameTest implements FabricClientGameTest {
                   || scaled.height != Math.max((int) (main.height * (double) renderScale), 1)
                   || Objects.requireNonNull(scaled.getColorTexture()).getFormat() != format) {
                 throw new AssertionError(
-                    "RenderScale dimensions or precision are incorrect: scenario=" + scenario
-                        + " main=" + main.width + "x" + main.height
-                        + " scaled=" + scaled.width + "x" + scaled.height
-                        + " expectedScale=" + renderScale
-                        + " mainFormat=" + Objects.requireNonNull(main.getColorTexture()).getFormat()
-                        + " scaledFormat=" + Objects.requireNonNull(scaled.getColorTexture()).getFormat());
+                    "RenderScale dimensions or precision are incorrect: scenario="
+                        + scenario
+                        + " main="
+                        + main.width
+                        + "x"
+                        + main.height
+                        + " scaled="
+                        + scaled.width
+                        + "x"
+                        + scaled.height
+                        + " expectedScale="
+                        + renderScale
+                        + " mainFormat="
+                        + Objects.requireNonNull(main.getColorTexture()).getFormat()
+                        + " scaledFormat="
+                        + Objects.requireNonNull(scaled.getColorTexture()).getFormat());
               }
               var device = RenderSystem.getDevice();
               var encoder = device.createCommandEncoder();
@@ -395,9 +405,14 @@ public final class ReleaseRenderScaleGameTest implements FabricClientGameTest {
           expected.setPixel(x, y, pixel);
           if (pixel
               != expectedPixel(
-                  sample, noise, source, strength, x, gpuY,
-                  scale == 1 ? 0.5f : 1, scale == 1 ? 0.5f : 1))
-            distinguish++;
+                  sample,
+                  noise,
+                  source,
+                  strength,
+                  x,
+                  gpuY,
+                  scale == 1 ? 0.5f : 1,
+                  scale == 1 ? 0.5f : 1)) distinguish++;
         }
       }
       expected.writeToFile(evidence(scenario, "expected"));
@@ -427,8 +442,14 @@ public final class ReleaseRenderScaleGameTest implements FabricClientGameTest {
   }
 
   private static int expectedPixel(
-      Sample sample, int[] noise, double source, float strength, int x, int gpuY,
-      float scaleX, float scaleY) {
+      Sample sample,
+      int[] noise,
+      double source,
+      float strength,
+      int x,
+      int gpuY,
+      float scaleX,
+      float scaleY) {
     int nx = Math.floorMod((int) Math.floor((x + 0.5) * scaleX), sample.noiseWidth());
     int ny = Math.floorMod((int) Math.floor((gpuY + 0.5) * scaleY), sample.noiseHeight());
     int noisePixel = noise[(sample.noiseHeight() - 1 - ny) * sample.noiseWidth() + nx];
