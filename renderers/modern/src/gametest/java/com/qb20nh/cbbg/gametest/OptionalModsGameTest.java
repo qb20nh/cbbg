@@ -38,14 +38,14 @@ public final class OptionalModsGameTest implements FabricClientGameTest {
             CbbgConfig.setMode(CbbgConfig.Mode.ENABLED);
             ClientTestAccess.addChatMessage(client, Component.literal(marker));
           });
-      context.setScreen(() -> new ChatScreen("", false));
+      context.setScreen(() -> ClientTestAccess.chatScreen(""));
       context.waitForScreen(ChatScreen.class);
       context.runOnClient(
           client ->
               ((ChatScreen) Objects.requireNonNull(ClientTestAccess.screen(client)))
                   .handleChatInput(command, true));
       context.waitFor(client -> CbbgConfig.get().mode() == CbbgConfig.Mode.DEMO, 200);
-      context.setScreen(() -> new ChatScreen("", false));
+      context.setScreen(() -> ClientTestAccess.chatScreen(""));
       context.waitTick();
       context.runOnClient(
           client -> {

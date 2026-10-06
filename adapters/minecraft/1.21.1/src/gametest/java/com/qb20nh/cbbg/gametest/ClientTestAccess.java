@@ -1,16 +1,16 @@
 package com.qb20nh.cbbg.gametest;
 
-import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
+import java.nio.file.Path;
+import net.fabricmc.fabric.api.client.gametest.v1.ClientGameTestContext;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.ChatComponent;
 import net.minecraft.client.gui.screens.ChatScreen;
 import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.client.input.MouseButtonEvent;
-import net.minecraft.client.input.MouseButtonInfo;
 import net.minecraft.network.chat.Component;
 import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
+import org.lwjgl.glfw.GLFW;
 
 @NullMarked
 final class ClientTestAccess {
@@ -25,22 +25,23 @@ final class ClientTestAccess {
   }
 
   static ChatScreen chatScreen(String initial) {
-    return new ChatScreen(initial, false);
+    return new ChatScreen(initial);
   }
 
   static void click(AbstractWidget widget, double x, double y) {
-    widget.onClick(new MouseButtonEvent(x, y, new MouseButtonInfo(0, 0)), false);
+    widget.onClick(x, y);
   }
 
   static void resizeWindow(ClientGameTestContext context, int width, int height) {
-    context.getInput().resizeWindow(width, height);
+    context.runOnClient(
+        client -> GLFW.glfwSetWindowSize(client.getWindow().getWindow(), width, height));
   }
 
   static void addChatMessage(Minecraft client, Component message) {
     chat(client).addMessage(message);
   }
 
-  static java.nio.file.Path takeScreenshot(ClientGameTestContext context, String name) {
+  static Path takeScreenshot(ClientGameTestContext context, String name) {
     return context.takeScreenshot(name);
   }
 }
