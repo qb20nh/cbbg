@@ -100,7 +100,8 @@ class ChangeImpact {
                 .findAll { it in report.targets }
         List<Map> rows = selected ? catalog.matrix(selected.join(',')) : []
         [matrix: [include: rows], build: !rows.isEmpty(),
-         core: 'core-java-8-17-21-25' in report.checks]
+         core: 'core-java-8-17-21-25' in report.checks,
+         tooling: report.checks.any { it != 'documentation' }]
     }
 
     static Map compare(File root, String base, String head, boolean development = false) {

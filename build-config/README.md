@@ -20,6 +20,11 @@ copies. Catalog edits select changed artifacts, including their runtime aliases.
 Shared core or unknown inputs select every CI target. The selection report and
 logs list the selected and skipped builds. Release acceptance keeps its full checks.
 
+Target jobs start after selection while tooling tests run separately. The `plan`
+check reports their combined result; known documentation-only changes skip tooling.
+Dispatched builds inherit the root's build-cache choice. Use `--no-build-cache`
+to disable reuse. `ciCheck dev` checks and builds each artifact in one child process.
+
 | Task | Inputs and result |
 | --- | --- |
 | `build`, `check`, `dev`, `genSources` | Optional `-Ptarget=id` or `-Ptargets=id,id`; defaults to `ciTargets`. |

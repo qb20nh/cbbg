@@ -138,6 +138,18 @@ class ChangeImpactTest {
     }
 
     @Test
+    void onlyDocumentationAndEmptyChangesCanSkipTooling() {
+        TargetCatalog catalog = TargetCatalog.read(new File('../targets.json'))
+        for (List<String> paths : [[], ['README.md', 'CONTRIBUTING.md', 'docs/multiversion-plan.md']]) {
+            assertEquals(false, ChangeImpact.ci(catalog, ChangeImpact.select(catalog, paths, true)).tooling)
+        }
+        for (List<String> paths : [['README.md', 'targets.json'], ['unknown/file'],
+                                  ['core/src/test/java/ConfigTest.java'], ['.github/workflows/dev.yml']]) {
+            assertEquals(true, ChangeImpact.ci(catalog, ChangeImpact.select(catalog, paths, true)).tooling)
+        }
+    }
+
+    @Test
     void coreUnitTestsNeedCoreJobsButSharedGameTestSupportNeedsTargetBuilds() {
         TargetCatalog catalog = TargetCatalog.read(new File('../targets.json'))
         for (String path : ['core/src/test/java/ConfigTest.java', 'core/rendering/src/test/resources/input.png']) {
