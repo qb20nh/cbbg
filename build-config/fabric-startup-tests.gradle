@@ -33,6 +33,8 @@
     IrisRestart: 'ReleaseIrisRestartGameTest',
     Allocation: 'ReleaseAllocationGameTest',
     WorldPixels: 'ReleaseWorldPixelsGameTest',
+    Transparency: 'ReleaseTransparencyGameTest',
+    RenderScale: 'ReleaseRenderScaleGameTest',
     ShaderFailure: 'ReleaseShaderFailureGameTest',
     DebugOverlay: 'ReleaseDebugOverlayGameTest',
     Notifications: 'ReleaseNotificationsGameTest'
