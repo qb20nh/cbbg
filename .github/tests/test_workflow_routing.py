@@ -50,10 +50,24 @@ class WorkflowRoutingTest(unittest.TestCase):
         self.assertIn("gh release create", script("Create draft release", release))
         self.assertIn("--draft", script("Create draft release", release))
 
-    def test_codeql_selects_old_upstream_target_explicitly(self):
-        codeql = WORKFLOWS / "codeql.yml"
-        self.assertIn("targetMatrix", codeql.read_text())
-        self.assertIn("-Ptarget=26.2-fabric", codeql.read_text())
+    def test_codeql_has_one_java_job_and_keeps_historical_coverage(self):
+        workflow = yaml.safe_load((WORKFLOWS / "codeql.yml").read_text())
+        jobs = workflow["jobs"]
+        self.assertEqual(set(jobs), {"analyze-targets", "analyze"})
+        java = jobs["analyze-targets"]
+        self.assertNotIn("strategy", java)
+        steps = java["steps"]
+        setup = next(step for step in steps if step.get("id") == "codeql")
+        self.assertEqual(setup["uses"], "github/codeql-action/setup-codeql@v4")
+        build = script("Analyze Java artifact builds", WORKFLOWS / "codeql.yml")
+        self.assertIn("codeqlScan", build)
+        self.assertIn('"-PcodeqlExecutable=$CODEQL_EXECUTABLE"', build)
+        self.assertIn("-PcodeqlLegacyTarget=26.2-fabric", build)
+        upload = next(step for step in steps if step.get("name") == "Upload Java analyses")
+        self.assertEqual(upload["with"]["sarif_file"], ".gradle/codeql-results/sarif")
+        self.assertNotIn("category", upload["with"])
+        self.assertNotIn("if", upload)
+        self.assertEqual(jobs["analyze"]["strategy"]["matrix"]["language"], ["actions", "python"])
 
     def test_publication_never_builds_artifact_and_retains_retry_gate(self):
         publish = WORKFLOWS / "publish.yml"

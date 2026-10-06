@@ -20,6 +20,7 @@ a target uses. Split a module when a target needs only part of it.
 | `runClient` | Exactly one target; runs locally. |
 | `checkCatalog` | Validates `targets.json`. |
 | `targetMatrix` | Writes JSON with `-Poutput=path`; `-PrequireImplemented=true` requires completed targets. |
+| `codeqlScan` | `-PcodeqlExecutable=path`; analyzes CI and implemented artifact owners. Optional `-PcodeqlLegacyTarget=id` retains a historical scan. |
 | `selectChecks` | `-Pbase=revision -Phead=revision -Poutput=path`; optional `-PgithubOutput=path`. |
 | `checkPackages` | Builds and checks selected production and source JARs. |
 | `optimizeReleaseJar` | Shrinks, optimizes and obfuscates the selected targets' release JARs, with per-target mappings. |
@@ -36,6 +37,18 @@ a target uses. Split a module when a target needs only part of it.
 `candidateBuildOutputs` and `bundleCandidate` currently support the 26.3 Fabric
 release path. A successful build does not establish release readiness. All
 required local runtime results must match the candidate before publication.
+
+CodeQL uses a separate database for each artifact owner and shares one Java CI
+job. Patch and loader aliases of the same artifact share its scan. Builds run
+sequentially with clean outputs; completed databases are removed before the next
+analysis. The plan and SARIF reports are in `.gradle/codeql-results/`, outside
+the historical 26.2 profile's cleanup directory. The Java upload runs only after
+every selected analysis succeeds. Java, Python and Actions analyses run on PRs,
+pushes to `main` and the weekly schedule.
+
+When adopting this workflow, replace required target-specific CodeQL checks with
+`CodeQL Advanced / Analyze (java-kotlin)`. GitHub may report a configuration
+transition warning on the migration PR because the Java matrix was removed.
 
 Release JARs use ProGuard to shrink, optimize and obfuscate CBBG. Development
 JARs retain ordinary names. Each processed release includes a mapping file on

@@ -151,6 +151,18 @@ class TargetsPlugin implements Plugin<Project> {
                 }
             }
         }
+        project.tasks.register('codeqlScan', CodeqlScan) {
+            group = 'verification'
+            description = 'Analyze each supported artifact in a separate CodeQL database.'
+            repositoryDirectory.set(project.layout.projectDirectory)
+            catalogFile.set(project.layout.projectDirectory.file('targets.json'))
+            codeqlExecutable.set(project.layout.file(project.providers.gradleProperty('codeqlExecutable')
+                    .map { project.file(it) }))
+            legacyTarget.set(project.providers.gradleProperty('codeqlLegacyTarget').orElse(''))
+            // The historical upstream profile's clean task deletes repository-level build/.
+            outputDirectory.set(project.layout.projectDirectory.dir('.gradle/codeql-results'))
+            outputs.upToDateWhen { false }
+        }
         project.tasks.named('check') { dependsOn('checkCatalog') }
         project.tasks.register('bundleCandidate', BundleCandidate) {
             group = 'distribution'
