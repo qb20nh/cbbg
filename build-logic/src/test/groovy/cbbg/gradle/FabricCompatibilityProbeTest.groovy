@@ -71,6 +71,34 @@ class FabricCompatibilityProbeTest {
         assertEquals(16, runs)
     }
 
+    @Test void cacheTracksOnlyGraphicsEnvironmentOverrides() {
+        Map inherited = [MESA_GL_VERSION_OVERRIDE: '4.6', LIBGL_ALWAYS_SOFTWARE: '1',
+                         GALLIUM_DRIVER: 'llvmpipe', __GL_SYNC_TO_VBLANK: '0',
+                         __EGL_VENDOR_LIBRARY_FILENAMES: '/vendor.json', DRI_PRIME: '1',
+                         GBM_BACKEND: 'nvidia-drm', LANG: 'en_US.UTF-8', PATH: '/bin']
+        Map snapshot = FabricCompatibilityProbe.graphicsEnvironment(inherited)
+        assertEquals(inherited.keySet().findAll { !(it in ['LANG', 'PATH']) }.sort(),
+                snapshot.keySet().toList())
+        inherited.MESA_GL_VERSION_OVERRIDE = '3.3'
+        assertEquals('4.6', snapshot.MESA_GL_VERSION_OVERRIDE)
+
+        File evidence = new File(directory, 'receipt.json')
+        evidence.text = 'passed'
+        File cache = new File(directory, 'cache')
+        Map inputs = [candidate: 'same-artifact', backend: 'opengl', graphicsEnvironment: snapshot]
+        int runs = 0
+        Closure run = { runs++; [status: 'passed', files: [evidence]] }
+        assertFalse(FabricCompatibilitySearch.cached(cache, inputs, run).cached)
+        assertTrue(FabricCompatibilitySearch.cached(cache, inputs, run).cached)
+        assertFalse(FabricCompatibilitySearch.cached(cache, inputs + [graphicsEnvironment:
+                FabricCompatibilityProbe.graphicsEnvironment(inherited)], run).cached)
+        inherited.LANG = 'ko_KR.UTF-8'
+        inherited.PATH = '/usr/bin'
+        assertTrue(FabricCompatibilitySearch.cached(cache, inputs + [graphicsEnvironment:
+                FabricCompatibilityProbe.graphicsEnvironment(inherited)], run).cached)
+        assertEquals(2, runs)
+    }
+
     @Test void executesThePinnedRuntimeCommandAndClassifiesReceipts() {
         File api = new File(directory, 'api.jar')
         File gametest = new File(directory, 'gametest.jar')
@@ -105,6 +133,8 @@ class FabricCompatibilityProbeTest {
                                     (search.canonicalPath): 'search-1',
                                     (runner.canonicalPath): 'runner-1']]
         Map cacheInputs = FabricCompatibilityProbe.cacheInputs(reportInputs, spec, coordinator, search)
+        Map environment = cacheInputs.graphicsEnvironment
+        assertSame(environment, spec.graphicsEnvironment)
         assertFalse(cacheInputs.files.containsKey(coordinator.canonicalPath))
         assertEquals(CandidateFiles.sha256(spec.python as File), cacheInputs.python.sha256)
         assertEquals(CandidateFiles.sha256(spec.java as File), cacheInputs.java.sha256)
@@ -124,6 +154,8 @@ class FabricCompatibilityProbeTest {
         }
         assertEquals('passed', passed.status)
         assertNull(passed.reason)
+        assertSame(environment, passed.graphicsEnvironment)
+        assertEquals(environment, (new JsonSlurper().parse(new File(passed.receipt)) as Map).graphicsEnvironment)
         assertEquals('26.1.1-fabric', command[command.indexOf('--target') + 1])
         assertEquals('0.145.4+26.1.1', command[command.indexOf('--gametest-api-version') + 1])
         assertEquals(gametest, command[command.indexOf('--gametest-api') + 1])

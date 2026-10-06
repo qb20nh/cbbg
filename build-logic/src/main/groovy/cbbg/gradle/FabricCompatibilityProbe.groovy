@@ -10,6 +10,20 @@ import java.util.concurrent.TimeUnit
 
 /** Runs one packaged-client dependency probe and classifies its recorded result. */
 class FabricCompatibilityProbe {
+    static Map graphicsEnvironment(Map environment = System.getenv()) {
+        new TreeMap(environment.findAll { name, value ->
+            ['MESA_', 'LIBGL_', 'GALLIUM_', '__GL', '__EGL'].any { name.startsWith(it) } ||
+                    name in ['DRI_PRIME', 'GBM_BACKEND']
+        })
+    }
+
+    private static Map graphicsEnvironmentSnapshot(Map spec) {
+        if (!spec.containsKey('graphicsEnvironment')) {
+            spec.graphicsEnvironment = graphicsEnvironment()
+        }
+        spec.graphicsEnvironment as Map
+    }
+
     static int run(List command, File log, def providers, File workingDirectory) {
         log.parentFile.mkdirs()
         def execution = providers.exec {
@@ -32,6 +46,7 @@ class FabricCompatibilityProbe {
     }
 
     static Map cacheInputs(Map reportInputs, Map spec, File coordinator, File search) {
+        Map environment = graphicsEnvironmentSnapshot(spec)
         File gametest = spec.gametest as File
         File api = spec.api as File
         File python = spec.python as File
@@ -56,7 +71,7 @@ class FabricCompatibilityProbe {
                 apiSha256: CandidateFiles.sha256(api), gametest: CandidateFiles.sha256(gametest),
                 runtime: CandidateFiles.sha256(spec.runtime.lock as File),
                 runtimeDirectory: (spec.runtime.directory as File).canonicalPath,
-                backend: spec.backend,
+                backend: spec.backend, graphicsEnvironment: environment,
                 python: [path: python.canonicalPath, sha256: CandidateFiles.sha256(python)],
                 java: [path: java.canonicalPath, sha256: CandidateFiles.sha256(java)],
                 runner: [path: runner.canonicalPath, sha256: CandidateFiles.sha256(runner)],
@@ -74,6 +89,7 @@ class FabricCompatibilityProbe {
     }
 
     static Map execute(Map spec, Closure<Integer> run) {
+        Map environment = graphicsEnvironmentSnapshot(spec)
         File cell = new File(spec.output as File, 'runs/' + UUID.randomUUID().toString())
         cell.mkdirs()
         File displayDirectory = spec.manageDisplay ?
@@ -143,6 +159,10 @@ class FabricCompatibilityProbe {
             int exit = run.call(command, log)
             File receipt = new File(cell, 'game/probe.json')
             Map recorded = receipt.isFile() ? (Map) CandidateFiles.read(receipt) : [:]
+            if (receipt.isFile()) {
+                recorded.graphicsEnvironment = environment
+                receipt.text = JsonOutput.toJson(recorded)
+            }
             boolean passed = exit == 0 && recorded.exitCode == 0 && !recorded.failure && recorded.scenarios
             String status = passed ? 'passed' : 'failed'
             String reason = recorded.failure?.message ?: log.text.takeRight(2000)
@@ -162,6 +182,7 @@ class FabricCompatibilityProbe {
                 if (!file.name.endsWith('.lock')) evidence.add(file)
             }
             [status: status, receipt: receipt.absolutePath, reason: passed ? null : reason,
+             graphicsEnvironment: environment,
              files: evidence]
         } finally {
             if (compositor != null) {
