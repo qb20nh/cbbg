@@ -1,0 +1,18 @@
+// Processed tests compile against the optimized named jar and run in the loader's namespace.
+tasks.names.findAll { it.endsWith('DriverJar') }.each { name ->
+    def driver = tasks.named(name, Jar)
+    driver.configure { destinationDirectory = layout.buildDirectory.dir('intermediates/named-drivers') }
+    def runtimeDriver = tasks.register("remap${name.capitalize()}", fabricRemapTaskType) {
+        dependsOn driver
+        inputFile.set(driver.flatMap { it.archiveFile })
+        archiveFileName.set(driver.flatMap { it.archiveFileName })
+        destinationDirectory = layout.buildDirectory.dir('libs')
+        addNestedDependencies = false
+        preserveFileTimestamps = false
+        reproducibleFileOrder = true
+    }
+    driver.configure {
+        ext.runtimeArchiveFile = runtimeDriver.flatMap { it.archiveFile }
+        finalizedBy runtimeDriver
+    }
+}

@@ -9,7 +9,7 @@ def sharedRepositoryRoot = privateGson.projectDir.parentFile
 def gsonLicense = new File(sharedRepositoryRoot, 'build-config/licenses/Apache-2.0.txt')
 def gsonVersion = privateGson.privateGsonVersion
 def gsonNotice = new File(sharedRepositoryRoot, "build-config/licenses/Gson-${gsonVersion}.txt")
-plugins.withId('net.fabricmc.fabric-loom') {
+if (plugins.hasPlugin('net.fabricmc.fabric-loom') || plugins.hasPlugin('net.fabricmc.fabric-loom-remap')) {
     def modFiles = files(sourceSets.main.output,
             sharedProjects.collect { it.sourceSets.main.output },
             sharedProjects.collect { it.tasks.named('jar') },

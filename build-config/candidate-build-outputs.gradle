@@ -31,7 +31,8 @@ tasks.register('candidateBuildOutputs') {
             def suite = driver.name in ['parityDriverJar', 'processedDriverJar'] ? 'ordinary' :
                     driver.archiveClassifier.get().replaceFirst(/^processed-/, '').replaceFirst(/-driver$/, '')
             if (drivers.containsKey(suite)) throw new GradleException('Duplicate driver suite: ' + suite)
-            drivers[suite] = reference(driver.archiveFile.get().asFile)
+            def archive = driver.hasProperty('runtimeArchiveFile') ? driver.runtimeArchiveFile : driver.archiveFile
+            drivers[suite] = reference(archive.get().asFile)
         }
         def output = [schema: 2, target: candidateTargetId, version: project.version.toString(),
                       source_commit: gitOutput(['rev-parse', 'HEAD']),

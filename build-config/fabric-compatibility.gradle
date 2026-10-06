@@ -209,7 +209,9 @@ tasks.register('verifyFabricCompatibility') {
                 'v' + project.version.toString().split(/\+/, 2)[0], compatibilityOwner)) {
             throw new GradleException('Compatibility search requires the artifact owner package version')
         }
-        File driver = tasks.named('processedDriverJar', Jar).get().archiveFile.get().asFile
+        def driverTask = tasks.named('processedDriverJar', Jar).get()
+        def driverArchive = driverTask.hasProperty('runtimeArchiveFile') ? driverTask.runtimeArchiveFile : driverTask.archiveFile
+        File driver = driverArchive.get().asFile
         def resolveJar = { String coordinate ->
             def configuration = configurations.detachedConfiguration(dependencies.create(coordinate))
             configuration.transitive = false
