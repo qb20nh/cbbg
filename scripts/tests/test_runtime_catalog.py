@@ -7,6 +7,17 @@ from runtime_catalog import load_catalog, select_targets
 
 
 class RuntimeCatalogTests(unittest.TestCase):
+    def test_upstream_metadata_uses_the_catalog_minecraft_range(self):
+        root = Path(__file__).resolve().parents[2]
+        template = json.loads((root / 'src/main/resources/fabric.mod.json').read_text())
+        for target in load_catalog()['targets']:
+            if target.get('buildProfile') != 'fabric-upstream':
+                continue
+            with self.subTest(target=target['id']):
+                expanded = template['depends']['minecraft'].replace('${minecraft_version}',
+                                                                   target['minecraft'])
+                self.assertEqual(target.get('minecraftDependency', target['minecraft']), expanded)
+
     def test_exact_runtime_selection_keeps_shared_jar_loaders_separate(self):
         catalog = load_catalog()
         self.assertEqual([record['id'] for record in select_targets(catalog, '26.3-fabric,26.3-quilt')],

@@ -121,6 +121,14 @@ class TargetCatalog {
         for (Map owner : data.targets.findAll {
             it.containsKey('compatibleMinecraft') || it.containsKey('minecraftDependency')
         }) {
+            if (!owner.containsKey('compatibleMinecraft')) {
+                if (owner.loader != 'fabric' || owner.artifactOf != null ||
+                        !(owner.minecraft ==~ /[0-9]+\.[0-9]+/) ||
+                        owner.minecraftDependency != '~' + owner.minecraft) {
+                    throw new IllegalArgumentException('Invalid Minecraft dependency: ' + owner.id)
+                }
+                continue
+            }
             List versions = owner.compatibleMinecraft instanceof List ? owner.compatibleMinecraft : []
             List<String> base = owner.minecraft.tokenize('.')
             String dependency = base.size() == 2 && base.every { it ==~ /[0-9]+/ } ?

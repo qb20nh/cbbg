@@ -9,6 +9,8 @@ plugins {
 
 import java.util.Date
 import groovy.json.JsonSlurper
+import cbbg.gradle.PackageChecks
+import cbbg.gradle.TargetCatalog
 
 def repositoryRoot = file('../..')
 layout.buildDirectory = new File(repositoryRoot, 'build')
@@ -154,6 +156,16 @@ apply from: new File(repositoryRoot, 'build-config/source-inventory.gradle')
 ext.candidateTargetId = '26.2-fabric'
 apply from: new File(repositoryRoot, 'build-config/candidate-build-outputs.gradle')
 apply from: new File(repositoryRoot, 'build-config/fabric-compatibility.gradle')
+
+tasks.named('checkPackages') {
+	inputs.file(new File(repositoryRoot, 'targets.json'))
+	doLast {
+		def target = TargetCatalog.read(new File(repositoryRoot, 'targets.json'))
+				.select(candidateTargetId).first()
+		PackageChecks.verifyFabricMetadata(
+				releaseOptimization.outputJar.get().asFile, target, project.version.toString())
+	}
+}
 
 // Opt-in integration dependencies, excluded from the published mod.
 if (providers.gradleProperty("testRenderScale").isPresent()) {
