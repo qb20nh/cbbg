@@ -91,6 +91,21 @@ class TargetCatalogTest {
         rejects(data, 'source groups')
     }
 
+    @Test void selectionErrorsListValidTargetsAndRequiredAliases() {
+        TargetCatalog catalog = TargetCatalog.read(CATALOG)
+        String unknown = assertThrows(IllegalArgumentException) { catalog.select('26.3') }.message
+        assertTrue(unknown.contains('26.3-fabric'), unknown)
+        assertTrue(unknown.contains('targets.json'), unknown)
+        String pending = assertThrows(IllegalArgumentException) { catalog.select('26.3-quilt', true) }.message
+        assertTrue(pending.contains('26.3-fabric'), pending)
+        assertTrue(pending.contains('Implemented targets'), pending)
+        String missing = assertThrows(IllegalArgumentException) {
+            catalog.releaseTargets(['26.1-fabric'])
+        }.message
+        assertTrue(missing.contains('-Ptargets='), missing)
+        assertTrue(missing.contains('26.1.1-fabric'), missing)
+    }
+
     @Test
     void compatibilityAndSharedArtifactRulesAreValidated() {
         for (Object profiles : [[:], [none: ['opengl']],

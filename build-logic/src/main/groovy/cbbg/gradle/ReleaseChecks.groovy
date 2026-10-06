@@ -11,7 +11,7 @@ class ReleaseChecks {
     static Map provenance(File manifest, File bundle, String repo, Closure run) {
         repository(repo)
         CandidateManifest candidate = new CandidateManifest(manifest)
-        if (!bundle.isFile()) throw new IllegalArgumentException('Missing attestation bundle')
+        if (!bundle.isFile()) throw new IllegalArgumentException('Missing attestation bundle: ' + bundle + '. Download provenance.jsonl from the same candidate as candidate.json and pass it with -Pbundle=<file>.')
         String manifestHash = CandidateFiles.sha256(candidate.file)
         String bundleHash = CandidateFiles.sha256(bundle)
         Map<String, File> subjects = [(manifestHash): candidate.file]
@@ -65,11 +65,13 @@ class ReleaseChecks {
         CandidateManifest candidate = new CandidateManifest(manifest)
         List<String> selected = candidate.data.selected_targets as List<String>
         if (!(results instanceof Map) || results.keySet() != selected.toSet()) {
-            throw new IllegalArgumentException('Result indexes must cover exactly the selected targets')
+            throw new IllegalArgumentException('Result indexes must cover exactly the selected targets. Required: ' +
+                    selected.join(', ') + '; supplied: ' + results?.keySet()?.join(', ') +
+                    '. Pass one -Presults.<target-id>=<index.json> for each selected runtime, including aliases that share a JAR.')
         }
         List<File> indexes = selected.collect { id -> new File(results[id].toString()).canonicalFile }
         if (indexes.toSet().size() != indexes.size()) {
-            throw new IllegalArgumentException('Each runtime target needs its own result index')
+            throw new IllegalArgumentException('Each runtime target needs its own result index. Run packaged acceptance separately for each selected loader and Minecraft version, then pass its index with -Presults.<target-id>=<index.json>.')
         }
         String hash = CandidateFiles.sha256(candidate.file)
         Map expected = [manifest_sha256: hash, source_commit: candidate.data.commit,
@@ -482,7 +484,7 @@ class ReleaseChecks {
             }
             if (parsed.size() < 100) break
         }
-        throw new IllegalArgumentException('Release not found for tag: ' + tag)
+        throw new IllegalArgumentException('Release not found for tag: ' + tag + '. Check the exact GitHub release tag, including any + character. Create its draft with the Release workflow before running publication tasks.')
     }
 
     private static String segment(String value) {
@@ -495,7 +497,7 @@ class ReleaseChecks {
                 !(release.id instanceof Integer || release.id instanceof Long ||
                         release.id instanceof BigInteger) || release.id <= 0 ||
                 !(release.assets instanceof List)) {
-            throw new IllegalArgumentException('Expected selected draft and release channel')
+            throw new IllegalArgumentException("Expected selected draft and release channel for ${tag}; received tag=${release.tag_name}, draft=${release.draft}, prerelease=${release.prerelease}. checkRelease and publishRelease require an unpublished draft whose prerelease flag matches its tag.")
         }
         Map assets = [:]
         release.assets.each { asset ->
@@ -521,7 +523,7 @@ class ReleaseChecks {
                 release.immutable != true ||
                 !(release.body instanceof String) || !release.body.trim() ||
                 !(release.assets instanceof List)) {
-            throw new IllegalArgumentException('Expected immutable published release in selected channel')
+            throw new IllegalArgumentException("Expected immutable published release in selected channel for ${tag}; received tag=${release.tag_name}, draft=${release.draft}, immutable=${release.immutable}, prerelease=${release.prerelease}. Finish acceptance and publish the GitHub release with immutable releases enabled before uploading to mod platforms; use dry_run=true to check a draft.")
         }
         Map assets = [:]
         release.assets.each { asset ->

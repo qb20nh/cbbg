@@ -206,14 +206,17 @@ class TargetCatalog {
             }
             Set unknown = requested.toSet() - targets.collect { it.id }.toSet()
             if (!unknown.isEmpty()) {
-                throw new IllegalArgumentException('Unknown targets: ' + unknown.sort().join(', '))
+                throw new IllegalArgumentException('Unknown targets: ' + unknown.sort().join(', ') +
+                        '. Use target IDs from targets.json. Available targets: ' + targets.collect { it.id }.join(', '))
             }
             targets = targets.findAll { requested.contains(it.id) }
         }
         if (requireImplemented) {
             List pending = targets.findAll { !it.implemented }.collect { it.id }
             if (!pending.isEmpty()) {
-                throw new IllegalArgumentException('Targets not implemented: ' + pending.join(', '))
+                throw new IllegalArgumentException('Targets not implemented: ' + pending.join(', ') +
+                        '. Select a completed target; release candidates require implemented=true in targets.json. Implemented targets: ' +
+                        data.targets.findAll { it.implemented }.collect { it.id }.join(', '))
             }
         }
         targets
@@ -269,7 +272,10 @@ class TargetCatalog {
         data.targets.findAll { it.artifactOf }.each { target ->
             if ((selection.contains(target.id) && !selection.contains(target.artifactOf)) ||
                     (selection.contains(target.artifactOf) && target.implemented && !selection.contains(target.id))) {
-                throw new IllegalArgumentException('Selection omits a shared-artifact runtime: ' + target.id)
+                throw new IllegalArgumentException('Selection omits a shared-artifact runtime: ' + target.id +
+                        '. Include its owner and all implemented aliases with -Ptargets=' +
+                        data.targets.findAll { it.id == (target.artifactOf ?: target.id) ||
+                                (it.artifactOf == (target.artifactOf ?: target.id) && it.implemented) }.collect { it.id }.join(','))
             }
         }
         selected.collectEntries { [(it.id): it] }

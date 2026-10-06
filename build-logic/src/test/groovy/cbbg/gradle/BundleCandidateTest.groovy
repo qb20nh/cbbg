@@ -96,10 +96,34 @@ tasks.register('assembleCandidate', BundleCandidate) {
         def fixture = setup()
         fixture.outputs.source_commit = 'b' * 40
         fixture.outputsFile.text = JsonOutput.toJson(fixture.outputs)
-        assertThrows(Exception) { fixture.task.bundle() }
+        String stale = assertThrows(Exception) { fixture.task.bundle() }.message
+        assertTrue(stale.contains(fixture.outputsFile.toString()), stale)
+        assertTrue(stale.contains(fixture.outputs.source_commit), stale)
+        assertTrue(stale.contains('candidateBuildOutputs'), stale)
         assertFalse(fixture.task.destination.get().asFile.exists())
         new File(fixture.root, 'gradle.properties').append('changed=yes\n')
-        assertThrows(Exception) { fixture.task.bundle() }
+        String dirty = assertThrows(Exception) { fixture.task.bundle() }.message
+        assertTrue(dirty.contains('git status --short'), dirty)
+        assertTrue(dirty.contains('gradle.properties'), dirty)
+    }
+
+    @Test void existingDestinationAndWrongVersionExplainRecovery() {
+        def fixture = setup()
+        File destination = fixture.task.destination.get().asFile
+        destination.mkdirs()
+        File keep = new File(destination, 'keep.txt')
+        keep.text = 'keep'
+        String existing = assertThrows(Exception) { fixture.task.bundle() }.message
+        assertTrue(existing.contains(destination.toString()), existing)
+        assertTrue(existing.contains('-Poutput'), existing)
+        assertEquals('keep', keep.text)
+        destination.deleteDir()
+        fixture.outputs.version = '2.0.0+mc26.3-fabric'
+        fixture.outputsFile.text = JsonOutput.toJson(fixture.outputs)
+        String version = assertThrows(Exception) { fixture.task.bundle() }.message
+        assertTrue(version.contains('2.0.0+mc26.3-fabric'), version)
+        assertTrue(version.contains('1.4.0+mc26.3-fabric'), version)
+        assertTrue(version.contains('26.3-fabric'), version)
     }
 
     @Test void missingDriverAndDuplicateNamesAreRejected() {

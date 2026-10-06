@@ -221,7 +221,7 @@ jobs:
             task=planModrinthUpload
           else
             if [[ -z "$MODRINTH_TOKEN" ]]; then
-              echo "Missing MODRINTH_TOKEN for upload."
+              echo "::error::Missing MODRINTH_TOKEN for upload. Configure this secret in the build and publish GitHub environment, or select CurseForge only. dry_run=true checks inputs without uploading."
               exit 1
             fi
             task=modrinth

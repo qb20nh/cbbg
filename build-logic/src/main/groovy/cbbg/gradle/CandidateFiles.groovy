@@ -84,7 +84,8 @@ class CandidateFiles {
         File root = base.canonicalFile
         File file = new File(root, path).canonicalFile
         if (file == root || !file.toPath().startsWith(root.toPath()) || !file.isFile()) {
-            throw new GradleException('Missing or escaping candidate file: ' + path)
+            throw new GradleException('Missing or escaping candidate file: ' + path +
+                    '. Expected an existing file inside ' + root + '; keep candidate files together and use paths relative to that directory.')
         }
         file
     }
@@ -93,7 +94,9 @@ class CandidateFiles {
         File file = relativeFile(base, reference.path)
         if (!(reference.sha256 instanceof String) || !(reference.sha256 ==~ /[0-9a-f]{64}/) ||
                 sha256(file) != reference.sha256) {
-            throw new GradleException('Changed or invalid candidate file: ' + reference.path)
+            throw new GradleException('Changed or invalid candidate file: ' + file +
+                    '. Expected SHA-256 ' + reference.sha256 + '; actual ' + sha256(file) +
+                    '. Download the matching candidate again; do not edit its manifest or files.')
         }
         file
     }
@@ -107,7 +110,7 @@ class CandidateFiles {
         String number = '(?:0|[1-9][0-9]*)'
         String suffix = '(?:-[A-Za-z][0-9A-Za-z-]*(?:\\.[A-Za-z][0-9A-Za-z-]*)*\\.[1-9][0-9]*)?'
         if (!(tag ==~ ('v' + number + '\\.' + number + '\\.' + number + suffix + '(?:\\+' + TARGET_METADATA + ')?'))) {
-            throw new GradleException('Invalid release tag')
+            throw new GradleException("Invalid release tag '${tag}'. Use v<major>.<minor>.<patch> for shared releases or v<version>+mc<minecraft>-<loader> for one artifact owner, e.g. v1.4.2+mc26.2-fabric.")
         }
         if (!(commit ==~ /[0-9a-f]{40}/)) throw new GradleException('Invalid source commit')
     }
@@ -135,7 +138,7 @@ class CandidateFiles {
             } : null
             if (owner == null ||
                     tag != 'v' + releaseVersion(tag) + '+mc' + owner.minecraft + '-' + owner.loader) {
-                throw new GradleException('Release tag must match the single selected target')
+                throw new GradleException("Release tag '${tag}' must match the selected artifact owner. Selected owners: ${owners.join(', ')}. Use +mc<minecraft>-<loader> for one owner or v${releaseVersion(tag)} for multiple owners.")
             }
         }
     }

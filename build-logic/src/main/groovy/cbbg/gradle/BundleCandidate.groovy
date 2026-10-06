@@ -47,13 +47,16 @@ abstract class BundleCandidate extends DefaultTask {
         File output = destination.get().asFile.canonicalFile
         // Gradle creates @OutputDirectory before invoking the task.
         if (output.exists() && (!output.isDirectory() || output.listFiles()?.length != 0)) {
-            throw new GradleException('Candidate destination already exists')
+            throw new GradleException("Candidate destination already exists: ${output}. Choose an empty directory with -Poutput=<directory>; existing candidate files are preserved.")
         }
         def state = sourceState()
         String commit = state[0]
         String release = releaseTag.get()
         CandidateFiles.releaseIdentity(release, commit)
-        if (state[1]) throw new GradleException('Commit source changes before bundling a candidate')
+        if (state[1]) {
+            throw new GradleException('Commit source changes before bundling a candidate. Run git status --short, commit or restore the listed changes, then rerun candidateBuildOutputs:\n' +
+                    git(['status', '--short', '--untracked-files=all', '--', '.', ':(top,exclude)docs/**']))
+        }
         def catalog = TargetCatalog.read(new File(root, 'targets.json'))
         List<String> ids = selectedTargets.get()
         boolean multipleInputs = !ids.isEmpty()
@@ -84,20 +87,20 @@ abstract class BundleCandidate extends DefaultTask {
         File dependencyFile = multipleInputs ? CandidateFiles.relativeFile(root, 'runtime-locks/' + target.id + '-mods.json') : dependencyLock.get().asFile
         Map built = CandidateFiles.read(outputsFile)
         if (!(built.schema instanceof Integer) || built.schema != 2 || built.source_commit != commit || built.source_dirty != false) {
-            throw new GradleException('Build outputs do not identify the current clean source')
+            throw new GradleException("Build outputs do not identify the current clean source: ${outputsFile} records commit ${built.source_commit}, dirty=${built.source_dirty}, schema=${built.schema}; expected commit ${commit}, dirty=false, schema=2. Rerun candidateBuildOutputs with -Ptarget=${owner.id} from the committed source.")
         }
-        if (built.target != owner.id) throw new GradleException('Build outputs identify a different target')
+        if (built.target != owner.id) throw new GradleException("Build outputs identify target ${built.target}; expected ${owner.id}: ${outputsFile}. Rerun candidateBuildOutputs with -Ptarget=${owner.id}.")
         String version = CandidateManifest.packageVersion(release, owner)
-        if (built.version != version) throw new GradleException('Build version differs from requested release')
+        if (built.version != version) throw new GradleException("Build version ${built.version} differs from requested release ${version} for ${owner.id}: ${outputsFile}. Set the intended mod_version and rerun candidateBuildOutputs before bundling.")
         Map scenarios = CandidateFiles.read(contractFile)
         if (scenarios.schemaVersion != 1 || scenarios.target != target.id) {
-            throw new GradleException('Scenario contract target or version differs')
+            throw new GradleException("Scenario contract ${contractFile} identifies target ${scenarios.target}, schema ${scenarios.schemaVersion}; expected ${target.id}, schema 1. Use the selected runtime's contract.")
         }
         File metadata = CandidateFiles.relativeFile(root, scenarios.ordinaryMetadata)
         List suites = ['ordinary'] + scenarios.additionalRuns.collect { it.suite }
         if (suites.any { !(it instanceof String) || !it } || suites.toSet().size() != suites.size() ||
                 !(built.drivers instanceof Map) || !built.drivers.keySet().containsAll(suites)) {
-            throw new GradleException('Build outputs omit required test drivers or contract has duplicate suites')
+            throw new GradleException("Build outputs omit required test drivers or contract has duplicate suites for ${target.id}. Required suites: ${suites}; recorded drivers: ${built.drivers instanceof Map ? built.drivers.keySet() : built.drivers}. Check ${contractFile} and rerun candidateBuildOutputs with -Ptarget=${owner.id}.")
         }
         if (built.processing != [tool: 'proguard', version: ProguardMapping.VERSION] || !(built.mapping instanceof Map)) {
             throw new GradleException('Build outputs require ProGuard processing and mapping')
@@ -127,7 +130,7 @@ abstract class BundleCandidate extends DefaultTask {
                                }]
         records[target.id] = record
         }
-        if (!output.isDirectory() && !output.mkdirs()) throw new GradleException('Could not create candidate directory')
+        if (!output.isDirectory() && !output.mkdirs()) throw new GradleException("Could not create candidate directory: ${output}. Check directory permissions and free disk space.")
         try {
             files.each { name, reference ->
                 File copied = new File(output, name)

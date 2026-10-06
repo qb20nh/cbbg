@@ -159,6 +159,9 @@ class CandidatePublishWorkflowTests(unittest.TestCase):
         self.env['DRY_RUN'] = 'false'
         result = self.run_step('Validate or publish to Modrinth')
         self.assertNotEqual(result.returncode, 0)
+        self.assertIn('::error::Missing MODRINTH_TOKEN', result.stdout)
+        self.assertIn('build and publish GitHub environment', result.stdout)
+        self.assertIn('dry_run=true', result.stdout)
         self.assertFalse((self.root / 'gradle-arguments.json').exists())
         self.env['MODRINTH_TOKEN'] = 'fixture-token'
         result = self.run_step('Validate or publish to Modrinth')

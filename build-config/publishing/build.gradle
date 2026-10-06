@@ -16,9 +16,9 @@ if (gradle.startParameter.taskNames == ['cyclonedxBom']) return
 
 def requiredFile = { String property ->
     def value = providers.gradleProperty(property).orNull
-    if (!value) throw new GradleException('Missing -P' + property)
+    if (!value) throw new GradleException('Missing -P' + property + '=<file>. Generate publication metadata with preparePublication, then pass its files to this publishing build. See CONTRIBUTING.md.')
     def path = file(value).canonicalFile
-    if (!path.isFile()) throw new GradleException('Missing file for -P' + property)
+    if (!path.isFile()) throw new GradleException('Missing file for -P' + property + ': ' + path + '. Use the path produced by preparePublication; relative paths resolve from build-config/publishing.')
     path
 }
 def repositoryRoot = file('../..').canonicalFile
