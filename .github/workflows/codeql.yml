@@ -31,7 +31,8 @@ jobs:
             17
             21
             25
-      - uses: gradle/actions/setup-gradle@v6.3.0
+      - name: Cache Gradle dependencies
+        uses: gradle/actions/setup-gradle@v6.3.0
       - name: Install CodeQL CLI
         id: codeql
         env:

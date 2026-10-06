@@ -79,6 +79,23 @@ class WorkflowRoutingTest(unittest.TestCase):
         self.assertNotIn("if", upload)
         self.assertEqual(jobs["analyze"]["strategy"]["matrix"]["language"], ["actions", "python"])
 
+    def test_codeql_restores_gradle_dependencies_before_analysis(self):
+        workflow = yaml.safe_load((WORKFLOWS / "codeql.yml").read_text())
+        steps = workflow["jobs"]["analyze-targets"]["steps"]
+        cache_index = next(
+            i for i, step in enumerate(steps)
+            if step.get("uses", "").startswith("gradle/actions/setup-gradle@")
+        )
+        build_index = next(
+            i for i, step in enumerate(steps)
+            if step.get("name") == "Analyze Java artifact builds"
+        )
+        self.assertLess(cache_index, build_index)
+        cache = steps[cache_index]
+        self.assertEqual(cache["name"], "Cache Gradle dependencies")
+        self.assertNotIn("cache-read-only", cache.get("with", {}))
+        self.assertFalse(cache.get("with", {}).get("cache-disabled", False))
+
     def test_publication_never_builds_artifact_and_retains_retry_gate(self):
         publish = WORKFLOWS / "publish.yml"
         text = publish.read_text()
