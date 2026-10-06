@@ -41,6 +41,10 @@ All current builds include the loader in their artifact versions. Older 26.2
 candidates keep the format recorded in their catalogs. The publisher also accepts
 historical `vX.Y.Z+mc<minecraft_version>` releases.
 
+Build profiles derive versions with `CandidateManifest.packageVersion` using the
+artifact owner. A shared Fabric/Quilt JAR keeps its owner's filename; publication
+lists every selected loader and Minecraft version.
+
 GitHub creates the dedicated Release attestation when an immutable release is
 published. Drafts show only the uploaded `provenance.jsonl` build attestation.
 Upload the mod JAR, sources JAR, `provenance.jsonl`, and `SHA256SUMS`.

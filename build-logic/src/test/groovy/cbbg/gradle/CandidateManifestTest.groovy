@@ -105,6 +105,26 @@ class CandidateManifestTest {
                 [minecraft: '26.3', loader: 'fabric', buildProfile: 'fabric-modern']))
     }
 
+    @Test void everyCatalogTargetUsesItsArtifactOwnersMinecraftAndLoader() {
+        TargetCatalog catalog = TargetCatalog.read(new File('../targets.json'))
+        Map<String, Map> targets = catalog.select().collectEntries { [(it.id): it] }
+        targets.values().each { target ->
+            Map owner = targets[target.artifactOf ?: target.id]
+            for (String modVersion : ['1.5.0', '1.5.0-rc.1']) {
+                String expected = modVersion + '+mc' + owner.minecraft + '-' + owner.loader
+                assertEquals(expected, CandidateManifest.packageVersion('v' + modVersion, owner), target.id)
+            }
+        }
+    }
+
+    @Test void standaloneLoadersIncludeTheirOwnSuffix() {
+        for (String loader : ['fabric', 'quilt', 'forge', 'neoforge', 'legacy-fabric']) {
+            Map target = [minecraft: '1.20.1', loader: loader, buildProfile: loader + '-modern']
+            assertEquals('1.5.0+mc1.20.1-' + loader,
+                    CandidateManifest.packageVersion('v1.5.0+mc1.20.1-' + loader, target))
+        }
+    }
+
     @Test void mappedCandidatesRejectMissingOrMismatchedEmbeddedMapping() {
         def fixture = CandidateFixture.create(directory)
         File sources = new File(fixture.bundle, fixture.record.sources.path)
