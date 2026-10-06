@@ -82,7 +82,9 @@ class CandidateManifest {
     }
 
     static String packageVersion(String release, Map target) {
-        CandidateFiles.releaseVersion(release) + '+mc' + target.minecraft + (target.buildProfile == 'fabric-upstream' ? '' : '-' + target.loader)
+        // Older upstream catalogs describe artifacts published without the loader suffix.
+        boolean includeLoader = target.versionIncludesLoader == true || target.buildProfile != 'fabric-upstream'
+        CandidateFiles.releaseVersion(release) + '+mc' + target.minecraft + (includeLoader ? '-' + target.loader : '')
     }
 
     Map<String, String> releaseFiles(boolean requireImplemented = true) {
