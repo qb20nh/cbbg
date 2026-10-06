@@ -128,6 +128,21 @@ class TargetCatalogTest {
     }
 
     @Test
+    void minecraftPatchRangeDoesNotDeclareSharedArtifacts() {
+        Map data = copyData()
+        Map fabric = target(data, '26.2-fabric')
+        fabric.minecraftDependency = '~26.2'
+        assertEquals(['26.2-fabric'], new TargetCatalog(data).artifacts('26.2-fabric')*.id)
+        for (String dependency : ['~26.3', '*', '>=26.2']) {
+            fabric.minecraftDependency = dependency
+            rejects(data, 'Minecraft dependency')
+        }
+        data = copyData()
+        target(data, '26.2-quilt').minecraftDependency = '~26.2'
+        rejects(data, 'Minecraft dependency')
+    }
+
+    @Test
     void compatibilityDependencyOverridesAreValidatedAndSelected() {
         Map data = copyData()
         Map fabric = target(data, '26.2-fabric')

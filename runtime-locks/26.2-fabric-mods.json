@@ -28,7 +28,18 @@
     "sodium": {
       "pin": "xJZxADzI",
       "sha256": "16a5e91db49750f8c046ecca3b8f2af5a28ea6f9b6581b42f123ca8fda20864f",
-      "source": "https://api.modrinth.com/v2/version/xJZxADzI"
+      "source": "https://api.modrinth.com/v2/version/xJZxADzI",
+      "alternatives": {
+        "2Yom1N68": {
+          "sha256": "de406c7a0ca5e748dfbe44740278400882a44e3109e2584b243ec02d4003344b",
+          "source": "https://api.modrinth.com/v2/version/2Yom1N68"
+        }
+      }
+    },
+    "sulkan": {
+      "pin": "nCLRA6yu",
+      "sha256": "16706186ca430b55f8636d8ff57545ed782202f7a6814eef933f61a821b3b8ca",
+      "source": "https://api.modrinth.com/v2/version/nCLRA6yu"
     },
     "renderScale": {
       "pin": "EJ7KZw6k",

@@ -1,10 +1,11 @@
 import copy
 import hashlib
+import json
 from pathlib import Path
 import tempfile
 import unittest
 
-from fabric_dependency_lock import verify_dependencies, verify_gametest_api
+from fabric_dependency_lock import locked_dependencies, verify_dependencies, verify_gametest_api
 
 
 class DependencyLockTests(unittest.TestCase):
@@ -65,6 +66,36 @@ class DependencyLockTests(unittest.TestCase):
         self.lock['dependencies']['sodium']['pin'] = 'pin'
         with self.assertRaisesRegex(ValueError, 'catalog pin mismatch: sodium'):
             verify_dependencies(self.target, 'sulkan', sulkan_paths, self.lock)
+
+    def test_profile_selects_alternate_version_and_its_checksum(self):
+        alternate = Path(self.temp.name) / 'alternate.jar'
+        alternate.write_bytes(b'alternate')
+        self.target['compatibilityProfiles']['sodium'] = ['opengl']
+        self.target['compatibilityDependencyOverrides'] = {'sodium': {'sodium': 'older'}}
+        self.lock['dependencies']['sodium']['alternatives'] = {
+            'older': {'sha256': hashlib.sha256(b'alternate').hexdigest()}}
+        paths = {'fabricApi': self.jar, 'sodium': alternate}
+        verify_dependencies(self.target, 'sodium', paths, self.lock)
+        self.assertEqual(locked_dependencies(self.target, 'sodium', self.lock)['sodium']['pin'],
+                         'older')
+        paths['sodium'] = self.jar
+        with self.assertRaisesRegex(ValueError, 'checksum mismatch: sodium'):
+            verify_dependencies(self.target, 'sodium', paths, self.lock)
+        verify_dependencies(self.target, 'iris+renderscale', self.paths, self.lock)
+
+    def test_committed_release_locks_cover_every_declared_profile(self):
+        root = Path(__file__).resolve().parents[2]
+        catalog = json.loads((root / 'targets.json').read_text())
+        for target in catalog['targets']:
+            path = root / 'runtime-locks' / (target['id'] + '-mods.json')
+            if not target.get('implemented') or target['loader'] != 'fabric':
+                continue
+            lock = json.loads(path.read_text())
+            for profile in target['compatibilityProfiles']:
+                with self.subTest(target=target['id'], profile=profile):
+                    entries = locked_dependencies(target, profile, lock)
+                    for entry in entries.values():
+                        self.assertRegex(entry['sha256'], r'^[0-9a-f]{64}$')
 
     def test_chatpatches_requires_yacl(self):
         self.target['dependencies'].update(chatPatches='pin', yacl='pin')
