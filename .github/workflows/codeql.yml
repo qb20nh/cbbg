@@ -32,11 +32,23 @@ jobs:
             21
             25
       - uses: gradle/actions/setup-gradle@v6.3.0
-      - name: Set up CodeQL
+      - name: Install CodeQL CLI
         id: codeql
-        uses: github/codeql-action/setup-codeql@v4
-        with:
-          languages: java-kotlin
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CODEQL_BUNDLE_VERSION: 2.27.1
+          CODEQL_BUNDLE_SHA256: 7b6bde03f722503199b3f937548caa48c09f252323d96bfbc2acce974bf8b6db
+        run: |
+          bundle="codeql-bundle-java-linux64.tar.zst"
+          install_dir="$RUNNER_TEMP/cbbg-codeql"
+          mkdir -p "$install_dir"
+          gh release download "codeql-bundle-v$CODEQL_BUNDLE_VERSION" \
+            --repo github/codeql-action --pattern "$bundle" --dir "$install_dir"
+          printf '%s  %s\n' "$CODEQL_BUNDLE_SHA256" "$install_dir/$bundle" | sha256sum --check
+          tar --zstd -xf "$install_dir/$bundle" -C "$install_dir"
+          rm "$install_dir/$bundle"
+          "$install_dir/codeql/codeql" version
+          printf 'codeql-path=%s\n' "$install_dir/codeql/codeql" >> "$GITHUB_OUTPUT"
       - name: Analyze Java artifact builds
         env:
           CODEQL_EXECUTABLE: ${{ steps.codeql.outputs.codeql-path }}

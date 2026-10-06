@@ -58,7 +58,17 @@ class WorkflowRoutingTest(unittest.TestCase):
         self.assertNotIn("strategy", java)
         steps = java["steps"]
         setup = next(step for step in steps if step.get("id") == "codeql")
-        self.assertEqual(setup["uses"], "github/codeql-action/setup-codeql@v4")
+        self.assertEqual(setup["name"], "Install CodeQL CLI")
+        self.assertNotIn("uses", setup)
+        self.assertRegex(setup["env"]["CODEQL_BUNDLE_VERSION"], r"^\d+\.\d+\.\d+$")
+        self.assertRegex(setup["env"]["CODEQL_BUNDLE_SHA256"], r"^[0-9a-f]{64}$")
+        install = setup["run"]
+        self.assertIn('gh release download "codeql-bundle-v$CODEQL_BUNDLE_VERSION"', install)
+        self.assertIn("--repo github/codeql-action", install)
+        self.assertLess(install.index("sha256sum --check"), install.index("tar --zstd"))
+        self.assertIn('"$install_dir/codeql/codeql" version', install)
+        self.assertIn('printf \'codeql-path=%s\\n\'', install)
+        self.assertIn('>> "$GITHUB_OUTPUT"', install)
         build = script("Analyze Java artifact builds", WORKFLOWS / "codeql.yml")
         self.assertIn("codeqlScan", build)
         self.assertIn('"-PcodeqlExecutable=$CODEQL_EXECUTABLE"', build)
