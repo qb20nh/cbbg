@@ -167,7 +167,7 @@ case "$*" in *-Pcompat=fail*) exit 7;; esac
         assertFalse(new File(directory, 'build/arguments.txt').exists())
         String failure = runner('build', '-Pcompat=fail').buildAndFail().output
         assertTrue(failure.contains('exit value 7'), failure)
-        assertTrue(failure.contains('Target 26.3-fabric failed during build'), failure)
+        assertTrue(failure.contains('Target 26.3-fabric failed (primary task build'), failure)
         assertTrue(failure.contains('profile fixture'), failure)
         assertTrue(failure.contains(new File(directory, 'build-config/fixture').toString()), failure)
     }

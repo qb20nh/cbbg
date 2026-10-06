@@ -53,7 +53,7 @@ abstract class TargetBuild extends DefaultTask {
             ignoreExitValue = true
         }
         if (result.exitValue != 0) {
-            throw new GradleException("Target ${targetId.get()} failed during ${operation.get()} (profile ${profile.get()}, exit value ${result.exitValue}). See the child Gradle failure above; build directory: ${directory}.")
+            throw new GradleException("Target ${targetId.get()} failed (primary task ${operation.get()}, profile ${profile.get()}, exit value ${result.exitValue}). See the child Gradle failure above; build directory: ${directory}.")
         }
     }
 
