@@ -14,7 +14,7 @@ def verify_gametest_api(target, path, lock):
         raise ValueError('Gametest API checksum mismatch')
 
 
-def verify_dependencies(target, profile, paths, lock):
+def locked_dependencies(target, profile, lock):
     if lock.get('schemaVersion') != 1 or lock.get('target') != target['id']:
         raise ValueError('Dependency lock target/schema mismatch')
     if profile not in target['compatibilityProfiles']:
@@ -33,12 +33,24 @@ def verify_dependencies(target, profile, paths, lock):
     if not selected <= aliases.keys():
         raise ValueError('Missing dependency lock entries')
     required = {aliases[name] for name in selected}
-    if set(paths) != required:
-        raise ValueError('Missing or extra selected mod dependencies')
+    entries = {}
     for name in sorted(required):
         entry = lock['dependencies'][name]
-        if entry['pin'] != effective_pins.get(name):
-            raise ValueError('Dependency lock catalog pin mismatch: ' + name)
+        pin = effective_pins.get(name)
+        if entry['pin'] != pin:
+            alternative = entry.get('alternatives', {}).get(pin)
+            if alternative is None:
+                raise ValueError('Dependency lock catalog pin mismatch: ' + name)
+            entry = dict(alternative, pin=pin)
+        entries[name] = entry
+    return entries
+
+
+def verify_dependencies(target, profile, paths, lock):
+    entries = locked_dependencies(target, profile, lock)
+    if set(paths) != set(entries):
+        raise ValueError('Missing or extra selected mod dependencies')
+    for name, entry in entries.items():
         with Path(paths[name]).open('rb') as stream:
             digest = hashlib.file_digest(stream, 'sha256').hexdigest()
         if digest != entry['sha256']:
