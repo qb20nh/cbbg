@@ -46,6 +46,7 @@ class FabricSources {
             boolean textureFormat = target.renderer == 'blaze-texture-format'
             List<String> groups = (["renderers/${target.renderer}", "adapters/minecraft/${owner.minecraft}",
                     "adapters/fabric/${owner.minecraft}"] + (target.sourceGroups ?: [])).unique()
+            if (textureFormat) groups << 'adapters/minecraft/blaze-texture-format'
             for (String group : groups) {
                 result.main.java << tree(group + '/src/main/java')
                 result.main.resources << tree(group + '/src/main/resources')
@@ -70,7 +71,7 @@ class FabricSources {
                 result.main.java << tree('adapters/fabric/modern/src/main/java', classes(
                         'CbbgClient', 'CbbgEarlyInit', 'CbbgLanguageAdapter'))
                 result.main.java << tree('renderers/modern/src/main/java', classes(
-                        'render/GenerationNotifications', 'render/DitherController', 'config/gui/CbbgConfigScreen'))
+                        'render/GenerationNotifications', 'render/DitherController', 'config/gui/CbbgConfigScreen', 'config/gui/ConfigCanvas'))
                 result.gametest.java << tree('renderers/modern/src/gametest/java', classes(
                         'gametest/ModMenuGameTest', 'gametest/IrisFixture', 'gametest/RenderScaleTestAccess',
                         'gametest/OptionalModsGameTest'))
@@ -105,6 +106,8 @@ class FabricSources {
         }
         result.copies.processedGametest << irisResources
         if (owner.renderer == 'renderpearl') {
+            result.main.java << tree('adapters/minecraft/26.1/src/main/java',
+                    classes('config/gui/ConfigScreenPlatform', 'render/HudPlatform'))
             processed << tree('adapters/fabric/shared/src/processedGametest/java',
                     classes('gametest/ReleaseSodiumConfigGameTest', 'gametest/ReleaseUtilitiesGameTest'))
         }

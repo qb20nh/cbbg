@@ -46,8 +46,10 @@ public final class CbbgClient implements ClientModInitializer {
           int centerX = graphics.guiWidth() / 2;
           Component left = Component.translatable("cbbg.hud.demo.left");
           Component right = Component.translatable("cbbg.hud.demo.right");
-          graphics.text(font, left, centerX - 6 - font.width(left), 6, 0xFFFFFFFF, true);
-          graphics.text(font, right, centerX + 6, 6, 0xFFFFFFFF, true);
+          com.qb20nh.cbbg.render.HudPlatform.text(
+              graphics, font, left, centerX - 6 - font.width(left), 6, 0xFFFFFFFF, true);
+          com.qb20nh.cbbg.render.HudPlatform.text(
+              graphics, font, right, centerX + 6, 6, 0xFFFFFFFF, true);
         });
   }
 }

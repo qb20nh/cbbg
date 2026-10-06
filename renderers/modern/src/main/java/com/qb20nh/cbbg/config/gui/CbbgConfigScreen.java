@@ -5,26 +5,16 @@ import com.qb20nh.cbbg.compat.sulkan.ShaderCompat;
 import com.qb20nh.cbbg.config.CbbgConfig;
 import com.qb20nh.cbbg.render.DitherController;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphicsExtractor;
-import net.minecraft.client.gui.screens.ConfirmScreen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
-import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 
 @NullMarked
-public final class CbbgConfigScreen extends Screen {
+public final class CbbgConfigScreen extends ConfigScreenPlatform {
   private final @Nullable Screen parent;
   private static final int CARD_WIDTH = CbbgConfigWidgets.CARD_WIDTH;
   private static final int CARD_HEIGHT = CbbgConfigWidgets.CARD_HEIGHT;
-  private static final int CARD_BG_COLOR = CbbgConfigWidgets.CARD_BG_COLOR;
-  private static final int CARD_BORDER_COLOR = CbbgConfigWidgets.CARD_BORDER_COLOR;
-
-  private static void renderCard(GuiGraphicsExtractor context, int x1, int y1, int x2, int y2) {
-    context.fill(x1, y1, x2, y2, CARD_BG_COLOR);
-    context.outline(x1, y1, x2 - x1, y2 - y1, CARD_BORDER_COLOR);
-  }
 
   public CbbgConfigScreen(@Nullable Screen parent) {
     super(Component.translatable("cbbg.config.title"));
@@ -66,8 +56,8 @@ public final class CbbgConfigScreen extends Screen {
     int stbnDepth = CbbgConfig.get().stbnDepth();
     long stbnSeed = CbbgConfig.get().stbnSeed();
 
-    ConfirmScreen confirm =
-        new ConfirmScreen(
+    var confirm =
+        confirmation(
             confirmed -> {
               if (confirmed) {
                 DitherController.reloadStbn(true); // Force regeneration
@@ -76,49 +66,12 @@ public final class CbbgConfigScreen extends Screen {
             },
             Component.translatable("cbbg.config.confirm.regenerate_stbn.title"),
             Component.translatable(
-                "cbbg.config.confirm.regenerate_stbn.message", stbnSize, stbnDepth, stbnSeed)) {
-          @Override
-          public void extractBackground(
-              @NonNull GuiGraphicsExtractor context, int mouseX, int mouseY, float partialTick) {
-            CbbgConfigScreen.this.renderSafeBackground(context, partialTick);
-          }
-
-          @Override
-          public void extractRenderState(
-              @NonNull GuiGraphicsExtractor context, int mouseX, int mouseY, float partialTick) {
-            // Draw the same card styling behind the confirm dialog UI.
-            final int padX = 12;
-            final int padY = 12;
-            int x1 = Math.max(0, this.layout.getX() - padX);
-            int y1 = Math.max(0, this.layout.getY() - padY);
-            int x2 = Math.min(this.width, this.layout.getX() + this.layout.getWidth() + padX);
-            int y2 = Math.min(this.height, this.layout.getY() + this.layout.getHeight() + padY);
-            renderCard(context, x1, y1, x2, y2);
-
-            super.extractRenderState(context, mouseX, mouseY, partialTick);
-          }
-        };
+                "cbbg.config.confirm.regenerate_stbn.message", stbnSize, stbnDepth, stbnSeed));
     ClientScreenAccess.setScreen(this.minecraft, confirm);
   }
 
   @Override
-  public void extractBackground(
-      @NonNull GuiGraphicsExtractor context, int mouseX, int mouseY, float partialTick) {
-    this.renderSafeBackground(context, partialTick);
-  }
-
-  private void renderSafeBackground(@NonNull GuiGraphicsExtractor context, float partialTick) {
-    if (this.minecraft.level != null) {
-      this.extractTransparentBackground(context);
-    } else {
-      this.extractPanorama(context, partialTick);
-      this.extractMenuBackground(context);
-    }
-  }
-
-  @Override
-  public void extractRenderState(
-      @NonNull GuiGraphicsExtractor context, int mouseX, int mouseY, float partialTick) {
+  protected void drawConfig(ConfigCanvas context) {
     // Card background
     int cx = this.width / 2;
     int cy = this.height / 2;
@@ -127,7 +80,7 @@ public final class CbbgConfigScreen extends Screen {
     int x2 = cx + CARD_WIDTH / 2;
     int y2 = cy + CARD_HEIGHT / 2;
 
-    renderCard(context, x1, y1, x2, y2);
+    context.card(x1, y1, x2, y2);
 
     // Header
     context.centeredText(this.font, this.title, cx, y1 + 10, 0xFFFFFFFF);
@@ -186,7 +139,5 @@ public final class CbbgConfigScreen extends Screen {
           statusY,
           0xFFAAAAAA);
     }
-
-    super.extractRenderState(context, mouseX, mouseY, partialTick);
   }
 }

@@ -1,7 +1,6 @@
 package com.qb20nh.cbbg.render;
 
 import com.mojang.blaze3d.buffers.GpuBuffer;
-import com.mojang.blaze3d.pipeline.ColorTargetState;
 import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.pipeline.TextureTarget;
 import com.mojang.blaze3d.shaders.UniformType;
@@ -15,7 +14,6 @@ import com.qb20nh.cbbg.api.DitherOptions;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.OptionalInt;
 import net.minecraft.client.renderer.MappableRingBuffer;
 import net.minecraft.resources.Identifier;
@@ -37,7 +35,7 @@ public final class DitherPass implements AutoCloseable {
   }
 
   private static RenderPipeline pipeline(boolean demo) {
-    return RenderPipeline.builder()
+    return RenderPlatform.rgba8(RenderPipeline.builder())
         .withLocation(
             Identifier.fromNamespaceAndPath("cbbg", demo ? "pipeline/demo" : "pipeline/dither"))
         .withVertexShader("core/screenquad")
@@ -46,8 +44,6 @@ public final class DitherPass implements AutoCloseable {
         .withSampler("InSampler")
         .withSampler("NoiseSampler")
         .withUniform("CbbgDitherInfo", UniformType.UNIFORM_BUFFER)
-        .withColorTargetState(ColorTargetState.DEFAULT)
-        .withDepthStencilState(Optional.empty())
         .withCull(false)
         .withVertexFormat(DefaultVertexFormat.EMPTY, VertexFormat.Mode.TRIANGLES)
         .build();
