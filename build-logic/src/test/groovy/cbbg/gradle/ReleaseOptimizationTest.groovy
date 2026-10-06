@@ -217,7 +217,7 @@ public class SampleMixin { public void shadow() {} }
         byte[] mappingBytes = mapping.bytes
         byte[] runtimeBytes = runtimeImage ? runtimeLibrary.bytes : null
         def unchanged = runner('optimizeReleaseJar').build()
-        assertEquals(TaskOutcome.UP_TO_DATE, unchanged.task(':optimizeReleaseJar').outcome)
+        assertEquals(TaskOutcome.UP_TO_DATE, unchanged.task(':minifyReleaseJar').outcome)
         if (runtimeImage) assertEquals(TaskOutcome.UP_TO_DATE, unchanged.task(':exportReleaseJdkLibraries').outcome)
         runner('clean', 'optimizeReleaseJar').build()
         assertArrayEquals(outputBytes, output.bytes)

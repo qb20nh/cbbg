@@ -11,19 +11,19 @@ class PackagingPlugin implements Plugin<Project> {
         def optimization = project.extensions.create('releaseOptimization', ReleaseOptimization, project.objects, project)
         optimization.usageFile.convention(project.layout.buildDirectory.file('reports/proguard/usage.txt'))
         optimization.configurationFile.convention(project.layout.buildDirectory.file('reports/proguard/configuration.txt'))
-        project.tasks.register('optimizeReleaseJar', ProGuardTask) {
+        def minified = project.tasks.register('minifyReleaseJar', ProGuardTask) {
             group = 'build'
             description = 'Shrink, optimize, and obfuscate the release jar with ProGuard.'
             inputs.file(optimization.inputJar)
             inputs.file(optimization.rulesFile)
             inputs.files(optimization.libraryJars)
             inputs.files(optimization.jdkLibraries)
-            outputs.file(optimization.outputJar)
+            outputs.file(optimization.optimizedJar)
             outputs.file(optimization.mappingFile)
             outputs.file(optimization.usageFile)
             outputs.file(optimization.configurationFile)
             doFirst {
-                File output = optimization.outputJar.get().asFile
+                File output = optimization.optimizedJar.get().asFile
                 File mapping = optimization.mappingFile.get().asFile
                 File usage = optimization.usageFile.get().asFile
                 File configurationDump = optimization.configurationFile.get().asFile
@@ -49,7 +49,18 @@ class PackagingPlugin implements Plugin<Project> {
                 printusage(usage)
                 printconfiguration(configurationDump)
             }
-            doLast { ReproducibleJar.normalize(optimization.outputJar.get().asFile) }
+            doLast { ReproducibleJar.normalize(optimization.optimizedJar.get().asFile) }
+        }
+        project.tasks.register('optimizeReleaseJar') {
+            group = 'build'
+            description = 'Build the optimized release jar in its runtime namespace.'
+            dependsOn minified
+            inputs.file(optimization.outputJar)
+            doLast {
+                if (!optimization.outputJar.get().asFile.isFile()) {
+                    throw new org.gradle.api.GradleException('Optimized release jar is missing')
+                }
+            }
         }
         project.afterEvaluate {
             if (optimization.mappingFile.isPresent()) {

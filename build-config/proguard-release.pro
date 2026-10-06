@@ -22,5 +22,5 @@
 }
 
 # Preserve Java 25 structural metadata, runtime annotations, and source positions for Retrace.
--keepattributes *
+-keepattributes !LocalVariableTable,!LocalVariableTypeTable,*
 -adaptclassstrings

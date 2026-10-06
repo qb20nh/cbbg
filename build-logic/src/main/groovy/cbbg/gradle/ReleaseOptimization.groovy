@@ -14,6 +14,7 @@ import javax.inject.Inject
 class ReleaseOptimization {
     final RegularFileProperty inputJar
     final RegularFileProperty outputJar
+    final RegularFileProperty optimizedJar
     final RegularFileProperty mappingFile
     final RegularFileProperty rulesFile
     final RegularFileProperty usageFile
@@ -26,6 +27,8 @@ class ReleaseOptimization {
         this.project = project
         inputJar = objects.fileProperty()
         outputJar = objects.fileProperty()
+        optimizedJar = objects.fileProperty()
+        optimizedJar.convention(outputJar)
         mappingFile = objects.fileProperty()
         rulesFile = objects.fileProperty()
         usageFile = objects.fileProperty()
