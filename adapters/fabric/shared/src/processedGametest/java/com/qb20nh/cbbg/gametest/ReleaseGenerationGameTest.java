@@ -5,6 +5,7 @@ import com.google.gson.JsonParser;
 import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
+import java.io.ByteArrayInputStream;
 import java.lang.reflect.Proxy;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -54,7 +55,7 @@ public final class ReleaseGenerationGameTest implements FabricClientGameTest {
                   return pending();
                 });
         context.waitFor(
-            client -> ReleaseGeneratingShutdownGameTest.mathActive() && !old.isDone(), WAIT_TICKS);
+            client -> ReleaseGenerationStatus.mathActive() && !old.isDone(), WAIT_TICKS);
         Request replacement =
             context.computeOnClient(
                 client -> {
@@ -98,8 +99,7 @@ public final class ReleaseGenerationGameTest implements FabricClientGameTest {
                   return large;
                 });
         context.waitFor(
-            client -> ReleaseGeneratingShutdownGameTest.mathActive() && !resetOld.isDone(),
-            WAIT_TICKS);
+            client -> ReleaseGenerationStatus.mathActive() && !resetOld.isDone(), WAIT_TICKS);
         context.runOnClient(client -> command(dispatcher, source, "stbn reset"));
         assertSettings(128, 64, 0);
         context.waitFor(
@@ -249,13 +249,13 @@ public final class ReleaseGenerationGameTest implements FabricClientGameTest {
             || !entry[0].equals(HexFormat.of().formatHex(digest.digest(png)))) {
           throw new AssertionError("Noise manifest differs at frame " + z);
         }
-        try (NativeImage image = NativeImage.read(png)) {
+        try (NativeImage image = NativeImage.read(new ByteArrayInputStream(png))) {
           if (image.getWidth() != size || image.getHeight() != size) {
             throw new AssertionError("Noise dimensions differ at frame " + z);
           }
           if (pixels != null) {
             for (int y = 0; y < size; y++) {
-              for (int x = 0; x < size; x++) pixels.putInt(image.getPixel(x, y));
+              for (int x = 0; x < size; x++) pixels.putInt(ReleaseImagePixels.argb(image, x, y));
             }
           }
         }

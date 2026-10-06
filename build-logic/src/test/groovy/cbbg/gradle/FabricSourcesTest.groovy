@@ -1,6 +1,8 @@
 package cbbg.gradle
 
+import groovy.json.JsonSlurper
 import org.gradle.testkit.runner.GradleRunner
+import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.ValueSource
@@ -9,6 +11,39 @@ import static org.junit.jupiter.api.Assertions.*
 
 class FabricSourcesTest {
     @TempDir File directory
+
+    @Test void selectsTheSharedOrdinaryFixturesForGl3() {
+        Map target = [id: '1.21.1-fabric', minecraft: '1.21.1', renderer: 'gl3',
+                      buildProfile: 'fabric-modern', java: 21,
+                      dependencies: [clientGametest: '2.0.0+99ff640a04']]
+        Map layout = FabricSources.layout(target, target)
+        String shared = 'adapters/fabric/shared/src/processedGametest/java/com/qb20nh/cbbg/gametest/'
+        assertTrue(layout.legacyGametestApi)
+        File metadata = new File(System.getProperty('cbbg.repository'),
+                'renderers/gl3/src/processedGametest/resources/fabric.mod.json')
+        List entrypoints = new JsonSlurper().parse(metadata).entrypoints['fabric-client-gametest']
+        ['ReleaseSodiumConfigGameTest', 'ReleaseGenerationGameTest', 'ReleaseNotificationsGameTest'].each { name ->
+            assertTrue(layout.processedGametest.java.any {
+                FabricSources.contains(it, shared + name + '.java')
+            })
+            assertEquals(1, entrypoints.count('com.qb20nh.cbbg.gametest.' + name))
+        }
+        assertTrue(layout.processedGametest.java.any {
+            FabricSources.contains(it, shared + 'ReleaseCommands.java')
+        })
+        ['UtilitiesBackend', 'ReleaseGenerationStatus', 'ReleaseNotificationUi',
+         'ReleasePackagedFields'].each { name ->
+            assertTrue(layout.processedGametest.java.any {
+                FabricSources.contains(it, 'renderers/gl3/src/processedGametest/java/' +
+                        'com/qb20nh/cbbg/gametest/' + name + '.java')
+            })
+        }
+        ['ReleaseWorldPixelsGameTest', 'ReleaseShutdownGameTest', 'ReleaseGeneratingShutdownGameTest'].each { name ->
+            assertFalse(layout.processedGametest.java.any {
+                FabricSources.contains(it, shared + name + '.java')
+            })
+        }
+    }
 
     @ParameterizedTest
     @ValueSource(booleans = [false, true])

@@ -10,7 +10,10 @@
       "com.qb20nh.cbbg.gametest.ReleaseLifecycleGameTest",
       "com.qb20nh.cbbg.gametest.ReleaseCacheGameTest",
       "com.qb20nh.cbbg.gametest.ReleaseSettingsGuiGameTest",
-      "com.qb20nh.cbbg.gametest.ReleaseUtilitiesGameTest"
+      "com.qb20nh.cbbg.gametest.ReleaseUtilitiesGameTest",
+      "com.qb20nh.cbbg.gametest.ReleaseSodiumConfigGameTest",
+      "com.qb20nh.cbbg.gametest.ReleaseGenerationGameTest",
+      "com.qb20nh.cbbg.gametest.ReleaseNotificationsGameTest"
     ]
   },
   "depends": {

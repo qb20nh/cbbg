@@ -123,6 +123,9 @@ class FabricSources {
             processed << tree('adapters/fabric/shared/src/processedGametest/java',
                     owner.renderer == 'gl3' ? classes('gametest/ReleaseCacheGameTest',
                             'gametest/ReleaseSettingsGuiGameTest', 'gametest/ReleaseUtilitiesGameTest',
+                            'gametest/ReleaseSodiumConfigGameTest',
+                            'gametest/ReleaseGenerationGameTest', 'gametest/ReleaseNotificationsGameTest',
+                            'gametest/ReleaseCommands',
                             'gametest/ReleaseGraphics', 'gametest/ReleaseGameNames',
                             'gametest/ReleaseMapping') : [])
             result.copies.processedGametest << tree('adapters/fabric/shared/src/processedGametest/resources')
