@@ -33,6 +33,21 @@ final class UtilitiesBackend {
 
   static void clear(TextureTarget target) {
     int previous = GL11.glGetInteger(GL11.GL_TEXTURE_BINDING_2D);
+    int[] packing = {
+      GL11.GL_UNPACK_ROW_LENGTH,
+      GL11.GL_UNPACK_SKIP_PIXELS,
+      GL11.GL_UNPACK_SKIP_ROWS,
+      GL11.GL_UNPACK_ALIGNMENT,
+      GL11.GL_PACK_ROW_LENGTH,
+      GL11.GL_PACK_SKIP_PIXELS,
+      GL11.GL_PACK_SKIP_ROWS,
+      GL11.GL_PACK_ALIGNMENT
+    };
+    int[] saved = new int[packing.length];
+    for (int i = 0; i < packing.length; i++) {
+      saved[i] = GL11.glGetInteger(packing[i]);
+      GL11.glPixelStorei(packing[i], i % 4 == 3 ? 4 : 0);
+    }
     var pixels = BufferUtils.createByteBuffer(target.width * target.height * 4);
     for (int i = 0; i < target.width * target.height; i++) {
       pixels.put((byte) 127).put((byte) 127).put((byte) 127).put((byte) 255);
@@ -50,7 +65,28 @@ final class UtilitiesBackend {
           GL11.GL_RGBA,
           GL11.GL_UNSIGNED_BYTE,
           pixels);
+      ReleaseUtilityCalls.capture(
+          target,
+          image -> {
+            try (image) {
+              for (int y = 0; y < target.height; y++) {
+                for (int x = 0; x < target.width; x++) {
+                  int pixel = ReleaseImagePixels.argb(image, x, y);
+                  if (pixel != 0xff7f7f7f) {
+                    throw new AssertionError(
+                        "Utility source fixture upload mismatch at "
+                            + x
+                            + ","
+                            + y
+                            + ": "
+                            + Integer.toHexString(pixel));
+                  }
+                }
+              }
+            }
+          });
     } finally {
+      for (int i = 0; i < packing.length; i++) GL11.glPixelStorei(packing[i], saved[i]);
       GlStateManager._bindTexture(previous);
     }
   }
