@@ -30,6 +30,73 @@ class CandidatePublishWorkflowTests(unittest.TestCase):
         return subprocess.run(['bash', '-euo', 'pipefail', '-c', script(name)],
                               cwd=self.root, env=self.env, capture_output=True, text=True)
 
+    def run_tag_check(self, response='published', tag='v1.4.2+mc26.2-fabric'):
+        launcher = self.root / 'gh'
+        launcher.write_text(
+            '#!/usr/bin/env python3\n'
+            'import json,os,sys\n'
+            'from pathlib import Path\n'
+            'args=sys.argv[1:]\n'
+            'with open("github-arguments.jsonl", "a") as f: f.write(json.dumps(args)+"\\n")\n'
+            'mode=os.environ["GH_RESPONSE"]\n'
+            'if args[:2] == ["release", "list"]:\n'
+            '    print("v1.4.2+mc26.2-fabric")\n'
+            'elif mode == "unavailable":\n'
+            '    print("gh: API unavailable (HTTP 503)", file=sys.stderr); sys.exit(1)\n'
+            'elif (args[0] == "api" and mode == "missing-tag") or '
+            '(args[:2] == ["release", "view"] and mode == "missing-release"):\n'
+            '    print("gh: Not Found (HTTP 404)", file=sys.stderr); sys.exit(1)\n'
+            'elif args[:2] == ["release", "view"]:\n'
+            '    print(json.dumps({"isDraft": mode == "draft"}))\n')
+        launcher.chmod(0o755)
+        self.env.update(PATH=str(self.root) + os.pathsep + os.environ['PATH'],
+                        GH_RESPONSE=response, RELEASE_TAG=tag,
+                        RUNNER_TEMP=str(self.root))
+        return self.run_step('Validate release tag')
+
+    def test_missing_tag_reports_exact_input_and_available_tags_before_checkout(self):
+        result = self.run_tag_check('missing-tag', 'v1.4.2-mc26.2-fabric')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('::error::', result.stdout)
+        self.assertIn('Available release tags:', result.stdout)
+        self.assertIn("'v1.4.2-mc26.2-fabric'", result.stdout)
+        self.assertIn('v1.4.2+mc26.2-fabric', result.stdout)
+        workflow = (ROOT / '.github/workflows/publish.yml').read_text()
+        self.assertLess(workflow.index('name: Validate release tag'),
+                        workflow.index('name: Checkout release source'))
+
+    def test_tag_check_encodes_tag_for_the_api(self):
+        result = self.run_tag_check()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        calls = [json.loads(line) for line in (self.root / 'github-arguments.jsonl').read_text().splitlines()]
+        self.assertIn('repos/example/mod/git/ref/tags/v1.4.2%2Bmc26.2-fabric', calls[0])
+
+    def test_api_failure_reports_the_service_error(self):
+        result = self.run_tag_check('unavailable')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('HTTP 503', result.stdout)
+        self.assertNotIn('Available release tags:', result.stdout)
+
+    def test_tag_input_is_not_executed_and_annotation_text_is_escaped(self):
+        tag = 'v1.4.2%\n$(touch executed)'
+        result = self.run_tag_check('missing-tag', tag)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse((self.root / 'executed').exists())
+        self.assertIn('v1.4.2%25%0A$(touch executed)', result.stdout)
+        self.assertEqual(sum(line.startswith('::error::') for line in result.stdout.splitlines()), 1)
+
+    def test_existing_tag_without_release_reports_missing_release(self):
+        result = self.run_tag_check('missing-release')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('has no GitHub release', result.stdout)
+
+    def test_draft_is_allowed_only_for_dry_runs(self):
+        self.assertEqual(self.run_tag_check('draft').returncode, 0)
+        self.env['DRY_RUN'] = 'false'
+        result = self.run_tag_check('draft')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('dry_run=true', result.stdout)
+
     def test_preflight_receives_explicit_release_source_and_service(self):
         self.env['SERVICES'] = 'modrinth'
         result = self.run_step('Prepare publication')
@@ -185,6 +252,7 @@ class CandidatePublishWorkflowTests(unittest.TestCase):
         workflow = (ROOT / '.github/workflows/publish.yml').read_text()
         self.assertIn("github.run_attempt != '1'", workflow)
         self.assertIn('Check the CurseForge project files', workflow)
+        self.assertEqual(workflow.count('::error::CurseForge uploads require a new dispatch'), 2)
 
 
 if __name__ == '__main__':
