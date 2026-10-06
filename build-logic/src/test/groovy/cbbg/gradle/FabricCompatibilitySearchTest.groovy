@@ -15,6 +15,45 @@ import static org.junit.jupiter.api.Assertions.*
 class FabricCompatibilitySearchTest {
     @TempDir File directory
 
+    @Test void isolatedFixtureReportsPreserveDependencySearchResults() {
+        File repository = new File(System.getProperty('cbbg.repository'))
+        String script = new File(repository, 'build-config/fabric-compatibility.gradle').text
+        int start = script.indexOf('def save =')
+        String save = script.substring(start, script.indexOf('def runtimePairPasses =', start))
+        File minimums = new File(directory, 'minimums.json')
+        minimums.text = '{"complete":true,"minimumLoader":"0.19.5"}\n'
+        String original = minimums.text
+        Map report = [complete: false, buildDependenciesVerified: true]
+        Binding binding = new Binding([
+                reports: ['fixture': report], runtimeOutputs: ['fixture': directory],
+                compatibilityReportName: 'processedWorldPixelsDriverJar.json'])
+        GroovyShell shell = new GroovyShell(binding)
+        String code = 'import groovy.json.JsonOutput\n' + save
+        shell.evaluate(code)
+        assertEquals(original, minimums.text)
+        assertEquals(report, new JsonSlurper().parse(
+                new File(directory, 'processedWorldPixelsDriverJar.json')))
+        binding.setVariable('compatibilityReportName', 'minimums.json')
+        shell.evaluate(code)
+        assertEquals(report, new JsonSlurper().parse(minimums))
+    }
+
+    @Test void isolatedFixturesCannotSupplyDependencyBoundaries() {
+        File repository = new File(System.getProperty('cbbg.repository'))
+        String script = new File(repository, 'build-config/fabric-compatibility.gradle').text
+        int start = script.indexOf('if (!ordinaryDriver &&')
+        String policy = script.substring(start, script.indexOf('boolean familySearch =', start))
+        Binding binding = new Binding([ordinaryDriver: false, buildOnly: true, strict: false])
+        GroovyShell shell = new GroovyShell(binding)
+        String code = 'import org.gradle.api.GradleException\n' + policy
+        shell.evaluate(code)
+        binding.setVariable('buildOnly', false)
+        assertThrows(GradleException) { shell.evaluate(code) }
+        binding.setVariable('buildOnly', true)
+        binding.setVariable('strict', true)
+        assertThrows(GradleException) { shell.evaluate(code) }
+    }
+
     @Test void findsThePassingBoundary() {
         List visited = []
         String result = FabricCompatibilitySearch.minimum(

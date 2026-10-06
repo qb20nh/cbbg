@@ -24,7 +24,13 @@ def familyTargets = sharedArtifactFamily ? compatibilityTargets.findAll {
     it.loader == 'fabric' && (it.id == compatibilityOwner.id || it.artifactOf == compatibilityOwner.id)
 } : [compatibilityTarget]
 def compatibilityOutput = layout.buildDirectory.dir('fabric-compatibility')
-def compatibilityReport = compatibilityOutput.map { it.file('minimums.json') }
+def compatibilityDriverName = providers.gradleProperty('compatibilityDriver').getOrElse('processedDriverJar')
+if (!(compatibilityDriverName ==~ /processed[A-Za-z0-9]*DriverJar/)) {
+    throw new GradleException('compatibilityDriver must name a processed test driver task')
+}
+def ordinaryDriver = compatibilityDriverName == 'processedDriverJar'
+def compatibilityReportName = ordinaryDriver ? 'minimums.json' : compatibilityDriverName + '.json'
+def compatibilityReport = compatibilityOutput.map { it.file(compatibilityReportName) }
 def compatibilityLastSuccess = compatibilityOutput.map { it.file('last-successful.json') }
 def resolvePinnedGametest = { Map target ->
     if (target.minecraft == '1.21.1' && project.ext.has('clientGametestBackport')) {
@@ -88,6 +94,10 @@ tasks.register('verifyFabricCompatibility') {
     group = 'verification'
     description = 'Find cached Loader/API compatibility boundaries using the processed release jar.'
     dependsOn 'prepareProcessedRuntime'
+    dependsOn {
+        def driver = tasks.named(compatibilityDriverName, Jar).get()
+        driver.hasProperty('runtimeArchiveFile') ? driver.runtimeArchiveFile : driver
+    }
     if (project.ext.has('clientGametestBackport')) dependsOn project.ext.clientGametestBackport
     doLast {
         if (System.getenv('CI')?.equalsIgnoreCase('true') || System.getenv('GITHUB_ACTIONS') == 'true') {
@@ -118,6 +128,9 @@ tasks.register('verifyFabricCompatibility') {
             throw new GradleException('verifyBuildDependenciesOnly must be true or false')
         }
         boolean buildOnly = buildOnlyOption == 'true'
+        if (!ordinaryDriver && (!buildOnly || strict)) {
+            throw new GradleException('A selected test driver requires -PverifyBuildDependenciesOnly=true')
+        }
         boolean familySearch = sharedArtifactFamily && compatibilityTarget.id == compatibilityOwner.id &&
                 !strict && !buildOnly
         String profile = providers.gradleProperty('compatibilityProfile').getOrElse('none')
@@ -213,7 +226,7 @@ tasks.register('verifyFabricCompatibility') {
                 'v' + project.version.toString().split(/\+/, 2)[0], compatibilityOwner)) {
             throw new GradleException('Compatibility search requires the artifact owner package version')
         }
-        def driverTask = tasks.named('processedDriverJar', Jar).get()
+        def driverTask = tasks.named(compatibilityDriverName, Jar).get()
         def driverArchive = driverTask.hasProperty('runtimeArchiveFile') ? driverTask.runtimeArchiveFile : driverTask.archiveFile
         File driver = driverArchive.get().asFile
         def resolveJar = { String coordinate ->
@@ -370,7 +383,7 @@ tasks.register('verifyFabricCompatibility') {
         }
         def save = {
             reports.each { String targetId, Map runtimeReport ->
-                File destination = new File(runtimeOutputs[targetId], 'minimums.json')
+                File destination = new File(runtimeOutputs[targetId], compatibilityReportName)
                 String content = JsonOutput.prettyPrint(JsonOutput.toJson(runtimeReport)) + '\n'
                 if (!destination.isFile() || destination.text != content) destination.text = content
             }
@@ -624,7 +637,7 @@ tasks.register('verifyFabricCompatibility') {
         } finally {
             save()
         }
-        logger.lifecycle('Tested dependency boundaries: ' + compatibilityReport.get().asFile)
+        logger.lifecycle('Verification report: ' + compatibilityReport.get().asFile)
     }
 }
 
