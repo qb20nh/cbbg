@@ -418,7 +418,7 @@ public final class ReleaseWorldPixelsGameTest implements FabricClientGameTest {
   }
 
   /** Read effective settings; config files may omit defaults. */
-  private static JsonObject currentSettings() {
+  static JsonObject currentSettings() {
     String owner = "com.qb20nh.cbbg.config.CbbgConfig";
     try {
       Class<?> type = Class.forName(ReleaseMapping.className(owner));

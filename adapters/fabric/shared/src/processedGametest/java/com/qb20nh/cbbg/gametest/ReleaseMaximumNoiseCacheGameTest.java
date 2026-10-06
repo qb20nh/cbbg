@@ -11,6 +11,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.FileTime;
 import java.security.MessageDigest;
+import java.util.Arrays;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Locale;
@@ -42,7 +43,8 @@ public final class ReleaseMaximumNoiseCacheGameTest implements FabricClientGameT
   @Override
   public void runTest(ClientGameTestContext context) {
     ReleaseGraphics.check(context);
-    JsonObject original = settings().deepCopy();
+    JsonObject original =
+        context.computeOnClient(client -> ReleaseWorldPixelsGameTest.currentSettings());
     FabricClientCommandSource source = silentSource();
     try (var world = context.worldBuilder().create()) {
       ReleaseViewport.waitForChunks(world);
@@ -65,13 +67,18 @@ public final class ReleaseMaximumNoiseCacheGameTest implements FabricClientGameT
           throw new AssertionError("Cold maximum cache did not complete CPU generation");
         }
         CacheEvidence cold = verifyCache();
+        awaitDithering(context, SIZE);
+        List<NativeImage> coldFrames = context.computeOnClient(client -> loadedFrames(DEPTH));
 
         command(context, source, "mode set disabled");
+        context.waitFor(client -> framesClosed(coldFrames), WARM_WAIT_TICKS);
         command(context, source, "stbn size 16");
         command(context, source, "stbn depth 8");
         command(context, source, "mode set enabled");
-        context.waitFor(client -> ReleaseGenerationStatus.settled(16), WARM_WAIT_TICKS);
+        awaitDithering(context, 16);
+        List<NativeImage> smallFrames = context.computeOnClient(client -> loadedFrames(8));
         command(context, source, "mode set disabled");
+        context.waitFor(client -> framesClosed(smallFrames), WARM_WAIT_TICKS);
         command(context, source, "stbn size " + SIZE);
         command(context, source, "stbn depth " + DEPTH);
         FileTime[] timestamps = ageCache();
@@ -90,15 +97,61 @@ public final class ReleaseMaximumNoiseCacheGameTest implements FabricClientGameT
           throw new AssertionError("Warm maximum-cache reload unexpectedly generated noise");
         }
         CacheEvidence warm = verifyCache();
+        awaitDithering(context, SIZE);
+        List<NativeImage> warmFrames = context.computeOnClient(client -> loadedFrames(DEPTH));
         assertSettings("ENABLED", SIZE, DEPTH, SEED);
         if (!cold.equals(warm)) {
           throw new AssertionError("Warm reload changed maximum-cache content or digest evidence");
         }
         assertTimestamps(timestamps);
+        command(context, source, "mode set disabled");
+        context.waitFor(client -> framesClosed(warmFrames), WARM_WAIT_TICKS);
         writeEvidence(cold);
       } finally {
         restore(context, source, original);
       }
+    }
+  }
+
+  private static void awaitDithering(ClientGameTestContext context, int size) {
+    context.waitFor(client -> ReleaseGenerationStatus.settled(size), WARM_WAIT_TICKS);
+    long before = context.computeOnClient(client -> (Long) controllerValue("long presentations"));
+    context.waitFor(
+        client -> (Long) controllerValue("long presentations") > before, WARM_WAIT_TICKS);
+  }
+
+  private static List<NativeImage> loadedFrames(int depth) {
+    NativeImage[] frames =
+        (NativeImage[]) controllerValue("com.mojang.blaze3d.platform.NativeImage[] frames");
+    if (frames.length != depth) {
+      throw new AssertionError("Applied noise frame count differs from the requested depth");
+    }
+    return List.copyOf(Arrays.asList(frames.clone()));
+  }
+
+  private static Object controllerValue(String signature) {
+    String owner = "com.qb20nh.cbbg.render.DitherController";
+    try {
+      Class<?> type = Class.forName(ReleaseMapping.className(owner));
+      var field = type.getDeclaredField(ReleaseMapping.memberName(owner, signature));
+      field.setAccessible(true);
+      return Objects.requireNonNull(field.get(null));
+    } catch (ReflectiveOperationException failure) {
+      throw new LinkageError("Cannot inspect packaged maximum-cache lifecycle", failure);
+    }
+  }
+
+  private static boolean framesClosed(List<NativeImage> frames) {
+    try {
+      var pixels =
+          NativeImage.class.getDeclaredField(ReleaseGameNames.field(NativeImage.class, "pixels"));
+      pixels.setAccessible(true);
+      for (NativeImage frame : frames) {
+        if (pixels.getLong(frame) != 0) return false;
+      }
+      return true;
+    } catch (ReflectiveOperationException failure) {
+      throw new LinkageError("Cannot inspect maximum-cache image disposal", failure);
     }
   }
 
@@ -160,7 +213,7 @@ public final class ReleaseMaximumNoiseCacheGameTest implements FabricClientGameT
           }
           for (int y = 0; y < SIZE; y++) {
             for (int x = 0; x < SIZE; x++) {
-              int rgba = image.getPixel(x, y);
+              int rgba = ReleaseImagePixels.argb(image, x, y);
               // The stable CPU reference hashes decoded pixels as little-endian ARGB ints.
               for (int channel = 0; channel < Integer.BYTES; channel++) {
                 pixelBytes[channel] = (byte) (rgba >>> (channel * Byte.SIZE));
@@ -225,7 +278,8 @@ public final class ReleaseMaximumNoiseCacheGameTest implements FabricClientGameT
           command(
               source, "mode set " + original.get("mode").getAsString().toLowerCase(Locale.ROOT));
         });
-    context.waitFor(client -> original.equals(settings()), WARM_WAIT_TICKS);
+    context.waitFor(
+        client -> original.equals(ReleaseWorldPixelsGameTest.currentSettings()), WARM_WAIT_TICKS);
   }
 
   private static void command(

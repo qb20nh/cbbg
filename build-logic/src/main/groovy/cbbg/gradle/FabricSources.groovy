@@ -138,7 +138,7 @@ class FabricSources {
                             'gametest/ReleaseWorldPixelsGameTest', 'gametest/ReleaseTransparencyGameTest',
                             'gametest/ReleaseRenderScaleGameTest', 'gametest/ReleaseCommands',
                             'gametest/ReleaseGraphics', 'gametest/ReleaseGameNames',
-                            'gametest/ReleaseMapping') : [],
+                            'gametest/ReleaseMapping', 'gametest/ReleaseMaximumNoiseCacheGameTest') : [],
                     owner.renderer in ['gl3', 'blaze-texture-format'] ? [] :
                             classes('gametest/ReleaseModMenuGameTest', 'gametest/ReleaseIrisGameTest'))
             result.copies.processedGametest << tree('adapters/fabric/shared/src/processedGametest/resources')

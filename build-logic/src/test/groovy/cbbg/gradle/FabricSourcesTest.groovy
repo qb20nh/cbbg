@@ -85,6 +85,27 @@ class FabricSourcesTest {
         }
     }
 
+    @Test void selectsMaximumNoiseCacheAsAnIsolatedGl3Fixture() {
+        Map target = [id: '1.21.1-fabric', minecraft: '1.21.1', renderer: 'gl3',
+                      buildProfile: 'fabric-modern', java: 21,
+                      dependencies: [clientGametest: '2.0.0+99ff640a04']]
+        Map layout = FabricSources.layout(target, target)
+        String fixture = 'adapters/fabric/shared/src/processedGametest/java/' +
+                'com/qb20nh/cbbg/gametest/ReleaseMaximumNoiseCacheGameTest.java'
+        assertEquals(1, layout.processedGametest.java.count { FabricSources.contains(it, fixture) })
+        String nativePixels = 'adapters/minecraft/1.21.1/src/processedGametest/java/' +
+                'com/qb20nh/cbbg/gametest/ReleaseImagePixels.java'
+        assertEquals(1, layout.processedGametest.java.count { FabricSources.contains(it, nativePixels) })
+        assertFalse(layout.processedGametest.java.any {
+            FabricSources.contains(it, 'adapters/fabric/shared/src/processedGametest/java/' +
+                    'com/qb20nh/cbbg/gametest/ReleaseImagePixels.java')
+        })
+        File metadata = new File(System.getProperty('cbbg.repository'),
+                'renderers/gl3/src/processedGametest/resources/fabric.mod.json')
+        List entrypoints = new JsonSlurper().parse(metadata).entrypoints['fabric-client-gametest']
+        assertFalse(entrypoints.contains('com.qb20nh.cbbg.gametest.ReleaseMaximumNoiseCacheGameTest'))
+    }
+
     @Test void retainsOrdinaryCompatibilityFixturesOnlyForTextureFormatAndGl3() {
         File root = new File(System.getProperty('cbbg.repository'))
         Map catalog = new JsonSlurper().parse(new File(root, 'targets.json'))
