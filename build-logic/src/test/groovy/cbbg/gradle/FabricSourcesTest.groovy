@@ -106,6 +106,21 @@ class FabricSourcesTest {
         assertFalse(entrypoints.contains('com.qb20nh.cbbg.gametest.ReleaseMaximumNoiseCacheGameTest'))
     }
 
+    @Test void selectsGl3AllocationMixinsWithoutTheSharedJava25Descriptor() {
+        Map target = [id: '1.21.1-fabric', minecraft: '1.21.1', renderer: 'gl3',
+                      buildProfile: 'fabric-modern', java: 21,
+                      dependencies: [clientGametest: '2.0.0+99ff640a04']]
+        Map layout = FabricSources.layout(target, target)
+        List resources = layout.processedGametest.resources + layout.copies.processedGametest
+        String descriptor = 'cbbg.release-allocation.mixins.json'
+        assertEquals(1, resources.count {
+            FabricSources.contains(it, 'renderers/gl3/src/processedGametest/resources/' + descriptor)
+        })
+        assertFalse(resources.any {
+            FabricSources.contains(it, 'adapters/fabric/shared/src/processedGametest/resources/' + descriptor)
+        })
+    }
+
     @Test void retainsOrdinaryCompatibilityFixturesOnlyForTextureFormatAndGl3() {
         File root = new File(System.getProperty('cbbg.repository'))
         Map catalog = new JsonSlurper().parse(new File(root, 'targets.json'))

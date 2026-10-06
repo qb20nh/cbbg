@@ -10,6 +10,7 @@
       "com.qb20nh.cbbg.gametest.ReleaseLifecycleGameTest",
       "com.qb20nh.cbbg.gametest.ReleaseCacheGameTest",
       "com.qb20nh.cbbg.gametest.ReleaseControlsGameTest",
+      "com.qb20nh.cbbg.gametest.ReleaseDebugOverlayGameTest",
       "com.qb20nh.cbbg.gametest.ReleaseModMenuGameTest",
       "com.qb20nh.cbbg.gametest.ReleaseIrisGameTest",
       "com.qb20nh.cbbg.gametest.ReleaseSettingsGuiGameTest",

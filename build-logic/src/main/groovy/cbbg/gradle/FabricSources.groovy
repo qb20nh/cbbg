@@ -141,7 +141,8 @@ class FabricSources {
                             'gametest/ReleaseMapping', 'gametest/ReleaseMaximumNoiseCacheGameTest') : [],
                     owner.renderer in ['gl3', 'blaze-texture-format'] ? [] :
                             classes('gametest/ReleaseModMenuGameTest', 'gametest/ReleaseIrisGameTest'))
-            result.copies.processedGametest << tree('adapters/fabric/shared/src/processedGametest/resources')
+            result.copies.processedGametest << tree('adapters/fabric/shared/src/processedGametest/resources', [],
+                    owner.renderer == 'gl3' ? ['cbbg.release-allocation.mixins.json'] : [])
         }
         result.copies.processedGametest << irisResources
         if (owner.renderer == 'renderpearl') {
