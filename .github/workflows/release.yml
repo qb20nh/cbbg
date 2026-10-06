@@ -32,6 +32,9 @@ jobs:
           java-version: '25'
           distribution: temurin
       - uses: gradle/actions/setup-gradle@v6.3.0
+        with:
+          cache-read-only: false
+          cache-cleanup: on-success
 
       - name: Validate release selection
         id: selection
@@ -90,14 +93,9 @@ jobs:
           java-version: ${{ steps.selection.outputs.java }}
           distribution: temurin
 
-      - uses: gradle/actions/setup-gradle@v6.3.0
-        with:
-          cache-read-only: false
-          cache-cleanup: on-success
-
       - name: Test candidate tooling
         run: |
-          ./gradlew -p build-logic --no-daemon test
+          ./gradlew -p build-logic --no-daemon --build-cache test
           python3 -m pip install --disable-pip-version-check -r .github/scripts/requirements.txt
           python3 -m unittest discover -s scripts/tests
           python3 -m unittest discover -s .github/tests

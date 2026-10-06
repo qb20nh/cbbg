@@ -28,6 +28,34 @@ class WorkflowRoutingTest(unittest.TestCase):
         self.assertIn("build/libs/*-dev-*.jar", dev.read_text())
         self.assertNotIn("scripts/build_targets.py", ci.read_text() + dev.read_text())
 
+    def test_dev_checks_and_builds_in_one_cached_root_invocation(self):
+        command = script("Check and build development jars", WORKFLOWS / "dev.yml")
+        with tempfile.TemporaryDirectory() as directory:
+            gradlew = Path(directory) / "gradlew"
+            gradlew.write_text('#!/bin/sh\nprintf "%s\\n" "$@"\n')
+            gradlew.chmod(0o755)
+            result = subprocess.run(
+                ["bash", "-e", "-c", command], cwd=directory,
+                env=dict(os.environ, TARGET_ID="26.3-fabric"),
+                capture_output=True, text=True, check=True,
+            )
+            self.assertEqual(result.stdout.splitlines(), [
+                "--no-daemon", "--build-cache", "-Ptarget=26.3-fabric", "ciCheck", "dev",
+            ])
+
+    def test_release_initializes_gradle_cache_once_before_validation(self):
+        release = yaml.safe_load((WORKFLOWS / "release.yml").read_text())
+        steps = release["jobs"]["candidate"]["steps"]
+        setups = [(index, step) for index, step in enumerate(steps)
+                  if step.get("uses", "").startswith("gradle/actions/setup-gradle@")]
+        self.assertEqual(len(setups), 1)
+        setup_index, setup = setups[0]
+        validation_index = next(index for index, step in enumerate(steps)
+                                if step.get("name") == "Validate release selection")
+        self.assertLess(setup_index, validation_index)
+        self.assertEqual(setup["with"], {"cache-read-only": False, "cache-cleanup": "on-success"})
+        self.assertIn("--build-cache", script("Test candidate tooling", WORKFLOWS / "release.yml"))
+
     def test_dependency_submission_uses_java_25_build_jvm(self):
         job = (WORKFLOWS / "gradle.yml").read_text().split("  dependency-submission:", 1)[1]
         self.assertIn("java-version: ${{ matrix.java }}", job)

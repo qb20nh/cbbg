@@ -10,12 +10,13 @@ permissions:
   contents: read
 
 jobs:
-  plan:
+  selection:
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.batch.outputs.matrix || steps.targets.outputs.matrix }}
       build: ${{ steps.batch.outputs.build || steps.targets.outputs.build }}
       core: ${{ steps.batch.outputs.core || steps.targets.outputs.core }}
+      tooling: ${{ steps.batch.outputs.tooling || steps.targets.outputs.tooling }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -26,8 +27,6 @@ jobs:
           java-version: '25'
           distribution: temurin
       - uses: gradle/actions/setup-gradle@v6.3.0
-      - name: Check Java formatting
-        run: ./gradlew --no-daemon spotlessCheck
       - name: Select catalog targets
         id: targets
         env:
@@ -44,22 +43,56 @@ jobs:
           ./gradlew --no-daemon "-Ptargets=$targets" \
             -Poutput=build/batch-matrix.json targetMatrix
           jq -e '.include | length > 0' build/batch-matrix.json
-          printf 'matrix=%s\nbuild=true\ncore=true\n' \
+          printf 'matrix=%s\nbuild=true\ncore=true\ntooling=true\n' \
             "$(jq -c . build/batch-matrix.json)" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@v7
         with:
           name: change-impact
           path: build/change-impact.json
+  tooling:
+    needs: selection
+    if: needs.selection.outputs.tooling == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set up build Java 25
+        uses: actions/setup-java@v6.0.1
+        with:
+          java-version: '25'
+          distribution: temurin
+      - uses: gradle/actions/setup-gradle@v6.3.0
+      - name: Check Java formatting
+        run: ./gradlew --no-daemon spotlessCheck
       - name: Test build and release tooling
         run: |
-          ./gradlew -p build-logic --no-daemon test
+          ./gradlew -p build-logic --no-daemon --build-cache test
           python3 -m pip install --disable-pip-version-check -r .github/scripts/requirements.txt
           python3 -m unittest discover -s scripts/tests
           python3 -m unittest discover -s .github/tests
 
+  plan:
+    needs: [selection, tooling]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify selection and tooling
+        env:
+          SELECTION_RESULT: ${{ needs.selection.result }}
+          TOOLING_RESULT: ${{ needs.tooling.result }}
+          TOOLING_REQUIRED: ${{ needs.selection.outputs.tooling }}
+        run: |
+          if [[ "$SELECTION_RESULT" != success ]]; then
+            echo "Target selection did not succeed: $SELECTION_RESULT"
+            exit 1
+          fi
+          case "$TOOLING_REQUIRED:$TOOLING_RESULT" in
+            true:success|false:success|false:skipped) ;;
+            *) echo "Tooling did not satisfy the selection: $TOOLING_REQUIRED:$TOOLING_RESULT"; exit 1 ;;
+          esac
+
   core:
-    needs: plan
-    if: needs.plan.outputs.core == 'true'
+    needs: selection
+    if: needs.selection.outputs.core == 'true'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -80,16 +113,23 @@ jobs:
           distribution: temurin
       - uses: gradle/actions/setup-gradle@v6.3.0
       - name: Test core on selected runtime
+        if: matrix.java != 25
         env:
           TEST_JAVA: ${{ matrix.java }}
           TEST_JAVA_HOME: ${{ steps.test-java.outputs.path }}
         run: >-
-          ./gradlew -p core test --no-daemon
+          ./gradlew -p core test --no-daemon --build-cache
           "-PtestJava=$TEST_JAVA"
           "-Dorg.gradle.java.installations.paths=$TEST_JAVA_HOME"
       - name: Check core quality
         if: matrix.java == 25
-        run: ./gradlew -p core --no-daemon check
+        env:
+          TEST_JAVA: ${{ matrix.java }}
+          TEST_JAVA_HOME: ${{ steps.test-java.outputs.path }}
+        run: >-
+          ./gradlew -p core --no-daemon --build-cache check
+          "-PtestJava=$TEST_JAVA"
+          "-Dorg.gradle.java.installations.paths=$TEST_JAVA_HOME"
       - uses: actions/upload-artifact@v7
         if: always()
         with:
@@ -99,12 +139,12 @@ jobs:
             core/*/build/reports/
 
   build:
-    needs: plan
-    if: needs.plan.outputs.build == 'true'
+    needs: selection
+    if: needs.selection.outputs.build == 'true'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
-      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+      matrix: ${{ fromJSON(needs.selection.outputs.matrix) }}
     steps:
       - uses: actions/checkout@v7
       - name: Set up target Java ${{ matrix.java }}
@@ -123,7 +163,7 @@ jobs:
       - name: Compile and check target packages
         env:
           TARGET_ID: ${{ matrix.id }}
-        run: ./gradlew --no-daemon "-Ptarget=$TARGET_ID" ciCheck
+        run: ./gradlew --no-daemon --build-cache "-Ptarget=$TARGET_ID" ciCheck
       - uses: actions/upload-artifact@v7
         if: always()
         with:
@@ -135,14 +175,14 @@ jobs:
             core/*/build/reports/
 
   dependency-submission:
-    if: github.event_name == 'push' && needs.plan.outputs.build == 'true'
-    needs: plan
+    if: github.event_name == 'push' && needs.selection.outputs.build == 'true'
+    needs: selection
     runs-on: ubuntu-latest
     permissions:
       contents: write
     strategy:
       fail-fast: false
-      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+      matrix: ${{ fromJSON(needs.selection.outputs.matrix) }}
     steps:
       - uses: actions/checkout@v7
       - name: Set up target Java ${{ matrix.java }}
