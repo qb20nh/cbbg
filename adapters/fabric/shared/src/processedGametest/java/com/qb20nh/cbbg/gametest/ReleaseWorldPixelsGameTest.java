@@ -20,7 +20,6 @@ import java.util.HexFormat;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
-import net.fabricmc.fabric.api.client.command.v2.ClientCommands;
 import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
@@ -78,7 +77,7 @@ public final class ReleaseWorldPixelsGameTest implements FabricClientGameTest {
       ReleaseViewport.waitForChunks(world);
       CommandDispatcher<FabricClientCommandSource> dispatcher =
           Objects.requireNonNull(
-              context.computeOnClient(client -> ClientCommands.getActiveDispatcher()));
+              context.computeOnClient(client -> ReleaseCommands.getActiveDispatcher()));
       try {
         context.runOnClient(
             client -> {

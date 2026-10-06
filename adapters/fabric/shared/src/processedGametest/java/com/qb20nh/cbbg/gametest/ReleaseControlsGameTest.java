@@ -7,7 +7,6 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Locale;
-import net.fabricmc.fabric.api.client.command.v2.ClientCommands;
 import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
@@ -158,7 +157,7 @@ public final class ReleaseControlsGameTest implements FabricClientGameTest {
   }
 
   private static void execute(FabricClientCommandSource source, String command, int expected) {
-    var dispatcher = ClientCommands.getActiveDispatcher();
+    var dispatcher = ReleaseCommands.getActiveDispatcher();
     if (dispatcher == null) throw new AssertionError("No active client command dispatcher");
     try {
       int result = dispatcher.execute("cbbg " + command, source);

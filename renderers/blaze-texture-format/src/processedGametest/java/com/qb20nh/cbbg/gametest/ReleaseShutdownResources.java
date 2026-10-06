@@ -69,14 +69,16 @@ final class ReleaseShutdownResources {
       if (!buffer.isClosed()) return false;
     }
     for (NativeImage frame : owned.frames()) {
-      if (!frame.isClosed()) return false;
+      if (!ReleaseWorldAccess.imageClosed(frame)) return false;
     }
     return true;
   }
 
   private static GpuBuffer[] buffers(MappableRingBuffer uniform) {
     try {
-      Field field = MappableRingBuffer.class.getDeclaredField("buffers");
+      Field field =
+          MappableRingBuffer.class.getDeclaredField(
+              ReleaseGameNames.field(MappableRingBuffer.class, "buffers"));
       field.setAccessible(true);
       return (GpuBuffer[]) Objects.requireNonNull(field.get(uniform));
     } catch (ReflectiveOperationException failure) {

@@ -17,7 +17,7 @@ final class ReleaseViewport {
   }
 
   static void waitForChunks(TestSingleplayerContext world) {
-    world.getClientLevel().waitForChunksRender();
+    ReleaseWorldAccess.waitForChunksRender(world);
   }
 
   static RenderTarget mainTarget(Minecraft client) {

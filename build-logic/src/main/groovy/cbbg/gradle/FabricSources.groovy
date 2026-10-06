@@ -71,12 +71,15 @@ class FabricSources {
                 result.main.java << tree('adapters/fabric/modern/src/main/java', classes(
                         'CbbgClient', 'CbbgEarlyInit', 'CbbgLanguageAdapter'))
                 result.main.java << tree('renderers/modern/src/main/java', classes(
-                        'render/GenerationNotifications', 'render/DitherController', 'config/gui/CbbgConfigScreen', 'config/gui/ConfigCanvas'))
+                        'render/GenerationNotifications', 'render/DitherController',
+                        'config/gui/CbbgConfigScreen', 'config/gui/ConfigCanvas'))
                 result.gametest.java << tree('renderers/modern/src/gametest/java', classes(
                         'gametest/ModMenuGameTest', 'gametest/IrisFixture', 'gametest/RenderScaleTestAccess',
                         'gametest/OptionalModsGameTest'))
-                processed << tree("renderers/${owner.renderer}/src/processedGametest/java")
+                processed << tree("renderers/${owner.renderer}/src/processedGametest/java", [],
+                        (owner.java as int) < 25 ? classes('gametest/mixin/ReleaseNoiseMixin') : [])
                 processed << tree("adapters/fabric/${owner.minecraft}/src/processedGametest/java")
+                processed << tree("adapters/minecraft/${owner.minecraft}/src/processedGametest/java")
                 result.processedGametest.resources << tree("renderers/${owner.renderer}/src/processedGametest/resources")
                 result.copies.gametest << irisResources
             } else if (target.id == '26.3-fabric') {

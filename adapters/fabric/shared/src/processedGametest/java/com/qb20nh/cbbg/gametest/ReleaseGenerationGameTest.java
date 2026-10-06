@@ -17,7 +17,6 @@ import java.util.Objects;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
-import net.fabricmc.fabric.api.client.command.v2.ClientCommands;
 import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
@@ -42,7 +41,7 @@ public final class ReleaseGenerationGameTest implements FabricClientGameTest {
       JsonObject original = settings();
       CommandDispatcher<FabricClientCommandSource> dispatcher =
           Objects.requireNonNull(
-              context.computeOnClient(client -> ClientCommands.getActiveDispatcher()));
+              context.computeOnClient(client -> ReleaseCommands.getActiveDispatcher()));
       FabricClientCommandSource source = silentSource();
       boolean completed = false;
       try {

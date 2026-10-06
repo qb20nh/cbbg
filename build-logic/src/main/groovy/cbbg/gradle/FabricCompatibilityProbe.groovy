@@ -49,7 +49,7 @@ class FabricCompatibilityProbe {
                 gametestApiSha256: CandidateFiles.sha256(gametest),
                 profile: spec.profile, optionalDependencies: mods,
                 initialConfig: CandidateFiles.sha256(spec.config as File),
-                display: spec.manageDisplay ? [managed: true] :
+                display: spec.manageDisplay ? [managed: true, protocol: (spec.target.java ?: 25) < 25 ? 'x11' : 'wayland'] :
                         [directory: (spec.displayDirectory as File).canonicalPath, wayland: spec.display],
                 minimumOverrides: !spec.strict,
                 loader: spec.loaderVersion, fabricApi: spec.apiVersion,
@@ -80,15 +80,19 @@ class FabricCompatibilityProbe {
                 Files.createTempDirectory(new File('/tmp').toPath(), 'cbbg-display-').toFile() :
                 spec.displayDirectory as File
         String display = spec.manageDisplay ? 'cbbg-test' : spec.display as String
+        boolean x11 = spec.manageDisplay && (spec.target.java ?: 25) < 25
+        String xDisplay = null
         Process compositor = null
         try {
             if (spec.manageDisplay) {
                 Files.setPosixFilePermissions(displayDirectory.toPath(),
                         PosixFilePermissions.fromString('rwx------'))
-                def builder = new ProcessBuilder((spec.weston as File).absolutePath,
+                List<String> compositorCommand = [(spec.weston as File).absolutePath,
                         '--backend=headless-backend.so', '--renderer=gl', '--socket=' + display,
                         '--width=1280', '--height=720',
-                        '--log=' + new File(cell, 'compositor.log').absolutePath)
+                        '--log=' + new File(cell, 'compositor.log').absolutePath]
+                if (x11) compositorCommand.add('--xwayland')
+                def builder = new ProcessBuilder(compositorCommand)
                 builder.environment().put('XDG_RUNTIME_DIR', displayDirectory.absolutePath)
                 if (spec.eglVendor != null) {
                     builder.environment().put('__EGL_VENDOR_LIBRARY_FILENAMES',
@@ -97,9 +101,16 @@ class FabricCompatibilityProbe {
                 builder.redirectErrorStream(true).redirectOutput(new File(cell, 'compositor-output.log'))
                 compositor = builder.start()
                 long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10)
-                while (compositor.isAlive() && !new File(displayDirectory, display).exists() &&
-                        System.nanoTime() < deadline) Thread.sleep(50)
-                if (!new File(displayDirectory, display).exists()) {
+                while (compositor.isAlive() && System.nanoTime() < deadline) {
+                    File compositorLog = new File(cell, 'compositor.log')
+                    if (x11 && compositorLog.isFile()) {
+                        def match = compositorLog.text =~ /xserver listening on display (:\d+)/
+                        if (match.find()) xDisplay = match.group(1)
+                    }
+                    if (new File(displayDirectory, display).exists() && (!x11 || xDisplay != null)) break
+                    Thread.sleep(50)
+                }
+                if (!new File(displayDirectory, display).exists() || (x11 && xDisplay == null)) {
                     throw new GradleException('Fresh test display failed; see ' + cell)
                 }
             }
@@ -120,7 +131,7 @@ class FabricCompatibilityProbe {
                     '--gametest-api', spec.gametest, '--runtime-lock', spec.runtime.lock,
                     '--dependency-lock', lock, '--dependency', 'fabricApi=' + (spec.api as File).absolutePath,
                     '--compat', spec.profile, '--backend', spec.backend,
-                    '--xdg-runtime-dir', displayDirectory, '--wayland-display', display,
+                    '--xdg-runtime-dir', displayDirectory, x11 ? '--x-display' : '--wayland-display', x11 ? xDisplay : display,
                     '--timeout', '600', '--cbbg-config', spec.config,
                     '--loader-version', spec.loaderVersion, '--fabric-api-version', spec.apiVersion,
                     '--gametest-api-version', spec.target.dependencies.fabricApi]

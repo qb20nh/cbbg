@@ -24,7 +24,8 @@ public final class ReleaseCacheGameTest implements FabricClientGameTest {
 
   @Override
   public void runTest(ClientGameTestContext context) {
-    try (var _ = context.worldBuilder().create()) {
+    try (@SuppressWarnings("PMD.UnusedLocalVariable")
+        var world = context.worldBuilder().create()) {
       context.waitTicks(5);
       command(context, "mode set enabled");
       command(context, "stbn size 16");

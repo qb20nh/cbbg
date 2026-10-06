@@ -15,7 +15,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.function.Supplier;
-import net.fabricmc.fabric.api.client.command.v2.ClientCommands;
 import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
@@ -37,7 +36,7 @@ public final class ReleaseAllocationGameTest implements FabricClientGameTest {
       JsonObject original = settings();
       CommandDispatcher<FabricClientCommandSource> dispatcher =
           Objects.requireNonNull(
-              context.computeOnClient(client -> ClientCommands.getActiveDispatcher()));
+              context.computeOnClient(client -> ReleaseCommands.getActiveDispatcher()));
       FabricClientCommandSource source = silentSource();
       try {
         context.runOnClient(

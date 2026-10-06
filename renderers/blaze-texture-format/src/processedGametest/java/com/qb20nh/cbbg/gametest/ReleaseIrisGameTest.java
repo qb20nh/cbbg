@@ -28,7 +28,7 @@ public final class ReleaseIrisGameTest implements FabricClientGameTest {
             ? context.computeOnClient(client -> RenderScaleTestAccess.setShaderTestScale(0.5f))
             : 1.0f;
     try (var world = context.worldBuilder().create()) {
-      world.getClientLevel().waitForChunksRender();
+      ReleaseWorldAccess.waitForChunksRender(world);
       ReleaseLifecycleGameTest.command(context, "mode set enabled");
       ReleaseLifecycleGameTest.command(context, "format set rgba16f");
       ReleaseLifecycleGameTest.awaitFormat(context, GL30.GL_RGBA16F);

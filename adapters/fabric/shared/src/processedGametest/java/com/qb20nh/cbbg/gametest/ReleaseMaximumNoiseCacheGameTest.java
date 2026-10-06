@@ -15,7 +15,6 @@ import java.util.HexFormat;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
-import net.fabricmc.fabric.api.client.command.v2.ClientCommands;
 import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
@@ -235,7 +234,7 @@ public final class ReleaseMaximumNoiseCacheGameTest implements FabricClientGameT
   }
 
   private static void command(FabricClientCommandSource source, String command) {
-    var dispatcher = ClientCommands.getActiveDispatcher();
+    var dispatcher = ReleaseCommands.getActiveDispatcher();
     if (dispatcher == null) throw new AssertionError("No active client command dispatcher");
     try {
       int result = dispatcher.execute("cbbg " + command, source);

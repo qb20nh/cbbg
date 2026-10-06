@@ -30,7 +30,8 @@ public final class OptionalModsGameTest implements FabricClientGameTest {
     CbbgConfig.Mode original = CbbgConfig.get().mode();
     String marker = "CBBG Chat Patches regression fixture";
     String command = "/cbbg mode set demo";
-    try (var _ = context.worldBuilder().create()) {
+    try (@SuppressWarnings("PMD.UnusedLocalVariable")
+        var world = context.worldBuilder().create()) {
       context.waitFor(client -> client.player != null, 600);
       context.runOnClient(
           client -> {

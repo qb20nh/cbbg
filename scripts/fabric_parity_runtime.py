@@ -80,8 +80,10 @@ def restart_state(game):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--target', choices=['26.1-fabric', '26.1.1-fabric', '26.1.2-fabric',
-                                            '26.2-fabric', '26.3-fabric'], default='26.3-fabric')
+    parser.add_argument('--target', choices=[target['id'] for target in load_catalog()['targets']
+                                            if target['loader'] == 'fabric'
+                                            and target.get('buildProfile') in ('fabric-modern', 'fabric-upstream')],
+                        default='26.3-fabric')
     for name in ('runtime', 'java', 'game-dir', 'candidate', 'driver', 'gametest-api',
                  'runtime-lock', 'dependency-lock', 'xdg-runtime-dir'):
         parser.add_argument('--' + name, type=Path, required=True)
@@ -179,6 +181,7 @@ def main():
                         '-Dcbbg.test.restart=' + (args.restart_phase or ''),
                         '-Dfabric.client.gametest.modid=cbbg-renderer-test',
                         '-Dcbbg.test.backend=' + args.backend,
+                        '-Dcbbg.test.artifact-target=' + (gametest_target.get('artifactOf') or gametest_target['id']),
                         '-Dcbbg.test.compat=' + args.compat,
                         '-Dcbbg.test.modmenu.version=' + target['dependencies']['modMenu'],
                         '-Dcbbg.test.evidence=' + str(evidence)],
