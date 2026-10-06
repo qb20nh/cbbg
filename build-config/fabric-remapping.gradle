@@ -1,9 +1,12 @@
 // Processed tests compile against the optimized named jar and run in the loader's namespace.
+def runtimeDrivers = []
 tasks.names.findAll { it.endsWith('DriverJar') }.each { name ->
     def driver = tasks.named(name, Jar)
     driver.configure { destinationDirectory = layout.buildDirectory.dir('intermediates/named-drivers') }
+    def previousDrivers = runtimeDrivers.toList()
     def runtimeDriver = tasks.register("remap${name.capitalize()}", fabricRemapTaskType) {
         dependsOn driver
+        mustRunAfter previousDrivers
         inputFile.set(driver.flatMap { it.archiveFile })
         archiveFileName.set(driver.flatMap { it.archiveFileName })
         destinationDirectory = layout.buildDirectory.dir('libs')
@@ -15,4 +18,10 @@ tasks.names.findAll { it.endsWith('DriverJar') }.each { name ->
         ext.runtimeArchiveFile = runtimeDriver.flatMap { it.archiveFile }
         finalizedBy runtimeDriver
     }
+    runtimeDrivers.add(runtimeDriver)
+    if (name in ['processedDriverJar', 'parityDriverJar']) {
+        String preparation = name == 'processedDriverJar' ? 'prepareProcessedRuntime' : 'prepareParityRuntime'
+        tasks.named(preparation) { dependsOn runtimeDriver }
+    }
 }
+tasks.matching { it.name == 'candidateBuildOutputs' }.configureEach { dependsOn runtimeDrivers }
