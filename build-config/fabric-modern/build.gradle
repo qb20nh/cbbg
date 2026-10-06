@@ -125,6 +125,11 @@ fabricApi {
     }
 }
 
+if (gameTarget.dependencies.clientGametest) {
+    dependencies.add(remappedGame ? 'modGametestImplementation' : 'gametestImplementation',
+            "net.fabricmc.fabric-api:fabric-client-gametest-api-v1:${gameTarget.dependencies.clientGametest}")
+}
+
 def testBackend = providers.gradleProperty('backend').getOrElse('opengl')
 if (!target.backends.contains(testBackend)) {
     throw new GradleException("Backend ${testBackend} is not supported by ${targetId}")

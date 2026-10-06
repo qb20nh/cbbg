@@ -28,7 +28,7 @@ class TargetCatalogTest {
     void actualCatalogSelectsRuntimeTargetsAndArtifactOwners() {
         TargetCatalog catalog = TargetCatalog.read(CATALOG)
         List<String> implemented = ['26.1-fabric', '26.1.1-fabric', '26.1.2-fabric', '26.2-fabric', '26.3-fabric']
-        assertEquals(33, catalog.select().size())
+        assertEquals(34, catalog.select().size())
         assertEquals(implemented, catalog.defaults()*.id)
         assertEquals(implemented, catalog.select().findAll { it.implemented }*.id)
         assertEquals(implemented, catalog.defaults(true)*.id)
@@ -53,6 +53,22 @@ class TargetCatalogTest {
         assertThrows(IllegalArgumentException) {
             catalog.releaseTargets(['26.1.1-fabric', '26.1.2-fabric'])
         }
+    }
+
+    @Test
+    void olderFabricTargetDeclaresItsSeparateClientTestModule() {
+        Map entry = target(copyData(), '1.21.1-fabric')
+        assertEquals(21, entry.java)
+        assertEquals('gl3', entry.renderer)
+        assertFalse(entry.implemented)
+        assertEquals('2.0.0+99ff640a04', entry.dependencies.clientGametest)
+        assertEquals(['opengl'], entry.backends)
+        Map stableIris = TargetCatalog.effectiveDependencies(entry, 'iris')
+        assertEquals('zsoi0dso', stableIris.iris)
+        assertEquals('u1OEbNKx', stableIris.sodium)
+        assertEquals('SMxNOGZ6', TargetCatalog.effectiveDependencies(entry, 'sodium').sodium)
+        assertTrue(entry.compatibilityProfiles.containsKey(
+                'modmenu+sodium+iris+renderscale+chatpatches+immediatelyfast'))
     }
 
     @Test
