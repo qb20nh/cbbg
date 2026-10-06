@@ -14,8 +14,9 @@ class CandidateBuildOutputsTest {
     @TempDir File directory
 
     @ParameterizedTest
-    @ValueSource(booleans = [false, true])
-    void recordsPackagedDriversAndCurrentSourceState(boolean processed) {
+    @ValueSource(strings = ['ordinary', 'all-processed', 'selected-processed'])
+    void recordsPackagedDriversAndCurrentSourceState(String selection) {
+        boolean processed = selection != 'ordinary'
         File profile = new File(directory, 'build-config/example')
         profile.mkdirs()
         new File(profile, 'settings.gradle').text = "rootProject.name = 'example'\n"
@@ -47,12 +48,34 @@ apply from: file('../candidate-build-outputs.gradle')
 tasks.register('processedDriverJar', Jar) { archiveClassifier = 'processed-driver' }
 tasks.register('processedEarlyStartupDriverJar', Jar) { archiveClassifier = 'processed-early-startup-driver' }
 sourceSets.create('processedGametest')
+SELECTED_SOURCES
 apply from: file('../fabric-startup-tests.gradle')
-''' : '')
+'''.replace('SELECTED_SOURCES', selection == 'selected-processed' ? '''
+def mapped = tasks.register('mapProcessedGametestApiImports', Sync) {
+    from('src/processedGametest/java')
+    into(layout.buildDirectory.dir('generated/processedGametest-api-imports'))
+}
+sourceSets.processedGametest.java.setSrcDirs([mapped])
+''' : '') : '')
         if (processed) {
             File resources = new File(profile, 'src/processedGametest/resources')
             resources.mkdirs()
             new File(resources, 'fabric.mod.json').text = '{"entrypoints":{},"mixins":[]}'
+            List classes = selection == 'selected-processed' ?
+                    ['ReleaseGenerationGameTest', 'ReleaseNotificationsGameTest'] :
+                    ['ReleaseEarlyStartupGameTest', 'ReleaseStartupPreLaunch',
+                     'ReleaseGenerationGameTest', 'ReleaseMaximumNoiseCacheGameTest',
+                     'ReleaseShutdownGameTest', 'ReleaseGeneratingShutdownGameTest',
+                     'ReleaseIrisRestartGameTest', 'ReleaseAllocationGameTest',
+                     'ReleaseWorldPixelsGameTest', 'ReleaseTransparencyGameTest',
+                     'ReleaseRenderScaleGameTest', 'ReleaseShaderFailureGameTest',
+                     'ReleaseDebugOverlayGameTest', 'ReleaseNotificationsGameTest']
+            File java = new File(profile, 'src/processedGametest/java/com/qb20nh/cbbg/gametest')
+            java.mkdirs()
+            classes.each { name ->
+                new File(java, name + '.java').text =
+                        "package com.qb20nh.cbbg.gametest; public class ${name} {}\n"
+            }
         }
         new File(directory, 'build-config/candidate-build-outputs.gradle').text =
                 new File(System.getProperty('cbbg.repository'), 'build-config/candidate-build-outputs.gradle').text
@@ -76,12 +99,13 @@ apply from: file('../fabric-startup-tests.gradle')
         assertEquals(git('rev-parse', 'HEAD'), output.source_commit)
         assertFalse(output.source_dirty)
         Set expected = ['ordinary', 'early-startup'] as Set
-        if (processed) {
+        if (selection == 'all-processed') {
             expected.addAll(['startup-cold', 'startup-warm', 'startup-damaged', 'startup-seed-mismatch',
                              'generation', 'maximum-noise-cache', 'shutdown', 'generating-shutdown',
                              'iris-restart', 'allocation', 'world-pixels', 'shader-failure',
                              'debug-overlay', 'notifications', 'transparency', 'render-scale'])
         }
+        if (selection == 'selected-processed') expected.addAll(['generation', 'notifications'])
         assertEquals(expected, output.drivers.keySet())
         output.drivers.values().each { driver ->
             assertEquals(processed, driver.filename.contains('processed'))

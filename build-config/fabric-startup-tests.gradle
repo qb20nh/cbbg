@@ -1,5 +1,14 @@
+// Legacy API imports are generated later; inspect the original selected sources.
+def importMapping = tasks.findByName('mapProcessedGametestApiImports')
+def processedSources = importMapping == null ? sourceSets.processedGametest.java : importMapping.source
+def includesFixture = { String name ->
+    !processedSources.matching { include "**/${name}.java" }.isEmpty()
+}
+
 // Separate launches retain each initial cache state.
 ['Cold', 'Warm', 'Damaged', 'SeedMismatch'].each { mode ->
+    if (!includesFixture('ReleaseEarlyStartupGameTest') ||
+            !includesFixture('ReleaseStartupPreLaunch')) return
     String classifier = 'startup-' + mode.replaceAll(/([a-z])([A-Z])/, '$1-$2').toLowerCase(Locale.ROOT)
     def metadata = tasks.register("processedEarlyStartup${mode}Metadata") {
         dependsOn tasks.named('processProcessedGametestResources')
@@ -38,7 +47,7 @@
     ShaderFailure: 'ReleaseShaderFailureGameTest',
     DebugOverlay: 'ReleaseDebugOverlayGameTest',
     Notifications: 'ReleaseNotificationsGameTest'
-].each { name, testClass ->
+].findAll { name, testClass -> includesFixture(testClass) }.each { name, testClass ->
     def metadata = tasks.register("processed${name}Metadata") {
         dependsOn tasks.named('processProcessedGametestResources')
         def source = layout.buildDirectory.file('resources/processedGametest/fabric.mod.json')
