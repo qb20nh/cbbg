@@ -1,5 +1,11 @@
 package com.qb20nh.cbbg.gametest;
 
+import com.google.gson.Gson;
+import com.google.gson.JsonObject;
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.Consumer;
@@ -19,6 +25,7 @@ public final class ReleaseSodiumConfigGameTest implements FabricClientGameTest {
     if (!FabricLoader.getInstance().isModLoaded("sodium")) {
       return;
     }
+    if (!settingsApiAvailable()) return;
     var original = context.computeOnClient(UtilitiesBackend::screen);
     var parent = context.computeOnClient(client -> new TitleScreen());
     try {
@@ -74,5 +81,30 @@ public final class ReleaseSodiumConfigGameTest implements FabricClientGameTest {
     } finally {
       context.setScreen(() -> original);
     }
+  }
+
+  private static boolean settingsApiAvailable() {
+    boolean available =
+        Objects.requireNonNull(ReleaseSodiumConfigGameTest.class.getClassLoader())
+                .getResource("net/caffeinemc/mods/sodium/api/config/ConfigEntryPoint.class")
+            != null;
+    JsonObject record = new JsonObject();
+    record.addProperty(
+        "sodiumVersion",
+        FabricLoader.getInstance()
+            .getModContainer("sodium")
+            .orElseThrow()
+            .getMetadata()
+            .getVersion()
+            .getFriendlyString());
+    record.addProperty("settingsApiAvailable", available);
+    Path evidence = Path.of(Objects.requireNonNull(System.getProperty("cbbg.test.evidence")));
+    try {
+      Files.createDirectories(evidence);
+      Files.writeString(evidence.resolve("sodium-config-api.json"), new Gson().toJson(record));
+    } catch (IOException failure) {
+      throw new UncheckedIOException(failure);
+    }
+    return available;
   }
 }

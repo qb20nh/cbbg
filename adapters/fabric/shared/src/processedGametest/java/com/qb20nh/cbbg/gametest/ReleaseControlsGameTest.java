@@ -88,7 +88,7 @@ public final class ReleaseControlsGameTest implements FabricClientGameTest {
     int resizedHeight = originalSize[0] == 854 && originalSize[1] == 480 ? 540 : 480;
     try {
       if (originalFullscreen) toggleFullscreen(context, false);
-      context.getInput().resizeWindow(resizedWidth, resizedHeight);
+      ReleaseViewport.resizeWindow(context, resizedWidth, resizedHeight);
       context.waitFor(
           client ->
               ReleaseViewport.windowWidth(client.getWindow()) == resizedWidth
@@ -106,7 +106,7 @@ public final class ReleaseControlsGameTest implements FabricClientGameTest {
       if (context.computeOnClient(client -> client.getWindow().isFullscreen())) {
         toggleFullscreen(context, false);
       }
-      context.getInput().resizeWindow(originalSize[0], originalSize[1]);
+      ReleaseViewport.resizeWindow(context, originalSize[0], originalSize[1]);
       context.waitFor(
           client ->
               ReleaseViewport.windowWidth(client.getWindow()) == originalSize[0]

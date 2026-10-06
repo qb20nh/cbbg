@@ -8,6 +8,7 @@ import java.nio.file.Files;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.regex.Pattern;
 import java.util.concurrent.CompletableFuture;
 import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
@@ -31,6 +32,7 @@ import org.jspecify.annotations.Nullable;
 @NullMarked
 public final class ReleaseNotificationsGameTest implements FabricClientGameTest {
   private static final int WAIT_TICKS = 600;
+  private static final Pattern CHAT_PATCHES_COUNT = Pattern.compile(" \\(x([1-9][0-9]*)\\)$");
 
   @Override
   public void runTest(ClientGameTestContext context) {
@@ -266,19 +268,34 @@ public final class ReleaseNotificationsGameTest implements FabricClientGameTest 
 
   private static boolean completionVisible(Minecraft client) {
     String expected = Component.translatable("cbbg.chat.stbn.complete").getString();
-    return messages(client).stream().anyMatch(text -> text.endsWith(expected));
+    return messages(client).stream().anyMatch(text -> messageCount(text, expected) > 0);
   }
 
   private static void checkMessages(Minecraft client, int starts, int completions) {
     List<String> messages = messages(client);
     String start = Component.translatable("cbbg.chat.stbn.generating").getString();
     String complete = Component.translatable("cbbg.chat.stbn.complete").getString();
-    long actualStarts = messages.stream().filter(text -> text.endsWith(start)).count();
-    long actualCompletions = messages.stream().filter(text -> text.endsWith(complete)).count();
+    long actualStarts = messages.stream().mapToLong(text -> messageCount(text, start)).sum();
+    long actualCompletions = messages.stream().mapToLong(text -> messageCount(text, complete)).sum();
     if (actualStarts != starts || actualCompletions != completions) {
       throw new AssertionError(
-          "Wrong generation chat notifications: " + actualStarts + "/" + actualCompletions);
+          "Wrong generation chat notifications: "
+              + actualStarts
+              + "/"
+              + actualCompletions
+              + "; displayed messages: "
+              + messages);
     }
+  }
+
+  private static long messageCount(String text, String expected) {
+    String plain = Objects.requireNonNull(net.minecraft.ChatFormatting.stripFormatting(text));
+    if (plain.endsWith(expected)) return 1;
+    if (!FabricLoader.getInstance().isModLoaded("chatpatches")) return 0;
+    var count = CHAT_PATCHES_COUNT.matcher(plain);
+    return count.find() && plain.substring(0, count.start()).endsWith(expected)
+        ? Long.parseLong(Objects.requireNonNull(count.group(1)))
+        : 0;
   }
 
   private static List<String> messages(Minecraft client) {

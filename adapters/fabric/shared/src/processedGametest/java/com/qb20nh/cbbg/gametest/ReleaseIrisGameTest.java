@@ -27,8 +27,24 @@ public final class ReleaseIrisGameTest implements FabricClientGameTest {
         renderScale
             ? context.computeOnClient(client -> RenderScaleTestAccess.setShaderTestScale(0.5f))
             : 1.0f;
+    int[] originalWindow =
+        context.computeOnClient(
+            client ->
+                new int[] {
+                  ReleaseViewport.windowWidth(client.getWindow()),
+                  ReleaseViewport.windowHeight(client.getWindow())
+                });
     try (var world = context.worldBuilder().create()) {
       ReleaseWorldAccess.waitForChunksRender(world);
+      if (renderScale) {
+        ReleaseViewport.resizeWindow(context, originalWindow[0] | 1, originalWindow[1] | 1);
+        context.waitFor(
+            client -> {
+              var main = ReleaseViewport.mainTarget(client);
+              return (main.width & 1) == 1 && (main.height & 1) == 1;
+            },
+            600);
+      }
       ReleaseLifecycleGameTest.command(context, "mode set enabled");
       ReleaseLifecycleGameTest.command(context, "format set rgba16f");
       ReleaseLifecycleGameTest.awaitFormat(context, GL30.GL_RGBA16F);
@@ -67,6 +83,12 @@ public final class ReleaseIrisGameTest implements FabricClientGameTest {
     } finally {
       if (renderScale) {
         context.runOnClient(client -> RenderScaleTestAccess.setShaderTestScale(originalScale));
+        ReleaseViewport.resizeWindow(context, originalWindow[0], originalWindow[1]);
+        context.waitFor(
+            client ->
+                ReleaseViewport.windowWidth(client.getWindow()) == originalWindow[0]
+                    && ReleaseViewport.windowHeight(client.getWindow()) == originalWindow[1],
+            600);
       }
     }
   }

@@ -2,11 +2,13 @@ package com.qb20nh.cbbg.gametest;
 
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.platform.Window;
+import net.fabricmc.fabric.api.client.gametest.v1.ClientGameTestContext;
 import net.fabricmc.fabric.api.client.gametest.v1.TestSingleplayerContext;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.Screen;
 import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
+import org.lwjgl.glfw.GLFW;
 
 @NullMarked
 final class ReleaseViewport {
@@ -22,6 +24,11 @@ final class ReleaseViewport {
 
   static RenderTarget mainTarget(Minecraft client) {
     return client.getMainRenderTarget();
+  }
+
+  static void resizeWindow(ClientGameTestContext context, int width, int height) {
+    context.runOnClient(
+        client -> GLFW.glfwSetWindowSize(client.getWindow().getWindow(), width, height));
   }
 
   static int framebufferWidth(Window window) {

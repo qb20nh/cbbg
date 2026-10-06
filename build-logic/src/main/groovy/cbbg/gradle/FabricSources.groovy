@@ -24,7 +24,8 @@ class FabricSources {
                       legacyGametestApi: owner.dependencies?.clientGametest?.startsWith('2.')]
         List<Map> processed = result.processedGametest.java
         List<String> progress = classes('gametest/mixin/ScenarioProgressMixin',
-                'gametest/IrisFixture', 'gametest/RenderScaleTestAccess', 'gametest/RenderScaleTargetFormat')
+                'gametest/IrisFixture', 'gametest/IrisImagePixels',
+                'gametest/RenderScaleTestAccess', 'gametest/RenderScaleTargetFormat')
         Map irisResources = tree('renderers/modern/src/gametest/resources', ['cbbg-iris-fixture/**'])
         if (owner.buildProfile == 'fabric-upstream') {
             String adapter = 'adapters/fabric/' + owner.minecraft + '/src/'
@@ -89,8 +90,8 @@ class FabricSources {
                         'config/gui/CbbgConfigScreen', 'config/gui/ConfigCanvas'))
                 result.gametest.java << tree('renderers/modern/src/gametest/java', classes(
                         'gametest/ModMenuGameTest', 'gametest/OptionalModsGameTest',
-                        'gametest/RenderScaleTestAccess') +
-                        (gl3 ? [] : classes('gametest/IrisFixture', 'gametest/RenderScaleTargetFormat')))
+                        'gametest/RenderScaleTestAccess', 'gametest/IrisFixture') +
+                        (gl3 ? [] : classes('gametest/IrisImagePixels', 'gametest/RenderScaleTargetFormat')))
                 processed << tree("renderers/${owner.renderer}/src/processedGametest/java", [],
                         (owner.java as int) < 25 ? classes('gametest/mixin/ReleaseNoiseMixin') : [])
                 processed << tree("adapters/fabric/${owner.minecraft}/src/processedGametest/java")
@@ -100,7 +101,8 @@ class FabricSources {
             } else if (target.id == '26.3-fabric') {
                 processed << tree('renderers/renderpearl/src/processedGametest/java')
                 List<String> shared = classes('gametest/mixin/ScenarioProgressMixin', 'reference/DitherReference',
-                        'gametest/FloatPrecisionGameTest', 'gametest/IrisFixture', 'gametest/RenderScaleTestAccess',
+                        'gametest/FloatPrecisionGameTest', 'gametest/IrisFixture', 'gametest/IrisImagePixels',
+                        'gametest/RenderScaleTestAccess',
                         'gametest/RenderScaleTargetFormat',
                         'gametest/EarlyStartupGameTest', 'gametest/mixin/EarlyPipelineCacheMixin',
                         'gametest/mixin/EarlyRenderPassMixin', 'gametest/WindowResizeGameTest')
@@ -119,9 +121,9 @@ class FabricSources {
         if (owner.buildProfile == 'fabric-upstream' || owner.renderer in ['blaze-texture-format', 'gl3']) {
             if (owner.renderer == 'gl3') {
                 processed << tree('renderers/modern/src/gametest/java',
-                        classes('gametest/RenderScaleTestAccess'))
+                        classes('gametest/RenderScaleTestAccess', 'gametest/IrisFixture'))
                 processed << tree('renderers/gl3/src/gametest/java',
-                        classes('gametest/RenderScaleTargetFormat'))
+                        classes('gametest/RenderScaleTargetFormat', 'gametest/IrisImagePixels'))
             } else {
                 processed << tree('renderers/renderpearl/src/gametest/java', progress)
                 processed << tree('renderers/modern/src/gametest/java', progress)
@@ -130,12 +132,15 @@ class FabricSources {
             processed << tree('adapters/fabric/shared/src/processedGametest/java',
                     owner.renderer == 'gl3' ? classes('gametest/ReleaseCacheGameTest',
                             'gametest/ReleaseSettingsGuiGameTest', 'gametest/ReleaseUtilitiesGameTest',
-                            'gametest/ReleaseSodiumConfigGameTest',
+                            'gametest/ReleaseSodiumConfigGameTest', 'gametest/ReleaseControlsGameTest',
+                            'gametest/ReleaseModMenuGameTest', 'gametest/ReleaseIrisGameTest',
                             'gametest/ReleaseGenerationGameTest', 'gametest/ReleaseNotificationsGameTest',
                             'gametest/ReleaseWorldPixelsGameTest', 'gametest/ReleaseTransparencyGameTest',
                             'gametest/ReleaseRenderScaleGameTest', 'gametest/ReleaseCommands',
                             'gametest/ReleaseGraphics', 'gametest/ReleaseGameNames',
-                            'gametest/ReleaseMapping') : [])
+                            'gametest/ReleaseMapping') : [],
+                    owner.renderer in ['gl3', 'blaze-texture-format'] ? [] :
+                            classes('gametest/ReleaseModMenuGameTest', 'gametest/ReleaseIrisGameTest'))
             result.copies.processedGametest << tree('adapters/fabric/shared/src/processedGametest/resources')
         }
         result.copies.processedGametest << irisResources

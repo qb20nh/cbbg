@@ -24,7 +24,7 @@ public final class IrisFixture {
     for (int y = fromY; y < toY; y++) {
       for (int x = image.getWidth() / 4; x < image.getWidth() * 3 / 4; x++) {
         total++;
-        if ((image.getPixel(x, y) & 0xffffff) == 0xff00ff) magenta++;
+        if ((IrisImagePixels.pixel(image, x, y) & 0xffffff) == 0xff00ff) magenta++;
       }
     }
     if (total == 0 || magenta < total * 0.9) throw new AssertionError(failureMessage);

@@ -22,7 +22,8 @@ class FabricSourcesTest {
         File metadata = new File(System.getProperty('cbbg.repository'),
                 'renderers/gl3/src/processedGametest/resources/fabric.mod.json')
         List entrypoints = new JsonSlurper().parse(metadata).entrypoints['fabric-client-gametest']
-        ['ReleaseSodiumConfigGameTest', 'ReleaseGenerationGameTest', 'ReleaseNotificationsGameTest'].each { name ->
+        ['ReleaseSodiumConfigGameTest', 'ReleaseGenerationGameTest', 'ReleaseNotificationsGameTest',
+         'ReleaseControlsGameTest', 'ReleaseModMenuGameTest', 'ReleaseIrisGameTest'].each { name ->
             assertTrue(layout.processedGametest.java.any {
                 FabricSources.contains(it, shared + name + '.java')
             })
@@ -32,7 +33,7 @@ class FabricSourcesTest {
             FabricSources.contains(it, shared + 'ReleaseCommands.java')
         })
         ['UtilitiesBackend', 'ReleaseGenerationStatus', 'ReleaseNotificationUi',
-         'ReleasePackagedFields'].each { name ->
+         'ReleasePackagedFields', 'ReleaseScreenshots', 'ReleaseRenderScale'].each { name ->
             assertTrue(layout.processedGametest.java.any {
                 FabricSources.contains(it, 'renderers/gl3/src/processedGametest/java/' +
                         'com/qb20nh/cbbg/gametest/' + name + '.java')
@@ -57,6 +58,18 @@ class FabricSourcesTest {
                         'com/qb20nh/cbbg/gametest/RenderScaleTestAccess.java')
             })
             assertTrue(layout[name].java.any {
+                FabricSources.contains(it, 'renderers/modern/src/gametest/java/' +
+                        'com/qb20nh/cbbg/gametest/IrisFixture.java')
+            })
+            assertTrue(layout[name].java.any {
+                FabricSources.contains(it, 'renderers/gl3/src/gametest/java/' +
+                        'com/qb20nh/cbbg/gametest/IrisImagePixels.java')
+            })
+            assertFalse(layout[name].java.any {
+                FabricSources.contains(it, 'renderers/modern/src/gametest/java/' +
+                        'com/qb20nh/cbbg/gametest/IrisImagePixels.java')
+            })
+            assertTrue(layout[name].java.any {
                 FabricSources.contains(it, 'renderers/gl3/src/gametest/java/' +
                         'com/qb20nh/cbbg/gametest/RenderScaleTargetFormat.java')
             })
@@ -68,6 +81,34 @@ class FabricSourcesTest {
         ['ReleaseShutdownGameTest', 'ReleaseGeneratingShutdownGameTest'].each { name ->
             assertFalse(layout.processedGametest.java.any {
                 FabricSources.contains(it, shared + name + '.java')
+            })
+        }
+    }
+
+    @Test void retainsOrdinaryCompatibilityFixturesOnlyForTextureFormatAndGl3() {
+        File root = new File(System.getProperty('cbbg.repository'))
+        Map catalog = new JsonSlurper().parse(new File(root, 'targets.json'))
+        ['1.21.11-fabric', '26.1-fabric', '26.2-fabric', '26.3-fabric'].each { id ->
+            Map target = catalog.targets.find { it.id == id }
+            Map layout = FabricSources.layout(target, target)
+            String shared = 'adapters/fabric/shared/src/processedGametest/java/com/qb20nh/cbbg/gametest/'
+            ['ReleaseModMenuGameTest', 'ReleaseIrisGameTest'].each { name ->
+                assertEquals(target.renderer == 'blaze-texture-format',
+                        layout.processedGametest.java.any { FabricSources.contains(it, shared + name + '.java') })
+                assertFalse(layout.processedGametest.java.any {
+                    FabricSources.contains(it, 'renderers/blaze-texture-format/src/processedGametest/java/' +
+                            'com/qb20nh/cbbg/gametest/' + name + '.java') &&
+                            new File(root, 'renderers/blaze-texture-format/src/processedGametest/java/' +
+                                    'com/qb20nh/cbbg/gametest/' + name + '.java').exists()
+                })
+            }
+            assertTrue(layout.processedGametest.java.any {
+                FabricSources.contains(it, 'renderers/modern/src/gametest/java/' +
+                        'com/qb20nh/cbbg/gametest/IrisImagePixels.java')
+            })
+            assertFalse(layout.processedGametest.java.any {
+                FabricSources.contains(it, 'renderers/gl3/src/gametest/java/' +
+                        'com/qb20nh/cbbg/gametest/IrisImagePixels.java')
             })
         }
     }
