@@ -182,7 +182,8 @@ if (targetId == '26.3-fabric') {
         archiveClassifier = 'processed-driver'
         from sourceSets.processedGametest.output
     }
-    [MaximumNoiseCache: 'maximum-noise-cache', WorldControl: 'world-control', IrisRestart: 'iris-restart',
+    [MaximumNoiseCache: 'maximum-noise-cache', RenderScale: 'renderscale',
+     WorldControl: 'world-control', IrisRestart: 'iris-restart',
      Shutdown: 'shutdown', GeneratingShutdown: 'generating-shutdown',
      EarlyStartup: 'early-startup',
      EarlyStartupCold: 'startup-cold', EarlyStartupWarm: 'startup-warm',

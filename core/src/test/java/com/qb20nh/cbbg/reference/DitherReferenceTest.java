@@ -48,6 +48,14 @@ class DitherReferenceTest {
       assertEquals(expected[pixel], DitherReference.noiseCoordinate(pixel, 0.5, 3));
     }
     assertEquals(2, DitherReference.noiseCoordinate(-1, 1, 3));
-    assertEquals(3, DitherReference.noiseCoordinate(4, 2, 5));
+    assertEquals(4, DitherReference.noiseCoordinate(4, 2, 5));
+  }
+
+  @Test
+  void fractionalScaleSamplesTheCenterOfEachOutputPixel() {
+    int[] expected = {0, 0, 0, 1, 1, 1, 2, 2, 2, 3, 3};
+    for (int pixel = 0; pixel < expected.length; pixel++) {
+      assertEquals(expected[pixel], DitherReference.noiseCoordinate(pixel, 319.0 / 960, 16));
+    }
   }
 }

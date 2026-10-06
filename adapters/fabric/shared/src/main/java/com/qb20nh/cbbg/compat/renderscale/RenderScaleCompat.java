@@ -46,18 +46,22 @@ public final class RenderScaleCompat {
    * This is only meaningful for downscaling; for {@code scale >= 1} this returns {@code 1}.
    */
   public static float getDitherCoordScale() {
+    return (float) getDitherScale();
+  }
+
+  public static double getDitherScale() {
     if (!RENDER_SCALE_LOADED) {
       return 1.0F;
     }
 
-    float scale = tryGetRenderScale();
+    double scale = tryGetRenderScale();
     if (!(scale > 0.0F) || scale >= 1.0F) {
       return 1.0F;
     }
     return scale;
   }
 
-  private static float tryGetRenderScale() {
+  private static double tryGetRenderScale() {
     ensureScaleReflection();
     if (scaleReflectionFailed) {
       return 1.0F;
@@ -71,7 +75,7 @@ public final class RenderScaleCompat {
                   .invoke(Objects.requireNonNull(commonGetConfig).invoke(null))
               : Objects.requireNonNull(rendererGetScale).invoke(renderer);
       if (scale instanceof Number n) {
-        return n.floatValue();
+        return n.doubleValue();
       }
       return 1.0F;
     } catch (Exception e) {

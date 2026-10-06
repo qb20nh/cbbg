@@ -178,7 +178,7 @@ public final class CbbgDither {
     TextureTarget target = Objects.requireNonNull(ditherTarget);
     GpuTextureView ditherView = Objects.requireNonNull(target.getColorTextureView());
     CommandEncoder encoder = RenderSystem.getDevice().createCommandEncoder();
-    GpuBuffer ditherInfo = ensureDitherInfoUbo();
+    GpuBuffer ditherInfo = ensureDitherInfoUbo(input);
 
     try (RenderPass pass =
         encoder.createRenderPass(
@@ -308,7 +308,7 @@ public final class CbbgDither {
     return shaderManager.getShader(fragmentShader, ShaderType.FRAGMENT) != null;
   }
 
-  private static @NonNull GpuBuffer ensureDitherInfoUbo() {
+  private static @NonNull GpuBuffer ensureDitherInfoUbo(GpuTextureView input) {
     if (ditherInfoUbo == null) {
       ditherInfoUbo =
           new MappableRingBuffer(
@@ -319,9 +319,13 @@ public final class CbbgDither {
 
     GpuBuffer buffer = ditherInfoUbo.currentBuffer();
     float strength = getEffectiveStrength();
-    float coordScale = RenderScaleCompat.getDitherCoordScale();
+    double coordScale = RenderScaleCompat.getDitherScale();
     try (GpuBufferSlice.MappedView view = buffer.map(false, true)) {
-      Std140Builder.intoBuffer(view.data()).putFloat(strength).putVec2(coordScale, coordScale);
+      Std140Builder.intoBuffer(view.data())
+          .putFloat(strength)
+          .putVec2(
+              DitherScale.forDimension(coordScale, input.getWidth(0)),
+              DitherScale.forDimension(coordScale, input.getHeight(0)));
     }
     return buffer;
   }
