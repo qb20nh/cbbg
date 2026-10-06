@@ -20,7 +20,8 @@ class FabricSources {
         Map result = [main: [java: [], resources: []], test: [java: [], resources: []],
                       gametest: [java: [], resources: []], processedGametest: [java: [], resources: []],
                       copies: [main: [], gametest: [], processedGametest: []],
-                      inputs: ['src/main/resources/fabric.mod.json']]
+                      inputs: ['src/main/resources/fabric.mod.json'],
+                      legacyGametestApi: owner.dependencies.clientGametest?.startsWith('2.')]
         List<Map> processed = result.processedGametest.java
         List<String> progress = classes('gametest/mixin/ScenarioProgressMixin',
                 'gametest/IrisFixture', 'gametest/RenderScaleTestAccess')
@@ -123,12 +124,26 @@ class FabricSources {
         for (String kind : ['java', 'resources']) {
             def sources = sourceSet."$kind"
             sources.setSrcDirs([])
+            List selected = []
             layout[name][kind].eachWithIndex { Map spec, int index ->
                 def tree = project.objects.sourceDirectorySet("${name}${kind}${index}", spec.path as String)
                 tree.srcDir(new File(root, spec.path as String))
                 if (spec.includes) tree.include(spec.includes)
                 if (spec.excludes) tree.exclude(spec.excludes)
-                sources.source(tree)
+                selected.add(tree)
+            }
+            if (kind == 'java' && name in ['gametest', 'processedGametest'] && layout.legacyGametestApi) {
+                def mapped = project.tasks.register("map${name.capitalize()}ApiImports", org.gradle.api.tasks.Sync) {
+                    from(selected)
+                    into(project.layout.buildDirectory.dir("generated/${name}-api-imports"))
+                    filter { String line ->
+                        line.replace('net.fabricmc.fabric.api.client.gametest.v1.context.',
+                                'net.fabricmc.fabric.api.client.gametest.v1.')
+                    }
+                }
+                sources.srcDir(mapped)
+            } else {
+                selected.each { sources.source(it) }
             }
         }
     }
