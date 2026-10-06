@@ -8,7 +8,24 @@ final class ReleaseImagePixels {
   private ReleaseImagePixels() {}
 
   static int argb(NativeImage image, int x, int y) {
-    int abgr = image.getPixelRGBA(x, y);
-    return (abgr & 0xff00ff00) | (abgr & 255) << 16 | (abgr >>> 16 & 255);
+    return swapRedBlue(image.getPixelRGBA(x, y));
+  }
+
+  static int[] pixels(NativeImage image) {
+    int[] pixels = new int[image.getWidth() * image.getHeight()];
+    for (int y = 0; y < image.getHeight(); y++) {
+      for (int x = 0; x < image.getWidth(); x++) {
+        pixels[y * image.getWidth() + x] = argb(image, x, y);
+      }
+    }
+    return pixels;
+  }
+
+  static void setArgb(NativeImage image, int x, int y, int argb) {
+    image.setPixelRGBA(x, y, swapRedBlue(argb));
+  }
+
+  private static int swapRedBlue(int pixel) {
+    return (pixel & 0xff00ff00) | (pixel & 255) << 16 | (pixel >>> 16 & 255);
   }
 }

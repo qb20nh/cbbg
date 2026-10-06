@@ -38,9 +38,51 @@ class FabricSourcesTest {
                         'com/qb20nh/cbbg/gametest/' + name + '.java')
             })
         }
-        ['ReleaseWorldPixelsGameTest', 'ReleaseShutdownGameTest', 'ReleaseGeneratingShutdownGameTest'].each { name ->
+        ['ReleaseWorldPixelsGameTest', 'ReleaseTransparencyGameTest', 'ReleaseRenderScaleGameTest'].each { name ->
+            assertTrue(layout.processedGametest.java.any {
+                FabricSources.contains(it, shared + name + '.java')
+            })
+        }
+        ['ReleaseWorldPixelsGameTest', 'ReleaseTransparencyGameTest', 'ReleaseRenderScaleGameTest'].each { name ->
+            assertFalse(entrypoints.contains('com.qb20nh.cbbg.gametest.' + name))
+        }
+        ['ReleaseWorldCapture', 'ReleaseWorldReadback', 'ReleaseTransparencySettings', 'ReleaseImagePixels'].each { name ->
             assertFalse(layout.processedGametest.java.any {
                 FabricSources.contains(it, shared + name + '.java')
+            })
+        }
+        ['gametest', 'processedGametest'].each { name ->
+            assertTrue(layout[name].java.any {
+                FabricSources.contains(it, 'renderers/modern/src/gametest/java/' +
+                        'com/qb20nh/cbbg/gametest/RenderScaleTestAccess.java')
+            })
+            assertTrue(layout[name].java.any {
+                FabricSources.contains(it, 'renderers/gl3/src/gametest/java/' +
+                        'com/qb20nh/cbbg/gametest/RenderScaleTargetFormat.java')
+            })
+            assertFalse(layout[name].java.any {
+                FabricSources.contains(it, 'renderers/modern/src/gametest/java/' +
+                        'com/qb20nh/cbbg/gametest/RenderScaleTargetFormat.java')
+            })
+        }
+        ['ReleaseShutdownGameTest', 'ReleaseGeneratingShutdownGameTest'].each { name ->
+            assertFalse(layout.processedGametest.java.any {
+                FabricSources.contains(it, shared + name + '.java')
+            })
+        }
+    }
+
+    @Test void selectsTheModernRenderScaleFormatBridge() {
+        [[id: '26.1-fabric', minecraft: '26.1', renderer: 'blaze-texture-format',
+          buildProfile: 'fabric-modern', java: 25],
+         [id: '26.2-fabric', minecraft: '26.2', renderer: 'modern',
+          buildProfile: 'fabric-upstream', java: 25],
+         [id: '26.3-fabric', minecraft: '26.3', renderer: 'renderpearl',
+          buildProfile: 'fabric-modern', java: 25]].each { target ->
+            Map layout = FabricSources.layout(target, target)
+            assertEquals(1, layout.processedGametest.java.count {
+                FabricSources.contains(it, 'renderers/modern/src/gametest/java/' +
+                        'com/qb20nh/cbbg/gametest/RenderScaleTargetFormat.java')
             })
         }
     }

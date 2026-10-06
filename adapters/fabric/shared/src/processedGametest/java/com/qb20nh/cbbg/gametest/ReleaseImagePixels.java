@@ -10,4 +10,12 @@ final class ReleaseImagePixels {
   static int argb(NativeImage image, int x, int y) {
     return image.getPixel(x, y);
   }
+
+  static int[] pixels(NativeImage image) {
+    return image.getPixels();
+  }
+
+  static void setArgb(NativeImage image, int x, int y, int argb) {
+    image.setPixel(x, y, argb);
+  }
 }

@@ -10,15 +10,14 @@ public final class ReleaseTransparencyGameTest implements FabricClientGameTest {
   @Override
   public void runTest(ClientGameTestContext context) {
     ReleaseGraphics.check(context);
-    boolean previous =
-        context.computeOnClient(client -> client.options.improvedTransparency().get());
+    Object previous = context.computeOnClient(ReleaseTransparencySettings::snapshot);
     try {
       for (boolean enabled : new boolean[] {false, true}) {
-        context.runOnClient(client -> client.options.improvedTransparency().set(enabled));
+        context.runOnClient(client -> ReleaseTransparencySettings.set(client, enabled));
         ReleaseWorldPixelsGameTest.runScene(context, true);
       }
     } finally {
-      context.runOnClient(client -> client.options.improvedTransparency().set(previous));
+      context.runOnClient(client -> ReleaseTransparencySettings.restore(client, previous));
     }
   }
 }

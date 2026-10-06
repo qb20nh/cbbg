@@ -24,7 +24,7 @@ class FabricSources {
                       legacyGametestApi: owner.dependencies?.clientGametest?.startsWith('2.')]
         List<Map> processed = result.processedGametest.java
         List<String> progress = classes('gametest/mixin/ScenarioProgressMixin',
-                'gametest/IrisFixture', 'gametest/RenderScaleTestAccess')
+                'gametest/IrisFixture', 'gametest/RenderScaleTestAccess', 'gametest/RenderScaleTargetFormat')
         Map irisResources = tree('renderers/modern/src/gametest/resources', ['cbbg-iris-fixture/**'])
         if (owner.buildProfile == 'fabric-upstream') {
             String adapter = 'adapters/fabric/' + owner.minecraft + '/src/'
@@ -88,8 +88,9 @@ class FabricSources {
                         'render/GenerationNotifications', 'render/DitherController',
                         'config/gui/CbbgConfigScreen', 'config/gui/ConfigCanvas'))
                 result.gametest.java << tree('renderers/modern/src/gametest/java', classes(
-                        'gametest/ModMenuGameTest', 'gametest/OptionalModsGameTest') +
-                        (gl3 ? [] : classes('gametest/IrisFixture', 'gametest/RenderScaleTestAccess')))
+                        'gametest/ModMenuGameTest', 'gametest/OptionalModsGameTest',
+                        'gametest/RenderScaleTestAccess') +
+                        (gl3 ? [] : classes('gametest/IrisFixture', 'gametest/RenderScaleTargetFormat')))
                 processed << tree("renderers/${owner.renderer}/src/processedGametest/java", [],
                         (owner.java as int) < 25 ? classes('gametest/mixin/ReleaseNoiseMixin') : [])
                 processed << tree("adapters/fabric/${owner.minecraft}/src/processedGametest/java")
@@ -100,6 +101,7 @@ class FabricSources {
                 processed << tree('renderers/renderpearl/src/processedGametest/java')
                 List<String> shared = classes('gametest/mixin/ScenarioProgressMixin', 'reference/DitherReference',
                         'gametest/FloatPrecisionGameTest', 'gametest/IrisFixture', 'gametest/RenderScaleTestAccess',
+                        'gametest/RenderScaleTargetFormat',
                         'gametest/EarlyStartupGameTest', 'gametest/mixin/EarlyPipelineCacheMixin',
                         'gametest/mixin/EarlyRenderPassMixin', 'gametest/WindowResizeGameTest')
                 processed << tree('renderers/renderpearl/src/gametest/java', shared)
@@ -115,7 +117,12 @@ class FabricSources {
             result.copies.main << tree('src/main/resources', resources)
         }
         if (owner.buildProfile == 'fabric-upstream' || owner.renderer in ['blaze-texture-format', 'gl3']) {
-            if (owner.renderer != 'gl3') {
+            if (owner.renderer == 'gl3') {
+                processed << tree('renderers/modern/src/gametest/java',
+                        classes('gametest/RenderScaleTestAccess'))
+                processed << tree('renderers/gl3/src/gametest/java',
+                        classes('gametest/RenderScaleTargetFormat'))
+            } else {
                 processed << tree('renderers/renderpearl/src/gametest/java', progress)
                 processed << tree('renderers/modern/src/gametest/java', progress)
             }
@@ -125,7 +132,8 @@ class FabricSources {
                             'gametest/ReleaseSettingsGuiGameTest', 'gametest/ReleaseUtilitiesGameTest',
                             'gametest/ReleaseSodiumConfigGameTest',
                             'gametest/ReleaseGenerationGameTest', 'gametest/ReleaseNotificationsGameTest',
-                            'gametest/ReleaseCommands',
+                            'gametest/ReleaseWorldPixelsGameTest', 'gametest/ReleaseTransparencyGameTest',
+                            'gametest/ReleaseRenderScaleGameTest', 'gametest/ReleaseCommands',
                             'gametest/ReleaseGraphics', 'gametest/ReleaseGameNames',
                             'gametest/ReleaseMapping') : [])
             result.copies.processedGametest << tree('adapters/fabric/shared/src/processedGametest/resources')

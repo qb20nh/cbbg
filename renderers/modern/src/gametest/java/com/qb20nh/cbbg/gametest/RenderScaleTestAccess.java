@@ -23,7 +23,7 @@ final class RenderScaleTestAccess {
     RenderTarget scaled =
         (RenderTarget) field(Objects.requireNonNull(call(null, "getInstance")), "renderTarget");
     if (scaled == null
-        || !Objects.requireNonNull(scaled.getColorTexture()).getFormat().name().equals(expected)
+        || !RenderScaleTargetFormat.name(scaled).equals(expected)
         || scaled.width != Math.max(main.width / 2, 1)
         || scaled.height != Math.max(main.height / 2, 1)) {
       throw new AssertionError(
@@ -54,7 +54,7 @@ final class RenderScaleTestAccess {
       @Nullable Object target, String name, Class<?>[] types, @Nullable Object... args) {
     try {
       Class<?> type =
-          target == null ? Class.forName("dev.zelo.renderscale.RenderScale") : target.getClass();
+          target == null ? apiType() : target.getClass();
       return type.getMethod(name, types).invoke(target, args);
     } catch (ReflectiveOperationException failure) {
       throw new LinkageError("RenderScale call failed: " + name, failure);
@@ -63,5 +63,13 @@ final class RenderScaleTestAccess {
 
   static @Nullable Object call(@Nullable Object target, String name) {
     return call(target, name, new Class<?>[0]);
+  }
+
+  private static Class<?> apiType() throws ClassNotFoundException {
+    try {
+      return Class.forName("dev.zelo.renderscale.CommonClass");
+    } catch (ClassNotFoundException newerApi) {
+      return Class.forName("dev.zelo.renderscale.RenderScale");
+    }
   }
 }

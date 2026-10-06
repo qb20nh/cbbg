@@ -199,7 +199,7 @@ public final class ReleaseShaderFailureGameTest implements FabricClientGameTest 
               }
               boolean vulkan = "vulkan".equalsIgnoreCase(ReleaseBackend.identity()[0]);
               CompletableFuture<byte[]> source =
-                  ReleaseWorldPixelsGameTest.read(color, width * height * 16, true);
+                  ReleaseWorldReadback.read(color, width * height * 16, true);
               CompletableFuture<int[]> screenshot = new CompletableFuture<>();
               Screenshot.takeScreenshot(
                   main,
