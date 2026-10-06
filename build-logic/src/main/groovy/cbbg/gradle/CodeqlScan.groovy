@@ -89,6 +89,11 @@ abstract class CodeqlScan extends DefaultTask {
                     result.runs.first().automationDetails?.id?.replaceFirst('/+$', '') != target.category) {
                 throw new GradleException('Unexpected CodeQL report for ' + target.id)
             }
+            if (target.category == '/language:java-kotlin') {
+                // Preserve the target category previously uploaded by the Java matrix.
+                result.runs.first().automationDetails.id = '/language:java-kotlin/target:' + target.id + '/'
+                new File(reports, target.id + '-target.sarif').setText(JsonOutput.toJson(result) + '\n', 'UTF-8')
+            }
             project.delete(database)
         }
         logger.lifecycle('Analyzed {} distinct artifact builds', selected.size())

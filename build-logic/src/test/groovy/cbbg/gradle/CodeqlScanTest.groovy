@@ -79,7 +79,12 @@ elif args[1] == 'analyze':
     category = next(a.split('=', 1)[1] for a in args if a.startswith('--sarif-category='))
     if 'WRONG_CATEGORY':
         category = '/wrong'
-    output.write_text(json.dumps({'version': '2.1.0', 'runs': [{'automationDetails': {'id': category + '/'}}]}))
+    output.write_text(json.dumps({'version': '2.1.0', 'runs': [{
+        'automationDetails': {'id': category + '/'},
+        'tool': {'driver': {'name': 'CodeQL', 'rules': [{'id': 'java/example'}]}},
+        'results': [{'ruleId': 'java/example', 'message': {'text': 'fixture finding'},
+                     'partialFingerprints': {'primaryLocationLineHash': 'fixture'}}]
+    }]}))
 '''.replace('FAILURE', failure == 'command' ? '26.3-fabric' : '')
                 .replace('WRONG_CATEGORY', failure == 'category' ? 'yes' : '')
         assertTrue(cli.setExecutable(true))
@@ -97,11 +102,18 @@ elif args[1] == 'analyze':
         File root = fixture()
         runner(root).build()
         File output = new File(root, '.gradle/codeql-results')
-        assertEquals(['26.1-fabric.sarif', '26.2-fabric.sarif', '26.3-fabric.sarif'] as Set,
+        assertEquals(['26.1-fabric.sarif', '26.2-fabric.sarif', '26.2-fabric-target.sarif', '26.3-fabric.sarif'] as Set,
                 new File(output, 'sarif').list() as Set)
+        Map primary = new JsonSlurper().parse(new File(output, 'sarif/26.2-fabric.sarif')) as Map
+        Map target = new JsonSlurper().parse(new File(output, 'sarif/26.2-fabric-target.sarif')) as Map
+        assertEquals('/language:java-kotlin/', primary.runs.first().automationDetails.id)
+        assertEquals('/language:java-kotlin/target:26.2-fabric/', target.runs.first().automationDetails.id)
+        primary.runs.first().automationDetails.id = target.runs.first().automationDetails.id
+        assertEquals(primary, target)
         List<Map> calls = new File(root, 'calls.jsonl').readLines().collect { new JsonSlurper().parseText(it) as Map }
         List<Map> builds = calls.findAll { it.args[1] == 'trace-command' }
         assertEquals(3, builds*.args.collect { it[2] }.toSet().size())
+        assertEquals(3, calls.count { it.args[1] == 'analyze' })
         builds.each { call ->
             assertTrue(new File(call.java as String).isDirectory())
             List<String> command = call.args.drop(4)
