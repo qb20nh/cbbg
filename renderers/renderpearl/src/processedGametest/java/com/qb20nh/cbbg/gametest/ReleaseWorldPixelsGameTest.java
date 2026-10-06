@@ -30,11 +30,19 @@ public final class ReleaseWorldPixelsGameTest implements FabricClientGameTest {
 
   @Override
   public void runTest(ClientGameTestContext context) {
+    ReleaseClient.checkArtifactAndBackend(context);
     runScene(context, false);
   }
 
   static void runScene(ClientGameTestContext context, boolean disabledControl) {
+    runScene(context, disabledControl, false);
+  }
+
+  static void runScene(
+      ClientGameTestContext context, boolean disabledControl, boolean translucent) {
     boolean hidden = context.computeOnClient(client -> client.gui.hud.isHidden());
+    boolean transparency =
+        context.computeOnClient(client -> client.options.improvedTransparency().get());
     try (var world = context.worldBuilder().create()) {
       String mode =
           context.computeOnClient(
@@ -57,6 +65,9 @@ public final class ReleaseWorldPixelsGameTest implements FabricClientGameTest {
         server.runCommand("fill -8 -64 5 -3 -55 5 minecraft:red_concrete");
         server.runCommand("fill 2 -57 5 8 -50 5 minecraft:blue_concrete");
         server.runCommand("setblock -1 -56 5 minecraft:glowstone");
+        if (translucent) {
+          server.runCommand("fill -8 -64 3 8 -50 3 minecraft:blue_stained_glass");
+        }
         server.runCommand("tp @a 0.5 -58 0.5 0 0");
         world.getConnection().waitForChunksRender();
         context.runOnClient(
@@ -86,6 +97,8 @@ public final class ReleaseWorldPixelsGameTest implements FabricClientGameTest {
             NOISE_DEPTH,
             NOISE_SEED);
         context.waitFor(client -> client.gui.overlay() == null, 600);
+        context.waitFor(
+            client -> client.gameRenderer.useImprovedTransparency() == transparency, 100);
         context.waitTicks(20);
         if (disabledControl) {
           ReleaseClient.assertNoDraws(context);
@@ -94,7 +107,7 @@ public final class ReleaseWorldPixelsGameTest implements FabricClientGameTest {
           CompletionException firstFailure = null;
           for (boolean demo : new boolean[] {false, true}) {
             try {
-              capture(context, demo);
+              capture(context, demo, translucent, transparency);
             } catch (CompletionException failure) {
               // Retain both modes for diagnosis, without turning a failed capture into a pass.
               if (firstFailure == null) firstFailure = failure;
@@ -118,6 +131,7 @@ public final class ReleaseWorldPixelsGameTest implements FabricClientGameTest {
         context.runOnClient(
             client -> {
               if (client.gui.hud.isHidden() != hidden) client.gui.hud.toggle();
+              client.options.improvedTransparency().set(transparency);
             });
       }
     }
@@ -150,7 +164,8 @@ public final class ReleaseWorldPixelsGameTest implements FabricClientGameTest {
     result.join();
   }
 
-  private static void capture(ClientGameTestContext context, boolean demo) {
+  private static void capture(
+      ClientGameTestContext context, boolean demo, boolean translucent, boolean transparency) {
     long beforeMode = ProcessedRenderObservations.draws();
     ReleaseClient.command(context, "mode set " + (demo ? "demo" : "enabled"));
     ReleaseClient.awaitFormat(context, GpuFormat.RGBA32_FLOAT);
@@ -217,7 +232,7 @@ public final class ReleaseWorldPixelsGameTest implements FabricClientGameTest {
                   Path directory =
                       Path.of(
                           Objects.requireNonNull(System.getProperty("cbbg.test.evidence")),
-                          "world-pixels",
+                          translucent ? "world-transparency-" + transparency : "world-pixels",
                           demo ? "demo" : "enabled");
                   Files.createDirectories(directory);
                   Files.copy(
@@ -280,7 +295,9 @@ public final class ReleaseWorldPixelsGameTest implements FabricClientGameTest {
                   return source.<int[], @Nullable Void>thenCombine(
                       actual,
                       (floats, pixels) -> {
-                        compare(directory, width, height, tileSize, noise, floats, pixels, demo);
+                        compare(
+                            directory, width, height, tileSize, noise, floats, pixels, demo,
+                            translucent);
                         return null;
                       });
                 } catch (Throwable failure) {
@@ -303,21 +320,26 @@ public final class ReleaseWorldPixelsGameTest implements FabricClientGameTest {
       int[] noise,
       float[] source,
       int[] actual,
-      boolean demo) {
+      boolean demo,
+      boolean translucent) {
     int changed = 0;
     int boundaries = 0;
     int mismatches = 0;
     int goldenMismatches = 0;
+    int fractionalChannels = 0;
     String first = null;
     String renderer = FabricLoader.getInstance().isModLoaded("sodium") ? "sodium/" : "";
     String goldenPath =
         "/cbbg-world-goldens/26.3/" + renderer + (demo ? "demo" : "enabled") + ".png";
-    var goldenStream = ReleaseWorldPixelsGameTest.class.getResourceAsStream(goldenPath);
-    if (goldenStream == null) throw new AssertionError("Missing world golden: " + goldenPath);
+    var goldenStream =
+        translucent ? null : ReleaseWorldPixelsGameTest.class.getResourceAsStream(goldenPath);
+    if (!translucent && goldenStream == null)
+      throw new AssertionError("Missing world golden: " + goldenPath);
     try (goldenStream;
-        NativeImage golden = NativeImage.read(goldenStream);
+        @Nullable NativeImage golden =
+            goldenStream == null ? null : NativeImage.read(goldenStream);
         NativeImage expectedImage = new NativeImage(width, height, false)) {
-      if (golden.getWidth() != width || golden.getHeight() != height) {
+      if (golden != null && (golden.getWidth() != width || golden.getHeight() != height)) {
         throw new AssertionError("World viewport differs from the golden");
       }
       for (int y = 0; y < height; y++) {
@@ -333,6 +355,10 @@ public final class ReleaseWorldPixelsGameTest implements FabricClientGameTest {
             int noiseByte = noisePixel >>> shift & 255;
             float input = source[(gpuY * width + x) * 4 + channel];
             if (!Float.isFinite(input)) throw new AssertionError("Nonfinite world source");
+            if (input > 0 && input < 1
+                && Math.abs(input * 255 - Math.round(input * 255)) > 0.002f) {
+              fractionalChannels++;
+            }
             int value = DitherReference.channel(input, noiseByte, 2, x, width, demo);
             expected |= value << shift;
             int plain = DitherReference.channel(input, noiseByte, 0, x, width, demo);
@@ -356,7 +382,7 @@ public final class ReleaseWorldPixelsGameTest implements FabricClientGameTest {
             throw new AssertionError("World screenshot alpha was not opaque");
           }
           expectedImage.setPixel(x, y, expected);
-          if (golden.getPixel(x, y) != expected) goldenMismatches++;
+          if (golden != null && golden.getPixel(x, y) != expected) goldenMismatches++;
         }
       }
       expectedImage.writeToFile(directory.resolve("expected.png"));
@@ -378,9 +404,12 @@ public final class ReleaseWorldPixelsGameTest implements FabricClientGameTest {
               + mismatches
               + ",\"goldenMismatchedPixels\":"
               + goldenMismatches
-              + ",\"goldenResource\":\""
-              + goldenPath
-              + "\",\"approvedGolden\":true}\n");
+              + ",\"goldenResource\":"
+              + (translucent ? "null" : "\"" + goldenPath + "\"")
+              + ",\"approvedGolden\":" + !translucent
+              + ",\"fractionalChannels\":" + fractionalChannels + "}\n");
+      if (translucent && fractionalChannels == 0)
+        throw new AssertionError("Transparency quantized the world before dithering");
       if (changed == 0) throw new AssertionError("World fixture cannot detect a missing effect");
       if (mismatches != 0)
         throw new AssertionError(
