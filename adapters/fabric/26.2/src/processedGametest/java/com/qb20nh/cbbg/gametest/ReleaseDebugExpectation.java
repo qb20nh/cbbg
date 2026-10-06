@@ -17,6 +17,6 @@ final class ReleaseDebugExpectation {
   }
 
   static int disabledFrames(int configuredDepth) {
-    return configuredDepth;
+    return 0;
   }
 }

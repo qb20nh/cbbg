@@ -33,6 +33,7 @@ public final class ReleaseDebugOverlayGameTest implements FabricClientGameTest {
   public void runTest(ClientGameTestContext context) {
     ReleaseGraphics.check(context);
     JsonObject original = settings();
+    int depth = original.get("stbnDepth").getAsInt();
     FabricClientCommandSource source = ReleaseGenerationGameTest.silentSource();
     boolean visible = context.computeOnClient(client -> client.debugEntries.isOverlayVisible());
     DebugScreenEntryStatus status =
@@ -60,7 +61,12 @@ public final class ReleaseDebugOverlayGameTest implements FabricClientGameTest {
           }
           context.waitTicks(5);
           context.runOnClient(
-              client -> check(client, mode, settings().get("stbnDepth").getAsInt()));
+              client -> {
+                if (settings().get("stbnDepth").getAsInt() != depth) {
+                  throw new AssertionError("Mode toggle changed the configured noise depth");
+                }
+                check(client, mode, depth);
+              });
         }
       } finally {
         context.runOnClient(
@@ -106,7 +112,7 @@ public final class ReleaseDebugOverlayGameTest implements FabricClientGameTest {
     int frames = Integer.parseInt(Objects.requireNonNull(match.group(2)));
     int expectedFrames =
         mode.equals("disabled") ? ReleaseDebugExpectation.disabledFrames(depth) : depth;
-    if (frames != expectedFrames || (frames > 0 && (frame < 0 || frame >= frames))) {
+    if (frames != expectedFrames || (frames == 0 ? frame != 0 : frame < 0 || frame >= frames)) {
       throw new AssertionError("Wrong live F3 noise sequence: " + text);
     }
     try {
