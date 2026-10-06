@@ -33,6 +33,8 @@ base {
 }
 
 def artifactVersion = project.version
+def fabricBounds = new JsonSlurper().parse(new File(repositoryRoot, 'targets.json')).targets
+		.find { it.id == '26.2-fabric' }.dependencies
 
 repositories {
 	// Add repositories to retrieve artifacts from in here.
@@ -90,10 +92,22 @@ sourceSets {
 	gametest.resources.setSrcDirs([new File(repositoryRoot, 'src/gametest/resources')])
 }
 
-def sharedReadback = objects.sourceDirectorySet('sharedReadback', 'Shared screenshot readback lifecycle')
-sharedReadback.srcDir(new File(repositoryRoot, 'renderers/modern/src/main/java'))
-sharedReadback.include 'com/qb20nh/cbbg/render/Rgba8Capture.java'
-sourceSets.main.java.source(sharedReadback)
+def sharedRenderLifecycle = objects.sourceDirectorySet('sharedRenderLifecycle', 'Shared render lifecycle')
+sharedRenderLifecycle.srcDir(new File(repositoryRoot, 'renderers/modern/src/main/java'))
+sharedRenderLifecycle.include 'com/qb20nh/cbbg/render/Rgba8Capture.java',
+		'com/qb20nh/cbbg/render/DitherController.java',
+		'com/qb20nh/cbbg/render/GenerationNotifications.java',
+		'com/qb20nh/cbbg/render/NotificationPlatform.java'
+sourceSets.main.java.source(sharedRenderLifecycle)
+
+def sharedShaderCompatibility = objects.sourceDirectorySet('sharedShaderCompatibility', 'Shared optional shader detection')
+sharedShaderCompatibility.srcDir(new File(repositoryRoot, 'adapters/fabric/shared/src/main/java'))
+sharedShaderCompatibility.srcDir(new File(repositoryRoot, 'adapters/fabric/modern/src/main/java'))
+sharedShaderCompatibility.include 'com/qb20nh/cbbg/platform/LoaderPlatform.java',
+		'com/qb20nh/cbbg/compat/sulkan/SulkanCompat.java',
+		'com/qb20nh/cbbg/platform/Text.java',
+		'com/qb20nh/cbbg/render/MainTargets.java'
+sourceSets.main.java.source(sharedShaderCompatibility)
 
 def externalCompileClasspath = configurations.compileClasspath.incoming.artifactView {
 	componentFilter { it instanceof org.gradle.api.artifacts.component.ModuleComponentIdentifier }
@@ -121,6 +135,9 @@ tasks.named('processProcessedGametestResources') {
 	dependsOn tasks.named('optimizeReleaseJar')
 	from(releaseOptimization.mappingFile) { rename { 'cbbg-test.map' } }
 	from(new File(repositoryRoot, 'adapters/fabric/shared/src/processedGametest/resources'))
+	def loaderMinimum = fabricBounds.minimumLoader ?: fabricBounds.loader
+	inputs.property('loaderMinimum', loaderMinimum)
+	filesMatching('fabric.mod.json') { expand(loader_minimum: loaderMinimum) }
 	from(new File(repositoryRoot, 'renderers/modern/src/gametest/resources')) {
 		include 'cbbg-iris-fixture/**'
 	}
@@ -150,12 +167,10 @@ processResources {
 	exclude 'licenses/LICENSE_AsmFabricLoader.txt'
 	inputs.property "version", project.version
 	inputs.property "minecraft_version", project.minecraft_version
-	def bounds = new JsonSlurper().parse(new File(repositoryRoot, 'targets.json')).targets
-			.find { it.id == '26.2-fabric' }.dependencies
-	def loaderRange = '>=' + (bounds.minimumLoader ?: '0.19.3') +
-			(bounds.loaderUpperExclusive ? ' <' + bounds.loaderUpperExclusive : '')
-	def apiRange = bounds.minimumFabricApi ? '>=' + bounds.minimumFabricApi +
-			(bounds.fabricApiUpperExclusive ? ' <' + bounds.fabricApiUpperExclusive : '') : '*'
+	def loaderRange = '>=' + (fabricBounds.minimumLoader ?: '0.19.3') +
+			(fabricBounds.loaderUpperExclusive ? ' <' + fabricBounds.loaderUpperExclusive : '')
+	def apiRange = fabricBounds.minimumFabricApi ? '>=' + fabricBounds.minimumFabricApi +
+			(fabricBounds.fabricApiUpperExclusive ? ' <' + fabricBounds.fabricApiUpperExclusive : '') : '*'
 	inputs.property 'loaderRange', loaderRange
 	inputs.property 'apiRange', apiRange
 

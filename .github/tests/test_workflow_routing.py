@@ -1,6 +1,9 @@
 """Check that hosted workflows invoke the native Gradle entry points."""
 
+import os
 from pathlib import Path
+import subprocess
+import tempfile
 import unittest
 
 import yaml
@@ -95,6 +98,23 @@ class WorkflowRoutingTest(unittest.TestCase):
         self.assertEqual(cache["name"], "Cache Gradle dependencies")
         self.assertNotIn("cache-read-only", cache.get("with", {}))
         self.assertFalse(cache.get("with", {}).get("cache-disabled", False))
+
+    def test_codeql_passes_cli_path_to_gradle(self):
+        scan_script = script("Analyze Java artifact builds", WORKFLOWS / "codeql.yml")
+        with tempfile.TemporaryDirectory() as directory:
+            gradlew = Path(directory) / "gradlew"
+            gradlew.write_text('#!/bin/sh\nprintf "%s\\n" "$@"\n')
+            gradlew.chmod(0o755)
+            result = subprocess.run(
+                ["bash", "-e", "-c", scan_script], cwd=directory,
+                env={**os.environ, "CODEQL_EXECUTABLE": "/local/codeql with spaces"},
+                capture_output=True, text=True, check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(result.stdout.splitlines(), [
+                "--no-daemon", "codeqlScan", "-PcodeqlExecutable=/local/codeql with spaces",
+                "-PcodeqlLegacyTarget=26.2-fabric",
+            ])
 
     def test_publication_never_builds_artifact_and_retains_retry_gate(self):
         publish = WORKFLOWS / "publish.yml"

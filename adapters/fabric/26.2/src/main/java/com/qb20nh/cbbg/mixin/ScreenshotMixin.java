@@ -58,10 +58,7 @@ public abstract class ScreenshotMixin {
     if (CbbgClient.isEnabled()) {
       GpuTextureView input = target.getColorTextureView();
       if (input != null) {
-        TextureTarget output =
-            CbbgClient.isDemoMode()
-                ? CbbgDither.renderDemoTarget(input)
-                : CbbgDither.renderDitheredTarget(input);
+        TextureTarget output = CbbgDither.renderScreenshotTarget(input);
         if (output != null) {
           CAPTURE_DEPTH.set(CAPTURE_DEPTH.get() + 1);
           try {

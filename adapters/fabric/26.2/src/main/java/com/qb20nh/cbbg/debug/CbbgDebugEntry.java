@@ -2,6 +2,7 @@ package com.qb20nh.cbbg.debug;
 
 import com.qb20nh.cbbg.CbbgClient;
 import com.qb20nh.cbbg.compat.iris.IrisCompat;
+import com.qb20nh.cbbg.compat.sulkan.SulkanCompat;
 import com.qb20nh.cbbg.config.CbbgConfig;
 import com.qb20nh.cbbg.render.CbbgDither;
 import net.minecraft.client.gui.components.debug.DebugScreenDisplayer;
@@ -31,6 +32,8 @@ public final class CbbgDebugEntry implements DebugScreenEntry {
             + user
             + ") iris="
             + (iris ? 1 : 0)
+            + " sulkan="
+            + (SulkanCompat.isShaderPackActive() ? 1 : 0)
             + " dis="
             + (CbbgDither.isDisabled() ? 1 : 0));
 

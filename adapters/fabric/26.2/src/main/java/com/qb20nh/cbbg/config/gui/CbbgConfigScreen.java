@@ -1,6 +1,7 @@
 package com.qb20nh.cbbg.config.gui;
 
 import com.qb20nh.cbbg.compat.iris.IrisCompat;
+import com.qb20nh.cbbg.compat.sulkan.SulkanCompat;
 import com.qb20nh.cbbg.config.CbbgConfig;
 import com.qb20nh.cbbg.render.CbbgDither;
 import com.qb20nh.cbbg.render.MainTargetFormatSupport;
@@ -439,6 +440,13 @@ public final class CbbgConfigScreen extends Screen {
       context.centeredText(
           this.font,
           Component.translatable("cbbg.config.status.iris_active"),
+          cx,
+          statusY,
+          0xFFFFAA00);
+    } else if (SulkanCompat.isShaderPackActive()) {
+      context.centeredText(
+          this.font,
+          Component.translatable("cbbg.config.status.shader_active", "Sulkan"),
           cx,
           statusY,
           0xFFFFAA00);

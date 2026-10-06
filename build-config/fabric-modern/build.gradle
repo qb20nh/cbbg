@@ -39,6 +39,7 @@ def testCompat = providers.gradleProperty('compat').getOrElse('none')
 if (!target.compatibilityProfiles.containsKey(testCompat)) {
     throw new GradleException("Unsupported compatibility fixture: ${testCompat}")
 }
+def effectiveDependencies = cbbg.gradle.TargetCatalog.effectiveDependencies(target, testCompat)
 
 dependencies {
     minecraft "com.mojang:minecraft:${gameTarget.minecraft}"
@@ -49,27 +50,27 @@ dependencies {
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
     compileOnly("com.terraformersmc:modmenu:${target.dependencies.modMenu}") { transitive = false }
     if (testCompat.tokenize('+').contains('modmenu')) {
-        runtimeOnly("com.terraformersmc:modmenu:${target.dependencies.modMenu}") { transitive = false }
+        runtimeOnly("com.terraformersmc:modmenu:${effectiveDependencies.modMenu}") { transitive = false }
     }
     if (testCompat.tokenize('+').contains('iris')) {
-        runtimeOnly("maven.modrinth:iris:${target.dependencies.iris}") { transitive = false }
+        runtimeOnly("maven.modrinth:iris:${effectiveDependencies.iris}") { transitive = false }
     }
     if (testCompat.tokenize('+').contains('immediatelyfast')) {
-        runtimeOnly("maven.modrinth:immediatelyfast:${target.dependencies.immediatelyFast}") { transitive = false }
+        runtimeOnly("maven.modrinth:immediatelyfast:${effectiveDependencies.immediatelyFast}") { transitive = false }
     }
     if (testCompat.tokenize('+').contains('sulkan')) {
-        runtimeOnly("maven.modrinth:sulkan:${target.dependencies.sulkan}") { transitive = false }
+        runtimeOnly("maven.modrinth:sulkan:${effectiveDependencies.sulkan}") { transitive = false }
     }
     if (testCompat.tokenize('+').any { it == 'iris' || it == 'sodium' || it == 'sulkan' }) {
-        runtimeOnly("maven.modrinth:sodium:${target.dependencies.sodium}") { transitive = false }
+        runtimeOnly("maven.modrinth:sodium:${effectiveDependencies.sodium}") { transitive = false }
     }
     if (testCompat.tokenize('+').contains('chatpatches')) {
-        runtimeOnly("maven.modrinth:chatpatches:${target.dependencies.chatPatches}") { transitive = false }
-        runtimeOnly("maven.modrinth:yacl:${target.dependencies.yacl}") { transitive = false }
+        runtimeOnly("maven.modrinth:chatpatches:${effectiveDependencies.chatPatches}") { transitive = false }
+        runtimeOnly("maven.modrinth:yacl:${effectiveDependencies.yacl}") { transitive = false }
     }
     if (testCompat.tokenize('+').contains('renderscale')) {
-        runtimeOnly("maven.modrinth:renderscale:${target.dependencies.renderScale}") { transitive = false }
-        runtimeOnly("maven.modrinth:cloth-config:${target.dependencies.clothConfig}") { transitive = false }
+        runtimeOnly("maven.modrinth:renderscale:${effectiveDependencies.renderScale}") { transitive = false }
+        runtimeOnly("maven.modrinth:cloth-config:${effectiveDependencies.clothConfig}") { transitive = false }
     }
 }
 

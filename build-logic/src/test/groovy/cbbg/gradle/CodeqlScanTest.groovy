@@ -25,7 +25,9 @@ class CodeqlScanTest {
         assertEquals('/language:java-kotlin/target:26.1-fabric', rows.find { it.id == '26.1-fabric' }.category)
         assertEquals(3, rows*.category.toSet().size())
         Map data = catalog()
-        data.ciTargets << '26.2-fabric'
+        data.ciTargets.remove('26.2-fabric')
+        data.targets.find { it.id == '26.2-fabric' }.implemented = false
+        assertFalse(CodeqlScan.targets(new TargetCatalog(data), '')*.id.contains('26.2-fabric'))
         assertEquals(rows, CodeqlScan.targets(new TargetCatalog(data), '26.2-fabric'))
     }
 

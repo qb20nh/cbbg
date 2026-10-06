@@ -25,10 +25,13 @@ final class ReleaseNotificationUi {
 
   static boolean settled() {
     try {
-      String owner = "com.qb20nh.cbbg.render.CbbgDither";
+      String owner = "com.qb20nh.cbbg.render.GenerationNotifications";
       Class<?> type = Class.forName(ReleaseMapping.className(owner));
-      Method method = type.getMethod(ReleaseMapping.memberName(owner, "boolean isGenerating()"));
-      return !((Boolean) Objects.requireNonNull(method.invoke(null)));
+      Field field =
+          type.getDeclaredField(
+              ReleaseMapping.memberName(owner, "java.util.concurrent.CompletableFuture pending"));
+      field.setAccessible(true);
+      return field.get(null) == null;
     } catch (ReflectiveOperationException failure) {
       throw new LinkageError("Packaged 26.2 generation state changed", failure);
     }
@@ -36,13 +39,13 @@ final class ReleaseNotificationUi {
 
   static SystemToast.SystemToastId toastId() {
     try {
-      String owner = "com.qb20nh.cbbg.render.CbbgDither";
+      String owner = "com.qb20nh.cbbg.render.NotificationPlatform";
       Class<?> type = Class.forName(ReleaseMapping.className(owner));
       Field field =
           type.getDeclaredField(
               ReleaseMapping.memberName(
                   owner,
-                  "net.minecraft.client.gui.components.toasts.SystemToast$SystemToastId generationToastId"));
+                  "net.minecraft.client.gui.components.toasts.SystemToast$SystemToastId toastId"));
       field.setAccessible(true);
       return (SystemToast.SystemToastId) Objects.requireNonNull(field.get(null));
     } catch (ReflectiveOperationException failure) {
@@ -52,9 +55,9 @@ final class ReleaseNotificationUi {
 
   static void settleNow() {
     try {
-      String owner = "com.qb20nh.cbbg.render.CbbgDither";
+      String owner = "com.qb20nh.cbbg.render.GenerationNotifications";
       Class<?> type = Class.forName(ReleaseMapping.className(owner));
-      Method method = type.getMethod(ReleaseMapping.memberName(owner, "void ensureStbnLoaded()"));
+      Method method = type.getMethod(ReleaseMapping.memberName(owner, "void tick()"));
       method.invoke(null);
     } catch (ReflectiveOperationException failure) {
       throw new LinkageError("Packaged 26.2 generation settlement changed", failure);
@@ -62,23 +65,6 @@ final class ReleaseNotificationUi {
   }
 
   static CompletableFuture<?> prepareFailure() {
-    try {
-      String owner = "com.qb20nh.cbbg.render.stbn.STBNGenerator";
-      Class<?> type = Class.forName(ReleaseMapping.className(owner));
-      Method method =
-          type.getMethod(
-              ReleaseMapping.memberName(
-                  owner,
-                  "java.util.concurrent.CompletableFuture generateAsync(int,int,int,long,boolean)"),
-              int.class,
-              int.class,
-              int.class,
-              long.class,
-              boolean.class);
-      return (CompletableFuture<?>)
-          Objects.requireNonNull(method.invoke(null, 16, 16, 8, 913736L, false));
-    } catch (ReflectiveOperationException failure) {
-      throw new LinkageError("Packaged 26.2 preparation API changed", failure);
-    }
+    return ReleaseGenerationGameTest.pending();
   }
 }
