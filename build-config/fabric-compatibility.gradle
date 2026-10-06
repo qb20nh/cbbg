@@ -141,7 +141,7 @@ tasks.register('verifyFabricCompatibility') {
         Map<String, String> modNames = [modmenu: 'modMenu', clothconfig: 'clothConfig', yacl: 'yacl',
                 sodium: 'sodium', iris: 'iris', sulkan: 'sulkan', renderscale: 'renderScale',
                 chatpatches: 'chatPatches', immediatelyfast: 'immediatelyFast',
-                threatengl: 'threatenGl', forcegl3: 'forceGl3']
+                threatengl: 'threatenGl', forcegl3: 'forceGl3', forcegl2: 'forceGl2']
         Set<String> selected = profile == 'none' ? [] as Set : profile.tokenize('+') as Set
         if (selected.contains('iris') || selected.contains('sulkan')) selected.add('sodium')
         if (selected.contains('renderscale')) selected.add('clothconfig')

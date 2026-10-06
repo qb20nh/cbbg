@@ -198,6 +198,21 @@ class TargetCatalogTest {
     }
 
     @Test
+    void glChangerProfilesHaveDependenciesForBothMinecraft121Targets() {
+        Map data = copyData()
+        for (String id : ['1.21.1-fabric', '1.21.11-fabric']) {
+            Map fabric = target(data, id)
+            String forceProfile = id == '1.21.1-fabric' ? 'forcegl2' : 'forcegl2+yacl'
+            assertEquals(['opengl'], fabric.compatibilityProfiles[forceProfile])
+            assertEquals(['opengl'], fabric.compatibilityProfiles.threatengl)
+            assertEquals(id == '1.21.1-fabric' ? 'x831iJzz' : 'PK6vSUU6',
+                    TargetCatalog.effectiveDependencies(fabric, forceProfile).forceGl2)
+            assertEquals('nK30v84J', TargetCatalog.effectiveDependencies(fabric, 'threatengl').threatenGl)
+        }
+        new TargetCatalog(data)
+    }
+
+    @Test
     void ciTargetsAndPathsAreValidated() {
         for (Object defaults : [[], ['unknown'], ['26.3-fabric', '26.3-fabric'], [false], '26.3-fabric']) {
             Map data = copyData()
