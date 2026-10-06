@@ -9,6 +9,7 @@ import java.util.Locale;
 import java.util.Objects;
 import java.util.function.DoubleConsumer;
 import java.util.function.IntConsumer;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.AbstractSliderButton;
 import net.minecraft.client.gui.components.Button;
@@ -50,6 +51,10 @@ public final class CbbgConfigScreen extends Screen {
   public CbbgConfigScreen(@Nullable Screen parent) {
     super(Component.translatable("cbbg.config.title"));
     this.parent = parent;
+  }
+
+  public static void open(Screen parent) {
+    Minecraft.getInstance().setScreenAndShow(new CbbgConfigScreen(parent));
   }
 
   @Override

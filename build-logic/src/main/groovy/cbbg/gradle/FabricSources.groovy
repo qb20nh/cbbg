@@ -37,7 +37,7 @@ class FabricSources {
                     'render/Rgba8Capture', 'render/DitherController',
                     'render/GenerationNotifications', 'render/NotificationPlatform'))
             List<String> compatibility = classes('platform/LoaderPlatform', 'compat/sulkan/SulkanCompat',
-                    'platform/Text', 'render/MainTargets')
+                    'platform/Text', 'render/MainTargets', 'compat/sodium/CbbgSodiumConfig')
             result.main.java << tree('adapters/fabric/shared/src/main/java', compatibility)
             result.main.java << tree('adapters/fabric/modern/src/main/java', compatibility)
             processed << tree(adapter + 'processedGametest/java')
@@ -60,7 +60,7 @@ class FabricSources {
                     'Cbbg', 'platform/LoaderPlatform', 'command/CbbgClientCommands', 'platform/Text',
                     'command/CommandPlatform', 'config/gui/CbbgConfigWidgets', 'config/gui/WidgetPlatform',
                     'compat/iris/IrisCompat', 'compat/renderscale/RenderScaleCompat',
-                    'compat/modmenu/CbbgModMenuApi',
+                    'compat/modmenu/CbbgModMenuApi', 'compat/sodium/CbbgSodiumConfig',
                     'render/stbn/STBNGenerator', 'render/stbn/STBNLoader',
                     'render/stbn/StbnImagePixels', 'render/stbn/STBNCache', 'render/MainTargets'))
             result.gametest.java << tree('adapters/fabric/shared/src/gametest/java',
@@ -106,7 +106,7 @@ class FabricSources {
         result.copies.processedGametest << irisResources
         if (owner.renderer == 'renderpearl') {
             processed << tree('adapters/fabric/shared/src/processedGametest/java',
-                    classes('gametest/ReleaseUtilitiesGameTest'))
+                    classes('gametest/ReleaseSodiumConfigGameTest', 'gametest/ReleaseUtilitiesGameTest'))
         }
         result
     }

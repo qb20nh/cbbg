@@ -4,6 +4,7 @@ import com.qb20nh.cbbg.compat.iris.IrisCompat;
 import com.qb20nh.cbbg.compat.sulkan.ShaderCompat;
 import com.qb20nh.cbbg.config.CbbgConfig;
 import com.qb20nh.cbbg.render.DitherController;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.ConfirmScreen;
 import net.minecraft.client.gui.screens.Screen;
@@ -28,6 +29,10 @@ public final class CbbgConfigScreen extends Screen {
   public CbbgConfigScreen(@Nullable Screen parent) {
     super(Component.translatable("cbbg.config.title"));
     this.parent = parent;
+  }
+
+  public static void open(Screen parent) {
+    ClientScreenAccess.setScreen(Minecraft.getInstance(), new CbbgConfigScreen(parent));
   }
 
   @Override

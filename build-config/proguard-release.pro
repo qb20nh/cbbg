@@ -5,6 +5,7 @@
 -keep class com.qb20nh.cbbg.CbbgLanguageAdapter { *; }
 -keep class com.qb20nh.cbbg.CbbgClient { *; }
 -keep class com.qb20nh.cbbg.compat.modmenu.CbbgModMenuApi { *; }
+-keep class com.qb20nh.cbbg.compat.sodium.CbbgSodiumConfig { *; }
 -keep class com.qb20nh.cbbg.api.** { public protected *; }
 -keep public class com.qb20nh.cbbg.render.DitherPass { public protected *; }
 -keep class com.qb20nh.cbbg.mixin.** { *; }

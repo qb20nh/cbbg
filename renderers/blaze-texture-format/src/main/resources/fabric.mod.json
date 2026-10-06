@@ -7,7 +7,8 @@
   "entrypoints": {
     "preLaunch": ["com.qb20nh.cbbg.CbbgEarlyInit"],
     "client": ["com.qb20nh.cbbg.CbbgClient"],
-    "modmenu": ["com.qb20nh.cbbg.compat.modmenu.CbbgModMenuApi"]
+    "modmenu": ["com.qb20nh.cbbg.compat.modmenu.CbbgModMenuApi"],
+    "sodium:config_api_user": ["com.qb20nh.cbbg.compat.sodium.CbbgSodiumConfig"]
   },
   "languageAdapters": {
     "cbbg:early": "com.qb20nh.cbbg.CbbgLanguageAdapter"

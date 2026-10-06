@@ -49,6 +49,7 @@ dependencies {
     testImplementation 'org.junit.jupiter:junit-jupiter'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
     compileOnly("com.terraformersmc:modmenu:${target.dependencies.modMenu}") { transitive = false }
+    compileOnly("maven.modrinth:sodium:${gameTarget.dependencies.sodium}") { transitive = false }
     if (testCompat.tokenize('+').contains('modmenu')) {
         runtimeOnly("com.terraformersmc:modmenu:${effectiveDependencies.modMenu}") { transitive = false }
     }
