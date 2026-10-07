@@ -153,6 +153,23 @@ class FabricSourcesTest {
         })
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = ['1.21.11-fabric', '26.1-fabric'])
+    void selectsVersionSpecificRenderPassHooks(String id) {
+        File root = new File(System.getProperty('cbbg.repository'))
+        Map target = new JsonSlurper().parse(new File(root, 'targets.json')).targets.find { it.id == id }
+        Map layout = FabricSources.layout(target, target)
+        boolean java21 = (target.java as int) == 21
+        ['ReleaseNoiseMixin', 'ReleaseStartupRenderPassMixin'].each { name ->
+            String relative = "com/qb20nh/cbbg/gametest/mixin/${name}.java"
+            String shared = 'renderers/blaze-texture-format/src/processedGametest/java/' + relative
+            String adapter = "adapters/minecraft/${target.minecraft}/src/processedGametest/java/" + relative
+            assertEquals(!java21, layout.processedGametest.java.any { FabricSources.contains(it, shared) })
+            assertEquals(java21, new File(root, adapter).isFile() &&
+                    layout.processedGametest.java.any { FabricSources.contains(it, adapter) })
+        }
+    }
+
     @Test void retainsOrdinaryCompatibilityFixturesOnlyForTextureFormatAndGl3() {
         File root = new File(System.getProperty('cbbg.repository'))
         Map catalog = new JsonSlurper().parse(new File(root, 'targets.json'))

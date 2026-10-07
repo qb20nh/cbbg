@@ -94,7 +94,8 @@ class FabricSources {
                         'gametest/RenderScaleTestAccess', 'gametest/IrisFixture') +
                         (gl3 ? [] : classes('gametest/IrisImagePixels', 'gametest/RenderScaleTargetFormat')))
                 processed << tree("renderers/${owner.renderer}/src/processedGametest/java", [],
-                        (owner.java as int) < 25 ? classes('gametest/mixin/ReleaseNoiseMixin') : [])
+                        (owner.java as int) < 25 ? classes('gametest/mixin/ReleaseNoiseMixin',
+                                'gametest/mixin/ReleaseStartupRenderPassMixin') : [])
                 processed << tree("adapters/fabric/${owner.minecraft}/src/processedGametest/java")
                 processed << tree("adapters/minecraft/${owner.minecraft}/src/processedGametest/java")
                 result.processedGametest.resources << tree("renderers/${owner.renderer}/src/processedGametest/resources")
