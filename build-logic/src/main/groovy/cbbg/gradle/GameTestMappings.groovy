@@ -40,6 +40,9 @@ abstract class GameTestMappings extends DefaultTask {
         properties.putAll(names(mappings.get().asFile.readLines('UTF-8')))
         File destination = output.get().asFile
         destination.parentFile.mkdirs()
-        destination.withWriter('UTF-8') { writer -> properties.store(writer, 'Minecraft test reflection names') }
+        StringWriter writer = new StringWriter()
+        properties.store(writer, null)
+        destination.setText(writer.toString().readLines().findAll { !it.startsWith('#') }
+                .sort().join('\n') + '\n', 'UTF-8')
     }
 }
