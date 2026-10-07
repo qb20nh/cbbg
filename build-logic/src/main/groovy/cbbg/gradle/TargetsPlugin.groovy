@@ -90,11 +90,11 @@ class TargetsPlugin implements Plugin<Project> {
         Map owner = owners.size() == 1 ? owners.first() : null
         List<Map> family = []
         if (selected.size() == 1 && selected.first().loader == 'fabric' && owner != null) {
-            if (owner.renderer in ['renderpearl', 'blaze-gpu-format']) {
-                family = [selected.first()]
-            } else if (owner.renderer == 'blaze-texture-format' && owner.compatibleMinecraft) {
+            if (owner.renderer == 'blaze-texture-format' && owner.compatibleMinecraft) {
                 String ids = ([owner.minecraft] + owner.compatibleMinecraft).collect { it + '-fabric' }.join(',')
                 family = catalog.select(ids)
+            } else if (owner.renderer in ['gl3', 'blaze-texture-format', 'blaze-gpu-format', 'renderpearl']) {
+                family = [selected.first()]
             }
         }
         if (family.isEmpty()) {

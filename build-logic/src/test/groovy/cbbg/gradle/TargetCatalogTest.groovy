@@ -27,12 +27,12 @@ class TargetCatalogTest {
     @Test
     void actualCatalogSelectsRuntimeTargetsAndArtifactOwners() {
         TargetCatalog catalog = TargetCatalog.read(CATALOG)
-        List<String> implemented = ['26.1-fabric', '26.1.1-fabric', '26.1.2-fabric', '26.2-fabric', '26.3-fabric']
+        List<String> implemented = ['1.21.1-fabric', '1.21.11-fabric', '26.1-fabric', '26.1.1-fabric', '26.1.2-fabric', '26.2-fabric', '26.3-fabric']
         assertEquals(34, catalog.select().size())
         assertEquals(implemented, catalog.defaults()*.id)
         assertEquals(implemented, catalog.select().findAll { it.implemented }*.id)
         assertEquals(implemented, catalog.defaults(true)*.id)
-        assertEquals(['26.1-fabric', '26.2-fabric', '26.3-fabric'], catalog.matrix(implemented.join(','), true)*.id)
+        assertEquals(['1.21.1-fabric', '1.21.11-fabric', '26.1-fabric', '26.2-fabric', '26.3-fabric'], catalog.matrix(implemented.join(','), true)*.id)
         assertEquals(['26.3-fabric'], catalog.matrix('26.3-fabric', true)*.id)
         assertEquals(['1.21.11-neoforge', '26.1.2-neoforge', '26.2-neoforge'],
                 catalog.selectProfile('neoforge-modern')*.id)
@@ -60,7 +60,9 @@ class TargetCatalogTest {
         Map entry = target(copyData(), '1.21.1-fabric')
         assertEquals(21, entry.java)
         assertEquals('gl3', entry.renderer)
-        assertFalse(entry.implemented)
+        assertTrue(entry.implemented)
+        assertEquals('0.16.0', entry.dependencies.minimumLoader)
+        assertEquals('0.101.2+1.21.1', entry.dependencies.minimumFabricApi)
         assertEquals('2.0.0+99ff640a04', entry.dependencies.clientGametest)
         assertEquals(['opengl'], entry.backends)
         Map stableIris = TargetCatalog.effectiveDependencies(entry, 'iris')

@@ -150,6 +150,30 @@ case "$*" in *-Pcompat=fail*) exit 7;; esac
         assertTrue(args.contains('-PverifyDeclaredMinimums=true'))
     }
 
+    @Test void singleRuntimeFabricMinimumSearchSupportsGl3AndBlazeTextureFormat() {
+        [['1.21.1', 'gl3'], ['1.21.11', 'blaze-texture-format']].each { runtime ->
+            fixture()
+            File arguments = new File(directory, 'build/arguments.txt')
+            if (arguments.exists()) assertTrue(arguments.delete())
+            Map target = [id: runtime[0] + '-fabric', minecraft: runtime[0], loader: 'fabric', java: 21,
+                          renderer: runtime[1], backends: ['opengl'], implemented: false, buildProfile: 'fixture']
+            new File(directory, 'targets.json').text = JsonOutput.toJson(
+                    [schema: 1, ciTargets: [target.id], targets: [target]])
+            Map environment = new HashMap(System.getenv())
+            environment.remove('CI')
+            environment.remove('GITHUB_ACTIONS')
+            runner('determineFabricMinimums', '-Ptarget=' + target.id, '-PcompatibilityRuntime=/local/runtime')
+                    .withEnvironment(environment).build()
+            List<String> args = arguments.readLines()
+            assertEquals(['updateFabricMinimums', 'verifyFabricCompatibility'],
+                    args.findAll { it in ['updateFabricMinimums', 'verifyFabricCompatibility'] })
+            assertEquals(['-PverifyDeclaredMinimums=false', '-PverifyDeclaredMinimums=true'],
+                    args.findAll { it.startsWith('-PverifyDeclaredMinimums=') })
+            assertEquals(2, args.count('-Ptarget=' + target.id))
+            assertEquals(2, args.count('-PcompatibilityRuntime=/local/runtime'))
+        }
+    }
+
     @Test void ciCannotRunTheMinimumSearch() {
         fixture()
         ['CI', 'GITHUB_ACTIONS'].each { name ->
