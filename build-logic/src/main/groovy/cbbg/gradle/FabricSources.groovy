@@ -51,6 +51,7 @@ class FabricSources {
             List<String> groups = (["renderers/${target.renderer}", "adapters/minecraft/${owner.minecraft}",
                     "adapters/fabric/${owner.minecraft}"] + (target.sourceGroups ?: [])).unique()
             if (textureFormat) groups << 'adapters/minecraft/blaze-texture-format'
+            if (owner.minecraft in ['1.21.1', '1.21.11']) groups << 'adapters/minecraft/gui-graphics'
             for (String group : groups) {
                 result.main.java << tree(group + '/src/main/java')
                 result.main.resources << tree(group + '/src/main/resources')

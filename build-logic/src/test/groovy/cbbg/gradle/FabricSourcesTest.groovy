@@ -12,6 +12,19 @@ import static org.junit.jupiter.api.Assertions.*
 class FabricSourcesTest {
     @TempDir File directory
 
+    @Test void selectsTheGuiGraphicsCanvasOnlyForItsMinecraftVersions() {
+        File root = new File(System.getProperty('cbbg.repository'))
+        Map catalog = new JsonSlurper().parse(new File(root, 'targets.json'))
+        String canvas = 'adapters/minecraft/gui-graphics/src/main/java/' +
+                'com/qb20nh/cbbg/config/gui/GuiGraphicsCanvas.java'
+        ['1.21.1-fabric', '1.21.11-fabric', '26.1-fabric', '26.2-fabric', '26.3-fabric'].each { id ->
+            Map target = catalog.targets.find { it.id == id }
+            Map layout = FabricSources.layout(target, target)
+            assertEquals(id in ['1.21.1-fabric', '1.21.11-fabric'],
+                    layout.main.java.any { FabricSources.contains(it, canvas) })
+        }
+    }
+
     @Test void selectsTheSharedOrdinaryFixturesForGl3() {
         Map target = [id: '1.21.1-fabric', minecraft: '1.21.1', renderer: 'gl3',
                       buildProfile: 'fabric-modern', java: 21,
