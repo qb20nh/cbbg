@@ -38,6 +38,8 @@ public final class ReleaseNotificationsGameTest implements FabricClientGameTest 
   public void runTest(ClientGameTestContext context) {
     ReleaseGraphics.check(context);
     JsonObject original = settings().deepCopy();
+    boolean originalChat = notificationSetting("notifyChat");
+    boolean originalToast = notificationSetting("notifyToast");
     FabricClientCommandSource source = ReleaseGenerationGameTest.silentSource();
     try (var world = context.worldBuilder().create()) {
       ReleaseViewport.waitForChunks(world);
@@ -211,14 +213,8 @@ public final class ReleaseNotificationsGameTest implements FabricClientGameTest 
               command(dispatcher, source, "stbn size " + original.get("stbnSize").getAsInt());
               command(dispatcher, source, "stbn depth " + original.get("stbnDepth").getAsInt());
               command(dispatcher, source, "stbn seed " + original.get("stbnSeed").getAsLong());
-              command(
-                  dispatcher,
-                  source,
-                  "notification chat " + original.get("notifyChat").getAsBoolean());
-              command(
-                  dispatcher,
-                  source,
-                  "notification toast " + original.get("notifyToast").getAsBoolean());
+              command(dispatcher, source, "notification chat " + originalChat);
+              command(dispatcher, source, "notification toast " + originalToast);
               command(
                   dispatcher,
                   source,
@@ -258,6 +254,22 @@ public final class ReleaseNotificationsGameTest implements FabricClientGameTest 
       return JsonParser.parseReader(reader).getAsJsonObject();
     } catch (Exception failure) {
       throw new AssertionError("Cannot read packaged CBBG settings", failure);
+    }
+  }
+
+  private static boolean notificationSetting(String name) {
+    try {
+      String owner = "com.qb20nh.cbbg.config.CbbgConfig";
+      Class<?> type = Class.forName(ReleaseMapping.className(owner));
+      Object config =
+          Objects.requireNonNull(
+              type.getMethod(ReleaseMapping.memberName(owner, owner + " get()")).invoke(null));
+      return (boolean)
+          Objects.requireNonNull(
+              type.getMethod(ReleaseMapping.memberName(owner, "boolean " + name + "()"))
+                  .invoke(config));
+    } catch (ReflectiveOperationException failure) {
+      throw new LinkageError("Packaged notification settings changed", failure);
     }
   }
 
