@@ -23,7 +23,7 @@ jobs:
         with:
           java-version: '25'
           distribution: temurin
-      - uses: gradle/actions/setup-gradle@v6.3.0
+      - uses: gradle/actions/setup-gradle@v6.4.0
       - name: Select catalog targets
         id: targets
         env:
@@ -52,7 +52,7 @@ jobs:
         with:
           java-version: '25'
           distribution: temurin
-      - uses: gradle/actions/setup-gradle@v6.3.0
+      - uses: gradle/actions/setup-gradle@v6.4.0
         with:
           cache-cleanup: on-success
       - name: Check and build development jars
