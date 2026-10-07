@@ -95,7 +95,8 @@ class FabricSources {
                         (gl3 ? [] : classes('gametest/IrisImagePixels', 'gametest/RenderScaleTargetFormat')))
                 processed << tree("renderers/${owner.renderer}/src/processedGametest/java", [],
                         ((owner.java as int) < 25 ? classes('gametest/mixin/ReleaseNoiseMixin') : []) +
-                                (owner.minecraft == '1.21.11' ? classes('gametest/mixin/ReleaseStartupRenderPassMixin') : []))
+                                (owner.minecraft == '1.21.11' ? classes('gametest/mixin/ReleaseStartupRenderPassMixin',
+                                        'gametest/mixin/ReleaseAllocationFailureMixin') : []))
                 processed << tree("adapters/fabric/${owner.minecraft}/src/processedGametest/java")
                 processed << tree("adapters/minecraft/${owner.minecraft}/src/processedGametest/java")
                 result.processedGametest.resources << tree("renderers/${owner.renderer}/src/processedGametest/resources")
