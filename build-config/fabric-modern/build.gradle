@@ -363,7 +363,7 @@ tasks.named('processResources') {
         cbbg.gradle.FabricBranding.apply(sharedDescriptor, descriptorFile)
         if (artifactOwner.minecraft == '1.21.1') {
             Map descriptor = new groovy.json.JsonSlurper().parse(descriptorFile)
-            descriptor.depends.mixinextras = '>=0.4.0'
+            descriptor.depends.mixinextras = '>=' + cbbg.gradle.PackageChecks.MINECRAFT_1211_MIXIN_EXTRAS_MINIMUM
             descriptorFile.text = groovy.json.JsonOutput.prettyPrint(
                     groovy.json.JsonOutput.toJson(descriptor)) + '\n'
         }

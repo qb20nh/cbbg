@@ -12,6 +12,7 @@ import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
 
 class PackageChecks {
+    static final String MINECRAFT_1211_MIXIN_EXTRAS_MINIMUM = '0.4.0'
     private static final List<String> TEST_PREFIXES = [
             'com/qb20nh/cbbg/parity/', 'com/qb20nh/cbbg/gametest/',
             'com/qb20nh/cbbg/smoke/', 'cbbg-iris-fixture/'
@@ -160,7 +161,13 @@ class PackageChecks {
                     minecraft: target.minecraftDependency ?: target.minecraft, java: '>=' + target.java,
                     'fabric-api': (target.dependencies.minimumFabricApi ? '>=' + target.dependencies.minimumFabricApi : '*') +
                             (target.dependencies.fabricApiUpperExclusive ? ' <' + target.dependencies.fabricApiUpperExclusive : '')]
-            if (metadata.depends != dependencies) throw new GradleException('Dependencies differ from target')
+            if (target.minecraft == '1.21.1') {
+                dependencies.mixinextras = '>=' + MINECRAFT_1211_MIXIN_EXTRAS_MINIMUM
+            }
+            if (metadata.depends != dependencies) {
+                throw new GradleException("Dependencies differ from target ${target.minecraft}: " +
+                        "${artifact.name}; expected ${dependencies}, found ${metadata.depends}")
+            }
             if (!(metadata.entrypoints instanceof Map) || !metadata.entrypoints.client) {
                 throw new GradleException('Missing client entrypoint')
             }

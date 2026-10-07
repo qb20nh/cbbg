@@ -82,6 +82,30 @@ class PackageChecksTest {
         assertEquals([java_sources: 1], result.sources)
     }
 
+    @Test void minecraft1211RequiresMixinExtrasForWrapMethod() {
+        Map s = specimen()
+        s.target.minecraft = '1.21.1'
+        s.target.java = 21
+        s.metadata.depends.minecraft = '1.21.1'
+        s.metadata.depends.java = '>=21'
+        s.metadata.depends.mixinextras = '>=0.4.0'
+        s.mixin.compatibilityLevel = 'JAVA_21'
+        s.binary['cbbg.mixins.json'] = json(s.mixin)
+        s.binary['fabric.mod.json'] = json(s.metadata)
+        archive(s.artifact, s.binary)
+        assertEquals([declared_classes: 2, mixin_configs: 1],
+                PackageChecks.verifyFabricMetadata(s.artifact, s.target, '1.4.0'))
+        for (String requirement : [null, '>=0.3.6']) {
+            if (requirement == null) s.metadata.depends.remove('mixinextras')
+            else s.metadata.depends.mixinextras = requirement
+            s.binary['fabric.mod.json'] = json(s.metadata)
+            archive(s.artifact, s.binary)
+            fails('Dependencies differ from target') {
+                PackageChecks.verifyFabricMetadata(s.artifact, s.target, '1.4.0')
+            }
+        }
+    }
+
     @Test void selectedSharedModulesKeepTheJava8Requirement() {
         Map s = specimen()
         File helper = new File(root, 'core/rendering/src/main/java/example/Helper.java')
