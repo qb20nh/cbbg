@@ -31,6 +31,7 @@ This project uses [Keep a Changelog](https://keepachangelog.com/) and [Semantic 
 ### Fixed
 
 - Align dithering with RenderScale's rendered pixels, including in screenshots ([#20](https://github.com/qb20nh/cbbg/issues/20)).
+- Lock or unlock settings controls immediately when changing Mode.
 
 #### Minecraft 1.21.1
 
