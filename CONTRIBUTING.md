@@ -48,6 +48,8 @@ lists every selected loader and Minecraft version.
 GitHub creates the dedicated Release attestation when an immutable release is
 published. Drafts show only the uploaded `provenance.jsonl` build attestation.
 Upload the mod JAR, sources JAR, `provenance.jsonl`, and `SHA256SUMS`.
+Also upload `cbbg-utilities-<version>.jar` and
+`cbbg-utilities-<version>-sources.jar` once per release.
 The sources JAR includes the ProGuard mapping and CycloneDX SBOM under
 `META-INF/cbbg/`; they need no separate release assets.
 
