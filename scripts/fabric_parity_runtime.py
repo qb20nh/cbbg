@@ -176,7 +176,8 @@ def main():
     command = get_minecraft_command(identity, str(runtime), {
         'username': 'CbbgParity', 'uuid': '00000000000000000000000000000001', 'token': '0',
         'executablePath': str(args.java.resolve()), 'gameDirectory': str(game),
-        'jvmArguments': ['-Xmx2G', '-XX:-CreateCoredumpOnCrash', *display_jvm_arguments, '-Dfabric.client.gametest',
+        'jvmArguments': ['-Xmx2G', '-XX:-CreateCoredumpOnCrash', '-Djava.awt.headless=true',
+                        *display_jvm_arguments, '-Dfabric.client.gametest',
                         '-Dcbbg.test.dsa=' + (args.dsa_mode or 'auto'),
                         '-Dcbbg.test.restart=' + (args.restart_phase or ''),
                         '-Dfabric.client.gametest.modid=cbbg-renderer-test',
