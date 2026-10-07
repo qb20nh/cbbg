@@ -4,6 +4,7 @@ import groovy.json.JsonOutput
 import org.gradle.testkit.runner.GradleRunner
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
+import java.nio.file.Files
 import static org.junit.jupiter.api.Assertions.*
 
 class ReleasePluginTest {
@@ -32,6 +33,32 @@ class ReleasePluginTest {
         String output = configured.build().output
         assertTrue(output.contains(':runCandidateAcceptance SKIPPED'))
         assertFalse(output.contains(':compileJava '))
+    }
+
+    @Test void candidateAcceptanceKeepsTheVirtualenvPythonPath() {
+        File interpreter = new File(directory, 'interpreter')
+        interpreter.text = '#!/bin/sh\nexit 0\n'
+        interpreter.setExecutable(true)
+        File bin = new File(directory, 'venv/bin')
+        bin.mkdirs()
+        Files.createSymbolicLink(new File(bin, 'python').toPath(), interpreter.toPath())
+        File weston = new File(bin, 'weston')
+        weston.text = interpreter.text
+        weston.setExecutable(true)
+        Map environment = new HashMap(System.getenv())
+        environment.remove('CI')
+        environment.PATH = bin.absolutePath + File.pathSeparator + environment.PATH
+        def configured = runner('runCandidateAcceptance', '-Pcandidate=candidate.json', '-Poutput=acceptance',
+                '-PacceptancePython=venv/bin/python', '-PacceptanceJava21=interpreter',
+                '-PacceptanceJava25=interpreter').withEnvironment(environment)
+        new File(directory, 'build.gradle').append('''
+cbbg.gradle.FabricCandidateAcceptance.metaClass.static.execute = { Map options, Closure command, Closure probe ->
+    assert options.python.absolutePath == new File(rootDir, 'venv/bin/python').absolutePath
+    assert options.python.canonicalPath == new File(rootDir, 'interpreter').canonicalPath
+    println 'Using the virtualenv executable'
+}
+''')
+        assertTrue(configured.build().output.contains('Using the virtualenv executable'))
     }
 
     @Test void publicationRequiresExplicitInputsWithoutBuilding() {

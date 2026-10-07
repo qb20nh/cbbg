@@ -98,6 +98,14 @@ class FabricCandidateAcceptanceTest {
         FabricCandidateAcceptance.execute(options, prepareCommand, probe)
         assertEquals(1, launches)
         assertEquals(3, verifications)
+        File alternatePython = new File(directory, 'alternate-python')
+        Files.createSymbolicLink(alternatePython.toPath(), python.toPath())
+        options.python = alternatePython
+        assertTrue(assertThrows(GradleException) {
+            FabricCandidateAcceptance.execute(options, prepareCommand, probe)
+        }.message.contains('Acceptance inputs changed'))
+        assertEquals(1, launches)
+        options.python = python
         displayInputs.each { input ->
             input.append('changed')
             GradleException error = assertThrows(GradleException) {

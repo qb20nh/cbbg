@@ -47,7 +47,8 @@ print(json.dumps({'runs':runs,'dependencies':{p:locked_dependencies(spec,p,lock)
                       sharedRuntime: options.sharedRuntime == null ? null : (options.sharedRuntime as File).canonicalPath]
         ['python', 'java21', 'java25', 'weston', 'eglVendor'].each { name ->
             File file = options[name] as File
-            if (file != null) inputs.executables[name] = [path: file.canonicalPath, sha256: CandidateFiles.sha256(file)]
+            if (file != null) inputs.executables[name] = [path: file.absolutePath,
+                    resolvedPath: file.canonicalPath, sha256: CandidateFiles.sha256(file)]
         }
         targets.each { id ->
             File seed = options.seedCaches?.get(id) as File
