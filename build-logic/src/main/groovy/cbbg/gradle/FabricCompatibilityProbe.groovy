@@ -11,6 +11,24 @@ import java.util.concurrent.TimeUnit
 
 /** Runs one packaged-client dependency probe and classifies its recorded result. */
 class FabricCompatibilityProbe {
+    static Map dependencyFailure(String gameText, boolean strict) {
+        List<Map> records = (gameText =~ /HARD_DEP(?:_NO_CANDIDATE)? ([^\s{}]+) [^\s{}]+ \{depends ([^\s{}]+) @ [^{}]*\}/)
+                .collect { [text: it[0], owner: it[1], dependency: it[2]] }
+                .unique { it.text }
+        List<Map> production = records.findAll { it.owner == 'cbbg' }
+        String details = records*.text.join('; ')
+        if (!strict && production.any { it.dependency in ['fabricloader', 'fabric-api'] }) {
+            return [status: 'blocked', reason: 'Minimum dependency overrides were not applied: ' + details]
+        }
+        if (production) {
+            return [status: 'failed', reason: 'Incompatible CBBG dependencies: ' + details]
+        }
+        if (records.any { it.owner in ['cbbg-renderer-test', 'fabric-client-gametest-api-v1'] }) {
+            return [status: 'blocked', reason: 'Incompatible test dependencies: ' + details]
+        }
+        [:]
+    }
+
     static void requireLocalInputs(boolean buildOnly, String startupMode, File config,
                                    File startupCache, String profile, boolean restart = false,
                                    String driverName = null) {
@@ -221,10 +239,13 @@ class FabricCompatibilityProbe {
                     it.contains('java.lang.AssertionError:') || it.startsWith('Caused by:')
                 }
                 if (!passed && failures) reason = failures.last()
+                Map dependencyError = passed ? [:] : dependencyFailure(gameText, spec.strict as boolean)
                 if (!receipt.isFile() || recorded.failure?.type == 'TimeoutExpired' ||
-                        (!spec.strict && gameText =~ /HARD_DEP(?:_NO_CANDIDATE)? cbbg(?:-renderer-test)? .*\{depends (?:fabricloader|fabric-api) @/) ||
                         reason =~ /Runtime inputs differ|checksum mismatch|Failed to create window|Failed to initialize Vulkan|GPU timeout|VK_ERROR_DEVICE_LOST/) {
                     status = 'blocked'
+                } else if (dependencyError) {
+                    status = dependencyError.status
+                    reason = dependencyError.reason
                 }
                 result = [status: status, receipt: receipt.absolutePath, reason: passed ? null : reason,
                           graphicsEnvironment: environment]

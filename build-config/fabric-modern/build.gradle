@@ -359,7 +359,14 @@ tasks.named('processResources') {
         expand(properties)
     }
     doLast {
-        cbbg.gradle.FabricBranding.apply(sharedDescriptor, new File(destinationDir, 'fabric.mod.json'))
+        File descriptorFile = new File(destinationDir, 'fabric.mod.json')
+        cbbg.gradle.FabricBranding.apply(sharedDescriptor, descriptorFile)
+        if (artifactOwner.minecraft == '1.21.1') {
+            Map descriptor = new groovy.json.JsonSlurper().parse(descriptorFile)
+            descriptor.depends.mixinextras = '>=0.4.0'
+            descriptorFile.text = groovy.json.JsonOutput.prettyPrint(
+                    groovy.json.JsonOutput.toJson(descriptor)) + '\n'
+        }
     }
     if (target.renderer == 'blaze-gpu-format') {
         filesMatching('assets/cbbg/shaders/core/cbbg_dither.fsh') {

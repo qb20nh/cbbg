@@ -12,6 +12,26 @@ import static org.junit.jupiter.api.Assertions.*
 class FabricCompatibilityProbeTest {
     @TempDir File directory
 
+    @Test void attributesDependencyErrorsToTheReportedMods() {
+        String framework = 'HARD_DEP cbbg-renderer-test 1.0.0 {depends fabric-client-gametest-api-v1 @ [*]}, ' +
+                'HARD_DEP_NO_CANDIDATE fabric-client-gametest-api-v1 2.0.0 {depends fabricloader @ [>=0.16.0]}'
+        Map blocked = FabricCompatibilityProbe.dependencyFailure(framework, false)
+        assertEquals('blocked', blocked.status)
+        assertTrue(blocked.reason.contains('fabric-client-gametest-api-v1'))
+        String production = 'HARD_DEP cbbg 1.5.0 {depends mixinextras @ [>=0.4.0]}, ' + framework
+        Map failed = FabricCompatibilityProbe.dependencyFailure(production, false)
+        assertEquals('failed', failed.status)
+        assertTrue(failed.reason.contains('cbbg 1.5.0 {depends mixinextras'))
+        assertTrue(failed.reason.contains('fabric-client-gametest-api-v1'))
+        assertEquals('failed', FabricCompatibilityProbe.dependencyFailure(production, true).status)
+        String override = 'HARD_DEP cbbg 1.5.0 {depends fabricloader @ [>=0.19.5]}'
+        assertEquals('blocked', FabricCompatibilityProbe.dependencyFailure(override, false).status)
+        assertEquals('failed', FabricCompatibilityProbe.dependencyFailure(override, true).status)
+        assertEquals('blocked', FabricCompatibilityProbe.dependencyFailure(
+                'HARD_DEP cbbg-renderer-test 1.0.0 {depends fabricloader @ [>=0.19.5]}', false).status)
+        assertEquals([:], FabricCompatibilityProbe.dependencyFailure('java.lang.AssertionError: Pixels differ', false))
+    }
+
     @Test void admitsOnlyMatchingStartupAndSuppliedConfigInputs() {
         File config = new File(directory, 'settings.json')
         config.text = '{"mode":"ENABLED","pixelFormat":"RGBA16F","stbnSize":16,' +
