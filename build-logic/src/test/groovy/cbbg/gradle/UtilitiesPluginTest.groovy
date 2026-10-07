@@ -1,8 +1,9 @@
 package cbbg.gradle
 
 import org.gradle.testkit.runner.GradleRunner
-import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.ValueSource
 
 import java.util.jar.JarFile
 
@@ -11,8 +12,9 @@ import static org.junit.jupiter.api.Assertions.*
 class UtilitiesPluginTest {
     @TempDir File directory
 
-    @Test
-    void optimizedLibraryRunsWithoutMinecraftOrConfigDependencies() {
+    @ParameterizedTest
+    @ValueSource(strings = ['1.4.2', '1.5.0'])
+    void optimizedLibraryRunsWithoutMinecraftOrConfigDependencies(String version) {
         File repository = new File(System.getProperty('cbbg.repository'))
         new File(directory, 'settings.gradle').text = "include 'core', 'core:rendering'\n"
         new File(directory, 'gradle.properties').text = 'mod_version=1.4.2\n'
@@ -43,9 +45,11 @@ tasks.withType(JavaCompile).configureEach { options.release = 8 }
             destination.parentFile.mkdirs()
             destination.bytes = new File(repository, path).bytes
         }
+        List<String> arguments = [':core:utilitiesSourcesJar', '--offline', '--stacktrace']
+        if (version != '1.4.2') arguments.add("-Pmod_version=${version}".toString())
         GradleRunner.create().withProjectDir(directory).withPluginClasspath()
-                .withArguments(':core:utilitiesSourcesJar', '--offline', '--stacktrace').build()
-        File artifact = new File(directory, 'core/build/libs/cbbg-utilities-1.4.2.jar')
+                .withArguments(arguments).build()
+        File artifact = new File(directory, "core/build/libs/cbbg-utilities-${version}.jar")
         try (JarFile jar = new JarFile(artifact)) {
             List names = jar.entries().toList()*.name
             assertTrue(names.contains('com/qb20nh/cbbg/api/NoiseVolume.class'))
@@ -70,7 +74,7 @@ tasks.withType(JavaCompile).configureEach { options.release = 8 }
                     1, 1, volume, 0, settings)
             assertArrayEquals([0, -1, 102, 51] as byte[], result)
         }
-        try (JarFile sourcesJar = new JarFile(new File(directory, 'core/build/libs/cbbg-utilities-1.4.2-sources.jar'))) {
+        try (JarFile sourcesJar = new JarFile(new File(directory, "core/build/libs/cbbg-utilities-${version}-sources.jar"))) {
             assertNotNull(sourcesJar.getEntry('META-INF/cbbg/proguard.map'))
             assertNotNull(sourcesJar.getEntry('com/qb20nh/cbbg/api/NoiseVolume.java'))
         }

@@ -15,7 +15,8 @@ class UtilitiesPlugin implements Plugin<Project> {
         File root = core.projectDir.parentFile
         def properties = new Properties()
         new File(root, 'gradle.properties').withInputStream { properties.load(it) }
-        String name = "cbbg-utilities-${properties.mod_version}"
+        String version = project.providers.gradleProperty('mod_version').getOrElse(properties.mod_version as String)
+        String name = "cbbg-utilities-${version}"
         File shader = new File(root, 'src/main/resources/assets/cbbg/shaders/include/dither.glsl')
         File license = new File(root, 'LICENSE')
         def raw = project.tasks.register('rawUtilitiesJar', Jar) {
