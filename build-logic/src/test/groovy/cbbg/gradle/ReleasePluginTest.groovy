@@ -13,7 +13,10 @@ class ReleasePluginTest {
     private GradleRunner runner(String... arguments) {
         new File(directory, 'settings.gradle').text = "rootProject.name = 'release-test'\n"
         new File(directory, 'build.gradle').text = "plugins { id 'cbbg.release' }\n"
+        Map environment = new HashMap(System.getenv())
+        environment.remove('CI')
         GradleRunner.create().withProjectDir(directory).withPluginClasspath()
+                .withEnvironment(environment)
                 .withArguments(arguments.toList() + ['--stacktrace'])
     }
 
