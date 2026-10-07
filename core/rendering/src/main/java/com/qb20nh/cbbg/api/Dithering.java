@@ -18,13 +18,14 @@ public final class Dithering {
       throw new IllegalArgumentException("Expected four floats per pixel");
     }
     byte[] output = new byte[length];
+    int middle = width / 2;
     for (int y = 0; y < height; y++) {
       for (int x = 0; x < width; x++) {
         int offset = (y * width + x) * 4;
         int nx = (int) Math.floor((x + 0.5) * options.scaleX());
         int ny = (int) Math.floor((y + 0.5) * options.scaleY());
         int pixel = noise.pixelABGR(nx, ny, frame);
-        double strength = options.demo() && x < width / 2 ? 0 : options.strength();
+        double strength = options.demo() && x < middle ? 0 : options.strength();
         for (int channel = 0; channel < 4; channel++) {
           float value = source[offset + channel];
           if (!Float.isFinite(value)) {
@@ -35,8 +36,7 @@ public final class Dithering {
           int quantized =
               Math.max(0, Math.min(255, (int) Math.floor(value * 255.0 + amount + 0.5)));
           output[offset + channel] =
-              (byte)
-                  (channel < 3 && options.demo() && x == width / 2 ? 255 - quantized : quantized);
+              (byte) (channel < 3 && options.demo() && x == middle ? 255 - quantized : quantized);
         }
       }
     }

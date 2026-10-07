@@ -3,6 +3,7 @@ package com.qb20nh.cbbg.api;
 import static org.junit.jupiter.api.Assertions.*;
 
 import com.qb20nh.cbbg.math.BlueNoise;
+import java.util.Arrays;
 import java.util.concurrent.CancellationException;
 import org.junit.jupiter.api.Test;
 
@@ -56,6 +57,26 @@ class UtilitiesTest {
     }
     assertEquals(51, result[3] & 255);
     assertEquals(204, result[7] & 255);
+  }
+
+  @Test
+  void keepsTheDemoDividerOnTheMiddlePixelForOddWidths() {
+    NoiseVolume noise = NoiseVolume.generate(2, 2, 1, 0);
+    for (int width : new int[] {1, 3, 5}) {
+      float[] source = new float[width * 4];
+      Arrays.fill(source, 0.5f);
+      byte[] full = Dithering.rgba8(source, width, 1, noise, 0, new DitherOptions(32, 1, 1, false));
+      byte[] demo = Dithering.rgba8(source, width, 1, noise, 0, new DitherOptions(32, 1, 1, true));
+      int middle = width / 2;
+      for (int channel = 0; channel < 3; channel++) {
+        assertEquals(255 - (full[middle * 4 + channel] & 255), demo[middle * 4 + channel] & 255);
+        if (width > 1) {
+          assertEquals(128, demo[(middle - 1) * 4 + channel] & 255);
+          assertEquals(full[(width - 1) * 4 + channel], demo[(width - 1) * 4 + channel]);
+        }
+      }
+      assertEquals(128, demo[middle * 4 + 3] & 255);
+    }
   }
 
   @Test
