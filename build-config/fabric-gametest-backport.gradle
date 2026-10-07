@@ -108,13 +108,15 @@ def metadata = tasks.register('prepareClientGametestBackportMetadata') {
         Map descriptor = read('fabric.mod.json')
         descriptor.version = '2.0.0+99ff640a04.cbbg.1.21.1'
         descriptor.depends.minecraft = '1.21.1'
+        descriptor.depends.fabricloader = '>=0.16.0'
         descriptor.mixins.add('cbbg.client-gametest-1.21.1-backport.mixins.json')
         Map provenance = [schema: 1, minecraft: '1.21.1',
                           upstream: coordinate,
                           source_commit: '99ff640a5d543bab0316924fb669304c25d8f293',
                           sources_sha256: MessageDigest.getInstance('SHA-256')
                                   .digest(upstreamSources.singleFile.bytes).encodeHex().toString(),
-                          changes: ['Registry.getHolderOrThrow', 'CreateWorldScreen.createNewWorld',
+                          changes: ['Fabric Loader 0.16.0 with MixinExtras 0.4.0',
+                                    'Registry.getHolderOrThrow', 'CreateWorldScreen.createNewWorld',
                                     'ChunkTrackingView.isWithinDistance', 'TestSingleplayerContext.close']]
         ['fabric.mod.json': descriptor, 'fabric-client-gametest-api-v1.mixins.json': mixins,
          'cbbg-client-gametest-backport.json': provenance].each { name, value ->

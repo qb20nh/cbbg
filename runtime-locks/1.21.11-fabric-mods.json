@@ -1,0 +1,68 @@
+{
+  "schemaVersion": 1,
+  "target": "1.21.11-fabric",
+  "gametestApi": {
+    "fabricApiPin": "0.141.6+1.21.11",
+    "coordinate": "net.fabricmc.fabric-api:fabric-client-gametest-api-v1:4.3.5+bfe9fcf43e",
+    "sha256": "170a49419a7e9a9407f1b871e2d0f686ee01d255db33e03af549767eba768960",
+    "verification": "Resolved Fabric API module used by the packaged test driver."
+  },
+  "verification": "Downloaded jars matched the primary file SHA-512 from each Modrinth version; SHA-256 recorded below.",
+  "dependencies": {
+    "chatPatches": {
+      "pin": "5QbnHot7",
+      "sha256": "ad0cf82ee5f9feac614d64ee8189fbba042f7c42e80d3509a2ce78aed07d1e4e",
+      "source": "https://api.modrinth.com/v2/version/5QbnHot7"
+    },
+    "clothConfig": {
+      "pin": "xuX40TN5",
+      "sha256": "8a40c84e5ecde525acfb6c4e13b8002dacfca3ef9534d7faf6e8049656f423c8",
+      "source": "https://api.modrinth.com/v2/version/xuX40TN5"
+    },
+    "fabricApi": {
+      "pin": "0.141.6+1.21.11",
+      "sha256": "bdff7fd7e220085cfad2ff9b1f40dde6534ae0b96cf378f97a374bc54cb9ed0f",
+      "source": "https://api.modrinth.com/v2/version/6qAuTtLR"
+    },
+    "forceGl2": {
+      "pin": "PK6vSUU6",
+      "sha256": "6d613a697472cabf9b90f8d84b2dd50f7d9f60f922002c24d5ef60c68f16f9bb",
+      "source": "https://api.modrinth.com/v2/version/PK6vSUU6"
+    },
+    "immediatelyFast": {
+      "pin": "4EwhsTu7",
+      "sha256": "c6e939744ed80345a1a70c351c481b8832d33970d6574b8d444dfe750abc2a86",
+      "source": "https://api.modrinth.com/v2/version/4EwhsTu7"
+    },
+    "iris": {
+      "pin": "fDpuVzVr",
+      "sha256": "58c55da18189c91a49f847d3cee451633a23b575fb69c0c5b65ddb274436cb19",
+      "source": "https://api.modrinth.com/v2/version/fDpuVzVr"
+    },
+    "modMenu": {
+      "pin": "17.0.1",
+      "sha256": "2eb2d6db9964fcf2e44e2be1e4d172b8c4e829e385c8f31636de94a1708c2076",
+      "source": "https://api.modrinth.com/v2/version/cLkYaVuL"
+    },
+    "renderScale": {
+      "pin": "e5ZPKfY7",
+      "sha256": "ad888953d7b9fc306ea0b452d7a8c2af9111f7c2c6f7f5fcddc3f327740e5448",
+      "source": "https://api.modrinth.com/v2/version/e5ZPKfY7"
+    },
+    "sodium": {
+      "pin": "UddlN6L4",
+      "sha256": "c08fae86b350aaa8a8f37e7347929df38f01cc2348cf31c322615564bdc53983",
+      "source": "https://api.modrinth.com/v2/version/UddlN6L4"
+    },
+    "threatenGl": {
+      "pin": "nK30v84J",
+      "sha256": "6b86c83ea88cc0b64bb201526d1347b392ad0006227befebdc511e5bd1ef562e",
+      "source": "https://api.modrinth.com/v2/version/nK30v84J"
+    },
+    "yacl": {
+      "pin": "pHWDw3Vc",
+      "sha256": "49c279bc28c80ca17d6c21c3dd299ec1c115b892272f21b3f034ed782829babd",
+      "source": "https://api.modrinth.com/v2/version/pHWDw3Vc"
+    }
+  }
+}
