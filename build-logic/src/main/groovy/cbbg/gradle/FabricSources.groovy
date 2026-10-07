@@ -145,8 +145,9 @@ class FabricSources {
                             'gametest/ReleaseRenderScaleGameTest', 'gametest/ReleaseCommands',
                             'gametest/ReleaseGraphics', 'gametest/ReleaseGameNames',
                             'gametest/ReleaseMapping', 'gametest/ReleaseMaximumNoiseCacheGameTest') : [],
-                    owner.renderer in ['gl3', 'blaze-texture-format'] ? [] :
-                            classes('gametest/ReleaseModMenuGameTest', 'gametest/ReleaseIrisGameTest'))
+                    (owner.renderer in ['gl3', 'blaze-texture-format'] ? [] :
+                            classes('gametest/ReleaseModMenuGameTest', 'gametest/ReleaseIrisGameTest')) +
+                            (owner.minecraft == '1.21.11' ? classes('gametest/ReleaseGuiCharacters') : []))
             result.copies.processedGametest << tree('adapters/fabric/shared/src/processedGametest/resources', [],
                     owner.renderer == 'gl3' ? ['cbbg.release-allocation.mixins.json',
                                                'cbbg.release-startup.mixins.json',
@@ -158,7 +159,10 @@ class FabricSources {
                     classes('config/gui/ConfigScreenPlatform', 'render/HudPlatform'))
             processed << tree('adapters/fabric/shared/src/processedGametest/java',
                     classes('gametest/ReleaseSodiumConfigGameTest', 'gametest/ReleaseUtilitiesGameTest',
-                            'gametest/ReleaseUtilityCalls', 'gametest/ReleaseImagePixels'))
+                            'gametest/ReleaseUtilityCalls', 'gametest/ReleaseImagePixels',
+                            'gametest/ReleaseSettingsGuiGameTest', 'gametest/ReleaseGuiInput',
+                            'gametest/ReleaseMapping', 'gametest/ReleaseGuiCharacters',
+                            'gametest/ReleaseGraphics'))
         }
         result
     }

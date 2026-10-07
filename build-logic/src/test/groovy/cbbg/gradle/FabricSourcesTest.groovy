@@ -12,6 +12,26 @@ import static org.junit.jupiter.api.Assertions.*
 class FabricSourcesTest {
     @TempDir File directory
 
+    @ParameterizedTest
+    @ValueSource(strings = ['1.21.1-fabric', '1.21.11-fabric', '26.1-fabric', '26.2-fabric', '26.3-fabric'])
+    void packagesGuiInteractionsForEveryArtifact(String id) {
+        File root = new File(System.getProperty('cbbg.repository'))
+        Map target = new JsonSlurper().parse(new File(root, 'targets.json')).targets.find { it.id == id }
+        Map layout = FabricSources.layout(target, target)
+        String packagePath = 'com/qb20nh/cbbg/gametest/'
+        ['ReleaseSettingsGuiGameTest', 'ReleaseGuiInput', 'ReleaseViewport'].each { name ->
+            List files = layout.processedGametest.java.collect { spec ->
+                String relative = spec.path + '/' + packagePath + name + '.java'
+                new File(root, relative).isFile() && FabricSources.contains(spec, relative) ? relative : null
+            }.findAll { it != null }
+            assertEquals(1, files.size(), id + ': ' + name)
+        }
+        Map contract = new JsonSlurper().parse(new File(root, 'runtime-locks/' + id + '-scenarios.json'))
+        Map metadata = new JsonSlurper().parse(new File(root, contract.ordinaryMetadata as String))
+        assertEquals(1, metadata.entrypoints['fabric-client-gametest'].count(
+                'com.qb20nh.cbbg.gametest.ReleaseSettingsGuiGameTest'))
+    }
+
     @Test void selectsTheGuiGraphicsCanvasOnlyForItsMinecraftVersions() {
         File root = new File(System.getProperty('cbbg.repository'))
         Map catalog = new JsonSlurper().parse(new File(root, 'targets.json'))

@@ -2,6 +2,7 @@ package com.qb20nh.cbbg.config.gui;
 
 import com.qb20nh.cbbg.config.CbbgConfig;
 import com.qb20nh.cbbg.platform.Text;
+import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.function.Consumer;
@@ -38,6 +39,7 @@ final class CbbgConfigWidgets {
   private final boolean lockedByError;
   private final Runnable confirmGeneration;
   private final Runnable close;
+  private Runnable updateLocks = () -> {};
 
   CbbgConfigWidgets(
       Consumer<AbstractWidget> addWidget,
@@ -79,8 +81,6 @@ final class CbbgConfigWidgets {
     int cy = this.height / 2;
     int yStart = cy - CARD_HEIGHT / 2 + 30;
 
-    final boolean lockedByUser = CbbgConfig.get().mode() == CbbgConfig.Mode.DISABLED;
-
     // 1. Rendering Mode
     CycleButton<CbbgConfig.Mode> modeButton =
         this.add(
@@ -101,6 +101,7 @@ final class CbbgConfigWidgets {
                         return;
                       }
                       CbbgConfig.setMode(value);
+                      updateLocks.run();
                     }));
 
     // 1.5 Pixel Format
@@ -118,7 +119,7 @@ final class CbbgConfigWidgets {
                     20,
                     Text.translatable("cbbg.config.format"),
                     (button, value) -> {
-                      if (lockedByError || lockedByUser) {
+                      if (lockedByError || CbbgConfig.get().mode() == CbbgConfig.Mode.DISABLED) {
                         return;
                       }
                       CbbgConfig.setPixelFormat(value);
@@ -138,7 +139,7 @@ final class CbbgConfigWidgets {
             4.0f,
             CbbgConfig.get().strength(),
             v -> {
-              if (lockedByError || lockedByUser) {
+              if (lockedByError || CbbgConfig.get().mode() == CbbgConfig.Mode.DISABLED) {
                 return;
               }
               CbbgConfig.setStrength((float) v);
@@ -160,7 +161,7 @@ final class CbbgConfigWidgets {
             256,
             CbbgConfig.get().stbnSize(),
             v -> {
-              if (lockedByError || lockedByUser) {
+              if (lockedByError || CbbgConfig.get().mode() == CbbgConfig.Mode.DISABLED) {
                 return;
               }
               CbbgConfig.setStbnSize(v);
@@ -180,7 +181,7 @@ final class CbbgConfigWidgets {
             128,
             CbbgConfig.get().stbnDepth(),
             v -> {
-              if (lockedByError || lockedByUser) {
+              if (lockedByError || CbbgConfig.get().mode() == CbbgConfig.Mode.DISABLED) {
                 return;
               }
               CbbgConfig.setStbnDepth(v);
@@ -206,7 +207,7 @@ final class CbbgConfigWidgets {
             WidgetPlatform.button(
                 Text.translatable("cbbg.config.button.generate_stbn"),
                 b -> {
-                  if (lockedByError || lockedByUser) {
+                  if (lockedByError || CbbgConfig.get().mode() == CbbgConfig.Mode.DISABLED) {
                     return;
                   }
                   try {
@@ -224,7 +225,7 @@ final class CbbgConfigWidgets {
 
     seedEdit.setResponder(
         s -> {
-          if (lockedByError || lockedByUser) {
+          if (lockedByError || CbbgConfig.get().mode() == CbbgConfig.Mode.DISABLED) {
             return;
           }
           try {
@@ -250,7 +251,7 @@ final class CbbgConfigWidgets {
                     20,
                     Text.translatable("cbbg.config.notify.chat"),
                     (b, val) -> {
-                      if (lockedByError || lockedByUser) {
+                      if (lockedByError || CbbgConfig.get().mode() == CbbgConfig.Mode.DISABLED) {
                         return;
                       }
                       CbbgConfig.setNotifyChat(val);
@@ -266,7 +267,7 @@ final class CbbgConfigWidgets {
                     20,
                     Text.translatable("cbbg.config.notify.toast"),
                     (b, val) -> {
-                      if (lockedByError || lockedByUser) {
+                      if (lockedByError || CbbgConfig.get().mode() == CbbgConfig.Mode.DISABLED) {
                         return;
                       }
                       CbbgConfig.setNotifyToast(val);
@@ -285,32 +286,32 @@ final class CbbgConfigWidgets {
             20,
             null));
 
-    // UI lock:
-    // - If cbbg disabled itself due to a render error: freeze everything (read-only).
-    // - If user Mode is DISABLED: allow changing Mode (to re-enable), but lock everything else.
-    // - If Iris is active: still editable (warning only).
-    if (lockedByError) {
-      modeButton.active = false;
-      formatButton.active = false;
-      strengthSlider.active = false;
-      sizeSlider.active = false;
-      depthSlider.active = false;
-      seedEdit.active = false;
-      seedEdit.setEditable(false);
-      generateButton.active = false;
-      chatNotifyButton.active = false;
-      toastNotifyButton.active = false;
-    } else if (lockedByUser) {
-      formatButton.active = false;
-      strengthSlider.active = false;
-      sizeSlider.active = false;
-      depthSlider.active = false;
-      seedEdit.active = false;
-      seedEdit.setEditable(false);
-      generateButton.active = false;
-      chatNotifyButton.active = false;
-      toastNotifyButton.active = false;
-    }
+    updateLocks =
+        () -> {
+          boolean active = !lockedByError && CbbgConfig.get().mode() != CbbgConfig.Mode.DISABLED;
+          modeButton.active = !lockedByError;
+          for (AbstractWidget widget :
+              List.of(
+                  formatButton,
+                  strengthSlider,
+                  sizeSlider,
+                  depthSlider,
+                  seedEdit,
+                  generateButton,
+                  chatNotifyButton,
+                  toastNotifyButton)) {
+            widget.active = active;
+          }
+          seedEdit.setEditable(active);
+          if (active) {
+            try {
+              parseSeed(seedEdit.getValue());
+            } catch (NumberFormatException invalidSeed) {
+              generateButton.active = false;
+            }
+          }
+        };
+    updateLocks.run();
   }
 
   private Component getModeName(CbbgConfig.Mode mode) {

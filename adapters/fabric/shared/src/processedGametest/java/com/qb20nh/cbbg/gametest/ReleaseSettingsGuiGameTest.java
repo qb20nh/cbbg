@@ -2,6 +2,7 @@ package com.qb20nh.cbbg.gametest;
 
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.mojang.blaze3d.platform.InputConstants;
 import java.io.IOException;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
@@ -56,6 +57,7 @@ public final class ReleaseSettingsGuiGameTest implements FabricClientGameTest {
 
   @Override
   public void runTest(ClientGameTestContext context) {
+    ReleaseGraphics.check(context);
     JsonObject original = settings();
     String originalLocale =
         context.computeOnClient(client -> client.getLanguageManager().getSelected());
@@ -75,9 +77,13 @@ public final class ReleaseSettingsGuiGameTest implements FabricClientGameTest {
         switchLocale(context, locales.contains("en_us") ? "en_us" : originalLocale);
         open(context, originalParent);
         ensureEnabledScreen(context, originalParent);
-        exerciseControls(context);
-        checkGenerationConfirmation(context);
         checkDisabledLock(context, originalParent);
+        open(context, originalParent);
+        exerciseControls(context);
+        checkKeyboardSelection(context);
+        checkGenerationConfirmation(context);
+        context.runOnClient(client -> ReleaseGuiInput.key(InputConstants.KEY_ESCAPE));
+        context.waitFor(client -> !isSettings(ReleaseViewport.currentScreen(client)), WAIT_TICKS);
       } finally {
         try {
           switchLocale(context, originalLocale);
@@ -93,6 +99,11 @@ public final class ReleaseSettingsGuiGameTest implements FabricClientGameTest {
         client -> {
           Widgets widgets = Widgets.from(currentScreen(client));
           JsonObject before = settings();
+          ReleaseGuiInput.click(-1, -1);
+          if (!before.equals(settings())) {
+            throw new AssertionError(
+                "Clicking outside settings controls changed the configuration");
+          }
 
           click(widgets.format());
           String format = settings().get("pixelFormat").getAsString();
@@ -120,8 +131,17 @@ public final class ReleaseSettingsGuiGameTest implements FabricClientGameTest {
           if (settings().get("stbnDepth").getAsInt() != targetDepth) {
             throw new AssertionError("Noise depth slider did not save " + targetDepth);
           }
+          for (int exponent = 0; exponent <= 4; exponent++) {
+            slide(widgets.size(), exponent / 4.0);
+            slide(widgets.depth(), exponent / 4.0);
+            if (settings().get("stbnSize").getAsInt() != (16 << exponent)
+                || settings().get("stbnDepth").getAsInt() != (8 << exponent)) {
+              throw new AssertionError("Noise sliders did not select step " + exponent);
+            }
+          }
 
-          widgets.seed().setValue("24681357");
+          checkSeedInput(widgets);
+          replaceSeed(widgets.seed(), "24681357");
           if (settings().get("stbnSeed").getAsLong() != 24681357L) {
             throw new AssertionError("Seed edit did not persist");
           }
@@ -137,7 +157,7 @@ public final class ReleaseSettingsGuiGameTest implements FabricClientGameTest {
 
           slide(widgets.size(), 0.0);
           slide(widgets.depth(), 0.0);
-          widgets.seed().setValue("74123");
+          replaceSeed(widgets.seed(), "74123");
           if (settings().get("stbnSize").getAsInt() != 16
               || settings().get("stbnDepth").getAsInt() != 8
               || settings().get("stbnSeed").getAsLong() != 74123L) {
@@ -146,11 +166,104 @@ public final class ReleaseSettingsGuiGameTest implements FabricClientGameTest {
         });
   }
 
+  private static void checkKeyboardSelection(ClientGameTestContext context) {
+    context.runOnClient(client -> click(Widgets.from(currentScreen(client)).seed()));
+    context.getInput().holdControl();
+    try {
+      context.runOnClient(client -> ReleaseGuiInput.selectAll());
+    } finally {
+      context.getInput().releaseControl();
+    }
+    context.runOnClient(
+        client -> {
+          EditBox seed = Widgets.from(currentScreen(client)).seed();
+          if (!seed.getHighlighted().equals(seed.getValue())) {
+            throw new AssertionError("Control+A did not select the seed text");
+          }
+        });
+    context.getInput().typeChars("74021");
+    context.runOnClient(
+        client -> {
+          Widgets widgets = Widgets.from(currentScreen(client));
+          if (!widgets.seed().getValue().equals("74021")
+              || settings().get("stbnSeed").getAsLong() != 74021) {
+            throw new AssertionError(
+                "Typing did not replace the selected seed: " + widgets.seed().getValue());
+          }
+          replaceSeed(widgets.seed(), "74123");
+        });
+  }
+
+  @SuppressWarnings("ReferenceEquality")
+  private static void checkSeedInput(Widgets widgets) {
+    replaceSeed(widgets.seed(), "-");
+    if (widgets.generate().active || settings().get("stbnSeed").getAsLong() != 0) {
+      throw new AssertionError("Incomplete seed changed settings or enabled generation");
+    }
+    setMode(widgets.mode(), "DISABLED");
+    setMode(widgets.mode(), "ENABLED");
+    if (widgets.generate().active) {
+      throw new AssertionError("Enabling mode allowed generation with an incomplete seed");
+    }
+    replaceSeed(widgets.seed(), "-42");
+    if (settings().get("stbnSeed").getAsLong() != -42 || !widgets.generate().active) {
+      throw new AssertionError("Typed negative seed did not save or enable generation");
+    }
+    ReleaseGuiInput.key(InputConstants.KEY_BACKSPACE);
+    ReleaseGuiInput.type("7");
+    if (settings().get("stbnSeed").getAsLong() != -47) {
+      throw new AssertionError("Seed caret/backspace input did not update settings");
+    }
+    for (long value : new long[] {Long.MIN_VALUE, Long.MAX_VALUE}) {
+      replaceSeed(widgets.seed(), Long.toString(value));
+      if (settings().get("stbnSeed").getAsLong() != value || !widgets.generate().active) {
+        throw new AssertionError("Seed input did not accept " + value);
+      }
+    }
+    for (String invalid : List.of("9223372036854775808", "-9223372036854775809", "abc")) {
+      replaceSeed(widgets.seed(), invalid);
+      if (widgets.generate().active) {
+        throw new AssertionError("Invalid seed enabled generation: " + invalid);
+      }
+    }
+    replaceSeed(widgets.seed(), "");
+    if (settings().get("stbnSeed").getAsLong() != 0 || !widgets.generate().active) {
+      throw new AssertionError("Clearing the seed did not select zero");
+    }
+    ReleaseGuiInput.key(InputConstants.KEY_TAB);
+    if (Objects.requireNonNull(currentScreen(Minecraft.getInstance())).getFocused()
+        != widgets.generate()) {
+      throw new AssertionError("Tab did not move seed focus to Generate");
+    }
+  }
+
+  private static void replaceSeed(EditBox seed, String value) {
+    click(seed);
+    if (!seed.isFocused()) throw new AssertionError("Click did not focus the seed input");
+    ReleaseGuiInput.key(InputConstants.KEY_HOME);
+    int length = seed.getValue().length();
+    for (int i = 0; i < length; i++) ReleaseGuiInput.key(InputConstants.KEY_DELETE);
+    ReleaseGuiInput.type(value);
+    if (!seed.getValue().equals(value)) {
+      throw new AssertionError(
+          "Seed keyboard input differs: expected " + value + ", got " + seed.getValue());
+    }
+  }
+
   private static void checkGenerationConfirmation(ClientGameTestContext context) {
     int cancelLogOffset = log().length();
+    context.runOnClient(
+        client -> {
+          ReleaseGuiInput.key(InputConstants.KEY_TAB);
+          ReleaseGuiInput.key(InputConstants.KEY_RETURN);
+        });
+    context.waitForScreen(ConfirmScreen.class);
+    context.runOnClient(client -> ReleaseGuiInput.key(InputConstants.KEY_ESCAPE));
+    context.waitFor(client -> isSettings(ReleaseViewport.currentScreen(client)), WAIT_TICKS);
     clickGenerate(context);
     context.waitForScreen(ConfirmScreen.class);
-    context.clickScreenButton("gui.no");
+    context.runOnClient(
+        client -> click(Widgets.find(currentScreen(client), Button.class, "gui.no")));
     context.waitFor(client -> isSettings(ReleaseViewport.currentScreen(client)), WAIT_TICKS);
     context.waitTicks(3);
     String canceled = logSuffix(cancelLogOffset);
@@ -161,7 +274,8 @@ public final class ReleaseSettingsGuiGameTest implements FabricClientGameTest {
     int confirmLogOffset = log().length();
     clickGenerate(context);
     context.waitForScreen(ConfirmScreen.class);
-    context.clickScreenButton("gui.yes");
+    context.runOnClient(
+        client -> click(Widgets.find(currentScreen(client), Button.class, "gui.yes")));
     context.waitFor(client -> isSettings(ReleaseViewport.currentScreen(client)), WAIT_TICKS);
     context.waitFor(client -> hasGenerationStart(logSuffix(confirmLogOffset)), WAIT_TICKS);
     context.waitFor(client -> hasGenerationCompletion(logSuffix(confirmLogOffset)), WAIT_TICKS);
@@ -174,8 +288,6 @@ public final class ReleaseSettingsGuiGameTest implements FabricClientGameTest {
   private static void checkDisabledLock(
       ClientGameTestContext context, @Nullable Screen originalParent) {
     context.runOnClient(client -> setMode(Widgets.from(currentScreen(client)).mode(), "DISABLED"));
-    clickDone(context);
-    open(context, originalParent);
     context.runOnClient(
         client -> {
           Widgets widgets = Widgets.from(currentScreen(client));
@@ -188,10 +300,39 @@ public final class ReleaseSettingsGuiGameTest implements FabricClientGameTest {
             }
           }
           long savedSeed = settings().get("stbnSeed").getAsLong();
-          widgets.seed().setValue("99173");
-          if (settings().get("stbnSeed").getAsLong() != savedSeed) {
+          String savedText = widgets.seed().getValue();
+          click(widgets.seed());
+          ReleaseGuiInput.type("99173");
+          if (settings().get("stbnSeed").getAsLong() != savedSeed
+              || !widgets.seed().getValue().equals(savedText)) {
             throw new AssertionError("Disabled mode allowed a locked seed change");
           }
+          setMode(widgets.mode(), "ENABLED");
+          for (AbstractWidget widget : widgets.lockedControls()) {
+            if (!widget.active) {
+              throw new AssertionError(
+                  "Enabling mode did not unlock a settings control: " + widget);
+            }
+          }
+        });
+    context.runOnClient(client -> setMode(Widgets.from(currentScreen(client)).mode(), "DISABLED"));
+    clickDone(context);
+    open(context, originalParent);
+    context.runOnClient(
+        client -> {
+          Widgets widgets = Widgets.from(currentScreen(client));
+          setMode(widgets.mode(), "ENABLED");
+          for (AbstractWidget widget : widgets.lockedControls()) {
+            if (!widget.active)
+              throw new AssertionError("Initially disabled screen did not unlock: " + widget);
+          }
+          long seed = settings().get("stbnSeed").getAsLong();
+          long edited = seed == Long.MAX_VALUE ? 0 : seed + 1;
+          replaceSeed(widgets.seed(), Long.toString(edited));
+          if (settings().get("stbnSeed").getAsLong() != edited) {
+            throw new AssertionError("Initially disabled screen ignored seed input after enabling");
+          }
+          replaceSeed(widgets.seed(), Long.toString(seed));
         });
     clickDone(context);
   }
@@ -234,7 +375,7 @@ public final class ReleaseSettingsGuiGameTest implements FabricClientGameTest {
               current.get("stbnDepth").getAsInt(),
               original.get("stbnDepth").getAsInt(),
               8);
-          widgets.seed().setValue(original.get("stbnSeed").getAsString());
+          replaceSeed(widgets.seed(), original.get("stbnSeed").getAsString());
           if (settings().get("stbnSeed").getAsLong() != original.get("stbnSeed").getAsLong()) {
             throw new AssertionError("Could not restore seed through the settings screen");
           }
@@ -328,7 +469,11 @@ public final class ReleaseSettingsGuiGameTest implements FabricClientGameTest {
 
   private static void open(ClientGameTestContext context, @Nullable Screen parent) {
     context.setScreen(() -> configScreen(parent));
-    context.waitFor(client -> isSettings(ReleaseViewport.currentScreen(client)), WAIT_TICKS);
+    context.waitFor(
+        client ->
+            isSettings(ReleaseViewport.currentScreen(client))
+                && !ReleaseViewport.loadingOverlay(client),
+        WAIT_TICKS);
     context.waitTick();
   }
 
@@ -372,12 +517,13 @@ public final class ReleaseSettingsGuiGameTest implements FabricClientGameTest {
 
   private static void click(AbstractWidget widget) {
     ReleaseGuiInput.click(
-        widget, widget.getX() + widget.getWidth() / 2.0, widget.getY() + widget.getHeight() / 2.0);
+        widget.getX() + widget.getWidth() / 2.0, widget.getY() + widget.getHeight() / 2.0);
   }
 
   private static void slide(AbstractSliderButton widget, double fraction) {
     double x = widget.getX() + 4 + fraction * (widget.getWidth() - 8);
-    ReleaseGuiInput.click(widget, x, widget.getY() + widget.getHeight() / 2.0);
+    ReleaseGuiInput.drag(
+        widget.getX() + widget.getWidth() / 2.0, widget.getY() + widget.getHeight() / 2.0, x);
   }
 
   private static double log2(double value) {
@@ -421,13 +567,16 @@ public final class ReleaseSettingsGuiGameTest implements FabricClientGameTest {
   private static JsonObject settings() {
     Path path = FabricLoader.getInstance().getConfigDir().resolve("cbbg.json");
     try (var reader = Files.newBufferedReader(path)) {
-      return JsonParser.parseReader(reader).getAsJsonObject();
+      JsonObject result = JsonParser.parseReader(reader).getAsJsonObject();
+      if (!result.has("notifyChat")) result.addProperty("notifyChat", true);
+      if (!result.has("notifyToast")) result.addProperty("notifyToast", true);
+      return result;
     } catch (IOException failure) {
       throw new AssertionError("Could not read persisted CBBG settings " + path, failure);
     }
   }
 
-  private record Widgets(
+  record Widgets(
       CycleButton<?> mode,
       CycleButton<?> format,
       AbstractSliderButton strength,

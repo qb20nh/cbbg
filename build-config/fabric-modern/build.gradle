@@ -235,6 +235,8 @@ if (targetId == '26.3-fabric') {
         dependsOn tasks.named('optimizeReleaseJar')
     }
     tasks.named('processProcessedGametestResources') {
+        dependsOn tasks.named('optimizeReleaseJar')
+        from(releaseOptimization.mappingFile) { rename { 'cbbg-test.map' } }
         def loaderMinimum = target.dependencies.minimumLoader ?: target.dependencies.loader
         inputs.property('loaderMinimum', loaderMinimum)
         filesMatching('fabric.mod.json') { expand(loader_minimum: loaderMinimum) }
