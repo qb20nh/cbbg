@@ -24,6 +24,22 @@ class CandidateManifestTest {
         assertFalse(candidate.releaseFiles(false).isEmpty())
     }
 
+    @Test void utilityPairIsOptionalButRequiresBothCheckedFiles() {
+        def fixture = CandidateFixture.create(directory)
+        assertFalse(new CandidateManifest(fixture.file).records[fixture.target.id].containsKey('utilities'))
+        CandidateFixture.utilities(fixture)
+        def candidate = new CandidateManifest(fixture.file)
+        assertEquals(fixture.record.utilities.sha256, candidate.releaseFiles()[fixture.record.utilities.path])
+        assertEquals(fixture.record.utilities_sources.sha256, candidate.releaseFiles()[fixture.record.utilities_sources.path])
+        Map source = fixture.record.remove('utilities_sources')
+        fixture.file.text = JsonOutput.toJson(fixture.manifest)
+        assertTrue(assertThrows(Exception) { new CandidateManifest(fixture.file) }.message.contains('together'))
+        fixture.record.utilities_sources = source
+        fixture.file.text = JsonOutput.toJson(fixture.manifest)
+        new File(fixture.bundle, source.path).append('changed')
+        assertThrows(Exception) { new CandidateManifest(fixture.file) }
+    }
+
     @Test void changedInputAndMismatchedSelectionAreRejected() {
         def fixture = CandidateFixture.create(directory)
         def original = fixture.file.text
@@ -79,6 +95,17 @@ class CandidateManifestTest {
         fixture.file.text = JsonOutput.toJson(fixture.manifest)
         assertEquals(['26.3-fabric', '26.3-quilt'] as Set,
                 new CandidateManifest(fixture.file).verifyPackages(fixture.root).keySet())
+        CandidateFixture.utilities(fixture)
+        new CandidateManifest(fixture.file)
+        ['utilities', 'utilities_sources'].each { kind ->
+            Map previous = record[kind]
+            File same = new File(fixture.bundle, 'alias-' + previous.path)
+            same.bytes = new File(fixture.bundle, previous.path).bytes
+            record[kind] = CandidateFiles.reference(fixture.bundle, same.name)
+            fixture.file.text = JsonOutput.toJson(fixture.manifest)
+            assertTrue(assertThrows(Exception) { new CandidateManifest(fixture.file) }.message.contains('Shared ' + kind))
+            record[kind] = previous
+        }
         File different = new File(fixture.bundle, 'different.jar')
         different.text = 'different'
         ['artifact', 'sources', 'mapping', 'source_inventory'].each { kind ->

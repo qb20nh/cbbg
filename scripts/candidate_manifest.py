@@ -19,6 +19,8 @@ def client_candidate(manifest_path, target_id):
         raise EvidenceError('Target is absent from candidate')
     target = targets[target_id]
     for record in targets.values():
+        if ('utilities' in record) != ('utilities_sources' in record):
+            raise EvidenceError('Candidate requires utilities and utilities_sources together')
         if manifest['schema'] == 3:
             if (not isinstance(record.get('mapping'), dict)
                     or record.get('processing') != {'tool': 'proguard', 'version': '7.10.0'}):
@@ -37,6 +39,19 @@ def client_candidate(manifest_path, target_id):
             for kind in ('artifact', 'sources') + (('mapping',) if manifest['schema'] == 3 else ()):
                 if targets[identifier][kind]['sha256'] != targets[owner][kind]['sha256']:
                     raise EvidenceError('Shared ' + kind + ' differs from owner: ' + identifier)
+            for kind in ('utilities', 'utilities_sources'):
+                if targets[identifier].get(kind) != targets[owner].get(kind):
+                    raise EvidenceError('Shared ' + kind + ' differs from owner: ' + identifier)
+    utilities_files = {}
+    for record in targets.values():
+        for kind in ('utilities', 'utilities_sources'):
+            if kind in record:
+                reference = record[kind]
+                checked_file(base, reference)
+                if (reference['path'] in utilities_files
+                        and utilities_files[reference['path']] != reference['sha256']):
+                    raise EvidenceError('Conflicting candidate filename: ' + reference['path'])
+                utilities_files[reference['path']] = reference['sha256']
     for kind in ('artifact', 'sources'):
         checked_file(base, target[kind])
     if 'source_inventory' in target:

@@ -99,6 +99,34 @@ class ReleaseChecksTest {
     }
 
     @Test
+    void utilitiesAreAttestedAndCopiedOnceIntoPublicAssetsAndChecksums() {
+        Map fixture = SharedPublicationFixture.multiple(directory)
+        CandidateFixture.utilities(fixture)
+        List<List<String>> commands = []
+        Map report = ReleaseChecks.provenance(fixture.file,
+                new File(fixture.bundle, 'provenance.jsonl'), 'owner/repo', runFor(fixture, commands))
+        ['utilities', 'utilities_sources'].each { kind ->
+            assertEquals(1, report.subjects.count { it.sha256 == fixture.record[kind].sha256 })
+        }
+        Map files = ReleaseChecks.publicFiles(new CandidateManifest(fixture.file))
+        File assets = new File(directory, 'public-utilities')
+        assertEquals(files, ReleaseChecks.preparePublicAssets(fixture.file, assets))
+        ['utilities', 'utilities_sources'].each { kind ->
+            Map reference = fixture.record[kind]
+            assertEquals(reference.sha256, files[reference.path])
+            assertEquals(reference.sha256, CandidateFiles.sha256(new File(assets, reference.path)))
+            assertTrue(new File(assets, 'SHA256SUMS').readLines().contains(reference.sha256 + '  ' + reference.path))
+        }
+        assertEquals(files.SHA256SUMS, CandidateFiles.sha256(new File(assets, 'SHA256SUMS')))
+        String output = ReleaseChecks.githubValues(Publication.metadata(fixture.file, fixture.root, 'Release notes').records[0],
+                fixture.target, new File(fixture.bundle, fixture.record.artifact.path),
+                new File(fixture.bundle, fixture.record.sources.path))
+        ['utilities', 'utilities_sources'].each { kind ->
+            assertTrue(output.readLines().contains(kind + '=' + new File(fixture.bundle, fixture.record[kind].path).absolutePath))
+        }
+    }
+
+    @Test
     void verifyRetainsRuntimeReportAndRequiresExactResultIndexes() {
         Map fixture = CandidateFixture.create(directory)
         List<List<String>> commands = []

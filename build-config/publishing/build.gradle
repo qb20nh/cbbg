@@ -57,7 +57,8 @@ def verifyInputs = {
             ? LegacyPublication.checkedRecord(metadataFile, sourceRoot, legacyAssets)
             : Publication.checkedRecord(candidateFile, metadataFile, targetId, sourceRoot)
     if (current[1] != record) throw new GradleException('Publishing record changed')
-    (['artifact', 'sources'] + (record.containsKey('evidence') ? ['evidence'] : [])).each { kind ->
+    (['artifact', 'sources'] + (record.containsKey('utilities') ? ['utilities', 'utilities_sources'] : []) +
+            (record.containsKey('evidence') ? ['evidence'] : [])).each { kind ->
         uploadFiles[kind] = CandidateFiles.checked(assets, (Map) record[kind])
     }
 }
@@ -77,6 +78,10 @@ modrinth {
     uploadFile = uploadFiles.artifact
     additionalFiles {
         sourcesJar uploadFiles.sources
+        if (uploadFiles.utilities) {
+            other uploadFiles.utilities
+            sourcesJar uploadFiles.utilities_sources
+        }
         if (uploadFiles.evidence) other uploadFiles.evidence
     }
     detectLoaders = false

@@ -77,6 +77,18 @@ abstract class BundleCandidate extends DefaultTask {
             files[name] = [file: file, sha256: sha]
             [path: name, sha256: sha]
         }
+        Set<String> utilityNames = [] as Set
+        def addUtilities = { String name, File file ->
+            if (utilityNames.contains(name)) {
+                if (files[name].sha256 != CandidateFiles.sha256(file)) {
+                    throw new GradleException('Conflicting candidate filename: ' + name)
+                }
+                return [path: name, sha256: files[name].sha256]
+            }
+            Map reference = add(name, file)
+            utilityNames.add(name)
+            reference
+        }
         Map catalogReference = add('catalog.json', new File(root, 'targets.json'))
         Map<String, Map> records = [:]
         selected.values().sort { it.artifactOf ? 1 : 0 }.each { Map target ->
@@ -106,6 +118,15 @@ abstract class BundleCandidate extends DefaultTask {
             throw new GradleException('Build outputs require ProGuard processing and mapping')
         }
         Map record = [id: target.id, processing: built.processing]
+        if (built.containsKey('utilities') != built.containsKey('utilities_sources')) {
+            throw new GradleException('Build outputs require utilities and utilities_sources together')
+        }
+        if (built.containsKey('utilities')) {
+            ['utilities', 'utilities_sources'].each { kind ->
+                record[kind] = target.artifactOf ? records[owner.id][kind] :
+                        addUtilities(built[kind].filename, CandidateFiles.checked(root, built[kind]))
+            }
+        }
         ['artifact', 'sources', 'source_inventory', 'mapping', 'sbom'].each { kind ->
             if (target.artifactOf) {
                 record[kind] = records[owner.id][kind]

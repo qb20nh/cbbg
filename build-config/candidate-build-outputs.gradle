@@ -1,5 +1,6 @@
 tasks.register('candidateBuildOutputs') {
     dependsOn tasks.named('ciCheck'), tasks.named('sourceInventory')
+    dependsOn ':core:utilitiesSourcesJar'
     dependsOn tasks.withType(Jar).matching { it.name.endsWith('DriverJar') }
     def destination = layout.file(providers.provider {
         new File(rootProject.file('../..'), "build/targets/${candidateTargetId}/candidate-build-outputs.json")
@@ -24,6 +25,8 @@ tasks.register('candidateBuildOutputs') {
             }.standardOutput.asText.get().trim()
         }
         def processed = tasks.names.contains('processedDriverJar')
+        def utilitiesSources = project(':core').tasks.named('utilitiesSourcesJar', Jar).get().archiveFile.get().asFile
+        def utilities = new File(utilitiesSources.parentFile, utilitiesSources.name.replaceFirst(/-sources\.jar$/, '.jar'))
         def drivers = new TreeMap<String, Map>()
         tasks.withType(Jar).matching {
             it.name.endsWith('DriverJar') && it.name.startsWith('processed') == processed
@@ -43,6 +46,7 @@ tasks.register('candidateBuildOutputs') {
                       sbom: reference(releaseSbomFile.get().asFile),
                       processing: [tool: 'proguard', version: releaseOptimization.toolVersion],
                       sources: reference(tasks.named('releaseSourcesJar', Jar).get().archiveFile.get().asFile),
+                      utilities: reference(utilities), utilities_sources: reference(utilitiesSources),
                       source_inventory: reference(layout.buildDirectory.file('source-inventory.json').get().asFile),
                       drivers: drivers]
         destination.get().asFile.parentFile.mkdirs()

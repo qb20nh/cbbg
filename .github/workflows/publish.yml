@@ -279,6 +279,60 @@ jobs:
             "-Ptarget=$TARGET_ID" "-PfileId=$CF_FILE_ID" "-PsourcesFileId=$CF_SOURCES_FILE_ID" \
             -Poutput=build/curseforge-sources-result.json recordCurseForgeUpload
 
+      - name: Upload standalone utilities to CurseForge
+        if: ${{ !inputs.dry_run && inputs.services != 'modrinth' && steps.publication.outputs.utilities != '' }}
+        id: curseforge_utilities_upload
+        uses: qb20nh/curseforge-upload@ca94ed0392ea2a4d975f0eef5e02f7805aa30469
+        with:
+          token: ${{ secrets.CF_API_TOKEN }}
+          project_id: ${{ steps.publication.outputs.cf_project_id }}
+          game_endpoint: minecraft
+          parent_file_id: ${{ steps.curseforge_upload.outputs.id }}
+          file_path: ${{ steps.publication.outputs.utilities }}
+          release_type: ${{ steps.publication.outputs.cf_release_type }}
+          display_name: ${{ steps.publication.outputs.cf_display_name }} standalone utilities
+          changelog: ${{ steps.publication.outputs.cf_changelog }}
+          changelog_type: markdown
+
+      - name: Save CurseForge utilities upload record
+        if: ${{ !inputs.dry_run && inputs.services != 'modrinth' && steps.publication.outputs.utilities != '' }}
+        env:
+          CF_FILE_ID: ${{ steps.curseforge_upload.outputs.id }}
+          CF_UTILITIES_FILE_ID: ${{ steps.curseforge_utilities_upload.outputs.id }}
+          TARGET_ID: ${{ matrix.target }}
+        run: |
+          ./gradlew --no-daemon "-PpublicationMetadata=build/publication.json" \
+            "-Ptarget=$TARGET_ID" "-PfileId=$CF_FILE_ID" "-PutilitiesFileId=$CF_UTILITIES_FILE_ID" \
+            -Poutput=build/curseforge-utilities-result.json recordCurseForgeUpload
+
+      - name: Upload utilities sources and mapping to CurseForge
+        if: ${{ !inputs.dry_run && inputs.services != 'modrinth' && steps.publication.outputs.utilities_sources != '' }}
+        id: curseforge_utilities_sources_upload
+        uses: qb20nh/curseforge-upload@ca94ed0392ea2a4d975f0eef5e02f7805aa30469
+        with:
+          token: ${{ secrets.CF_API_TOKEN }}
+          project_id: ${{ steps.publication.outputs.cf_project_id }}
+          game_endpoint: minecraft
+          parent_file_id: ${{ steps.curseforge_upload.outputs.id }}
+          file_path: ${{ steps.publication.outputs.utilities_sources }}
+          release_type: ${{ steps.publication.outputs.cf_release_type }}
+          display_name: ${{ steps.publication.outputs.cf_display_name }} standalone utilities sources
+          changelog: ${{ steps.publication.outputs.cf_changelog }}
+          changelog_type: markdown
+
+      - name: Save CurseForge utilities sources upload record
+        if: ${{ !inputs.dry_run && inputs.services != 'modrinth' && steps.publication.outputs.utilities_sources != '' }}
+        env:
+          CF_FILE_ID: ${{ steps.curseforge_upload.outputs.id }}
+          CF_UTILITIES_FILE_ID: ${{ steps.curseforge_utilities_upload.outputs.id }}
+          CF_UTILITIES_SOURCES_FILE_ID: ${{ steps.curseforge_utilities_sources_upload.outputs.id }}
+          TARGET_ID: ${{ matrix.target }}
+        run: |
+          ./gradlew --no-daemon "-PpublicationMetadata=build/publication.json" \
+            "-Ptarget=$TARGET_ID" "-PfileId=$CF_FILE_ID" "-PutilitiesFileId=$CF_UTILITIES_FILE_ID" \
+            "-PutilitiesSourcesFileId=$CF_UTILITIES_SOURCES_FILE_ID" \
+            -Poutput=build/curseforge-utilities-sources-result.json recordCurseForgeUpload
+
       - name: Upload SBOM and provenance to CurseForge
         if: ${{ !inputs.dry_run && inputs.services != 'modrinth' && steps.publication.outputs.evidence != '' }}
         id: curseforge_evidence_upload
@@ -316,6 +370,8 @@ jobs:
             build/publication.json
             build/curseforge-result.json
             build/curseforge-sources-result.json
+            build/curseforge-utilities-result.json
+            build/curseforge-utilities-sources-result.json
             build/curseforge-evidence-result.json
             build/publishing/**/modrinth-plan.json
             build/publishing/**/modrinth-result.json

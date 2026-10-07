@@ -19,7 +19,24 @@ class CandidateBuildOutputsTest {
         boolean processed = selection != 'ordinary'
         File profile = new File(directory, 'build-config/example')
         profile.mkdirs()
-        new File(profile, 'settings.gradle').text = "rootProject.name = 'example'\n"
+        new File(profile, 'settings.gradle').text = "rootProject.name = 'example'\ninclude ':core'\nproject(':core').projectDir = file('../../core')\n"
+        File core = new File(directory, 'core')
+        core.mkdirs()
+        new File(core, 'build.gradle').text = '''
+plugins { id 'base' }
+tasks.register('optimizeUtilitiesJar') {
+    doLast {
+        def libs = layout.buildDirectory.dir('libs').get().asFile
+        libs.mkdirs()
+        new File(libs, 'cbbg-utilities-1.4.1.jar').text = 'optimized Java 8 utility fixture'
+    }
+}
+tasks.register('utilitiesSourcesJar', Jar) {
+    dependsOn 'optimizeUtilitiesJar'
+    archiveFileName = 'cbbg-utilities-1.4.1-sources.jar'
+    destinationDirectory = layout.buildDirectory.dir('libs')
+}
+'''
         new File(profile, 'build.gradle').text = '''
 plugins { id 'java'; id 'cbbg.packaging' }
 java { withSourcesJar() }
@@ -96,6 +113,8 @@ sourceSets.processedGametest.java.setSrcDirs([mapped])
         assertFalse(new File(profile, 'build/candidate-build-outputs.json').exists())
         assertEquals('26.2-fabric', output.target)
         assertEquals('1.4.1+mc26.2', output.version)
+        assertEquals('cbbg-utilities-1.4.1.jar', output.utilities.filename)
+        assertEquals('cbbg-utilities-1.4.1-sources.jar', output.utilities_sources.filename)
         assertEquals(git('rev-parse', 'HEAD'), output.source_commit)
         assertFalse(output.source_dirty)
         Set expected = ['ordinary', 'early-startup'] as Set
@@ -110,7 +129,7 @@ sourceSets.processedGametest.java.setSrcDirs([mapped])
         output.drivers.values().each { driver ->
             assertEquals(processed, driver.filename.contains('processed'))
         }
-        ([output.artifact, output.mapping, output.sbom, output.sources, output.source_inventory] +
+        ([output.artifact, output.mapping, output.sbom, output.sources, output.utilities, output.utilities_sources, output.source_inventory] +
                 output.drivers.values()).each { reference ->
             File file = new File(directory, reference.path)
             assertTrue(file.isFile(), reference.path as String)

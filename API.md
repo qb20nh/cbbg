@@ -52,6 +52,15 @@ Your integration remains responsible for scheduling its pass within that rendere
 
 ## Standalone library
 
+Download `cbbg-utilities-<version>.jar` and `cbbg-utilities-<version>-sources.jar`
+from the [GitHub release](https://github.com/qb20nh/cbbg/releases), or from the
+additional files on the corresponding Modrinth or CurseForge release. Add the
+binary to your Java classpath; attach the sources JAR in your IDE for source and
+mapping lookup. These downloads expose the noise and CPU image APIs on Java 8
+and newer. Use the CBBG mod for your Minecraft version for the GPU pass.
+
+To build the standalone library locally:
+
 ```sh
 ./gradlew -p core utilitiesSourcesJar
 ```

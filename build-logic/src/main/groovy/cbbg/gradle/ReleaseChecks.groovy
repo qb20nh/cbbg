@@ -18,6 +18,7 @@ class ReleaseChecks {
         Map<File, String> files = [(candidate.file): manifestHash]
         candidate.records.values().each { record ->
             (['artifact', 'sources'] + (candidate.data.schema == 3 ? ['mapping'] : []) +
+                    (record.containsKey('utilities') ? ['utilities', 'utilities_sources'] : []) +
                     (record.containsKey('sbom') ? ['sbom'] : [])).each { kind ->
                 File path = CandidateFiles.checked(candidate.file.parentFile, record[kind] as Map)
                 String hash = record[kind].sha256
@@ -545,7 +546,7 @@ class ReleaseChecks {
     static Map<String, String> publicFiles(CandidateManifest candidate) {
         Map<String, String> files = [:]
         candidate.records.values().each { record ->
-            ['artifact', 'sources'].each { kind ->
+            ['artifact', 'sources', 'utilities', 'utilities_sources'].each { kind ->
                 Map reference = record[kind] as Map
                 if (reference != null) {
                     String name = reference.path
@@ -647,6 +648,10 @@ class ReleaseChecks {
                       cf_relations: curseforge.relations, cf_changelog: curseforge.changelog]
         values.evidence = record.evidence
                 ? CandidateFiles.checked(artifact.parentFile, record.evidence as Map).absolutePath : ''
+        ['utilities', 'utilities_sources'].each { kind ->
+            values[kind] = record[kind]
+                    ? CandidateFiles.checked(artifact.parentFile, record[kind] as Map).absolutePath : ''
+        }
         values.collect { key, value ->
             String text = value.toString()
             if (text.contains('\n') || text.contains('\r')) {

@@ -155,6 +155,19 @@ class ReleasePlugin implements Plugin<Project> {
                 result.evidence_file_id = evidenceIdentifier
                 result.evidence_url = 'https://www.curseforge.com/minecraft/mc-mods/cbbg/files/' + evidenceIdentifier
             }
+            ['utilities', 'utilities_sources'].each { kind ->
+                String property = kind == 'utilities' ? 'utilitiesFileId' : 'utilitiesSourcesFileId'
+                String fileIdentifier = project.providers.gradleProperty(property).orNull
+                if (fileIdentifier != null) {
+                    if (!(fileIdentifier ==~ /[0-9]+/) || new BigInteger(fileIdentifier) <= 0) {
+                        throw new GradleException('CurseForge returned no valid ' + kind + ' file ID; check the project before retrying')
+                    }
+                    if (!(record[kind] instanceof Map)) throw new GradleException('Missing ' + kind + ' publication record')
+                    result[kind] = record[kind]
+                    result[kind + '_file_id'] = fileIdentifier
+                    result[kind + '_url'] = 'https://www.curseforge.com/minecraft/mc-mods/cbbg/files/' + fileIdentifier
+                }
+            }
             CandidateFiles.writeNew(input('output'), result)
             project.logger.lifecycle(result.url as String)
         }

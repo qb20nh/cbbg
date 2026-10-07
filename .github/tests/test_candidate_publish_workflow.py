@@ -121,9 +121,20 @@ class CandidatePublishWorkflowTests(unittest.TestCase):
         self.assertIn('DRY_RUN: ${{ inputs.dry_run }}', prepare)
         uploads = [step for step in workflow.split('\n      - ')
                    if 'uses: qb20nh/curseforge-upload@' in step]
-        self.assertEqual(len(uploads), 3)
+        identifiers = [next(line.strip()[4:] for line in step.splitlines()
+                            if line.strip().startswith('id: ')) for step in uploads]
+        self.assertEqual(len(identifiers), 5)
+        self.assertEqual(set(identifiers), {
+            'curseforge_upload', 'curseforge_sources_upload',
+            'curseforge_utilities_upload', 'curseforge_utilities_sources_upload',
+            'curseforge_evidence_upload'})
         for step in uploads:
             self.assertIn('!inputs.dry_run', step)
+        for kind in ('utilities', 'utilities_sources'):
+            step = uploads[identifiers.index('curseforge_' + kind + '_upload')]
+            self.assertIn("steps.publication.outputs." + kind + " != ''", step)
+            self.assertIn('parent_file_id: ${{ steps.curseforge_upload.outputs.id }}', step)
+            self.assertIn('file_path: ${{ steps.publication.outputs.' + kind + ' }}', step)
         publisher = (ROOT / 'build-config/publishing/build.gradle').read_text()
         self.assertIn('Publication.requireUploadAllowed(CandidateFiles.read(metadataFile))', publisher)
 

@@ -70,6 +70,10 @@ class Publication {
             if (target.containsKey('sbom')) {
                 records.last().evidence = ReleaseEvidence.reference(manifest, id)
             }
+            if (target.containsKey('utilities')) {
+                records.last().utilities = target.utilities
+                records.last().utilities_sources = target.utilities_sources
+            }
         }
         if (CandidateFiles.sha256(candidate) != before) {
             throw new GradleException('Candidate changed during metadata generation')
@@ -93,7 +97,7 @@ class Publication {
         if (expectedRecords.size() != 1 ||
                 ['schema', 'release', 'source_commit', 'manifest_sha256'].any { published[it] != expected[it] } ||
                 published.records.size() != expected.records.size() ||
-                ['targets', 'artifact', 'sources', 'evidence', 'modrinth'].any { record[it] != expectedRecords[0][it] }) {
+                ['targets', 'artifact', 'sources', 'utilities', 'utilities_sources', 'evidence', 'modrinth'].any { record[it] != expectedRecords[0][it] }) {
             throw new GradleException('Publishing metadata differs from the checked candidate')
         }
         Map curseforge = record.curseforge instanceof Map ? new LinkedHashMap(record.curseforge) : [:]
@@ -203,7 +207,9 @@ class Publication {
         if (record.targets[0] != target) throw new GradleException('Publishing target differs from selected target')
         File assets = candidate != null ? candidate.parentFile : legacyAssets
         Map upload = record.modrinth
-        List<String> kinds = ['artifact', 'sources'] + (record.containsKey('evidence') ? ['evidence'] : [])
+        List<String> kinds = ['artifact', 'sources'] +
+                (record.containsKey('utilities') ? ['utilities', 'utilities_sources'] : []) +
+                (record.containsKey('evidence') ? ['evidence'] : [])
         Map project = request(fetch, MODRINTH_API + '/project/' + segment(upload.project_id), [:]) as Map
         if (project.id != upload.project_id || !(project.slug instanceof String) ||
                 !(project.slug ==~ /[\w-]+/)) {
@@ -231,6 +237,10 @@ class Publication {
                       project_id: project.id, version_number: upload.version_number,
                       artifact: record.artifact, sources: record.sources, action: 'upload']
         if (record.containsKey('evidence')) result.evidence = record.evidence
+        if (record.containsKey('utilities')) {
+            result.utilities = record.utilities
+            result.utilities_sources = record.utilities_sources
+        }
         if (candidate != null) result.manifest_sha256 = expected.manifest_sha256
         if (!matches.isEmpty()) {
             Map existing = matches[0]
@@ -273,10 +283,11 @@ class Publication {
                 }
                 Map item = fileMatches[0]
                 String sha512 = digest(file, 'SHA-512')
-                List fileTypes = kind == 'sources' ? ['sources-jar'] :
+                List fileTypes = kind in ['sources', 'utilities_sources'] ? ['sources-jar'] :
+                        (kind == 'utilities' ? [null, 'other'] :
                         (kind == 'evidence'
                                 ? (uploadedVersionId != null ? [null] : [null, 'signature'])
-                                : [null])
+                                : [null]))
                 if (item.hashes?.sha512 != sha512 || item.primary != (kind == 'artifact') ||
                         !fileTypes.contains(item.file_type)) {
                     throw new GradleException('Existing Modrinth file differs from candidate: ' + kind)

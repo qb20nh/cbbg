@@ -93,11 +93,28 @@ class ReleasePluginTest {
         }
     }
 
+    @Test void workflowUploadsUtilityPairAsOptionalCurseForgeChildFilesAndSavesReceipts() {
+        String workflow = new File('../.github/workflows/publish.yml').text
+        ['utilities', 'utilities_sources'].each { kind ->
+            String step = workflow.split(/\n      - name: /).find { it.contains('id: curseforge_' + kind + '_upload\n') }
+            assertNotNull(step)
+            assertTrue(step.contains("!inputs.dry_run && inputs.services != 'modrinth' && steps.publication.outputs.${kind} != ''"))
+            assertTrue(step.contains('parent_file_id: ${{ steps.curseforge_upload.outputs.id }}'))
+            assertTrue(step.contains('file_path: ${{ steps.publication.outputs.' + kind + ' }}'))
+        }
+        assertTrue(workflow.contains('"-PutilitiesFileId=$CF_UTILITIES_FILE_ID"'))
+        assertTrue(workflow.contains('"-PutilitiesSourcesFileId=$CF_UTILITIES_SOURCES_FILE_ID"'))
+        assertTrue(workflow.contains('            build/curseforge-utilities-result.json\n'))
+        assertTrue(workflow.contains('            build/curseforge-utilities-sources-result.json\n'))
+    }
+
     @Test void curseForgeReceiptBindsFileIdToSubmittedMetadata() {
         File metadata = new File(directory, 'publication.json')
         metadata.text = JsonOutput.toJson([release: 'v1.4.0', source_commit: 'a' * 40,
                 records: [[targets: ['26.3-fabric'], artifact: [path: 'cbbg.jar', sha256: 'b' * 64],
                            sources: [path: 'cbbg-sources.jar', sha256: 'c' * 64],
+                           utilities: [path: 'cbbg-utilities.jar', sha256: 'e' * 64],
+                           utilities_sources: [path: 'cbbg-utilities-sources.jar', sha256: 'f' * 64],
                            evidence: [path: 'cbbg-evidence.zip', sha256: 'd' * 64]]]])
         String[] arguments = ['recordCurseForgeUpload', '-PpublicationMetadata=publication.json',
                               '-Poutput=receipt.json', '-PfileId=123']
@@ -123,6 +140,22 @@ class ReleasePluginTest {
         assertEquals('789', evidenceResult.evidence_file_id)
         assertEquals([path: 'cbbg-evidence.zip', sha256: 'd' * 64], evidenceResult.evidence)
         assertTrue(evidenceResult.evidence_url.endsWith('/789'))
+        runner('recordCurseForgeUpload', '-PpublicationMetadata=publication.json',
+                '-Poutput=utilities-receipt.json', '-PfileId=123', '-PutilitiesFileId=234',
+                '-PutilitiesSourcesFileId=345').build()
+        Map utilitiesResult = CandidateFiles.read(new File(directory, 'utilities-receipt.json'))
+        assertEquals('234', utilitiesResult.utilities_file_id)
+        assertEquals('345', utilitiesResult.utilities_sources_file_id)
+        assertEquals([path: 'cbbg-utilities.jar', sha256: 'e' * 64], utilitiesResult.utilities)
+        assertEquals([path: 'cbbg-utilities-sources.jar', sha256: 'f' * 64], utilitiesResult.utilities_sources)
+        assertTrue(utilitiesResult.utilities_url.endsWith('/234'))
+        assertTrue(utilitiesResult.utilities_sources_url.endsWith('/345'))
+        assertTrue(runner('recordCurseForgeUpload', '-PpublicationMetadata=publication.json',
+                '-Poutput=invalid-utilities.json', '-PfileId=123', '-PutilitiesFileId=0')
+                .buildAndFail().output.contains('no valid utilities file ID'))
+        assertTrue(runner('recordCurseForgeUpload', '-PpublicationMetadata=publication.json',
+                '-Poutput=invalid-utilities-sources.json', '-PfileId=123', '-PutilitiesSourcesFileId=abc')
+                .buildAndFail().output.contains('no valid utilities_sources file ID'))
         ['0', '-1', 'abc', '１２'].each { id ->
             assertTrue(runner('recordCurseForgeUpload', '-PfileId=' + id).buildAndFail().output
                     .contains('no valid file ID'))

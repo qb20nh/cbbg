@@ -53,16 +53,25 @@ class CandidateManifest {
                         throw new GradleException('Shared ' + kind + ' differs from owner: ' + id)
                     }
                 }
+                ['utilities', 'utilities_sources'].each { kind ->
+                    if (records[id][kind] != records[specification.artifactOf][kind]) {
+                        throw new GradleException('Shared ' + kind + ' differs from owner: ' + id)
+                    }
+                }
             }
         }
     }
 
     static List<Map> references(Map target) {
+        if (target.containsKey('utilities') != target.containsKey('utilities_sources')) {
+            throw new GradleException('Candidate requires utilities and utilities_sources together')
+        }
         def tests = target.client_tests
         if (!(tests instanceof Map) || !(tests.drivers instanceof Map) || tests.drivers.isEmpty()) {
             throw new GradleException('Missing client test drivers')
         }
         (['artifact', 'sources', 'source_inventory'] + (target.containsKey('mapping') ? ['mapping'] : []) +
+                (target.containsKey('utilities') ? ['utilities', 'utilities_sources'] : []) +
                 (target.containsKey('sbom') ? ['sbom'] : [])).collect { target[it] as Map } +
                 ['catalog', 'contract', 'ordinary_metadata', 'runtime_lock', 'dependency_lock'].collect { tests[it] as Map } +
                 tests.drivers.values().collect { it as Map }

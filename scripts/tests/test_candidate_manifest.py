@@ -55,6 +55,29 @@ class CandidateManifestTest(unittest.TestCase):
             with self.subTest(tag=tag), self.assertRaises(EvidenceError):
                 self.read()
 
+    def utilities(self):
+        for kind, name in (('utilities', 'cbbg-utilities-1.4.0.jar'),
+                           ('utilities_sources', 'cbbg-utilities-1.4.0-sources.jar')):
+            (self.root / name).write_bytes(name.encode())
+            self.target[kind] = self.reference(name)
+
+    def test_utility_pair_is_optional_but_both_files_are_checked(self):
+        self.assertNotIn('utilities', self.read()[1])
+        self.utilities()
+        self.assertEqual(self.target['utilities'], self.read()[1]['utilities'])
+        sources = self.target.pop('utilities_sources')
+        with self.assertRaisesRegex(EvidenceError, 'together'):
+            self.read()
+        self.target['utilities_sources'] = sources
+        for kind in ('utilities', 'utilities_sources'):
+            with self.subTest(kind=kind):
+                path = self.root / self.target[kind]['path']
+                previous = path.read_bytes()
+                path.write_text('changed')
+                with self.assertRaisesRegex(EvidenceError, 'Changed evidence file'):
+                    self.read()
+                path.write_bytes(previous)
+
     def test_saved_runtime_candidates_without_inventory_remain_readable(self):
         del self.target['source_inventory']
         self.assertEqual(self.read()[1]['id'], '26.3-fabric')
@@ -92,6 +115,7 @@ class CandidateManifestTest(unittest.TestCase):
             self.read()
 
     def test_shared_runtime_requires_matching_artifact_and_sources(self):
+        self.utilities()
         self.manifest['selected_targets'].append('26.3-quilt')
         quilt = copy.deepcopy(self.target)
         quilt['id'] = '26.3-quilt'
@@ -104,6 +128,15 @@ class CandidateManifestTest(unittest.TestCase):
                 with self.assertRaisesRegex(EvidenceError, 'Shared ' + kind):
                     self.read()
                 quilt[kind]['sha256'] = original
+        for kind in ('utilities', 'utilities_sources'):
+            with self.subTest(kind=kind):
+                previous = quilt[kind]
+                name = 'alias-' + previous['path']
+                (self.root / name).write_bytes((self.root / previous['path']).read_bytes())
+                quilt[kind] = self.reference(name)
+                with self.assertRaisesRegex(EvidenceError, 'Shared ' + kind):
+                    self.read()
+                quilt[kind] = previous
 
 
 if __name__ == '__main__':

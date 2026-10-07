@@ -68,6 +68,36 @@ class BundleCandidateTest {
         assertThrows(Exception) { fixture.task.bundle() }
     }
 
+    private void utilityInputs(Map fixture) {
+        CandidateFixture.utilities(fixture)
+        ['utilities', 'utilities_sources'].each { kind ->
+            Map reference = fixture.record[kind]
+            File input = new File(fixture.root, 'build/inputs/' + reference.path)
+            input.bytes = new File(fixture.bundle, reference.path).bytes
+            fixture.outputs[kind] = CandidateFiles.reference(fixture.root, 'build/inputs/' + reference.path) +
+                    [filename: reference.path]
+        }
+        fixture.outputsFile.text = JsonOutput.toJson(fixture.outputs)
+    }
+
+    @Test void bundlesCheckedUtilityPairAndRejectsPartialBuildOutputs() {
+        def fixture = setup()
+        utilityInputs(fixture)
+        Map sources = fixture.outputs.remove('utilities_sources')
+        fixture.outputsFile.text = JsonOutput.toJson(fixture.outputs)
+        assertTrue(assertThrows(Exception) { fixture.task.bundle() }.message.contains('together'))
+        fixture.outputs.utilities_sources = sources
+        fixture.outputsFile.text = JsonOutput.toJson(fixture.outputs)
+        fixture.task.bundle()
+        File output = fixture.task.destination.get().asFile
+        Map record = new CandidateManifest(new File(output, 'candidate.json')).records[fixture.target.id]
+        ['utilities', 'utilities_sources'].each { kind ->
+            assertEquals(fixture.record[kind], record[kind])
+            assertEquals(record[kind].sha256, CandidateFiles.sha256(new File(output, record[kind].path)))
+            assertTrue(new File(output, 'SHA256SUMS').readLines().contains(record[kind].sha256 + '  ' + record[kind].path))
+        }
+    }
+
     @Test void bundlesThroughGradleWhenItCreatesTheOutputDirectory() {
         def fixture = setup()
         File project = new File(directory, 'gradle-project')
@@ -201,6 +231,7 @@ tasks.register('assembleCandidate', BundleCandidate) {
 
     @Test void explicitSelectionBundlesOwnerAndAliasWithIndependentRuntimeInputs() {
         def fixture = setup()
+        utilityInputs(fixture)
         fixture.catalog.targets.add(fixture.target + [id: '26.3-quilt', loader: 'quilt', artifactOf: '26.3-fabric'])
         new File(fixture.root, 'targets.json').text = JsonOutput.toJson(fixture.catalog)
         conventionalInputs(fixture, ['26.3-fabric', '26.3-quilt'])
@@ -208,6 +239,8 @@ tasks.register('assembleCandidate', BundleCandidate) {
         def candidate = new CandidateManifest(new File(fixture.task.destination.get().asFile, 'candidate.json'))
         assertEquals(['26.3-fabric', '26.3-quilt'] as Set, candidate.verifyPackages(fixture.root).keySet())
         assertEquals(candidate.records['26.3-fabric'].artifact, candidate.records['26.3-quilt'].artifact)
+        assertEquals(candidate.records['26.3-fabric'].utilities, candidate.records['26.3-quilt'].utilities)
+        assertEquals(candidate.records['26.3-fabric'].utilities_sources, candidate.records['26.3-quilt'].utilities_sources)
         assertNotEquals(candidate.records['26.3-fabric'].client_tests.contract.path,
                 candidate.records['26.3-quilt'].client_tests.contract.path)
         assertEquals(['26.3-fabric', '26.3-quilt'], candidate.data.selected_targets)
@@ -226,6 +259,7 @@ tasks.register('assembleCandidate', BundleCandidate) {
 
     @Test void explicitSelectionBundlesDistinctArtifactsAndRejectsMixedBuildIdentity() {
         def fixture = setup()
+        utilityInputs(fixture)
         def second = CandidateFixture.create(new File(directory, 'second'), false, true, '26.2')
         fixture.catalog.targets.add(second.target)
         new File(fixture.root, 'targets.json').text = JsonOutput.toJson(fixture.catalog)
@@ -241,6 +275,11 @@ tasks.register('assembleCandidate', BundleCandidate) {
                        processing: second.record.processing, source_commit: fixture.outputs.source_commit, source_dirty: false,
                        drivers: [ordinary: copy(second.record.client_tests.drivers.ordinary)]]
         ['artifact', 'sources', 'source_inventory', 'mapping', 'sbom'].each { outputs[it] = copy(second.record[it]) }
+        ['utilities', 'utilities_sources'].each { kind ->
+            File input = new File(inputs, fixture.outputs[kind].filename)
+            input.bytes = new File(fixture.root, fixture.outputs[kind].path).bytes
+            outputs[kind] = CandidateFiles.reference(fixture.root, 'build/second-inputs/' + input.name) + [filename: input.name]
+        }
         File outputsFile = new File(fixture.root, 'build/targets/26.2-fabric/candidate-build-outputs.json')
         outputsFile.parentFile.mkdirs()
         for (Map invalid : [outputs + [source_commit: 'b' * 40], outputs + [version: '2.0.0+mc26.2-fabric']]) {
@@ -249,9 +288,22 @@ tasks.register('assembleCandidate', BundleCandidate) {
             assertFalse(fixture.task.destination.get().asFile.exists())
         }
         outputsFile.text = JsonOutput.toJson(outputs)
+        File utilities = new File(fixture.root, outputs.utilities.path)
+        byte[] original = utilities.bytes
+        utilities.text = 'conflicting utilities'
+        outputs.utilities.sha256 = CandidateFiles.sha256(utilities)
+        outputsFile.text = JsonOutput.toJson(outputs)
+        assertTrue(assertThrows(Exception) { fixture.task.bundle() }.message.contains('Conflicting candidate filename'))
+        utilities.bytes = original
+        outputs.utilities.sha256 = CandidateFiles.sha256(utilities)
+        outputsFile.text = JsonOutput.toJson(outputs)
         fixture.task.bundle()
         def candidate = new CandidateManifest(new File(fixture.task.destination.get().asFile, 'candidate.json'))
         assertEquals(['26.3-fabric', '26.2-fabric'] as Set, candidate.verifyPackages(fixture.root).keySet())
         assertNotEquals(candidate.records['26.3-fabric'].artifact, candidate.records['26.2-fabric'].artifact)
+        ['utilities', 'utilities_sources'].each { kind ->
+            assertEquals(candidate.records['26.3-fabric'][kind], candidate.records['26.2-fabric'][kind])
+            assertEquals(1, fixture.task.destination.get().asFile.listFiles().count { it.name == fixture.record[kind].path })
+        }
     }
 }
