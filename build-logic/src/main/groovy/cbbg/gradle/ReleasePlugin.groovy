@@ -85,6 +85,45 @@ class ReleasePlugin implements Plugin<Project> {
         task('preparePublicReleaseAssets', 'Select public files from a verified candidate.') {
             ReleaseChecks.preparePublicAssets(input('candidate'), input('output'))
         }
+        project.tasks.register('runCandidateAcceptance') {
+            group = 'distribution'
+            description = 'Run and resume the packaged Fabric candidate acceptance matrix locally.'
+            outputs.upToDateWhen { false }
+            doLast {
+                local()
+                File manifest = input('candidate')
+                File output = input('output')
+                def paths = { String prefix ->
+                    project.properties.findAll { key, value -> key.startsWith(prefix + '.') }
+                            .collectEntries { key, value -> [(key.substring(prefix.length() + 1)): project.file(value.toString()).canonicalFile] }
+                }
+                def optional = { String name ->
+                    String value = project.providers.gradleProperty(name).orNull
+                    value ? project.file(value).canonicalFile : null
+                }
+                File weston = System.getenv('PATH').tokenize(File.pathSeparator)
+                        .collect { new File(it, 'weston') }.find { it.canExecute() }
+                if (weston == null) throw new GradleException('Fresh candidate acceptance displays require Weston')
+                String selection = project.providers.gradleProperty('targets').orElse(project.providers.gradleProperty('target')).orNull
+                if (project.providers.gradleProperty('targets').isPresent() && project.providers.gradleProperty('target').isPresent()) {
+                    throw new GradleException('Use either -Ptarget or -Ptargets')
+                }
+                Map options = [root: source(), candidate: manifest, output: output,
+                               python: input('acceptancePython'), java21: input('acceptanceJava21'), java25: input('acceptanceJava25'),
+                               weston: weston, eglVendor: optional('acceptanceEglVendorFile'),
+                               sharedRuntime: optional('acceptanceSharedRuntime'), runtimes: paths('acceptanceRuntime'),
+                               gametestApis: paths('acceptanceGametestApi'), seedCaches: paths('acceptanceSeedZeroCache')]
+                if (selection != null) options.targets = selection.split(',', -1).toList()
+                FabricCandidateAcceptance.execute(options, run) { Map spec ->
+                    project.logger.lifecycle('Candidate acceptance: {} {} {} (startup={}, restart={})',
+                            spec.target.id, spec.profile, spec.backend, spec.startupMode, spec.restart)
+                    FabricCompatibilityProbe.execute(spec) { List command, File log ->
+                        FabricCompatibilityProbe.run(command, log, project.providers, spec.root as File)
+                    }
+                }
+                project.logger.lifecycle('Candidate acceptance indexes: {}/<target>/results.json', output)
+            }
+        }
         task('verifyCandidate', 'Check packaged candidate and complete local runtime results.') {
             local()
             File output = input('output')

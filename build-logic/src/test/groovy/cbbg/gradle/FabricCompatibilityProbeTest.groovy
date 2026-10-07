@@ -316,6 +316,16 @@ class FabricCompatibilityProbeTest {
         assertEquals('0.145.4+26.1.1', recorded.gametestApi.fabricApiPin)
         assertEquals('0.143.12+26.1', recorded.dependencies.fabricApi.pin)
 
+        File packagedLock = new File(directory, 'packaged-dependencies.json')
+        packagedLock.text = '{"immutable":"packaged lock"}\n'
+        String packagedHash = CandidateFiles.sha256(packagedLock)
+        FabricCompatibilityProbe.execute(spec + [dependencyLock: packagedLock]) { List args, File log ->
+            assertEquals(packagedLock, args[args.indexOf('--dependency-lock') + 1])
+            log.text = 'packaged lock forwarded'
+            1
+        }
+        assertEquals(packagedHash, CandidateFiles.sha256(packagedLock))
+
         Map restartSpec = spec + [restart: true, profile: 'iris']
         List<String> restartPhases = []
         List<File> restartGames = []

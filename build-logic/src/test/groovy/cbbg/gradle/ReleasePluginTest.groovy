@@ -19,10 +19,19 @@ class ReleasePluginTest {
     @Test void acceptanceAndPublicationRequireLocalExecution() {
         Map environment = new HashMap(System.getenv())
         environment.CI = 'true'
-        ['verifyCandidate', 'checkRelease', 'publishRelease'].each { name ->
+        ['runCandidateAcceptance', 'verifyCandidate', 'checkRelease', 'publishRelease'].each { name ->
             assertTrue(runner(name).withEnvironment(environment).buildAndFail().output
                     .contains('Candidate runtime acceptance and finalization run locally'))
         }
+    }
+
+    @Test void candidateAcceptanceRequiresInputsWithoutBuildingAndHasNoOverallTimeout() {
+        assertTrue(runner('runCandidateAcceptance').buildAndFail().output.contains('Missing -Pcandidate'))
+        def configured = runner('runCandidateAcceptance', '--dry-run')
+        new File(directory, 'build.gradle').append("\nassert tasks.runCandidateAcceptance.timeout.orNull == null\n")
+        String output = configured.build().output
+        assertTrue(output.contains(':runCandidateAcceptance SKIPPED'))
+        assertFalse(output.contains(':compileJava '))
     }
 
     @Test void publicationRequiresExplicitInputsWithoutBuilding() {

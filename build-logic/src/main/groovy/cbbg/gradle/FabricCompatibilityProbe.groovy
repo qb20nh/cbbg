@@ -187,13 +187,13 @@ class FabricCompatibilityProbe {
                     throw new GradleException('Fresh test display failed; see ' + cell)
                 }
             }
-            File lock = new File(cell, 'dependencies.json')
+            File lock = spec.dependencyLock as File ?: new File(cell, 'dependencies.json')
             Map locked = [fabricApi: [pin: spec.apiVersion,
                     sha256: CandidateFiles.sha256(spec.api as File)]]
             (spec.optionalMods as Map).each { name, mod ->
                 locked[name] = [pin: mod.pin, sha256: mod.sha256]
             }
-            lock.text = JsonOutput.toJson([schemaVersion: 1, target: spec.target.id,
+            if (spec.dependencyLock == null) lock.text = JsonOutput.toJson([schemaVersion: 1, target: spec.target.id,
                     dependencies: locked,
                     gametestApi: [fabricApiPin: spec.target.dependencies.fabricApi,
                             sha256: CandidateFiles.sha256(spec.gametest as File)]])
