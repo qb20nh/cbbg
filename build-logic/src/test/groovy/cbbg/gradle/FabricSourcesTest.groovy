@@ -170,6 +170,15 @@ class FabricSourcesTest {
         }
     }
 
+    @Test void retainsGl3StartupDrawHook() {
+        File root = new File(System.getProperty('cbbg.repository'))
+        Map target = new JsonSlurper().parse(new File(root, 'targets.json')).targets.find { it.id == '1.21.1-fabric' }
+        Map layout = FabricSources.layout(target, target)
+        String hook = 'renderers/gl3/src/processedGametest/java/com/qb20nh/cbbg/gametest/mixin/ReleaseStartupRenderPassMixin.java'
+        assertTrue(new File(root, hook).isFile())
+        assertTrue(layout.processedGametest.java.any { FabricSources.contains(it, hook) })
+    }
+
     @Test void retainsOrdinaryCompatibilityFixturesOnlyForTextureFormatAndGl3() {
         File root = new File(System.getProperty('cbbg.repository'))
         Map catalog = new JsonSlurper().parse(new File(root, 'targets.json'))
