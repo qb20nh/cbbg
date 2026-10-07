@@ -4,7 +4,7 @@ class TargetCatalog {
     final Map data
     private static final Set OPTIONAL_DEPENDENCIES = [
             'modMenu', 'clothConfig', 'yacl', 'sodium', 'iris', 'sulkan', 'renderScale',
-            'chatPatches', 'immediatelyFast', 'threatenGl', 'forceGl3', 'forceGl2'
+            'chatPatches', 'immediatelyFast', 'threatenGl', 'forceGl3', 'forceGl2', 'satin'
     ] as Set
 
     static Map effectiveDependencies(Map target, String profile) {

@@ -47,7 +47,8 @@ def includesFixture = { String name ->
     RenderScale: 'ReleaseRenderScaleGameTest',
     ShaderFailure: 'ReleaseShaderFailureGameTest',
     DebugOverlay: 'ReleaseDebugOverlayGameTest',
-    Notifications: 'ReleaseNotificationsGameTest'
+    Notifications: 'ReleaseNotificationsGameTest',
+    Satin: 'ReleaseSatinGameTest'
 ].findAll { name, testClass -> includesFixture(testClass) }.each { name, testClass ->
     def metadata = tasks.register("processed${name}Metadata") {
         dependsOn tasks.named('processProcessedGametestResources')

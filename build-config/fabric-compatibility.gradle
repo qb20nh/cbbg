@@ -169,7 +169,7 @@ tasks.register('verifyFabricCompatibility') {
             FabricCompatibilityProbe.run(command, log, providers, compatibilityRoot)
         }
         Map<String, String> modNames = [modmenu: 'modMenu', clothconfig: 'clothConfig', yacl: 'yacl',
-                sodium: 'sodium', iris: 'iris', sulkan: 'sulkan', renderscale: 'renderScale',
+                sodium: 'sodium', iris: 'iris', sulkan: 'sulkan', satin: 'satin', renderscale: 'renderScale',
                 chatpatches: 'chatPatches', immediatelyfast: 'immediatelyFast',
                 threatengl: 'threatenGl', forcegl3: 'forceGl3', forcegl2: 'forceGl2']
         Set<String> selected = profile == 'none' ? [] as Set : profile.tokenize('+') as Set

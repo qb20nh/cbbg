@@ -70,6 +70,9 @@ dependencies {
     if (testCompat.tokenize('+').contains('immediatelyfast')) {
         add(remappedGame ? 'modRuntimeOnly' : 'runtimeOnly', "maven.modrinth:immediatelyfast:${effectiveDependencies.immediatelyFast}") { transitive = false }
     }
+    if (testCompat.tokenize('+').contains('satin')) {
+        add(remappedGame ? 'modRuntimeOnly' : 'runtimeOnly', "maven.modrinth:satin-api:${effectiveDependencies.satin}") { transitive = false }
+    }
     if (testCompat.tokenize('+').contains('sulkan')) {
         add(remappedGame ? 'modRuntimeOnly' : 'runtimeOnly', "maven.modrinth:sulkan:${effectiveDependencies.sulkan}") { transitive = false }
     }
