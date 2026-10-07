@@ -63,7 +63,7 @@ def includesFixture = { String name ->
             if (name in ['Shutdown', 'GeneratingShutdown']) {
                 descriptor.mixins.addAll(['cbbg.release-startup.mixins.json', 'cbbg.release-shutdown.mixins.json'])
             }
-            if (name == 'IrisRestart') descriptor.mixins.add('cbbg.release-startup.mixins.json')
+            if (name in ['IrisRestart', 'ShaderFailure']) descriptor.mixins.add('cbbg.release-startup.mixins.json')
             if (name == 'Allocation') descriptor.mixins.add('cbbg.release-allocation.mixins.json')
             destination.get().asFile.parentFile.mkdirs()
             destination.get().asFile.text = groovy.json.JsonOutput.prettyPrint(
@@ -71,6 +71,7 @@ def includesFixture = { String name ->
         }
     }
     tasks.register("processed${name}DriverJar", Jar) {
+        ext.restart = name == 'IrisRestart'
         String suite = name.replaceAll(/([a-z])([A-Z])/, '$1-$2').toLowerCase(Locale.ROOT)
         archiveClassifier = "processed-${suite}-driver"
         from(sourceSets.processedGametest.output) { exclude 'fabric.mod.json' }

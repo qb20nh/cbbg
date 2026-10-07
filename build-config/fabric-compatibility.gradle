@@ -144,11 +144,14 @@ tasks.register('verifyFabricCompatibility') {
         def driverTask = tasks.named(compatibilityDriverName, Jar).get()
         String startupMode = driverTask.extensions.extraProperties.has('startupMode') ?
                 driverTask.extensions.extraProperties.get('startupMode') as String : null
+        boolean restart = driverTask.extensions.extraProperties.has('restart') &&
+                driverTask.extensions.extraProperties.get('restart') == true
         File suppliedConfig = providers.gradleProperty('compatibilityConfig').isPresent() ?
                 file(providers.gradleProperty('compatibilityConfig').get()) : null
         File startupCache = providers.gradleProperty('compatibilityStartupCache').isPresent() ?
                 file(providers.gradleProperty('compatibilityStartupCache').get()) : null
-        FabricCompatibilityProbe.requireLocalInputs(buildOnly, startupMode, suppliedConfig, startupCache, profile)
+        FabricCompatibilityProbe.requireLocalInputs(buildOnly, startupMode, suppliedConfig, startupCache,
+                profile, restart, compatibilityDriverName)
         File output = compatibilityOutput.get().asFile
         output.mkdirs()
         File initialConfig = suppliedConfig ?: new File(output, 'initial-cbbg.json')
@@ -452,7 +455,7 @@ tasks.register('verifyFabricCompatibility') {
                         api: api, gametest: gametest, runtime: runtime, optionalMods: optionalMods,
                         candidate: candidate, driver: driver, profile: profile, backend: backend,
                         config: targetConfig, python: python, java: java, strict: strict,
-                        startupMode: startupMode, startupCache: startupCache,
+                        startupMode: startupMode, startupCache: startupCache, restart: restart,
                         manageDisplay: manageDisplay, displayDirectory: displayDirectory,
                         display: display, weston: weston, eglVendor: eglVendor]
                 Map inputs = FabricCompatibilityProbe.cacheInputs(targetFixed, spec,

@@ -63,6 +63,27 @@ class FabricCompatibilityProbeTest {
         assertTrue(log.text.contains('version'))
     }
 
+    @Test void admitsRestartOnlyForTheDedicatedBuildOnlyIrisDriver() {
+        FabricCompatibilityProbe.requireLocalInputs(true, null, null, null, 'iris', true,
+                'processedIrisRestartDriverJar')
+        FabricCompatibilityProbe.requireLocalInputs(true, null, null, null,
+                'modmenu+sodium+iris+renderscale+chatpatches', true, 'processedIrisRestartDriverJar')
+        assertThrows(GradleException) {
+            FabricCompatibilityProbe.requireLocalInputs(true, null, new File(directory, 'settings.json'),
+                    null, 'iris', true, 'processedIrisRestartDriverJar')
+        }
+        [[false, 'iris', true, 'processedIrisRestartDriverJar'],
+         [true, 'none', true, 'processedIrisRestartDriverJar'],
+         [true, 'modmenu+sodium', true, 'processedIrisRestartDriverJar'],
+         [true, 'iris', false, 'processedIrisRestartDriverJar'],
+         [true, 'iris', true, 'processedDriverJar']].each { inputs ->
+            assertThrows(GradleException) {
+                FabricCompatibilityProbe.requireLocalInputs(inputs[0] as boolean, null, null, null,
+                        inputs[1] as String, inputs[2] as boolean, inputs[3] as String)
+            }
+        }
+    }
+
     @Test void cacheTracksProbeInputsButNotSearchPolicyOrOpenGlVulkanLoader() {
         File coordinator = new File(directory, 'fabric-compatibility.gradle')
         File search = new File(directory, 'FabricCompatibilitySearch.groovy')
@@ -176,6 +197,18 @@ class FabricCompatibilityProbeTest {
                                     (search.canonicalPath): 'search-1',
                                     (runner.canonicalPath): 'runner-1']]
         Map cacheInputs = FabricCompatibilityProbe.cacheInputs(reportInputs, spec, coordinator, search)
+        Map restartInputs = FabricCompatibilityProbe.cacheInputs(reportInputs, spec + [restart: true],
+                coordinator, search)
+        assertEquals(false, cacheInputs.restart)
+        assertEquals(true, restartInputs.restart)
+        assertNotEquals(cacheInputs, restartInputs)
+        File restartEvidence = new File(directory, 'restart-cache-evidence.json')
+        restartEvidence.text = 'passed'
+        File restartCache = new File(directory, 'restart-cache')
+        Closure restartRun = { [status: 'passed', files: [restartEvidence]] }
+        assertFalse(FabricCompatibilitySearch.cached(restartCache, cacheInputs, restartRun).cached)
+        assertFalse(FabricCompatibilitySearch.cached(restartCache, restartInputs, restartRun).cached)
+        assertTrue(FabricCompatibilitySearch.cached(restartCache, restartInputs, restartRun).cached)
         File startupCache = new File(directory, 'startup-cache')
         startupCache.mkdirs()
         File cachedNoise = new File(startupCache, 'noise.png')
@@ -262,6 +295,56 @@ class FabricCompatibilityProbeTest {
         assertEquals('26.1.1-fabric', recorded.target)
         assertEquals('0.145.4+26.1.1', recorded.gametestApi.fabricApiPin)
         assertEquals('0.143.12+26.1', recorded.dependencies.fabricApi.pin)
+
+        Map restartSpec = spec + [restart: true, profile: 'iris']
+        List<String> restartPhases = []
+        List<File> restartGames = []
+        Map restarted = FabricCompatibilityProbe.execute(restartSpec) { List args, File log ->
+            assertFalse(args.contains('--cbbg-config'))
+            assertFalse(args.contains('--test-dependency-minimums'))
+            String phase = args[args.indexOf('--restart-phase') + 1]
+            File game = args[args.indexOf('--game-dir') + 1] as File
+            restartPhases.add(phase)
+            restartGames.add(game)
+            game.mkdirs()
+            new File(game, phase + '-probe.json').text = JsonOutput.toJson(
+                    [exitCode: 0, scenarios: [ok: true]])
+            new File(game, phase + '-launch.log').text = phase
+            log.text = phase
+            0
+        }
+        assertEquals(['control', 'prepare', 'verify'], restartPhases)
+        assertNotEquals(restartGames[0], restartGames[1])
+        assertEquals(restartGames[1], restartGames[2])
+        assertEquals('passed', restarted.status)
+        assertEquals(new File(restartGames[2], 'verify-probe.json').absolutePath, restarted.receipt)
+        ['control', 'prepare', 'verify'].each { phase ->
+            assertTrue(restarted.files.any { it.name == phase + '-runner.log' })
+            assertTrue(restarted.files.any { it.name == phase + '-launch.log' })
+            assertTrue(restarted.files.any { it.name == phase + '-probe.json' })
+        }
+        ['control', 'prepare', 'verify'].eachWithIndex { failingPhase, phaseIndex ->
+            [false, true].each { missingReceipt ->
+                List<String> attempted = []
+                Map stopped = FabricCompatibilityProbe.execute(restartSpec) { List args, File log ->
+                    String phase = args[args.indexOf('--restart-phase') + 1]
+                    File game = args[args.indexOf('--game-dir') + 1] as File
+                    attempted.add(phase)
+                    game.mkdirs()
+                    boolean failedPhase = phase == failingPhase
+                    if (!failedPhase || !missingReceipt) {
+                        new File(game, phase + '-probe.json').text = JsonOutput.toJson(failedPhase ?
+                                [exitCode: 1, failure: [type: 'AssertionError', message: 'phase failed']] :
+                                [exitCode: 0, scenarios: [ok: true]])
+                    }
+                    log.text = 'phase completed'
+                    failedPhase && !missingReceipt ? 1 : 0
+                }
+                assertEquals(['control', 'prepare', 'verify'].take(phaseIndex + 1), attempted)
+                assertEquals(missingReceipt ? 'blocked' : 'failed', stopped.status)
+                assertTrue(stopped.receipt.endsWith(failingPhase + '-probe.json'))
+            }
+        }
 
         Map blocked = FabricCompatibilityProbe.execute(spec + [strict: true]) { List args, File log ->
             assertFalse(args.contains('--test-dependency-minimums'))

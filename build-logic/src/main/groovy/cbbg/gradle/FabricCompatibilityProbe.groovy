@@ -12,7 +12,14 @@ import java.util.concurrent.TimeUnit
 /** Runs one packaged-client dependency probe and classifies its recorded result. */
 class FabricCompatibilityProbe {
     static void requireLocalInputs(boolean buildOnly, String startupMode, File config,
-                                   File startupCache, String profile) {
+                                   File startupCache, String profile, boolean restart = false,
+                                   String driverName = null) {
+        if ((restart || driverName == 'processedIrisRestartDriverJar') &&
+                (!restart || driverName != 'processedIrisRestartDriverJar' || !buildOnly ||
+                 !profile?.tokenize('+')?.contains('iris') || startupMode != null || startupCache != null || config != null)) {
+            throw new GradleException('Iris restart verification requires processedIrisRestartDriverJar, ' +
+                    'build-only verification, a profile containing Iris and no initial config')
+        }
         if (config != null && (!buildOnly || !config.isFile())) {
             throw new GradleException('compatibilityConfig requires build-only verification and an existing file')
         }
@@ -83,7 +90,7 @@ class FabricCompatibilityProbe {
         if (startupCache != null) {
             startupCache.traverse(type: FileType.FILES) { File file -> startupFiles.add(file) }
         }
-        reportInputs + [startupMode: spec.startupMode,
+        reportInputs + [restart: spec.restart == true, startupMode: spec.startupMode,
                 startupCache: startupCache == null ? null : [directory: startupCache.canonicalPath,
                         files: startupFiles.sort { it.canonicalPath }.collectEntries {
                             [(it.canonicalPath): CandidateFiles.sha256(it)]
@@ -180,44 +187,54 @@ class FabricCompatibilityProbe {
                     '--dependency-lock', lock, '--dependency', 'fabricApi=' + (spec.api as File).absolutePath,
                     '--compat', spec.profile, '--backend', spec.backend,
                     '--xdg-runtime-dir', displayDirectory, x11 ? '--x-display' : '--wayland-display', x11 ? xDisplay : display,
-                    '--timeout', '600', '--cbbg-config', spec.config,
+                    '--timeout', '600',
                     '--loader-version', spec.loaderVersion, '--fabric-api-version', spec.apiVersion,
                     '--gametest-api-version', spec.target.dependencies.fabricApi]
+            if (!spec.restart) command.addAll(['--cbbg-config', spec.config])
             (spec.optionalMods as Map).each { name, mod ->
                 command.addAll(['--dependency', name + '=' + mod.file.absolutePath])
             }
             if (spec.startupMode != null) command.addAll(['--startup-mode', spec.startupMode])
             if (spec.startupCache != null) command.addAll(['--startup-cache', spec.startupCache])
-            if (!spec.strict) command.add('--test-dependency-minimums')
-            File log = new File(cell, 'runner.log')
-            int exit = run.call(command, log)
-            File receipt = new File(cell, 'game/probe.json')
-            Map recorded = receipt.isFile() ? (Map) CandidateFiles.read(receipt) : [:]
-            if (receipt.isFile()) {
-                recorded.graphicsEnvironment = environment
-                receipt.text = JsonOutput.toJson(recorded)
-            }
-            boolean passed = exit == 0 && recorded.exitCode == 0 && !recorded.failure && recorded.scenarios
-            String status = passed ? 'passed' : 'failed'
-            String reason = recorded.failure?.message ?: log.text.takeRight(2000)
-            File gameLog = new File(cell, 'game/launch.log')
-            String gameText = gameLog.isFile() ? gameLog.text : ''
-            List failures = gameText.readLines().findAll {
-                it.contains('java.lang.AssertionError:') || it.startsWith('Caused by:')
-            }
-            if (!passed && failures) reason = failures.last()
-            if (!receipt.isFile() || recorded.failure?.type == 'TimeoutExpired' ||
-                    (!spec.strict && gameText =~ /HARD_DEP(?:_NO_CANDIDATE)? cbbg(?:-renderer-test)? .*\{depends (?:fabricloader|fabric-api) @/) ||
-                    reason =~ /Runtime inputs differ|checksum mismatch|Failed to create window|Failed to initialize Vulkan|GPU timeout|VK_ERROR_DEVICE_LOST/) {
-                status = 'blocked'
+            if (!spec.strict && !spec.restart) command.add('--test-dependency-minimums')
+            Map result
+            List<String> phases = spec.restart ? ['control', 'prepare', 'verify'] : [null]
+            for (String phase : phases) {
+                List phaseCommand = new ArrayList(command)
+                File game = new File(cell, phase == 'control' ? 'control-game' : 'game')
+                phaseCommand[phaseCommand.indexOf('--game-dir') + 1] = game
+                if (phase != null) phaseCommand.addAll(['--restart-phase', phase])
+                File log = new File(cell, phase == null ? 'runner.log' : phase + '-runner.log')
+                int exit = run.call(phaseCommand, log)
+                File receipt = new File(game, phase == null ? 'probe.json' : phase + '-probe.json')
+                Map recorded = receipt.isFile() ? (Map) CandidateFiles.read(receipt) : [:]
+                if (receipt.isFile()) {
+                    recorded.graphicsEnvironment = environment
+                    receipt.text = JsonOutput.toJson(recorded)
+                }
+                boolean passed = exit == 0 && recorded.exitCode == 0 && !recorded.failure && recorded.scenarios
+                String status = passed ? 'passed' : 'failed'
+                String reason = recorded.failure?.message ?: log.text.takeRight(2000)
+                File gameLog = new File(game, phase == null ? 'launch.log' : phase + '-launch.log')
+                String gameText = gameLog.isFile() ? gameLog.text : ''
+                List failures = gameText.readLines().findAll {
+                    it.contains('java.lang.AssertionError:') || it.startsWith('Caused by:')
+                }
+                if (!passed && failures) reason = failures.last()
+                if (!receipt.isFile() || recorded.failure?.type == 'TimeoutExpired' ||
+                        (!spec.strict && gameText =~ /HARD_DEP(?:_NO_CANDIDATE)? cbbg(?:-renderer-test)? .*\{depends (?:fabricloader|fabric-api) @/) ||
+                        reason =~ /Runtime inputs differ|checksum mismatch|Failed to create window|Failed to initialize Vulkan|GPU timeout|VK_ERROR_DEVICE_LOST/) {
+                    status = 'blocked'
+                }
+                result = [status: status, receipt: receipt.absolutePath, reason: passed ? null : reason,
+                          graphicsEnvironment: environment]
+                if (!passed) break
             }
             List<File> evidence = []
             cell.traverse(type: FileType.FILES) { File file ->
                 if (!file.name.endsWith('.lock')) evidence.add(file)
             }
-            [status: status, receipt: receipt.absolutePath, reason: passed ? null : reason,
-             graphicsEnvironment: environment,
-             files: evidence]
+            result + [files: evidence]
         } finally {
             if (compositor != null) {
                 compositor.destroy()
