@@ -4,6 +4,21 @@ This project uses [Keep a Changelog](https://keepachangelog.com/) and [Semantic 
 
 ## [Unreleased]
 
+### Added
+
+- Public noise-generation, CPU image-dithering and Minecraft GPU-dithering APIs for other mods, independent of CBBG's settings ([#90](https://github.com/qb20nh/cbbg/issues/90)).
+- A standalone Java 8 noise-generation and CPU-dithering library with a reusable GLSL include.
+- Open CBBG settings from Sodium's options menu when Sodium provides its configuration API ([#34](https://github.com/qb20nh/cbbg/issues/34)).
+
+### Changed
+
+- Update the Minecraft 1.21.1 and 1.21.11 Fabric builds with early noise generation, background image and cache loading, cancellation of replaced calculations, current generation notifications and screenshot handling, and smaller release jars. Their sources jars include mappings and dependency information.
+
+### Fixed
+
+- Preserve float precision with improved transparency and Fabulous graphics, including when Sodium is installed ([#19](https://github.com/qb20nh/cbbg/issues/19)).
+- Align dithering with RenderScale's rendered pixels, including in screenshots ([#20](https://github.com/qb20nh/cbbg/issues/20)).
+
 ## [1.4.2 for Minecraft 26.2 Fabric] - 2026-10-05 <!-- [1.4.2-mc26.2-fabric] -->
 
 ### Added
