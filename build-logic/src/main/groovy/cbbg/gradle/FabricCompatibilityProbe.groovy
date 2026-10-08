@@ -92,6 +92,13 @@ class FabricCompatibilityProbe {
         }
     }
 
+    static boolean usesX11(Map target) {
+        // GLFW needs a keyboard-capable Xwayland display; Minecraft 26.3 switches to SDL.
+        List<String> version = target.minecraft.tokenize('.')
+        int major = version[0].toInteger()
+        major < 26 || (major == 26 && version[1].toInteger() < 3)
+    }
+
     static Map cacheInputs(Map reportInputs, Map spec, File coordinator, File search) {
         Map environment = graphicsEnvironmentSnapshot(spec)
         File gametest = spec.gametest as File
@@ -121,7 +128,7 @@ class FabricCompatibilityProbe {
                 gametestApiSha256: CandidateFiles.sha256(gametest),
                 profile: spec.profile, optionalDependencies: mods,
                 initialConfig: CandidateFiles.sha256(spec.config as File),
-                display: spec.manageDisplay ? [managed: true, protocol: (spec.target.java ?: 25) < 25 ? 'x11' : 'wayland'] :
+                display: spec.manageDisplay ? [managed: true, protocol: usesX11(spec.target as Map) ? 'x11' : 'wayland'] :
                         [directory: (spec.displayDirectory as File).canonicalPath, wayland: spec.display],
                 minimumOverrides: !spec.strict,
                 loader: spec.loaderVersion, fabricApi: spec.apiVersion,
@@ -153,7 +160,7 @@ class FabricCompatibilityProbe {
                 Files.createTempDirectory(new File('/tmp').toPath(), 'cbbg-display-').toFile() :
                 spec.displayDirectory as File
         String display = spec.manageDisplay ? 'cbbg-test' : spec.display as String
-        boolean x11 = spec.manageDisplay && (spec.target.java ?: 25) < 25
+        boolean x11 = spec.manageDisplay && usesX11(spec.target as Map)
         String xDisplay = null
         Process compositor = null
         try {
@@ -235,10 +242,19 @@ class FabricCompatibilityProbe {
                 String reason = recorded.failure?.message ?: log.text.takeRight(2000)
                 File gameLog = new File(game, phase == null ? 'launch.log' : phase + '-launch.log')
                 String gameText = gameLog.isFile() ? gameLog.text : ''
-                List failures = gameText.readLines().findAll {
+                List<String> gameLines = gameText.readLines()
+                List failures = gameLines.findAll {
                     it.contains('java.lang.AssertionError:') || it.startsWith('Caused by:')
                 }
                 if (!passed && failures) reason = failures.last()
+                String signal = gameLines.find { it.startsWith('#  SIG') }
+                if (!passed && signal) {
+                    reason = 'Native crash: ' + signal.substring(1).trim()
+                    int frame = gameLines.indexOf('# Problematic frame:')
+                    if (frame >= 0 && frame + 1 < gameLines.size()) {
+                        reason += '; ' + gameLines[frame + 1].replaceFirst(/^#\s*/, '')
+                    }
+                }
                 Map dependencyError = passed ? [:] : dependencyFailure(gameText, spec.strict as boolean)
                 if (!receipt.isFile() || recorded.failure?.type == 'TimeoutExpired' ||
                         reason =~ /Runtime inputs differ|checksum mismatch|Failed to create window|Failed to initialize Vulkan|GPU timeout|VK_ERROR_DEVICE_LOST/) {

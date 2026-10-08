@@ -12,6 +12,13 @@ import static org.junit.jupiter.api.Assertions.*
 class FabricCompatibilityProbeTest {
     @TempDir File directory
 
+    @Test void selectsDisplayForTheMinecraftWindowingApi() {
+        ['1.21.1': 21, '1.21.11': 21, '26.1': 25, '26.1.1': 25, '26.1.2': 25, '26.2': 25].each { version, java ->
+            assertTrue(FabricCompatibilityProbe.usesX11([minecraft: version, java: java]), version)
+        }
+        assertFalse(FabricCompatibilityProbe.usesX11([minecraft: '26.3', java: 25]))
+    }
+
     @Test void attributesDependencyErrorsToTheReportedMods() {
         String framework = 'HARD_DEP cbbg-renderer-test 1.0.0 {depends fabric-client-gametest-api-v1 @ [*]}, ' +
                 'HARD_DEP_NO_CANDIDATE fabric-client-gametest-api-v1 2.0.0 {depends fabricloader @ [>=0.16.0]}'
@@ -393,5 +400,22 @@ class FabricCompatibilityProbeTest {
         }
         assertEquals('failed', failed.status)
         assertEquals('Caused by: broken shader', failed.reason)
+        Map nativeCrash = FabricCompatibilityProbe.execute(spec) { List args, File log ->
+            File game = args[args.indexOf('--game-dir') + 1] as File
+            game.mkdirs()
+            new File(game, 'probe.json').text = JsonOutput.toJson(
+                    [exitCode: 1, failure: [type: 'ValueError', message: 'Client did not exit successfully']])
+            new File(game, 'launch.log').text = '''Caused by: offline authentication
+# A fatal error has been detected by the Java Runtime Environment:
+#  SIGSEGV (0xb) at pc=0x1234
+# Problematic frame:
+# C  [libxkbcommon.so.0+0x3d374] xkb_state_key_get_layout+0x4
+'''
+            log.text = 'runner failed'
+            1
+        }
+        assertEquals('failed', nativeCrash.status)
+        assertTrue(nativeCrash.reason.contains('SIGSEGV'), nativeCrash.reason as String)
+        assertTrue(nativeCrash.reason.contains('libxkbcommon'), nativeCrash.reason as String)
     }
 }
