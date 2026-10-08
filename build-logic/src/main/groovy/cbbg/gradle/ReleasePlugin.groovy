@@ -109,11 +109,16 @@ class ReleasePlugin implements Plugin<Project> {
                     throw new GradleException('Use either -Ptarget or -Ptargets')
                 }
                 Map options = [root: source(), candidate: manifest, output: output,
+                               reuse: ([optional('acceptanceReuse')] + paths('acceptanceReuse').values()).findAll { it != null },
                                python: project.file(required('acceptancePython')).absoluteFile,
                                java21: input('acceptanceJava21'), java25: input('acceptanceJava25'),
                                weston: weston, eglVendor: optional('acceptanceEglVendorFile'),
                                sharedRuntime: optional('acceptanceSharedRuntime'), runtimes: paths('acceptanceRuntime'),
                                gametestApis: paths('acceptanceGametestApi'), seedCaches: paths('acceptanceSeedZeroCache')]
+                options.cacheDecision = { String id, List cell, String decision, String reason ->
+                    project.logger.lifecycle('Acceptance cache: {} {} {}{}', id, cell, decision,
+                            reason == null ? '' : ': ' + reason)
+                }
                 if (selection != null) options.targets = selection.split(',', -1).toList()
                 FabricCandidateAcceptance.execute(options, run) { Map spec ->
                     project.logger.lifecycle('Candidate acceptance: {} {} {} (startup={}, restart={})',

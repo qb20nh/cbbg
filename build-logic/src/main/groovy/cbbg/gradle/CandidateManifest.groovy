@@ -74,7 +74,8 @@ class CandidateManifest {
                 (target.containsKey('utilities') ? ['utilities', 'utilities_sources'] : []) +
                 (target.containsKey('sbom') ? ['sbom'] : [])).collect { target[it] as Map } +
                 ['catalog', 'contract', 'ordinary_metadata', 'runtime_lock', 'dependency_lock'].collect { tests[it] as Map } +
-                tests.drivers.values().collect { it as Map }
+                tests.drivers.values().collect { it as Map } +
+                (tests.containsKey('test_dependencies') ? [tests.test_dependencies as Map] : [])
     }
 
     Map verifyPackages(File sourceRoot) {

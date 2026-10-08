@@ -40,6 +40,11 @@ class FabricCandidateAcceptanceTest {
         File scripts = new File(fixture.root, 'scripts')
         scripts.mkdirs()
         new File(scripts, 'runner.py').text = 'runner'
+        ['FabricCompatibilityProbe', 'FabricRuntimeInstallation'].each { name ->
+            File source = new File(fixture.root, 'build-logic/src/main/groovy/cbbg/gradle/' + name + '.groovy')
+            source.parentFile.mkdirs()
+            source.text = 'runner implementation'
+        }
         File runtime = new File(directory, 'runtime')
         runtime.mkdirs()
         new File(runtime, 'cbbg-install-receipt.json').text = JsonOutput.toJson([target: fixture.target.id,
@@ -47,6 +52,7 @@ class FabricCandidateAcceptanceTest {
         Map requirement = [suite: 'ordinary', profile: 'none', backend: 'opengl', restart: false,
                            startupMode: null, entrypoints: ['example.Test']]
         Map options = [root: fixture.root, candidate: fixture.file, output: new File(directory, 'acceptance'),
+                       hostLibraryDirectories: [],
                        python: python, java21: python, java25: python, weston: python,
                        runtimes: [(fixture.target.id): runtime],
                        gametestApis: [(fixture.target.id): new File(fixture.bundle, 'ordinary-driver.jar')]]
@@ -54,8 +60,14 @@ class FabricCandidateAcceptanceTest {
         File dependency = new File(options.output as File, 'dependencies/' + CandidateFiles.sha256(python) + '.jar')
         Map entry = [pin: 'api', sha256: CandidateFiles.sha256(python)]
         int verifications = 0
+        String head = 'a' * 40
         Closure command = { List args, File root ->
-            if (args[0] == 'git') return args[1] == 'rev-parse' ? 'a' * 40 : ''
+            if (args[0] == 'git') return args[1] == 'rev-parse' ? head :
+                    args[1] == 'show' ? 'runner implementation' : ''
+            if (args.contains('-c') && args[args.indexOf('-c') + 1].contains('reuse_arguments')) {
+                return JsonOutput.toJson([source_commit: 'a' * 40,
+                    driver_sha256: fixture.record.client_tests.drivers.ordinary.sha256])
+            }
             if (args.contains('-c')) return args[args.indexOf('-c') + 1].contains('client_candidate') ?
                     JsonOutput.toJson([runs: [requirement], dependencies: [none: [fabricApi: entry]]]) :
                     JsonOutput.toJson([pythonVersion: 'test', launcherVersion: '8.0'])
@@ -83,6 +95,7 @@ class FabricCandidateAcceptanceTest {
         Closure prepareCommand = { List args, File root ->
             String result = command.call(args, root)
             if (args.contains('-c') && args[args.indexOf('-c') + 1].contains('client_candidate')) {
+                dependency = new File(options.output as File, 'dependencies/' + CandidateFiles.sha256(python) + '.jar')
                 dependency.parentFile.mkdirs(); dependency.bytes = python.bytes
             }
             result
@@ -98,13 +111,45 @@ class FabricCandidateAcceptanceTest {
         FabricCandidateAcceptance.execute(options, prepareCommand, probe)
         assertEquals(1, launches)
         assertEquals(3, verifications)
+        File priorOutput = options.output as File
+        options.output = new File(directory, 'incremental')
+        options.reuse = priorOutput
+        head = 'b' * 40
+        fixture.manifest.commit = head
+        File dependencyGraph = new File(fixture.bundle, 'test-dependencies.json')
+        dependencyGraph.text = '{}'
+        fixture.record.client_tests.test_dependencies = CandidateFiles.reference(fixture.bundle, dependencyGraph.name)
+        fixture.file.text = JsonOutput.toJson(fixture.manifest)
+        FabricCandidateAcceptance.execute(options, prepareCommand, probe)
+        assertEquals(1, launches, 'An unchanged suite must reuse its previous client run across commits')
+        File importedIndex = new File(options.output as File, fixture.target.id + '/results.json')
+        Map imported = (CandidateFiles.read(importedIndex) as List)[0]
+        assertEquals('a' * 40, CandidateFiles.read(CandidateFiles.checked(importedIndex.parentFile, imported.reuse.inputs)).source)
+        assertEquals('b' * 40, CandidateFiles.read(new File(options.output as File, 'inputs.json')).source)
+        ['initial-cbbg.json', 'inputs.json'].each { name ->
+            File saved = name == 'inputs.json' ? new File(priorOutput, name) : new File(index.parentFile, name)
+            byte[] contents = saved.bytes
+            assertTrue(saved.delete())
+            options.output = new File(directory, 'missing-' + name)
+            int before = launches
+            FabricCandidateAcceptance.execute(options, prepareCommand, probe)
+            assertEquals(before + 1, launches, 'Missing cached evidence must run a fresh client')
+            saved.bytes = contents
+        }
+        int completedLaunches = launches
+        options.output = priorOutput
+        options.remove('reuse')
+        head = 'a' * 40
+        fixture.manifest.commit = head
+        fixture.record.client_tests.remove('test_dependencies')
+        fixture.file.text = JsonOutput.toJson(fixture.manifest)
         File alternatePython = new File(directory, 'alternate-python')
         Files.createSymbolicLink(alternatePython.toPath(), python.toPath())
         options.python = alternatePython
         assertTrue(assertThrows(GradleException) {
             FabricCandidateAcceptance.execute(options, prepareCommand, probe)
         }.message.contains('Acceptance inputs changed'))
-        assertEquals(1, launches)
+        assertEquals(completedLaunches, launches)
         options.python = python
         displayInputs.each { input ->
             input.append('changed')
@@ -112,7 +157,7 @@ class FabricCandidateAcceptanceTest {
                 FabricCandidateAcceptance.execute(options, prepareCommand, probe)
             }
             assertTrue(error.message.contains('Acceptance inputs changed'))
-            assertEquals(1, launches)
+            assertEquals(completedLaunches, launches)
             input.text = 'display implementation'
         }
         new File(game, 'probe.json').append('changed')

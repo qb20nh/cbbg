@@ -22,6 +22,15 @@ Keep changes focused and readable. Run checks for the affected code; run local
 game tests when rendering or game behavior changes. CI compiles, runs unit
 tests and checks packages. It never launches Minecraft clients.
 
+For incremental packaged acceptance, add `-PacceptanceReuse=<previous acceptance
+directory>` to `runCandidateAcceptance`. Add `-PacceptanceReuse.<name>=<directory>`
+for other saved campaigns. The task rechecks receipts and reuses passing cases
+when the mod JAR, required test classes and resources, runtime, dependencies,
+configuration and graphics environment match. Missing or changed inputs require
+a new run. Custom Vulkan, JVM or library overrides require fresh runs because
+their referenced files are not recorded. Reused results retain the commit that
+was tested.
+
 ## Targets and versions
 
 Minecraft versions and loaders share one branch. `targets.json` records their

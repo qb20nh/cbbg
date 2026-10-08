@@ -57,6 +57,17 @@ print(json.dumps({'runs':runs,'dependencies':{p:locked_dependencies(spec,p,lock)
             if (api != null) inputs.gametestApis[id] = [path: api.canonicalPath, sha256: CandidateFiles.sha256(api)]
         }
         inputs.scripts = inventory(new File(root, 'scripts'))
+        inputs.executionSources = executionSources(root)
+        inputs.initialConfig = INITIAL_CONFIG
+        inputs.executionEnvironment = ['VK_DRIVER_FILES', 'VK_ICD_FILENAMES', 'VK_ADD_DRIVER_FILES',
+                'VK_LOADER_DRIVERS_SELECT', 'VK_LOADER_DRIVERS_DISABLE',
+                'VK_LAYER_PATH', 'VK_ADD_LAYER_PATH', 'VK_INSTANCE_LAYERS', 'VK_LOADER_LAYERS_ENABLE',
+                'VK_LOADER_LAYERS_DISABLE', 'JAVA_TOOL_OPTIONS', 'JDK_JAVA_OPTIONS', '_JAVA_OPTIONS',
+                'LD_LIBRARY_PATH', 'LD_PRELOAD', '__EGL_VENDOR_LIBRARY_FILENAMES',
+                '__EGL_VENDOR_LIBRARY_DIRS', 'LIBGL_DRIVERS_PATH'].findAll { System.getenv(it) != null }.collectEntries { name ->
+            [(name): java.security.MessageDigest.getInstance('SHA-256')
+                    .digest(System.getenv(name).getBytes('UTF-8')).encodeHex().toString()]
+        }
         inputs.host = hostInputs(options)
         inputs.python = parse(command.call(python(options, root, '''import json,sys
 from importlib.metadata import version
@@ -89,6 +100,18 @@ print(json.dumps({'pythonVersion':sys.version,'launcherVersion':version('minecra
             File index = new File(targetOutput, 'results.json')
             List<Map> rows = index.exists() ? CandidateFiles.read(index) as List<Map> : []
             validateRows(rows, runs)
+            if (options.reuse != null) {
+                List previous = options.reuse instanceof List ? options.reuse : [options.reuse]
+                previous.each { directory ->
+                    try {
+                        importResults(candidate, target, files, runs, rows, targetOutput, inputs,
+                                options + [reuse: directory], command)
+                    } catch (GradleException | IOException error) {
+                        options.cacheDecision?.call(id, [], 'run', 'Cached input unavailable: ' + error.message)
+                    }
+                }
+                writeIndex(index, rows)
+            }
             File runtime = options.runtimes?.get(id) as File ?: new File(output, 'runtimes/' + id)
             String profile = 'fabric-loader-' + target.dependencies.loader + '-' + target.minecraft
             FabricRuntimeInstallation.ensure(runtime, id, profile) { boolean resume ->
@@ -214,7 +237,8 @@ print(json.dumps({'pythonVersion':sys.version,'launcherVersion':version('minecra
         File displayPrefix = (options.weston as File).canonicalFile.parentFile.parentFile
         File xwayland = new File(displayPrefix, 'bin/Xwayland')
         if (xwayland.isFile()) files.add(xwayland)
-        List<File> libraries = ['/usr/lib', '/usr/lib64'].collect { new File(it) } +
+        List<File> libraries = (options.hostLibraryDirectories == null ? ['/usr/lib', '/usr/lib64'].collect { new File(it) } :
+                options.hostLibraryDirectories as List<File>) +
                 ['lib', 'lib64'].collect { new File(displayPrefix, it) }
         libraries.findAll { it.isDirectory() }.unique().each { directory ->
             List<File> directories = [directory] + directory.listFiles().findAll {
@@ -249,10 +273,27 @@ print(json.dumps({'pythonVersion':sys.version,'launcherVersion':version('minecra
     private static void verify(CandidateManifest candidate, Map target, Map files, Map requirement, Map row,
                                File base, Map options, Closure<String> command) {
         File saved = receipt(base, row)
+        String source = candidate.data.commit
+        String driver = candidate.records[target.id].client_tests.drivers[requirement.suite].sha256
+        if (row.containsKey('reuse')) {
+            Map tests = candidate.records[target.id].client_tests
+            File dependencies = CandidateFiles.checked(candidate.file.parentFile, tests.test_dependencies as Map)
+            File currentDriver = CandidateFiles.checked(candidate.file.parentFile, tests.drivers[requirement.suite] as Map)
+            String code = '''import json,sys
+from pathlib import Path
+from fabric_test_cache import reuse_arguments
+from parity_evidence import read_json
+print(json.dumps(reuse_arguments(json.loads(sys.argv[1]),Path(sys.argv[2]),json.loads(sys.argv[3]),current_driver=Path(sys.argv[4]),dependencies=read_json(sys.argv[5]),current_inputs=Path(sys.argv[6]),base=Path(sys.argv[7]))))'''
+            Map reused = parse(command.call(python(options, options.root as File, code,
+                    [JsonOutput.toJson(row), saved, JsonOutput.toJson(target), currentDriver, dependencies,
+                     new File(base.parentFile, 'inputs.json'), base]), options.root as File))
+            source = reused.source_commit
+            driver = reused.driver_sha256
+        }
         List args = [options.python, new File(options.root as File, 'scripts/fabric_run_evidence.py'),
-                     '--receipt', saved, '--target', target.id, '--source-commit', candidate.data.commit,
+                     '--receipt', saved, '--target', target.id, '--source-commit', source,
                      '--candidate-sha256', candidate.records[target.id].artifact.sha256,
-                     '--driver-sha256', candidate.records[target.id].client_tests.drivers[requirement.suite].sha256,
+                     '--driver-sha256', driver,
                      '--catalog', files.catalog, '--runtime-lock', files.runtime_lock, '--dependency-lock', files.dependency_lock]
         if (requirement.restart) args.addAll(['--restart', '--control-receipt', CandidateFiles.checked(base, row.control_receipt as Map)])
         else if (row.containsKey('control_receipt')) throw new GradleException('Ordinary cell has a restart control receipt')
@@ -261,6 +302,88 @@ print(json.dumps({'pythonVersion':sys.version,'launcherVersion':version('minecra
                 verified.scenarios != requirement.entrypoints || verified.startupMode != requirement.startupMode) {
             throw new GradleException('Verified receipt differs from acceptance cell: ' + key(requirement))
         }
+    }
+
+    private static final List<String> EXECUTION_SOURCES = [
+            'build-logic/src/main/groovy/cbbg/gradle/FabricCompatibilityProbe.groovy',
+            'build-logic/src/main/groovy/cbbg/gradle/FabricRuntimeInstallation.groovy']
+
+    static Map executionSources(File root) {
+        EXECUTION_SOURCES.collectEntries { name -> [(name): CandidateFiles.sha256(new File(root, name))] }
+    }
+
+    private static void importResults(CandidateManifest candidate, Map target, Map files, List<Map> runs,
+                                      List<Map> rows, File output, Map inputs, Map options, Closure<String> command) {
+        File previous = (options.reuse as File).canonicalFile
+        Path currentRoot = output.parentFile.canonicalFile.toPath()
+        if (previous.toPath().startsWith(currentRoot) || currentRoot.startsWith(previous.toPath())) {
+            throw new GradleException('Reuse must reference a separate acceptance directory')
+        }
+        File oldIndex = new File(previous, target.id + '/results.json')
+        if (!oldIndex.isFile()) return
+        File oldIdentity = new File(previous, 'inputs.json')
+        Map oldInputs = CandidateFiles.read(oldIdentity) as Map
+        if (!(oldInputs.executionEnvironment instanceof Map) || oldInputs.executionEnvironment || inputs.executionEnvironment) {
+            options.cacheDecision?.call(target.id, [], 'run', 'Cached execution environment is unknown or uses custom overrides')
+            return
+        }
+        Map sources = EXECUTION_SOURCES.collectEntries { name ->
+            String text = command.call(['git', 'show', oldInputs.source + ':' + name], options.root as File)
+            [(name): java.security.MessageDigest.getInstance('SHA-256').digest(text.getBytes('UTF-8')).encodeHex().toString()]
+        }
+        if (sources != inputs.executionSources) return
+        String prefix = 'reuse/' + CandidateFiles.sha256(oldIdentity)
+        File copied = new File(output, prefix)
+        copyResults(oldIndex.parentFile, copied)
+        File copiedInputs = new File(copied, 'inputs.json')
+        if (!copiedInputs.exists()) Files.createLink(copiedInputs.toPath(), oldIdentity.toPath())
+        List<Map> priorRows = CandidateFiles.read(oldIndex) as List<Map>
+        priorRows.each { old ->
+            Map requirement = runs.find { key(it) == key(old) }
+            if (requirement == null || rows.any { key(it) == key(old) }) return
+            try {
+                Map row = old + [receipt: old.receipt + [path: prefix + '/' + old.receipt.path],
+                                 reuse: [inputs: CandidateFiles.reference(output, prefix + '/inputs.json'),
+                                         config: CandidateFiles.reference(output, prefix + '/initial-cbbg.json'),
+                                         execution_sources: sources]]
+                if (old.reuse != null) {
+                    row.reuse.inputs = old.reuse.inputs + [path: prefix + '/' + old.reuse.inputs.path]
+                    row.reuse.config = old.reuse.config + [path: prefix + '/' + old.reuse.config.path]
+                }
+                if (old.control_receipt != null) row.control_receipt = old.control_receipt + [path: prefix + '/' + old.control_receipt.path]
+                verify(candidate, target, files, requirement, row, output, options, command)
+                rows.add(row)
+                options.cacheDecision?.call(target.id, key(row), 'reuse', null)
+            } catch (GradleException | IOException error) {
+                // Changed dependencies or missing evidence require a new client run.
+                options.cacheDecision?.call(target.id, key(old), 'run', error.message)
+            }
+        }
+    }
+
+    static void copyResults(File source, File destination) {
+        destination.mkdirs()
+        Files.walkFileTree(source.toPath(), new SimpleFileVisitor<Path>() {
+            @Override FileVisitResult preVisitDirectory(Path path, BasicFileAttributes attributes) {
+                if (path.fileName.toString() in ['.fabric', 'natives', 'saves']) return FileVisitResult.SKIP_SUBTREE
+                new File(destination, source.toPath().relativize(path).toString()).mkdirs()
+                FileVisitResult.CONTINUE
+            }
+            @Override FileVisitResult visitFile(Path path, BasicFileAttributes attributes) {
+                if (Files.isSymbolicLink(path)) throw new GradleException('Cached result contains a symlink: ' + path)
+                File target = new File(destination, source.toPath().relativize(path).toString())
+                if (target.exists()) {
+                    if (CandidateFiles.sha256(target) != CandidateFiles.sha256(path.toFile())) {
+                        throw new GradleException('Cached result copy differs: ' + target)
+                    }
+                } else if (Files.getFileStore(target.parentFile.toPath()) == Files.getFileStore(path)) {
+                    Files.createLink(target.toPath(), path)
+                } else {
+                    Files.copy(path, target.toPath(), StandardCopyOption.COPY_ATTRIBUTES)
+                }
+                FileVisitResult.CONTINUE
+            }
+        })
     }
 
     private static File receipt(File base, Map row) { CandidateFiles.checked(base, row.receipt as Map) }
