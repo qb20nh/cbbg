@@ -62,6 +62,7 @@ def main():
     receipt = {"target": target["id"], "profile": identity, "source": url,
                "profileSha256": hashlib.sha256(response.content).hexdigest(),
                "installed": False, "runtimeTested": False}
+    receipt_path.write_text(json.dumps(receipt, indent=2) + "\n", encoding="utf-8")
     try:
         if args.shared_runtime and not args.resume:
             shared = args.shared_runtime.resolve()
