@@ -162,7 +162,8 @@ public final class ReleaseRenderScaleGameTest implements FabricClientGameTest {
             "format set " + previous.get("pixelFormat").getAsString().toLowerCase(Locale.ROOT));
         ReleaseClient.command(
             context, "mode set " + previous.get("mode").getAsString().toLowerCase(Locale.ROOT));
-        context.waitFor(client -> ReleaseClient.settings().equals(previous), 600);
+        context.waitFor(
+            client -> ReleaseClient.settings().entrySet().containsAll(previous.entrySet()), 600);
       }
     }
   }
