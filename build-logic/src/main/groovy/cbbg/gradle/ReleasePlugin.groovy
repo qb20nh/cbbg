@@ -114,7 +114,8 @@ class ReleasePlugin implements Plugin<Project> {
                                java21: input('acceptanceJava21'), java25: input('acceptanceJava25'),
                                weston: weston, eglVendor: optional('acceptanceEglVendorFile'),
                                sharedRuntime: optional('acceptanceSharedRuntime'), runtimes: paths('acceptanceRuntime'),
-                               gametestApis: paths('acceptanceGametestApi'), seedCaches: paths('acceptanceSeedZeroCache')]
+                               gametestApis: paths('acceptanceGametestApi'), seedCaches: paths('acceptanceSeedZeroCache'),
+                               workers: project.providers.gradleProperty('acceptanceWorkers').getOrElse('1').toInteger()]
                 options.cacheDecision = { String id, List cell, String decision, String reason ->
                     project.logger.lifecycle('Acceptance cache: {} {} {}{}', id, cell, decision,
                             reason == null ? '' : ': ' + reason)
@@ -124,7 +125,17 @@ class ReleasePlugin implements Plugin<Project> {
                     project.logger.lifecycle('Candidate acceptance: {} {} {} (startup={}, restart={})',
                             spec.target.id, spec.profile, spec.backend, spec.startupMode, spec.restart)
                     FabricCompatibilityProbe.execute(spec) { List command, File log ->
-                        FabricCompatibilityProbe.run(command, log, project.providers, spec.root as File)
+                        def stdout = new ByteArrayOutputStream()
+                        def stderr = new ByteArrayOutputStream()
+                        def result = execOperations.exec {
+                            commandLine command.collect { it.toString() }
+                            workingDir spec.root as File
+                            standardOutput = stdout
+                            errorOutput = stderr
+                            ignoreExitValue = true
+                        }
+                        log.text = stdout.toString('UTF-8') + stderr.toString('UTF-8')
+                        result.exitValue
                     }
                 }
                 project.logger.lifecycle('Candidate acceptance indexes: {}/<target>/results.json', output)

@@ -10,8 +10,12 @@ import java.nio.file.Path
 import java.nio.file.SimpleFileVisitor
 import java.nio.file.StandardCopyOption
 import java.nio.file.attribute.BasicFileAttributes
+import java.util.concurrent.Callable
+import java.util.concurrent.ExecutorCompletionService
+import java.util.concurrent.Executors
+import java.util.concurrent.Future
 
-/** Serial local acceptance of the immutable packaged Fabric candidate. */
+/** Resumable local acceptance of the immutable packaged Fabric candidate. */
 class FabricCandidateAcceptance {
     static final Map INITIAL_CONFIG = [mode: 'ENABLED', pixelFormat: 'RGBA16F', stbnSize: 16,
                                        stbnDepth: 8, stbnSeed: 74123, strength: 2.0]
@@ -82,6 +86,9 @@ print(json.dumps({'pythonVersion':sys.version,'launcherVersion':version('minecra
             if (output.listFiles().length != 0) throw new GradleException('Acceptance output has no matching input identity: ' + output)
             CandidateFiles.writeNew(identity, inputs)
         }
+        int workers = options.workers == null ? 1 : options.workers as int
+        if (workers < 1) throw new GradleException('Acceptance workers must be a positive integer')
+        List<Map> contexts = []
         targets.each { String id ->
             Map record = candidate.records[id]
             Map target = candidate.specifications[id]
@@ -148,50 +155,105 @@ print(json.dumps({'pythonVersion':sys.version,'launcherVersion':version('minecra
             File config = new File(targetOutput, 'initial-cbbg.json')
             if (!config.exists()) CandidateFiles.writeNew(config, INITIAL_CONFIG)
             if (CandidateFiles.read(config) != INITIAL_CONFIG) throw new GradleException('Acceptance config changed: ' + config)
-            runs.each { Map requirement ->
-                if (rows.any { key(it) == key(requirement) }) return
-                requireSource(root, candidate, command)
-                if (output.usableSpace < 512L * 1024 * 1024) throw new GradleException('Candidate acceptance needs at least 512 MiB free before the next client: ' + output + '. Free space and resume this same output.')
-                Map dependencies = (plan.dependencies[requirement.profile] as Map).collectEntries { name, entry ->
-                    [(name): entry + [file: dependency(entry as Map, new File(output, 'dependencies'))]]
-                }
-                File startupCache = requirement.startupMode in ['warm', 'damaged'] ? coldCaches[requirement.backend] :
-                        requirement.startupMode == 'seed-mismatch' ? options.seedCaches[id] as File : null
-                if (requirement.startupMode in ['warm', 'damaged'] && startupCache == null) {
-                    throw new GradleException('Startup ' + requirement.startupMode + ' requires an earlier verified cold cell for ' + id)
-                }
-                Map spec = [root: root, output: targetOutput, target: target, python: options.python,
-                            java: options['java' + target.java], weston: options.weston,
-                            eglVendor: options.eglVendor, manageDisplay: true, strict: true,
-                            candidate: CandidateFiles.checked(base, record.artifact as Map),
-                            driver: CandidateFiles.checked(base, tests.drivers[requirement.suite] as Map),
-                            gametest: gametest, api: dependencies.fabricApi.file,
-                            apiVersion: target.dependencies.fabricApi, loaderVersion: target.dependencies.loader,
-                            optionalMods: dependencies.findAll { name, entry -> name != 'fabricApi' },
-                            runtime: [directory: runtime, lock: files.runtime_lock], dependencyLock: files.dependency_lock,
-                            profile: requirement.profile, backend: requirement.backend, restart: requirement.restart,
-                            config: config, startupMode: requirement.startupMode, startupCache: startupCache]
-                Map result = probe.call(spec)
-                if (result.status != 'passed') throw new GradleException('Acceptance failed for ' + id + ' ' + key(requirement) +
-                        ': ' + result.reason + '. Saved receipt: ' + result.receipt)
-                File saved = new File(result.receipt as String)
-                Map row = [suite: requirement.suite, profile: requirement.profile, backend: requirement.backend,
-                           receipt: CandidateFiles.reference(targetOutput, relative(targetOutput, saved))]
-                if (requirement.restart) {
-                    File control = new File(saved.parentFile.parentFile, 'control-game/control-probe.json')
-                    row.control_receipt = CandidateFiles.reference(targetOutput, relative(targetOutput, control))
-                }
-                verify(candidate, target, files, requirement, row, targetOutput, options, command)
-                if (requirement.startupMode == 'cold') coldCaches[requirement.backend] = new File(saved.parentFile, '.cbbg')
-                deduplicateMods(output, saved, requirement.restart as boolean)
-                cleanup(saved, requirement.restart as boolean, requirement.startupMode == null && !requirement.restart)
-                verify(candidate, target, files, requirement, row, targetOutput, options, command)
-                rows.add(row)
-                writeIndex(index, rows)
-            }
-            command.call([options.python, new File(root, 'scripts/fabric_acceptance.py'), '--candidate', candidate.file,
-                          '--target', id, '--results', index].collect { it.toString() }, root)
+            contexts.add([id: id, record: record, target: target, tests: tests, base: base,
+                          files: files, plan: plan, runs: runs, rows: rows, output: targetOutput,
+                          index: index, runtime: runtime, gametest: gametest, config: config,
+                          coldCaches: coldCaches])
         }
+        List<Map> pending = contexts.collectMany { Map context ->
+            context.runs.findAll { requirement -> !context.rows.any { key(it) == key(requirement) } }
+                    .collect { requirement -> [context: context, requirement: requirement] }
+        }
+        runPending(pending, workers, { Map job ->
+            Map context = job.context
+            Map requirement = job.requirement
+            requireSource(root, candidate, command)
+            if (output.usableSpace < 512L * 1024 * 1024) throw new GradleException('Candidate acceptance needs at least 512 MiB free before the next client: ' + output + '. Free space and resume this same output.')
+            Map dependencies = (context.plan.dependencies[requirement.profile] as Map).collectEntries { name, entry ->
+                [(name): entry + [file: dependency(entry as Map, new File(output, 'dependencies'))]]
+            }
+            File startupCache = requirement.startupMode in ['warm', 'damaged'] ? context.coldCaches[requirement.backend] :
+                    requirement.startupMode == 'seed-mismatch' ? options.seedCaches[context.id] as File : null
+            Map target = context.target
+            [root: root, output: context.output, target: target, python: options.python,
+             java: options['java' + target.java], weston: options.weston,
+             eglVendor: options.eglVendor, manageDisplay: true, strict: true,
+             candidate: CandidateFiles.checked(context.base as File, context.record.artifact as Map),
+             driver: CandidateFiles.checked(context.base as File, context.tests.drivers[requirement.suite] as Map),
+             gametest: context.gametest, api: dependencies.fabricApi.file,
+             apiVersion: target.dependencies.fabricApi, loaderVersion: target.dependencies.loader,
+             optionalMods: dependencies.findAll { name, entry -> name != 'fabricApi' },
+             runtime: [directory: context.runtime, lock: context.files.runtime_lock], dependencyLock: context.files.dependency_lock,
+             profile: requirement.profile, backend: requirement.backend, restart: requirement.restart,
+             config: context.config, startupMode: requirement.startupMode, startupCache: startupCache]
+        }, probe, { Map job, Map result ->
+            Map context = job.context
+            Map requirement = job.requirement
+            if (result.status != 'passed') throw new GradleException('Acceptance failed for ' + context.id + ' ' + key(requirement) +
+                    ': ' + result.reason + '. Saved receipt: ' + result.receipt)
+            File saved = new File(result.receipt as String)
+            File targetOutput = context.output as File
+            Map row = [suite: requirement.suite, profile: requirement.profile, backend: requirement.backend,
+                       receipt: CandidateFiles.reference(targetOutput, relative(targetOutput, saved))]
+            if (requirement.restart) {
+                File control = new File(saved.parentFile.parentFile, 'control-game/control-probe.json')
+                row.control_receipt = CandidateFiles.reference(targetOutput, relative(targetOutput, control))
+            }
+            verify(candidate, context.target as Map, context.files as Map, requirement, row, targetOutput, options, command)
+            deduplicateMods(output, saved, requirement.restart as boolean)
+            cleanup(saved, requirement.restart as boolean, requirement.startupMode == null && !requirement.restart)
+            verify(candidate, context.target as Map, context.files as Map, requirement, row, targetOutput, options, command)
+            context.rows.add(row)
+            writeIndex(context.index as File, context.rows as List)
+            if (requirement.startupMode == 'cold') context.coldCaches[requirement.backend] = new File(saved.parentFile, '.cbbg')
+        })
+        contexts.each { Map context ->
+            command.call([options.python, new File(root, 'scripts/fabric_acceptance.py'), '--candidate', candidate.file,
+                          '--target', context.id, '--results', context.index].collect { it.toString() }, root)
+        }
+    }
+
+    static void runPending(List<Map> pending, int workers, Closure<Map> prepare,
+                           Closure<Map> probe, Closure finished) {
+        if (workers < 1) throw new GradleException('Acceptance workers must be a positive integer')
+        def executor = Executors.newFixedThreadPool(workers)
+        def completions = new ExecutorCompletionService<Map>(executor)
+        int running = 0
+        Exception failure = null
+        try {
+            while (pending || running) {
+                if (failure == null) {
+                    try {
+                        while (running < workers) {
+                            Map job = pending.find { Map candidate ->
+                                !(candidate.requirement.startupMode in ['warm', 'damaged']) ||
+                                        candidate.context.coldCaches[candidate.requirement.backend] != null
+                            }
+                            if (job == null) break
+                            pending.remove(job)
+                            Map spec = prepare.call(job)
+                            completions.submit({ -> [job: job, result: probe.call(spec)] } as Callable<Map>)
+                            running++
+                        }
+                    } catch (Exception error) { failure = error }
+                }
+                if (running == 0) {
+                    if (failure == null && pending) throw new GradleException('Pending startup tests require a verified cold cache')
+                    break
+                }
+                Future<Map> completed = completions.take()
+                running--
+                try {
+                    Map result = completed.get()
+                    finished.call(result.job, result.result)
+                } catch (java.util.concurrent.ExecutionException error) {
+                    if (failure == null) failure = new GradleException('Acceptance client failed', error.cause)
+                } catch (Exception error) {
+                    if (failure == null) failure = error
+                }
+            }
+        } finally { executor.shutdown() }
+        if (failure != null) throw failure
     }
 
     static void requireSource(File root, CandidateManifest candidate, Closure<String> command) {

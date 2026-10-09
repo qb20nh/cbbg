@@ -6,11 +6,106 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 
 import java.nio.file.Files
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 
 import static org.junit.jupiter.api.Assertions.*
 
 class FabricCandidateAcceptanceTest {
     @TempDir File directory
+
+    @Test void idleWorkerTakesTheNextScenarioWhileAnotherWorkerIsBusy() {
+        def slowStarted = new CountDownLatch(1)
+        def releaseSlow = new CountDownLatch(1)
+        def active = new AtomicInteger()
+        def maximum = new AtomicInteger()
+        List<String> completed = []
+        List<Map> jobs = ['slow', 'fast', 'next'].collect { name ->
+            [context: [coldCaches: [:]], requirement: [suite: name, startupMode: null]]
+        }
+        FabricCandidateAcceptance.runPending(jobs, 2, { job -> [name: job.requirement.suite] }, { spec ->
+            int count = active.incrementAndGet()
+            maximum.accumulateAndGet(count, Math.&max)
+            try {
+                if (spec.name == 'slow') {
+                    slowStarted.countDown()
+                    assertTrue(releaseSlow.await(10, TimeUnit.SECONDS))
+                } else {
+                    assertTrue(slowStarted.await(10, TimeUnit.SECONDS))
+                    if (spec.name == 'next') {
+                        assertEquals(1L, releaseSlow.count, 'Next scenario must start before the slow scenario finishes')
+                        releaseSlow.countDown()
+                    }
+                }
+                [name: spec.name]
+            } finally { active.decrementAndGet() }
+        }, { job, result ->
+            assertEquals(job.requirement.suite, result.name)
+            completed.add(result.name as String)
+        })
+        assertEquals(['fast', 'next', 'slow'] as Set, completed as Set)
+        assertEquals(3, completed.size())
+        assertEquals(2, maximum.get())
+        assertTrue(jobs.empty)
+    }
+
+    @Test void startupDependentsWaitForTheSavedColdResult() {
+        Map context = [coldCaches: [:]]
+        List<String> launched = []
+        List<Map> jobs = ['warm', 'damaged', 'cold'].collect { mode ->
+            [context: context, requirement: [startupMode: mode, backend: 'opengl']]
+        }
+        FabricCandidateAcceptance.runPending(jobs, 2, { job ->
+            String mode = job.requirement.startupMode
+            if (mode != 'cold') assertNotNull(context.coldCaches.opengl)
+            launched.add(mode)
+            [mode: mode]
+        }, { spec -> [mode: spec.mode] }, { job, result ->
+            if (result.mode == 'cold') context.coldCaches.opengl = directory
+        })
+        assertEquals('cold', launched.first())
+        assertEquals(['cold', 'warm', 'damaged'] as Set, launched as Set)
+    }
+
+    @Test void failureStopsNewLaunchesAndSavesTheOtherRunningResult() {
+        def otherStarted = new CountDownLatch(1)
+        def releaseOther = new CountDownLatch(1)
+        List<String> saved = []
+        List<Map> jobs = ['failure', 'other', 'pending'].collect { name ->
+            [context: [coldCaches: [:]], requirement: [suite: name, startupMode: null]]
+        }
+        GradleException error = assertThrows(GradleException) {
+            FabricCandidateAcceptance.runPending(jobs, 2, { job -> [name: job.requirement.suite] }, { spec ->
+                if (spec.name == 'failure') {
+                    assertTrue(otherStarted.await(10, TimeUnit.SECONDS))
+                    return [name: spec.name, status: 'failed']
+                }
+                otherStarted.countDown()
+                assertTrue(releaseOther.await(10, TimeUnit.SECONDS))
+                [name: spec.name]
+            }, { job, result ->
+                if (result.status == 'failed') {
+                    releaseOther.countDown()
+                    throw new GradleException('client failed')
+                }
+                saved.add(result.name as String)
+            })
+        }
+        assertEquals('client failed', error.message)
+        assertEquals(['other'], saved)
+        assertEquals(['pending'], jobs.collect { it.requirement.suite })
+    }
+
+    @Test void rejectsInvalidWorkerCountsAndMissingColdDependencies() {
+        assertThrows(GradleException) {
+            FabricCandidateAcceptance.runPending([], 0, { [:] }, { [:] }, {})
+        }
+        assertThrows(GradleException) {
+            FabricCandidateAcceptance.runPending([[context: [coldCaches: [:]],
+                    requirement: [startupMode: 'warm', backend: 'opengl']]], 2, { [:] }, { [:] }, {})
+        }
+    }
 
     @Test void resumesOnlyMatchingInputsAndRevalidatesRecordedReceipts() {
         Map fixture = CandidateFixture.create(directory)

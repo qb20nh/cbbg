@@ -31,6 +31,11 @@ a new run. Custom Vulkan, JVM or library overrides require fresh runs because
 their referenced files are not recorded. Reused results retain the commit that
 was tested.
 
+Add `-PacceptanceWorkers=2` to run independent acceptance scenarios in parallel.
+Workers share a queue; cache-dependent cases wait for their verified inputs, and
+result indexes are written serially. Choose a worker count that fits available
+memory, disk and GPU capacity. The default is one worker.
+
 ## Targets and versions
 
 Minecraft versions and loaders share one branch. `targets.json` records their
