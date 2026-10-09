@@ -2,7 +2,6 @@ package com.qb20nh.cbbg.api;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-import com.qb20nh.cbbg.math.BlueNoise;
 import java.util.Arrays;
 import java.util.concurrent.CancellationException;
 import org.junit.jupiter.api.Test;
@@ -11,11 +10,15 @@ class UtilitiesTest {
   @Test
   void generatesExistingNoiseAndWrapsCoordinates() {
     NoiseVolume noise = NoiseVolume.generate(4, 2, 2, 42);
-    double[] u = BlueNoise.generateScalarField(4, 2, 2, BlueNoise.stbnUSeed(42));
-    double[] v = BlueNoise.generateScalarField(4, 2, 2, BlueNoise.stbnVSeed(42));
-    for (int i = 0; i < u.length; i++) {
-      assertEquals(
-          BlueNoise.calculatePixelColor(u[i], v[i]), noise.pixelABGR(i % 4, i / 4 % 2, i / 8));
+    // ABGR fixture captured from the original raw scalar-field calculation, in frame/y/x order.
+    int[] expected = {
+      0xff99ec41, 0xff1150aa, 0xff8807a7, 0xff447ff0,
+      0xffdd6d2b, 0xffaab0ed, 0xff774cf4, 0xff008080,
+      0xff223454, 0xffee8d41, 0xff55391e, 0xffff8080,
+      0xff331a75, 0xff66c91a, 0xffbb80f0, 0xffcce575
+    };
+    for (int i = 0; i < expected.length; i++) {
+      assertEquals(expected[i], noise.pixelABGR(i % 4, i / 4 % 2, i / 8));
     }
     assertEquals(noise.pixelABGR(3, 1, 1), noise.pixelABGR(-1, -1, -1));
     byte[] frame = noise.frameRGBA(1);

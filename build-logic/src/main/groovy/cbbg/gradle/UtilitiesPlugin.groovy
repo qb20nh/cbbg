@@ -10,6 +10,7 @@ import org.gradle.api.attributes.Usage
 import org.gradle.api.attributes.java.TargetJvmVersion
 import org.gradle.api.publish.maven.MavenPublication
 import org.gradle.api.tasks.bundling.Jar
+import org.gradle.api.tasks.testing.Test
 import org.gradle.jvm.toolchain.JavaLanguageVersion
 import org.gradle.jvm.toolchain.JavaToolchainService
 import proguard.gradle.ProGuardTask
@@ -70,6 +71,16 @@ class UtilitiesPlugin implements Plugin<Project> {
             }
             doLast { ReproducibleJar.normalize(output.get().asFile) }
         }
+        def processedTest = project.tasks.register('processedUtilitiesTest', Test) {
+            group = 'verification'
+            description = 'Exercise the public utilities API from the optimized standalone jar.'
+            dependsOn optimized
+            testClassesDirs = project.sourceSets.test.output.classesDirs
+            classpath = project.files(project.sourceSets.test.output, output,
+                    project.configurations.testRuntimeClasspath)
+            include 'com/qb20nh/cbbg/api/UtilitiesTest.class'
+        }
+        project.tasks.named('check') { dependsOn processedTest }
         project.tasks.named('sourcesJar') { archiveFileName = "${name}-raw-sources.jar" }
         def sources = project.tasks.register('utilitiesSourcesJar', Jar) {
             dependsOn optimized, project.tasks.named('releaseSbom')
