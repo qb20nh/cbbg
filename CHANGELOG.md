@@ -10,6 +10,7 @@ This project uses [Keep a Changelog](https://keepachangelog.com/) and [Semantic 
 
 - Public noise-generation, CPU image-dithering and Minecraft GPU-dithering APIs for other mods, independent of CBBG's settings ([#90](https://github.com/qb20nh/cbbg/issues/90)).
 - A standalone Java 8 noise-generation and CPU-dithering library with a reusable GLSL include.
+- CBBG Lib, an independently installable utility mod bundled with CBBG. Library versions and GitHub releases advance separately.
 - Open CBBG settings from Sodium's options menu when Sodium provides its configuration API ([#34](https://github.com/qb20nh/cbbg/issues/34)).
 
 ### Changed
