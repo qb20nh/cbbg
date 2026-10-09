@@ -1,5 +1,6 @@
 package com.qb20nh.cbbg.compat.renderscale;
 
+import com.qb20nh.cbbg.Cbbg;
 import java.lang.reflect.Method;
 import java.util.Objects;
 import java.util.function.Supplier;
@@ -32,6 +33,23 @@ public final class RenderScaleCompat {
 
   public static boolean isLoaded() {
     return RENDER_SCALE_LOADED;
+  }
+
+  /** Recreates RenderScale's targets after CBBG changes their required color format. */
+  public static void refreshTargets() {
+    if (!RENDER_SCALE_LOADED) {
+      return;
+    }
+    try {
+      Class<?> type = Class.forName("dev.zelo.renderscale.RenderScale");
+      Object renderer = type.getMethod("getInstance").invoke(null);
+      if (renderer != null) {
+        type.getMethod("onResolutionChanged").invoke(renderer);
+      }
+    } catch (ReflectiveOperationException failure) {
+      Cbbg.LOGGER.warn(
+          "Could not refresh RenderScale targets after a color format change", failure);
+    }
   }
 
   public static boolean isRenderScaleColorTextureLabel(@Nullable Supplier<String> label) {
