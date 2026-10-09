@@ -60,6 +60,7 @@ This project uses [Keep a Changelog](https://keepachangelog.com/) and [Semantic 
 #### Minecraft 26.2
 
 - Preserve float precision with improved transparency and Fabulous graphics, including when Sodium is installed ([#19](https://github.com/qb20nh/cbbg/issues/19)).
+- Update RenderScale's target precision when changing CBBG's mode or pixel format.
 
 ## [1.4.2 for Minecraft 26.2 Fabric] - 2026-10-05 <!-- [1.4.2-mc26.2-fabric] -->
 
