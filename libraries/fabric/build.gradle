@@ -50,17 +50,25 @@ tasks.named('processResources') {
                 loader_upper_bound: target.dependencies.loaderUpperExclusive ? ' <' + target.dependencies.loaderUpperExclusive : '')
     }
     def shader = new File(repositoryRoot, 'libraries/utilities/src/main/resources/com/qb20nh/cbbg/api/shaders/dither.glsl')
+    def directive = cbbg.gradle.TargetCatalog.shaderImport(target) + ' <'
+    def shaderImports = { line -> line.replace('#moj_import <', directive).replace('#include <', directive) }
     from(shader) { into 'assets/cbbg/shaders/include' }
     if (target.renderer == 'gl3') {
         from(shader) { into 'assets/minecraft/shaders/include'; rename { 'cbbg_dither.glsl' } }
     } else if (target.renderer == 'blaze-texture-format') {
         from('src/gpu/resources')
+    } else if (target.renderer == 'blaze-gpu-format') {
+        from('src/blaze-gpu-format/resources/assets/cbbg/shaders/core/cbbg_dither.fsh') {
+            into 'assets/cbbg/shaders/core'
+            rename { 'cbbg_demo.fsh' }
+            filter(shaderImports)
+            filter { line -> line.startsWith('#version ') ? line + '\n#define CBBG_DEMO' : line }
+        }
     } else {
         if (target.renderer == 'renderpearl') from('src/blaze-gpu-format/resources')
     }
     filesMatching('assets/cbbg/shaders/core/*.fsh') {
-        def directive = cbbg.gradle.TargetCatalog.shaderImport(target) + ' <'
-        filter { line -> line.replace('#moj_import <', directive).replace('#include <', directive) }
+        filter(shaderImports)
     }
     doLast {
         if (target.renderer == 'gl3') {

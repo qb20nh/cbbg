@@ -121,6 +121,19 @@ class TestCacheTests(unittest.TestCase):
         with self.assertRaisesRegex(EvidenceError, 'Missing.class'):
             check_driver_dependencies(driver, expected)
 
+    def test_library_runs_can_be_reused_without_cbbg_configuration(self):
+        self.inputs['initialConfig'] = None
+        driver = self.driver('game/mods/driver.jar', b'helper', b'other')
+        receipt = self.write('game/probe.json', {'artifacts': {'driver.jar': digest(driver)}})
+        prior = self.write('prior.json', self.inputs)
+        self.write('current.json', dict(self.inputs, source='b' * 40))
+        row = {'suite': 'ordinary', 'reuse': {'inputs': prior,
+            'execution_sources': self.inputs['executionSources']}}
+        arguments = dict(current_driver=driver, dependencies={'ordinary': {'driver_sha256': digest(driver)}},
+            current_inputs=self.root / 'current.json', base=self.root)
+        self.assertEqual('a' * 40,
+                         reuse_arguments(row, self.root / receipt['path'], self.target, **arguments)['source_commit'])
+
     def test_final_validation_keeps_historical_run_source(self):
         driver = self.driver('game/mods/driver.jar', b'helper', b'other')
         config = self.write('config.json', self.inputs['initialConfig'])
