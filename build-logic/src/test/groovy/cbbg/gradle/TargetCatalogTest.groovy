@@ -56,6 +56,16 @@ class TargetCatalogTest {
     }
 
     @Test
+    void shaderImportsFollowTheMinecraftRenderer() {
+        TargetCatalog catalog = TargetCatalog.read(CATALOG)
+        ['1.21.1-fabric', '1.21.11-fabric', '26.1-fabric', '26.1.1-fabric',
+         '26.1.2-fabric', '26.2-fabric'].each { id ->
+            assertEquals('#moj_import', TargetCatalog.shaderImport(catalog.select(id)[0]))
+        }
+        assertEquals('#include', TargetCatalog.shaderImport(catalog.select('26.3-fabric')[0]))
+    }
+
+    @Test
     void olderFabricTargetDeclaresItsSeparateClientTestModule() {
         Map entry = target(copyData(), '1.21.1-fabric')
         assertEquals(21, entry.java)

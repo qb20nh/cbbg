@@ -55,14 +55,12 @@ tasks.named('processResources') {
         from(shader) { into 'assets/minecraft/shaders/include'; rename { 'cbbg_dither.glsl' } }
     } else if (target.renderer == 'blaze-texture-format') {
         from('src/gpu/resources')
-        filesMatching('assets/cbbg/shaders/core/*.fsh') {
-            filter { line -> line.replace('#include <', remappedGame ? '#moj_import <' : '#include <') }
-        }
     } else {
         if (target.renderer == 'renderpearl') from('src/blaze-gpu-format/resources')
-        filesMatching('assets/cbbg/shaders/core/*.fsh') {
-            filter { line -> line.replace('#moj_import <', '#include <') }
-        }
+    }
+    filesMatching('assets/cbbg/shaders/core/*.fsh') {
+        def directive = cbbg.gradle.TargetCatalog.shaderImport(target) + ' <'
+        filter { line -> line.replace('#moj_import <', directive).replace('#include <', directive) }
     }
     doLast {
         if (target.renderer == 'gl3') {

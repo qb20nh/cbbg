@@ -346,7 +346,7 @@ tasks.named('processResources') {
                       fabric_api_upper_bound: artifactOwner.dependencies.fabricApiUpperExclusive ? ' <' + artifactOwner.dependencies.fabricApiUpperExclusive : '',
                       java_version: target.java,
                       renderer_family: target.renderer,
-                      shader_import: remappedGame || target.renderer == 'blaze-gpu-format' ? '#moj_import' : '#include']
+                      shader_import: cbbg.gradle.TargetCatalog.shaderImport(target)]
     inputs.properties(properties)
     filesMatching('fabric.mod.json') {
         if (properties.fabric_api_minimum == '*') {

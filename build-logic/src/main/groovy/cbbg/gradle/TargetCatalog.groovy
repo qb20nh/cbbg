@@ -13,6 +13,10 @@ class TargetCatalog {
         effective
     }
 
+    static String shaderImport(Map target) {
+        target.renderer == 'renderpearl' ? '#include' : '#moj_import'
+    }
+
     static TargetCatalog read(File file) {
         Object parsed = CandidateFiles.read(file)
         if (!(parsed instanceof Map)) {
