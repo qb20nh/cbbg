@@ -22,6 +22,16 @@ class FabricAcceptanceTests(unittest.TestCase):
                     for backend in backends}
         self.assertEqual(actual, expected)
 
+    def test_library_consumer_uses_only_its_independent_profile(self):
+        for target_id in ('1.21.1-fabric', '1.21.11-fabric', '26.1-fabric',
+                          '26.1.1-fabric', '26.1.2-fabric', '26.2-fabric', '26.3-fabric'):
+            target = select_targets(load_catalog(), target_id)[0]
+            contract = read_json(ROOT / ('runtime-locks/lib/' + target_id + '-scenarios.json'))
+            runs = required_runs(target, contract)
+            self.assertEqual({('none', backend) for backend in target['backends']},
+                             {(run['profile'], run['backend']) for run in runs})
+            self.assertTrue(all(run['suite'] == 'ordinary' for run in runs))
+
     def test_sulkan_vulkan_suspension_has_own_profile(self):
         runs = required_runs(self.target, self.contract)
         selected = [run for run in runs if run['suite'] == 'ordinary'
@@ -97,7 +107,8 @@ class FabricAcceptanceTests(unittest.TestCase):
             required_runs(self.target, self.contract)
 
     def test_empty_shader_selection_rejected(self):
-        self.contract['additionalRuns'][2]['requiresMod'] = 'missing'
+        next(run for run in self.contract['additionalRuns']
+             if 'requiresMod' in run)['requiresMod'] = 'missing'
         with self.assertRaisesRegex(ValueError, 'Invalid suite selection'):
             required_runs(self.target, self.contract)
 
@@ -125,6 +136,7 @@ class FabricResultMatrixTests(unittest.TestCase):
                 self.rows[-1]['control_receipt'] = {'path': control.name, 'sha256': digest(control)}
             self.results[path] = {'target': self.target['id'], 'profile': run['profile'],
                                   'startupMode': run.get('startupMode'),
+                                  'externalLibrary': run.get('externalLibrary', False),
                                   'backend': run['backend'], 'scenarios': run['entrypoints'],
                                   'releaseAcceptance': False}
         # Run-file checks have their own tests; exercise matrix selection and dispatch here.
@@ -152,6 +164,13 @@ class FabricResultMatrixTests(unittest.TestCase):
         self.assertEqual(self.ordinary.call_count, sum(not run['restart'] for run in self.runs))
         self.assertEqual(result['contract_sha256'], digest(self.contract))
         self.assertFalse(result['releaseAcceptance'])
+
+    def test_external_library_installation_required(self):
+        number = next(number for number, run in enumerate(self.runs)
+                      if run.get('externalLibrary'))
+        self.results[self.root / (str(number) + '.json')]['externalLibrary'] = False
+        with self.assertRaisesRegex(ValueError, 'library'):
+            self.verify()
 
     def test_missing_run_rejected_before_validation(self):
         self.rows.pop()

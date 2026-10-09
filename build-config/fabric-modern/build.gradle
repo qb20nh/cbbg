@@ -339,12 +339,6 @@ tasks.named('processResources') {
     def sharedDescriptor = new File(repositoryRoot, 'src/main/resources/fabric.mod.json')
     inputs.file(sharedDescriptor).withPropertyName('sharedFabricMetadata')
     cbbg.gradle.FabricSources.copyResources(project, repositoryRoot, sourceLayout, 'main', delegate)
-    if (usesGl3) {
-        from(new File(repositoryRoot, 'src/main/resources/assets/cbbg/shaders/include/dither.glsl')) {
-            into 'assets/minecraft/shaders/include'
-            rename { 'cbbg_dither.glsl' }
-        }
-    }
     def properties = [version: project.version, minecraft_version: artifactOwner.minecraftDependency ?: artifactOwner.minecraft,
                       loader_version: artifactOwner.dependencies.minimumLoader ?: artifactOwner.dependencies.loader,
                       loader_upper_bound: artifactOwner.dependencies.loaderUpperExclusive ? ' <' + artifactOwner.dependencies.loaderUpperExclusive : '',
@@ -488,6 +482,7 @@ tasks.register('ciCheck') {
 }
 
 ext.candidateTargetId = targetId
+apply from: new File(repositoryRoot, 'build-config/library-dependency.gradle')
 if (remappedGame) {
     ext.fabricRemapTaskType = net.fabricmc.loom.task.RemapJarTask
     apply from: new File(repositoryRoot, 'build-config/fabric-remapping.gradle')

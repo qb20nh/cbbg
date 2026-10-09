@@ -62,7 +62,7 @@ print(json.dumps({'runs':runs,'dependencies':{p:locked_dependencies(spec,p,lock)
         }
         inputs.scripts = inventory(new File(root, 'scripts'))
         inputs.executionSources = executionSources(root)
-        inputs.initialConfig = INITIAL_CONFIG
+        inputs.initialConfig = candidate.identity.product == 'lib' ? null : INITIAL_CONFIG
         inputs.executionEnvironment = ['VK_DRIVER_FILES', 'VK_ICD_FILENAMES', 'VK_ADD_DRIVER_FILES',
                 'VK_LOADER_DRIVERS_SELECT', 'VK_LOADER_DRIVERS_DISABLE',
                 'VK_LAYER_PATH', 'VK_ADD_LAYER_PATH', 'VK_INSTANCE_LAYERS', 'VK_LOADER_LAYERS_ENABLE',
@@ -152,9 +152,12 @@ print(json.dumps({'pythonVersion':sys.version,'launcherVersion':version('minecra
                     coldCaches[requirement.backend] = new File(receipt(targetOutput, row).parentFile, '.cbbg')
                 }
             }
-            File config = new File(targetOutput, 'initial-cbbg.json')
-            if (!config.exists()) CandidateFiles.writeNew(config, INITIAL_CONFIG)
-            if (CandidateFiles.read(config) != INITIAL_CONFIG) throw new GradleException('Acceptance config changed: ' + config)
+            File config = null
+            if (candidate.identity.product != 'lib') {
+                config = new File(targetOutput, 'initial-cbbg.json')
+                if (!config.exists()) CandidateFiles.writeNew(config, INITIAL_CONFIG)
+                if (CandidateFiles.read(config) != INITIAL_CONFIG) throw new GradleException('Acceptance config changed: ' + config)
+            }
             contexts.add([id: id, record: record, target: target, tests: tests, base: base,
                           files: files, plan: plan, runs: runs, rows: rows, output: targetOutput,
                           index: index, runtime: runtime, gametest: gametest, config: config,
@@ -175,10 +178,15 @@ print(json.dumps({'pythonVersion':sys.version,'launcherVersion':version('minecra
             File startupCache = requirement.startupMode in ['warm', 'damaged'] ? context.coldCaches[requirement.backend] :
                     requirement.startupMode == 'seed-mismatch' ? options.seedCaches[context.id] as File : null
             Map target = context.target
+            if (requirement.externalLibrary == true && !(context.record.library instanceof Map)) {
+                throw new GradleException('External library suite requires a packaged library reference for ' + context.id)
+            }
             [root: root, output: context.output, target: target, python: options.python,
              java: options['java' + target.java], weston: options.weston,
              eglVendor: options.eglVendor, manageDisplay: true, strict: true,
              candidate: CandidateFiles.checked(context.base as File, context.record.artifact as Map),
+             externalLibrary: requirement.externalLibrary == true ?
+                     CandidateFiles.checked(context.base as File, context.record.library as Map) : null,
              driver: CandidateFiles.checked(context.base as File, context.tests.drivers[requirement.suite] as Map),
              gametest: context.gametest, api: dependencies.fabricApi.file,
              apiVersion: target.dependencies.fabricApi, loaderVersion: target.dependencies.loader,
@@ -406,11 +414,11 @@ print(json.dumps(reuse_arguments(json.loads(sys.argv[1]),Path(sys.argv[2]),json.
             try {
                 Map row = old + [receipt: old.receipt + [path: prefix + '/' + old.receipt.path],
                                  reuse: [inputs: CandidateFiles.reference(output, prefix + '/inputs.json'),
-                                         config: CandidateFiles.reference(output, prefix + '/initial-cbbg.json'),
                                          execution_sources: sources]]
+                if (candidate.identity.product != 'lib') row.reuse.config = CandidateFiles.reference(output, prefix + '/initial-cbbg.json')
                 if (old.reuse != null) {
                     row.reuse.inputs = old.reuse.inputs + [path: prefix + '/' + old.reuse.inputs.path]
-                    row.reuse.config = old.reuse.config + [path: prefix + '/' + old.reuse.config.path]
+                    if (old.reuse.config != null) row.reuse.config = old.reuse.config + [path: prefix + '/' + old.reuse.config.path]
                 }
                 if (old.control_receipt != null) row.control_receipt = old.control_receipt + [path: prefix + '/' + old.control_receipt.path]
                 verify(candidate, target, files, requirement, row, output, options, command)

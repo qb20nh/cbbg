@@ -2,6 +2,7 @@ package com.qb20nh.cbbg.math;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import com.qb20nh.cbbg.api.NoiseVolume;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -60,8 +61,10 @@ class NoisePreparationTest {
           assertTrue(request.get(5, TimeUnit.SECONDS));
         }
         NoisePreparation.Fields fields = Objects.requireNonNull(first.get(5, TimeUnit.SECONDS));
-        assertArrayEquals(BlueNoise.generateScalarField(8, 4, 2, 42 * 31), fields.u());
-        assertArrayEquals(BlueNoise.generateScalarField(8, 4, 2, 42 * 31 + 7), fields.v());
+        NoiseVolume expected = NoiseVolume.generate(8, 4, 2, 42);
+        for (int frame = 0; frame < expected.depth(); frame++) {
+          assertArrayEquals(expected.frameRGBA(frame), fields.volume().frameRGBA(frame));
+        }
         assertSame(first, preparation.prepare(8, 4, 2, 42, false, () -> true));
         assertEquals(1, checks.get());
       } finally {
@@ -130,9 +133,11 @@ class NoisePreparationTest {
       assertTrue(old.isCancelled());
       assertTrue(preparation.matches(4, 4, 2, 7));
       assertFalse(preparation.matches(8, 4, 2, 0));
-      assertArrayEquals(
-          BlueNoise.generateScalarField(4, 4, 2, 7 * 31),
-          Objects.requireNonNull(next.get(5, TimeUnit.SECONDS)).u());
+      NoiseVolume expected = NoiseVolume.generate(4, 4, 2, 7);
+      NoiseVolume actual = Objects.requireNonNull(next.get(5, TimeUnit.SECONDS)).volume();
+      for (int frame = 0; frame < expected.depth(); frame++) {
+        assertArrayEquals(expected.frameRGBA(frame), actual.frameRGBA(frame));
+      }
     }
   }
 

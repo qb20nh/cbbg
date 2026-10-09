@@ -74,7 +74,7 @@ def validate_release_identity(release, commit):
     prerelease = r"(?:-[A-Za-z][0-9A-Za-z-]*(?:\.[A-Za-z][0-9A-Za-z-]*)*\.[1-9][0-9]*)?"
     target = r"(?:\+mc[0-9][0-9A-Za-z-]*(?:\.[0-9A-Za-z-]+)*-(?:fabric|quilt|forge|neoforge|legacy-fabric))?"
     if not isinstance(release, str) or not re.fullmatch(
-            "v" + number + r"\." + number + r"\." + number + prerelease + target, release):
+            r"(?:lib/)?v" + number + r"\." + number + r"\." + number + prerelease + target, release):
         raise EvidenceError("Invalid release tag")
     if not isinstance(commit, str) or not re.fullmatch(r"[0-9a-f]{40}", commit):
         raise EvidenceError("Invalid source commit")

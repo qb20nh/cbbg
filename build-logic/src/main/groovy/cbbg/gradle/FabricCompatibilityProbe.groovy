@@ -127,7 +127,8 @@ class FabricCompatibilityProbe {
                 gametestApiPin: spec.target.dependencies.fabricApi,
                 gametestApiSha256: CandidateFiles.sha256(gametest),
                 profile: spec.profile, optionalDependencies: mods,
-                initialConfig: CandidateFiles.sha256(spec.config as File),
+                initialConfig: spec.config == null ? null : CandidateFiles.sha256(spec.config as File),
+                externalLibrary: spec.externalLibrary == null ? null : CandidateFiles.sha256(spec.externalLibrary as File),
                 display: spec.manageDisplay ? [managed: true, protocol: usesX11(spec.target as Map) ? 'x11' : 'wayland'] :
                         [directory: (spec.displayDirectory as File).canonicalPath, wayland: spec.display],
                 minimumOverrides: !spec.strict,
@@ -215,7 +216,8 @@ class FabricCompatibilityProbe {
                     '--timeout', '600',
                     '--loader-version', spec.loaderVersion, '--fabric-api-version', spec.apiVersion,
                     '--gametest-api-version', spec.target.dependencies.fabricApi]
-            if (!spec.restart) command.addAll(['--cbbg-config', spec.config])
+            if (!spec.restart && spec.config != null) command.addAll(['--cbbg-config', spec.config])
+            if (spec.externalLibrary != null) command.addAll(['--external-library', spec.externalLibrary])
             (spec.optionalMods as Map).each { name, mod ->
                 command.addAll(['--dependency', name + '=' + mod.file.absolutePath])
             }

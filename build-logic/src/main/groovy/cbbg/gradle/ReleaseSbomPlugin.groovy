@@ -21,7 +21,6 @@ class ReleaseSbomPlugin implements Plugin<Project> {
             includeBomSerialNumber = false
             includeLicenseText = false
             aggregateConfigurationName = 'releaseSbomUnusedAggregate'
-            componentName = 'cbbg'
             xmlOutput.unset()
             doLast {
                 File file = jsonOutput.get().asFile
@@ -33,11 +32,36 @@ class ReleaseSbomPlugin implements Plugin<Project> {
                             value: 'Only the streaming API is embedded; shrunk and relocated with ProGuard. ' +
                                     'Version and hashes identify the upstream input, not the transformed classes.']]
                 }
+                if (project.extensions.extraProperties.has('libraryArchive')) {
+                    File library = project.libraryArchive
+                    if (!library.isFile()) throw new org.gradle.api.GradleException('Missing nested library for release SBOM')
+                    String hash = java.security.MessageDigest.getInstance('SHA-256').digest(library.bytes).encodeHex().toString()
+                    String reference = 'cbbg-lib:' + hash
+                    List components = bom.components ?: []
+                    components.add([type: 'library', 'bom-ref': reference, group: 'com.qb20nh', name: 'cbbg-lib',
+                                    version: project.libraryPackageVersion,
+                                    hashes: [[alg: 'SHA-256', content: hash]]])
+                    bom.components = components
+                    List dependencies = bom.dependencies ?: []
+                    Map root = dependencies.find { it.ref == bom.metadata.component['bom-ref'] }
+                    if (root == null) {
+                        root = [ref: bom.metadata.component['bom-ref'], dependsOn: []]
+                        dependencies.add(root)
+                    }
+                    root.dependsOn = (root.dependsOn ?: []) + reference
+                    bom.dependencies = dependencies
+                }
                 file.text = JsonOutput.prettyPrint(JsonOutput.toJson(bom)) + '\n'
             }
         }
         project.extensions.extraProperties.set('releaseSbomFile', sbom.flatMap { it.jsonOutput })
         project.afterEvaluate {
+            if (project.extensions.extraProperties.has('libraryArchive')) {
+                sbom.configure {
+                    inputs.file(project.libraryArchive).withPropertyName('nestedLibrary')
+                    inputs.property('nestedLibraryVersion', project.libraryPackageVersion)
+                }
+            }
             def core = project.rootProject.findProject(':core')
             def original = core?.configurations?.findByName('privateGsonInput')
             if (original != null) {
@@ -47,6 +71,10 @@ class ReleaseSbomPlugin implements Plugin<Project> {
                 componentGroup = project.group.toString()
                 componentVersion = project.version.toString()
                 def archiveName = project.extensions.findByName('base')?.archivesName?.get() ?: project.name
+                componentName = archiveName
+                includeConfigs.set(['releasePrivateGsonInput', 'include', 'utilitiesRaw'].findAll {
+                    project.configurations.findByName(it) != null
+                })
                 jsonOutput = project.layout.buildDirectory.file("libs/${archiveName}-${project.version}.cdx.json")
             }
         }

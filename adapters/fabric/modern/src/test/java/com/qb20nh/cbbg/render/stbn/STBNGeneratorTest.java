@@ -2,6 +2,7 @@ package com.qb20nh.cbbg.render.stbn;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import com.qb20nh.cbbg.api.NoiseVolume;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
@@ -26,8 +27,9 @@ class STBNGeneratorTest {
     var fields =
         Objects.requireNonNull(
             STBNGenerator.generateAsync(4, 4, 2, 0L, true, cacheValid).get(10, TimeUnit.SECONDS));
-    assertEquals(4 * 4 * 2, fields.uField().length);
-    assertEquals(4 * 4 * 2, fields.vField().length);
+    assertEquals(4, fields.volume().width());
+    assertEquals(4, fields.volume().height());
+    assertEquals(2, fields.volume().depth());
     assertEquals(0L, fields.seed());
     assertEquals(1, checks.get());
     assertNull(
@@ -36,25 +38,15 @@ class STBNGeneratorTest {
   }
 
   @Test
-  void fieldsPreserveArrayOwnershipAndValueContract() {
-    double[] u = {0.25, 0.5};
-    double[] v = {0.75, 1.0};
-    var defaults = new STBNGenerator.STBNFields(u, v);
-    var seeded = new STBNGenerator.STBNFields(u, v, 101L);
-    var equal = new STBNGenerator.STBNFields(u.clone(), v.clone(), 101L);
-
-    assertEquals(0L, defaults.seed());
-    assertEquals(101L, seeded.seed());
-    assertSame(u, defaults.uField());
-    assertSame(v, defaults.vField());
-    assertSame(u, seeded.uField());
-    assertSame(v, seeded.vField());
-    assertEquals(seeded, equal);
-    assertEquals(seeded.hashCode(), equal.hashCode());
-    assertNotEquals(seeded, new STBNGenerator.STBNFields(u, v, 102L));
-    assertNotEquals(defaults, seeded);
-    assertNotEquals(seeded, new STBNGenerator.STBNFields(new double[] {0.5}, v, 101L));
-    assertEquals("STBNFields{uField=[0.25, 0.5], vField=[0.75, 1.0]}", seeded.toString());
+  void fieldsPreserveImmutableVolumeAndCapturedSeed() {
+    NoiseVolume volume = NoiseVolume.generate(2, 2, 1, 101L);
+    var fields = new STBNGenerator.STBNFields(volume, 101L);
+    assertSame(volume, fields.volume());
+    assertEquals(101L, fields.seed());
+    byte[] expected = volume.frameRGBA(0);
+    byte[] copy = fields.volume().frameRGBA(0);
+    copy[0] ^= 0xff;
+    assertArrayEquals(expected, fields.volume().frameRGBA(0));
   }
 
   @Test
@@ -90,7 +82,8 @@ class STBNGeneratorTest {
       STBNGenerator.STBNFields fields = Objects.requireNonNull(claimed.get(10, TimeUnit.SECONDS));
       assertSame(fields, early.get(10, TimeUnit.SECONDS));
       assertEquals(101L, fields.seed());
-      assertEquals(4 * 4 * 2, fields.uField().length);
+      assertArrayEquals(
+          NoiseVolume.generate(4, 4, 2, 101L).frameRGBA(0), fields.volume().frameRGBA(0));
       assertEquals(1, checks.get());
 
       assertNull(STBNGenerator.generateAsync(4, 4, 2, 101L, () -> true).get(10, TimeUnit.SECONDS));

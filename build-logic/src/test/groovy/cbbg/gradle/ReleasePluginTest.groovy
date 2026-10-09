@@ -105,6 +105,32 @@ cbbg.gradle.FabricCandidateAcceptance.metaClass.static.execute = { Map options, 
                 '-Ptargets=26.3-neoforge', '-Poutput=notes.md').buildAndFail().output.contains('Use either'))
     }
 
+    @Test void releaseIdentityTaskUsesTheSharedProductParser() {
+        runner('releaseIdentity', '-Prelease=lib/v1.0.0-rc.1+mc26.3-fabric', '-Poutput=identity.json').build()
+        Map identity = CandidateFiles.read(new File(directory, 'identity.json')) as Map
+        assertEquals('lib', identity.product)
+        assertEquals('1.0.0-rc.1', identity.version)
+        assertEquals('CBBG Lib 1.0.0-rc.1', identity.title)
+        assertTrue(identity.prerelease)
+        assertEquals('libraries/CHANGELOG.md', identity.changelog_path)
+        assertTrue(runner('releaseIdentity', '-Prelease=lib/v1.0.0', '-PrequireProduct=cbbg',
+                '-Poutput=rejected.json').buildAndFail().output.contains("requires 'cbbg'"))
+        assertFalse(new File(directory, 'rejected.json').exists())
+    }
+
+    @Test void libraryReleaseNotesSelectTheIndependentChangelog() {
+        Map target = [id: '26.3-fabric', minecraft: '26.3', loader: 'fabric', java: 25,
+                      renderer: 'renderpearl', backends: ['opengl', 'vulkan'], implemented: false]
+        new File(directory, 'targets.json').text = JsonOutput.toJson([schema: 1, targets: [target]])
+        new File(directory, 'CHANGELOG.md').text = '## [1.5.0]\n### Added\n- Main notes.\n'
+        File library = new File(directory, 'libraries/CHANGELOG.md')
+        library.parentFile.mkdirs()
+        library.text = '## [1.0.0]\n### Added\n- Library notes.\n'
+        runner('releaseNotes', '-Prelease=lib/v1.0.0', '-Ptarget=26.3-fabric', '-Poutput=notes.md').build()
+        assertTrue(new File(directory, 'notes.md').text.contains('Library notes.'))
+        assertFalse(new File(directory, 'notes.md').text.contains('Main notes.'))
+    }
+
     @Test void curseForgeReceiptsSelectAnArtifactWithinASharedRelease() {
         new File(directory, 'publication.json').text = JsonOutput.toJson([release: 'v1.5.0',
                 source_commit: 'a' * 40, records: [
@@ -134,7 +160,7 @@ cbbg.gradle.FabricCandidateAcceptance.metaClass.static.execute = { Map options, 
 
     @Test void workflowUploadsUtilityPairAsOptionalCurseForgeChildFilesAndSavesReceipts() {
         String workflow = new File('../.github/workflows/publish.yml').text
-        ['utilities', 'utilities_sources'].each { kind ->
+        ['utilities', 'utilities_sources', 'library', 'library_sources'].each { kind ->
             String step = workflow.split(/\n      - name: /).find { it.contains('id: curseforge_' + kind + '_upload\n') }
             assertNotNull(step)
             assertTrue(step.contains("!inputs.dry_run && inputs.services != 'modrinth' && steps.publication.outputs.${kind} != ''"))
@@ -143,6 +169,10 @@ cbbg.gradle.FabricCandidateAcceptance.metaClass.static.execute = { Map options, 
         }
         assertTrue(workflow.contains('"-PutilitiesFileId=$CF_UTILITIES_FILE_ID"'))
         assertTrue(workflow.contains('"-PutilitiesSourcesFileId=$CF_UTILITIES_SOURCES_FILE_ID"'))
+        assertTrue(workflow.contains('"-PlibraryFileId=$CF_LIBRARY_FILE_ID"'))
+        assertTrue(workflow.contains('"-PlibrarySourcesFileId=$CF_LIBRARY_SOURCES_FILE_ID"'))
+        assertTrue(workflow.contains('            build/curseforge-library-result.json\n'))
+        assertTrue(workflow.contains('            build/curseforge-library-sources-result.json\n'))
         assertTrue(workflow.contains('            build/curseforge-utilities-result.json\n'))
         assertTrue(workflow.contains('            build/curseforge-utilities-sources-result.json\n'))
     }
@@ -154,6 +184,8 @@ cbbg.gradle.FabricCandidateAcceptance.metaClass.static.execute = { Map options, 
                            sources: [path: 'cbbg-sources.jar', sha256: 'c' * 64],
                            utilities: [path: 'cbbg-utilities.jar', sha256: 'e' * 64],
                            utilities_sources: [path: 'cbbg-utilities-sources.jar', sha256: 'f' * 64],
+                           library: [path: 'cbbg-lib.jar', sha256: '1' * 64],
+                           library_sources: [path: 'cbbg-lib-sources.jar', sha256: '2' * 64],
                            evidence: [path: 'cbbg-evidence.zip', sha256: 'd' * 64]]]])
         String[] arguments = ['recordCurseForgeUpload', '-PpublicationMetadata=publication.json',
                               '-Poutput=receipt.json', '-PfileId=123']
@@ -189,6 +221,14 @@ cbbg.gradle.FabricCandidateAcceptance.metaClass.static.execute = { Map options, 
         assertEquals([path: 'cbbg-utilities-sources.jar', sha256: 'f' * 64], utilitiesResult.utilities_sources)
         assertTrue(utilitiesResult.utilities_url.endsWith('/234'))
         assertTrue(utilitiesResult.utilities_sources_url.endsWith('/345'))
+        runner('recordCurseForgeUpload', '-PpublicationMetadata=publication.json',
+                '-Poutput=library-receipt.json', '-PfileId=123', '-PlibraryFileId=567',
+                '-PlibrarySourcesFileId=678').build()
+        Map libraryResult = CandidateFiles.read(new File(directory, 'library-receipt.json'))
+        assertEquals('567', libraryResult.library_file_id)
+        assertEquals('678', libraryResult.library_sources_file_id)
+        assertEquals([path: 'cbbg-lib.jar', sha256: '1' * 64], libraryResult.library)
+        assertEquals([path: 'cbbg-lib-sources.jar', sha256: '2' * 64], libraryResult.library_sources)
         assertTrue(runner('recordCurseForgeUpload', '-PpublicationMetadata=publication.json',
                 '-Poutput=invalid-utilities.json', '-PfileId=123', '-PutilitiesFileId=0')
                 .buildAndFail().output.contains('no valid utilities file ID'))

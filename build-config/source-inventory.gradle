@@ -2,16 +2,18 @@ import groovy.json.JsonOutput
 import java.security.MessageDigest
 
 def repositoryRoot = rootProject.file('../..').canonicalFile.toPath()
-def inventorySources = [sourceSets.main] + sharedProjects.collect { it.sourceSets.main }
+def inventorySources = [sourceSets.main.allJava] +
+        (project.hasProperty('sharedProjects') ? sharedProjects.collect { it.sourceSets.main.allJava } : []) +
+        (project.hasProperty('additionalInventorySources') ? additionalInventorySources : [])
 def inventoryFile = layout.buildDirectory.file('source-inventory.json')
 tasks.register('sourceInventory') {
-    inputs.files(inventorySources.collect { it.allJava })
+    inputs.files(inventorySources)
     outputs.file(inventoryFile)
     doLast {
         def destination = inventoryFile.get().asFile
         def entries = new TreeMap<String, Map>()
-        inventorySources.each { sourceSet ->
-            sourceSet.allJava.visit { detail ->
+        inventorySources.each { sources ->
+            sources.visit { detail ->
                 if (detail.directory) return
                 def path = detail.file.canonicalFile.toPath()
                 if (!path.startsWith(repositoryRoot)) {

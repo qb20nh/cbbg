@@ -336,10 +336,11 @@ class PublicationTest {
          loaders: ['fabric'], game_versions: ['26.3'],
          dependencies: [[project_id: 'P7dR8mSH', dependency_type: 'required']],
          files: (['artifact', 'sources'] + (record.containsKey('utilities') ? ['utilities', 'utilities_sources'] : []) +
+                 (record.containsKey('library') ? ['library', 'library_sources'] : []) +
                  (record.containsKey('evidence') ? ['evidence'] : [])).collect { String kind ->
              File file = new File(fixture.bundle, record[kind].path)
              [filename: file.name, hashes: [sha512: sha512(file)],
-              primary: kind == 'artifact', file_type: kind in ['sources', 'utilities_sources'] ? 'sources-jar' : null]
+              primary: kind == 'artifact', file_type: kind in ['sources', 'utilities_sources', 'library_sources'] ? 'sources-jar' : null]
          }]
     }
 
@@ -368,6 +369,70 @@ class PublicationTest {
         result = Publication.plan(fixture.file, publication, '26.3-fabric', fixture.root, fetch([], []))
         assertEquals('upload', result.action)
         assertFalse(result.containsKey('version_id'))
+    }
+
+    @Test void standaloneLibraryTagsCannotProduceOrUploadPlatformMetadata() {
+        Map value = metadata()
+        value.release = 'lib/v1.0.0'
+        fails("requires 'cbbg'") { Publication.requireUploadAllowed(value) }
+        fails("requires 'cbbg'") {
+            Publication.resolve(value, 'modrinth', { url -> throw new AssertionError('No platform requests for Lib') })
+        }
+        fixture.manifest.release = 'lib/v1.0.0'
+        fixture.manifest.product = 'lib'
+        File contract = new File(fixture.bundle, fixture.record.client_tests.contract.path)
+        Map scenario = CandidateFiles.read(contract) as Map
+        scenario.product = 'lib'
+        contract.text = JsonOutput.toJson(scenario)
+        fixture.record.client_tests.contract.sha256 = CandidateFiles.sha256(contract)
+        fixture.file.text = JsonOutput.toJson(fixture.manifest)
+        fails("requires 'cbbg'") { metadata() }
+    }
+
+    @Test void libraryAttachmentsRequireExactRemoteFilesAndSourceTypes() {
+        File artifact = new File(fixture.bundle, fixture.record.artifact.path)
+        Map entries = [:]
+        new ZipFile(artifact).withCloseable { zip ->
+            zip.entries().each { entry -> entries[entry.name] = zip.getInputStream(entry).withCloseable { it.readAllBytes() } }
+        }
+        Map mod = CandidateFiles.parse(new StringReader(new String(entries['fabric.mod.json'], 'UTF-8'))) as Map
+        mod.depends.cbbg_lib = '>=1.0.0 <2.0.0'
+        entries['fabric.mod.json'] = JsonOutput.toJson(mod).bytes
+        CandidateFixture.archive(artifact, entries)
+        fixture.record.artifact = CandidateFiles.reference(fixture.bundle, artifact.name)
+        ['library': 'cbbg-lib-1.0.0+mc26.3-fabric.jar',
+         'library_sources': 'cbbg-lib-1.0.0+mc26.3-fabric-sources.jar'].each { kind, name ->
+            File file = new File(fixture.bundle, name)
+            CandidateFixture.archive(file, [(kind == 'library' ? 'example/Library.class' : 'example/Library.java'):
+                    ('Library attachment ' + kind).bytes])
+            fixture.record[kind] = CandidateFiles.reference(fixture.bundle, name)
+        }
+        String nested = 'META-INF/jars/' + fixture.record.library.path
+        mod.jars = [[file: nested]]
+        entries['fabric.mod.json'] = JsonOutput.toJson(mod).bytes
+        entries[nested] = new File(fixture.bundle, fixture.record.library.path).bytes
+        CandidateFixture.archive(artifact, entries)
+        fixture.record.artifact = CandidateFiles.reference(fixture.bundle, artifact.name)
+        fixture.record.library_release = 'lib/v1.0.0'
+        fixture.file.text = JsonOutput.toJson(fixture.manifest)
+        Map value = metadata()
+        assertEquals(fixture.record.library, value.records[0].library)
+        assertEquals(fixture.record.library_sources, value.records[0].library_sources)
+        writeMetadata(value)
+        Map remote = existing(value.records[0])
+        assertEquals(4, remote.files.size())
+        Map result = Publication.plan(fixture.file, publication, fixture.target.id, fixture.root, fetch([remote], []))
+        assertEquals('reuse', result.action)
+        assertEquals(fixture.record.library, result.library)
+        remote.files[2].file_type = 'other'
+        assertEquals('reuse', Publication.plan(fixture.file, publication, fixture.target.id, fixture.root, fetch([remote], [])).action)
+        remote.files[3].file_type = null
+        fails('Existing Modrinth file') {
+            Publication.plan(fixture.file, publication, fixture.target.id, fixture.root, fetch([remote], []))
+        }
+        value.records[0].library.sha256 = '0' * 64
+        writeMetadata(value)
+        fails('checked candidate') { Publication.checkedRecord(fixture.file, publication, fixture.target.id, fixture.root) }
     }
 
     @Test

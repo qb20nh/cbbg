@@ -16,6 +16,7 @@ class Publication {
     private static final String CURSEFORGE_API = 'https://minecraft.curseforge.com/api/game'
 
     static void requireUploadAllowed(Map metadata) {
+        if (metadata.legacy != true) ReleaseIdentity.parse(metadata.release as String).requireProduct('cbbg')
         if (metadata.dry_run_only == true) {
             throw new GradleException('Draft publication metadata is dry-run only; refusing upload')
         }
@@ -25,6 +26,7 @@ class Publication {
         if (!(notes instanceof String) || !notes.trim()) throw new GradleException('Release notes are empty')
         String before = CandidateFiles.sha256(candidate)
         CandidateManifest manifest = new CandidateManifest(candidate)
+        manifest.identity.requireProduct('cbbg')
         if (!(manifest.data.selected_targets instanceof List) || manifest.data.selected_targets.isEmpty()) {
             throw new GradleException('Candidate requires an explicit target selection')
         }
@@ -70,6 +72,11 @@ class Publication {
             if (target.containsKey('sbom')) {
                 records.last().evidence = ReleaseEvidence.reference(manifest, id)
             }
+            if (target.containsKey('library')) {
+                records.last().library = target.library
+                records.last().library_sources = target.library_sources
+                records.last().library_release = target.library_release
+            }
             if (target.containsKey('utilities')) {
                 records.last().utilities = target.utilities
                 records.last().utilities_sources = target.utilities_sources
@@ -97,7 +104,7 @@ class Publication {
         if (expectedRecords.size() != 1 ||
                 ['schema', 'release', 'source_commit', 'manifest_sha256'].any { published[it] != expected[it] } ||
                 published.records.size() != expected.records.size() ||
-                ['targets', 'artifact', 'sources', 'utilities', 'utilities_sources', 'evidence', 'modrinth'].any { record[it] != expectedRecords[0][it] }) {
+                ['targets', 'artifact', 'sources', 'utilities', 'utilities_sources', 'library', 'library_sources', 'library_release', 'evidence', 'modrinth'].any { record[it] != expectedRecords[0][it] }) {
             throw new GradleException('Publishing metadata differs from the checked candidate')
         }
         Map curseforge = record.curseforge instanceof Map ? new LinkedHashMap(record.curseforge) : [:]
@@ -127,6 +134,7 @@ class Publication {
         if (!(services in ['both', 'modrinth', 'curseforge'])) {
             throw new GradleException('Invalid publishing service selection')
         }
+        if (metadata.legacy != true) ReleaseIdentity.parse(metadata.release as String).requireProduct('cbbg')
         Map resolved = (Map) CandidateFiles.parse(new StringReader(JsonOutput.toJson(metadata)))
         List modrinthVersions = []
         List modrinthLoaders = []
@@ -209,6 +217,7 @@ class Publication {
         Map upload = record.modrinth
         List<String> kinds = ['artifact', 'sources'] +
                 (record.containsKey('utilities') ? ['utilities', 'utilities_sources'] : []) +
+                (record.containsKey('library') ? ['library', 'library_sources'] : []) +
                 (record.containsKey('evidence') ? ['evidence'] : [])
         Map project = request(fetch, MODRINTH_API + '/project/' + segment(upload.project_id), [:]) as Map
         if (project.id != upload.project_id || !(project.slug instanceof String) ||
@@ -237,6 +246,11 @@ class Publication {
                       project_id: project.id, version_number: upload.version_number,
                       artifact: record.artifact, sources: record.sources, action: 'upload']
         if (record.containsKey('evidence')) result.evidence = record.evidence
+        if (record.containsKey('library')) {
+            result.library = record.library
+            result.library_sources = record.library_sources
+            result.library_release = record.library_release
+        }
         if (record.containsKey('utilities')) {
             result.utilities = record.utilities
             result.utilities_sources = record.utilities_sources
@@ -283,8 +297,8 @@ class Publication {
                 }
                 Map item = fileMatches[0]
                 String sha512 = digest(file, 'SHA-512')
-                List fileTypes = kind in ['sources', 'utilities_sources'] ? ['sources-jar'] :
-                        (kind == 'utilities' ? [null, 'other'] :
+                List fileTypes = kind in ['sources', 'utilities_sources', 'library_sources'] ? ['sources-jar'] :
+                        (kind in ['utilities', 'library'] ? [null, 'other'] :
                         (kind == 'evidence'
                                 ? (uploadedVersionId != null ? [null] : [null, 'signature'])
                                 : [null]))

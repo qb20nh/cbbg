@@ -35,7 +35,7 @@ public final class DitherPass implements AutoCloseable {
   }
 
   private static RenderPipeline pipeline(boolean demo) {
-    return RenderPlatform.rgba8(RenderPipeline.builder())
+    return DitherOutputFormat.rgba8(RenderPipeline.builder())
         .withLocation(
             Identifier.fromNamespaceAndPath("cbbg", demo ? "pipeline/demo" : "pipeline/dither"))
         .withVertexShader("core/screenquad")

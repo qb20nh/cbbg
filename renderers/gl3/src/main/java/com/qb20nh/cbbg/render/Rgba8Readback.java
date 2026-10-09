@@ -8,6 +8,7 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import com.qb20nh.cbbg.config.CbbgConfig;
 import net.minecraft.client.Minecraft;
 import org.lwjgl.opengl.GL11;
+import org.lwjgl.opengl.GL13;
 import org.lwjgl.opengl.GL30;
 
 /** RGBA8 conversion remains available before shaders or noise have loaded. */
@@ -27,7 +28,7 @@ public final class Rgba8Readback {
   public static NativeImage capture(RenderTarget source) {
     RenderSystem.assertOnRenderThread();
     try (@SuppressWarnings("PMD.UnusedLocalVariable")
-        DitherPass.GlState state = new DitherPass.GlState()) {
+        ReadbackState state = new ReadbackState()) {
       TextureTarget output = createTarget(source.width, source.height);
       try {
         GlStateManager._disableScissorTest();
@@ -63,7 +64,7 @@ public final class Rgba8Readback {
   private static NativeImage read(RenderTarget target, boolean opaque) {
     RenderSystem.assertOnRenderThread();
     try (@SuppressWarnings("PMD.UnusedLocalVariable")
-        DitherPass.GlState state = new DitherPass.GlState()) {
+        ReadbackState state = new ReadbackState()) {
       NativeImage image = new NativeImage(target.width, target.height, false);
       try {
         GlStateManager._bindTexture(target.getColorTextureId());
@@ -74,6 +75,44 @@ public final class Rgba8Readback {
         image.close();
         throw failure;
       }
+    }
+  }
+
+  private static final class ReadbackState implements AutoCloseable {
+    private final int read = GL11.glGetInteger(GL30.GL_READ_FRAMEBUFFER_BINDING);
+    private final int draw = GL11.glGetInteger(GL30.GL_DRAW_FRAMEBUFFER_BINDING);
+    private final int[] viewport = new int[4];
+    private final boolean depth = GL11.glIsEnabled(GL11.GL_DEPTH_TEST);
+    private final boolean scissor = GL11.glIsEnabled(GL11.GL_SCISSOR_TEST);
+    private final boolean srgb = GL11.glIsEnabled(GL30.GL_FRAMEBUFFER_SRGB);
+    private final int active = GL11.glGetInteger(GL13.GL_ACTIVE_TEXTURE);
+    private final int[] textures = new int[2];
+
+    ReadbackState() {
+      GL11.glGetIntegerv(GL11.GL_VIEWPORT, viewport);
+      for (int i = 0; i < textures.length; i++) {
+        GlStateManager._activeTexture(GL13.GL_TEXTURE0 + i);
+        textures[i] = GL11.glGetInteger(GL11.GL_TEXTURE_BINDING_2D);
+      }
+      GlStateManager._activeTexture(GL13.GL_TEXTURE0);
+    }
+
+    @Override
+    public void close() {
+      GlStateManager._glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, read);
+      GlStateManager._glBindFramebuffer(GL30.GL_DRAW_FRAMEBUFFER, draw);
+      RenderSystem.viewport(viewport[0], viewport[1], viewport[2], viewport[3]);
+      if (depth) GlStateManager._enableDepthTest();
+      else GlStateManager._disableDepthTest();
+      if (scissor) GlStateManager._enableScissorTest();
+      else GlStateManager._disableScissorTest();
+      if (srgb) GL11.glEnable(GL30.GL_FRAMEBUFFER_SRGB);
+      else GL11.glDisable(GL30.GL_FRAMEBUFFER_SRGB);
+      for (int i = 0; i < textures.length; i++) {
+        GlStateManager._activeTexture(GL13.GL_TEXTURE0 + i);
+        GlStateManager._bindTexture(textures[i]);
+      }
+      GlStateManager._activeTexture(active);
     }
   }
 }

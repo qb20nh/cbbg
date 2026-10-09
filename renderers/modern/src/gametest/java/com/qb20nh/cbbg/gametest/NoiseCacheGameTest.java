@@ -1,8 +1,8 @@
 package com.qb20nh.cbbg.gametest;
 
 import com.mojang.blaze3d.platform.NativeImage;
+import com.qb20nh.cbbg.api.NoiseVolume;
 import com.qb20nh.cbbg.config.CbbgConfig;
-import com.qb20nh.cbbg.math.BlueNoise;
 import com.qb20nh.cbbg.render.DitherController;
 import com.qb20nh.cbbg.render.stbn.STBNCache;
 import com.qb20nh.cbbg.render.stbn.STBNGenerator;
@@ -84,8 +84,7 @@ public final class NoiseCacheGameTest implements FabricClientGameTest {
       if (images.length != DEPTH || !STBNCache.isCacheValid(SIZE, SIZE, DEPTH, seed)) {
         throw new AssertionError("Generated cache is incomplete");
       }
-      double[] u = BlueNoise.generateScalarField(SIZE, SIZE, DEPTH, BlueNoise.stbnUSeed(seed));
-      double[] v = BlueNoise.generateScalarField(SIZE, SIZE, DEPTH, BlueNoise.stbnVSeed(seed));
+      NoiseVolume expected = NoiseVolume.generate(SIZE, SIZE, DEPTH, seed);
       int[] pixels = new int[SIZE * SIZE * DEPTH];
       for (int z = 0; z < DEPTH; z++) {
         if (images[z].getWidth() != SIZE || images[z].getHeight() != SIZE) {
@@ -95,7 +94,7 @@ public final class NoiseCacheGameTest implements FabricClientGameTest {
           for (int x = 0; x < SIZE; x++) {
             int index = (z * SIZE + y) * SIZE + x;
             pixels[index] = images[z].getPixel(x, y);
-            if (pixels[index] != BlueNoise.calculatePixelColor(u[index], v[index])) {
+            if (pixels[index] != expected.pixelABGR(x, y, z)) {
               throw new AssertionError("Decoded pixel differs from CPU reference at " + index);
             }
           }

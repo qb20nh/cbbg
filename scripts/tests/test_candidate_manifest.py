@@ -46,6 +46,56 @@ class CandidateManifestTest(unittest.TestCase):
         self.assertEqual(target['artifact'], self.reference('artifact.jar'))
         self.assertEqual(specification['minecraft'], '26.3')
 
+    def test_library_release_has_its_own_product(self):
+        self.manifest.update(release='lib/v1.0.0', product='lib')
+        self.assertEqual('lib', self.read()[0]['product'])
+        self.manifest['product'] = 'cbbg'
+        with self.assertRaisesRegex(EvidenceError, 'product'):
+            self.read()
+
+    def test_acceptance_contract_must_match_candidate_product(self):
+        contract = self.root / 'contract.json'
+        for product, release in (('cbbg', 'v1.5.0'), ('lib', 'lib/v1.0.0')):
+            with self.subTest(product=product):
+                self.manifest.update(product=product, release=release)
+                contract.write_text(json.dumps({'product': product}))
+                self.target['client_tests']['contract'] = self.reference(contract.name)
+                self.read()
+                contract.write_text(json.dumps({'product': 'lib' if product == 'cbbg' else 'cbbg'}))
+                self.target['client_tests']['contract'] = self.reference(contract.name)
+                with self.assertRaisesRegex(EvidenceError, 'own acceptance contract'):
+                    self.read()
+
+    def test_main_library_dependency_checks_both_artifacts(self):
+        for kind, name in (('library', 'cbbg-lib-1.0.0.jar'),
+                           ('library_sources', 'cbbg-lib-1.0.0-sources.jar')):
+            (self.root / name).write_bytes(name.encode())
+            self.target[kind] = self.reference(name)
+        self.target['library_release'] = 'lib/v1.0.0'
+        self.read()
+        (self.root / 'cbbg-lib-1.0.0.jar').write_bytes(b'changed')
+        with self.assertRaises(EvidenceError):
+            self.read()
+
+    def test_library_dependency_requires_its_own_release(self):
+        self.target.update(library=self.reference('artifact.jar'),
+                           library_sources=self.reference('sources.jar'),
+                           library_release='v1.0.0')
+        with self.assertRaisesRegex(EvidenceError, 'library release'):
+            self.read()
+
+    def test_library_provenance_requires_dependency_and_source_commit(self):
+        self.target['library_provenance'] = self.reference('inventory.json')
+        with self.assertRaisesRegex(EvidenceError, 'provenance requires'):
+            self.read()
+        self.target.update(library=self.reference('artifact.jar'),
+                           library_sources=self.reference('sources.jar'),
+                           library_release='lib/v1.0.0', library_source_commit='b' * 40)
+        self.read()
+        (self.root / 'inventory.json').write_text('changed')
+        with self.assertRaisesRegex(EvidenceError, 'Changed evidence file'):
+            self.read()
+
     def test_target_tag_must_match_selected_runtime(self):
         for tag in ('v1.4.0+mc26.3-fabric', 'v1.4.0-rc.1+mc26.3-fabric'):
             self.manifest['release'] = tag

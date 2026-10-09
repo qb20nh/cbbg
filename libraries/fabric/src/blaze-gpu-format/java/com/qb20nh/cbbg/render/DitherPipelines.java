@@ -12,9 +12,9 @@ import net.minecraft.resources.Identifier;
 import org.jspecify.annotations.NullMarked;
 
 @NullMarked
-final class DitherPipelines {
-  static final RenderPipeline ENABLED = create(false);
-  static final RenderPipeline DEMO = create(true);
+public final class DitherPipelines {
+  public static final RenderPipeline ENABLED = create(false);
+  public static final RenderPipeline DEMO = create(true);
 
   private DitherPipelines() {}
 

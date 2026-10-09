@@ -3,11 +3,13 @@ package com.qb20nh.cbbg.mixin;
 import com.qb20nh.cbbg.render.CbbgShaders;
 import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.server.packs.resources.ResourceProvider;
+import org.jspecify.annotations.NullMarked;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
+@NullMarked
 @Mixin(GameRenderer.class)
 public abstract class GameRendererReloadShadersMixin {
   @Inject(method = "reloadShaders", at = @At("HEAD"))

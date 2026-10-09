@@ -4,6 +4,14 @@
   "ordinaryMetadata": "renderers/renderpearl/src/processedGametest/resources/fabric.mod.json",
   "additionalRuns": [
     {
+      "suite": "library-external",
+      "profiles": ["none"],
+      "backends": ["opengl", "vulkan"],
+      "restart": false,
+      "externalLibrary": true,
+      "entrypoints": ["ReleaseLibraryResolutionGameTest", "ReleaseUtilitiesGameTest"]
+    },
+    {
       "suite": "maximum-noise-cache",
       "profiles": ["none"],
       "backends": ["opengl", "vulkan"],

@@ -97,6 +97,18 @@ class CandidatePublishWorkflowTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn('dry_run=true', result.stdout)
 
+    def test_library_publication_is_rejected_before_platform_preflight(self):
+        workflow = (ROOT / '.github/workflows/publish.yml').read_text()
+        self.assertLess(workflow.index('name: Require the CBBG publication product'),
+                        workflow.index('name: Prepare publication'))
+        self.env['RELEASE_TAG'] = 'lib/v1.0.0'
+        result = self.run_step('Require the CBBG publication product')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        args = json.loads((self.root / 'gradle-arguments.json').read_text())
+        self.assertIn('-PrequireProduct=cbbg', args)
+        self.assertIn('-Prelease=lib/v1.0.0', args)
+        self.assertEqual(args[-1], 'releaseIdentity')
+
     def test_preflight_receives_explicit_release_source_and_service(self):
         self.env['SERVICES'] = 'modrinth'
         result = self.run_step('Prepare publication')
@@ -123,14 +135,15 @@ class CandidatePublishWorkflowTests(unittest.TestCase):
                    if 'uses: qb20nh/curseforge-upload@' in step]
         identifiers = [next(line.strip()[4:] for line in step.splitlines()
                             if line.strip().startswith('id: ')) for step in uploads]
-        self.assertEqual(len(identifiers), 5)
+        self.assertEqual(len(identifiers), 7)
         self.assertEqual(set(identifiers), {
             'curseforge_upload', 'curseforge_sources_upload',
             'curseforge_utilities_upload', 'curseforge_utilities_sources_upload',
+            'curseforge_library_upload', 'curseforge_library_sources_upload',
             'curseforge_evidence_upload'})
         for step in uploads:
             self.assertIn('!inputs.dry_run', step)
-        for kind in ('utilities', 'utilities_sources'):
+        for kind in ('utilities', 'utilities_sources', 'library', 'library_sources'):
             step = uploads[identifiers.index('curseforge_' + kind + '_upload')]
             self.assertIn("steps.publication.outputs." + kind + " != ''", step)
             self.assertIn('parent_file_id: ${{ steps.curseforge_upload.outputs.id }}', step)

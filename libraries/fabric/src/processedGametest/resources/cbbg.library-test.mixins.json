@@ -1,0 +1,11 @@
+{
+  "required": true,
+  "package": "com.qb20nh.cbbg.gametest.mixin",
+  "compatibilityLevel": "JAVA_${java_level}",
+  "client": [
+    "ScenarioProgressMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

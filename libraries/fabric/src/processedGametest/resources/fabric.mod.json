@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "id": "cbbg-library-test",
+  "version": "1.0.0",
+  "name": "CBBG library consumer acceptance",
+  "environment": "client",
+  "entrypoints": {
+    "fabric-client-gametest": [
+      "com.qb20nh.cbbg.gametest.ReleaseUtilitiesGameTest"
+    ]
+  },
+  "depends": {
+    "cbbg_lib": "*",
+    "fabricloader": ">=${loader_minimum}",
+    "minecraft": "${minecraft_version}",
+    "fabric-client-gametest-api-v1": "*"
+  },
+  "mixins": [
+    "cbbg.library-test.mixins.json"
+  ]
+}

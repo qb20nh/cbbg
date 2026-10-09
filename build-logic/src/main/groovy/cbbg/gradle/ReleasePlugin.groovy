@@ -54,9 +54,19 @@ class ReleasePlugin implements Plugin<Project> {
                 doLast(action)
             }
         }
+        task('releaseIdentity', 'Resolve the shared release product and tag identity.') {
+            ReleaseIdentity identity = ReleaseIdentity.parse(required('release'))
+            String expected = project.providers.gradleProperty('requireProduct').orNull
+            if (expected != null) identity.requireProduct(expected)
+            File output = input('output')
+            output.parentFile.mkdirs()
+            output.setText(JsonOutput.toJson([product: identity.product, version: identity.version,
+                    title: identity.releaseTitle, prerelease: identity.prerelease,
+                    changelog_path: identity.changelogPath]) + '\n', 'UTF-8')
+        }
         task('releaseNotes', 'Select shared and target-specific changelog notes for a release.') {
             String tag = required('release')
-            CandidateFiles.releaseIdentity(tag, '0' * 40)
+            ReleaseIdentity identity = ReleaseIdentity.parse(tag)
             if (project.providers.gradleProperty('targets').isPresent() && project.providers.gradleProperty('target').isPresent()) {
                 throw new GradleException('Use either -Ptarget or -Ptargets')
             }
@@ -64,13 +74,31 @@ class ReleasePlugin implements Plugin<Project> {
             if (!selection) throw new GradleException('Release notes require an explicit target selection. Use -Ptarget=<id> for one runtime or -Ptargets=<id,id> for a shared release; IDs are listed in targets.json.')
             List<Map> targets = TargetCatalog.read(new File(source(), 'targets.json')).select(selection)
             CandidateFiles.releaseTargets(tag, targets)
-            String notes = ChangelogNotes.select(new File(source(), 'CHANGELOG.md'), CandidateFiles.releaseVersion(tag), targets)
+            String notes = ChangelogNotes.select(new File(source(), identity.changelogPath), identity.version, targets)
             File output = input('output')
             output.parentFile.mkdirs()
             output.setText(notes, 'UTF-8')
         }
         task('retrace', 'Decode a crash with its release mapping.') {
             RetraceLog.translate(input('candidate'), required('target'), input('crash'), input('output'))
+        }
+        task('verifyLibraryDependencies', 'Verify and bind library draft or immutable dependency provenance before candidate attestation.') {
+            File manifest = input('candidate')
+            File output = input('output')
+            if (output.exists() || output.toPath().startsWith(manifest.parentFile.toPath())) {
+                throw new GradleException('Choose a new library verification report path outside the candidate directory')
+            }
+            if (new File(manifest.parentFile, 'provenance.jsonl').exists()) {
+                throw new GradleException('Bind library dependencies before candidate attestation; rebuild an unattested candidate before retrying.')
+            }
+            CandidateManifest candidate = new CandidateManifest(manifest)
+            candidate.identity.requireProduct('cbbg')
+            Map report = ReleaseChecks.verifyLibraryDependencies(candidate, required('repo'), source(), run, true, true)
+            manifest.setText(JsonOutput.prettyPrint(JsonOutput.toJson(candidate.data)) + '\n', 'UTF-8')
+            File checksums = new File(manifest.parentFile, 'SHA256SUMS')
+            checksums.setText(manifest.parentFile.listFiles().findAll { it.name != 'SHA256SUMS' }
+                    .sort { it.name }.collect { CandidateFiles.sha256(it) + '  ' + it.name }.join('\n') + '\n', 'UTF-8')
+            CandidateFiles.writeNew(output, report)
         }
         task('verifyProvenance', 'Check candidate build attestations.') {
             CandidateFiles.writeNew(input('output'), ReleaseChecks.provenance(
@@ -211,8 +239,8 @@ class ReleasePlugin implements Plugin<Project> {
                 result.evidence_file_id = evidenceIdentifier
                 result.evidence_url = 'https://www.curseforge.com/minecraft/mc-mods/cbbg/files/' + evidenceIdentifier
             }
-            ['utilities', 'utilities_sources'].each { kind ->
-                String property = kind == 'utilities' ? 'utilitiesFileId' : 'utilitiesSourcesFileId'
+            [utilities: 'utilitiesFileId', utilities_sources: 'utilitiesSourcesFileId',
+             library: 'libraryFileId', library_sources: 'librarySourcesFileId'].each { kind, property ->
                 String fileIdentifier = project.providers.gradleProperty(property).orNull
                 if (fileIdentifier != null) {
                     if (!(fileIdentifier ==~ /[0-9]+/) || new BigInteger(fileIdentifier) <= 0) {

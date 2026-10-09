@@ -4,6 +4,14 @@
   "ordinaryMetadata": "renderers/blaze-texture-format/src/processedGametest/resources/fabric.mod.json",
   "additionalRuns": [
     {
+      "suite": "library-external",
+      "profiles": ["none"],
+      "backends": ["opengl"],
+      "restart": false,
+      "externalLibrary": true,
+      "entrypoints": ["ReleaseLibraryResolutionGameTest", "ReleaseUtilitiesGameTest"]
+    },
+    {
       "suite": "generation",
       "profiles": [
         "none"

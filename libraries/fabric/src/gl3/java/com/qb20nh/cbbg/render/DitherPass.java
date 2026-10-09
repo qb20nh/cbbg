@@ -8,6 +8,9 @@ import com.mojang.blaze3d.vertex.BufferUploader;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import com.qb20nh.cbbg.api.DitherOptions;
+import java.nio.ByteBuffer;
+import net.minecraft.client.Minecraft;
+import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL13;
@@ -16,6 +19,7 @@ import org.lwjgl.opengl.GL20;
 import org.lwjgl.opengl.GL30;
 
 /** Independent GPU pass. Input and noise textures remain owned by the caller. */
+@NullMarked
 public final class DitherPass implements AutoCloseable {
   private @Nullable TextureTarget output;
 
@@ -36,7 +40,7 @@ public final class DitherPass implements AutoCloseable {
         GlState state = new GlState()) {
       if (output == null || output.width != width || output.height != height) {
         close();
-        output = Rgba8Readback.createTarget(width, height);
+        output = createTarget(width, height);
       }
       shader.setSampler("InSampler", inputTexture);
       shader.setSampler("NoiseSampler", noiseTexture);
@@ -64,6 +68,25 @@ public final class DitherPass implements AutoCloseable {
       }
       return output;
     }
+  }
+
+  private static TextureTarget createTarget(int width, int height) {
+    var target = new TextureTarget(width, height, false, Minecraft.ON_OSX);
+    GlStateManager._bindTexture(target.getColorTextureId());
+    // The embedding application's framebuffer mixins may change vanilla's allocation format.
+    GL11.glTexImage2D(
+        GL11.GL_TEXTURE_2D,
+        0,
+        GL11.GL_RGBA8,
+        width,
+        height,
+        0,
+        GL11.GL_RGBA,
+        GL11.GL_UNSIGNED_BYTE,
+        (ByteBuffer) null);
+    target.bindWrite(false);
+    target.checkStatus();
+    return target;
   }
 
   @Override

@@ -19,6 +19,7 @@ class ReleaseChecks {
         candidate.records.values().each { record ->
             (['artifact', 'sources'] + (candidate.data.schema == 3 ? ['mapping'] : []) +
                     (record.containsKey('utilities') ? ['utilities', 'utilities_sources'] : []) +
+                    (record.containsKey('library') ? ['library', 'library_sources'] : []) +
                     (record.containsKey('sbom') ? ['sbom'] : [])).each { kind ->
                 File path = CandidateFiles.checked(candidate.file.parentFile, record[kind] as Map)
                 String hash = record[kind].sha256
@@ -109,13 +110,14 @@ class ReleaseChecks {
         Map<String, String> internalFiles = candidate.releaseFiles()
         if (candidate.data.release != tag) throw new IllegalArgumentException('Requested release differs from candidate')
         cleanSource(sourceRoot, candidate.data.commit as String, run)
+        Map libraryDependencies = verifyLibraryDependencies(candidate, repo, sourceRoot, run)
         String body = notes.getText('UTF-8')
         if (!body.trim()) throw new IllegalArgumentException('Release notes are required')
         Map validation = verify(candidate.file, results,
                 new File(candidate.file.parentFile, 'provenance.jsonl'), sourceRoot, repo, run)
         String endpoint = 'repos/' + repo
         String tagEndpoint = endpoint + '/commits/' + segment('refs/tags/' + tag)
-        String releaseEndpoint = endpoint + '/releases/tags/' + tag
+        String releaseEndpoint = endpoint + '/releases/tags/' + segment(tag)
         if (api(tagEndpoint, sourceRoot, run).sha != candidate.data.commit) {
             throw new IllegalArgumentException('Release tag differs from candidate commit')
         }
@@ -147,7 +149,7 @@ class ReleaseChecks {
         }
         Map report = [release: tag, repository: repo, source_commit: candidate.data.commit,
                        manifest_sha256: internalFiles['candidate.json'], files: files, draft: snapshot,
-                      validation: validation, notes: body, published: false]
+                      validation: validation, library_dependencies: libraryDependencies, notes: body, published: false]
         CandidateFiles.writeNew(output, report)
         if (publish) {
             if (api(endpoint + '/immutable-releases', sourceRoot, run).enabled != true ||
@@ -182,11 +184,103 @@ class ReleaseChecks {
         report
     }
 
+    static Map verifyLibraryDependencies(CandidateManifest candidate, String repo, File source, Closure run,
+                                         boolean allowDraft = false, boolean saveEvidence = false) {
+        if (candidate.identity.product == 'lib') return [:]
+        Map reports = [:]
+        candidate.records.each { id, record ->
+            if (!record.containsKey('library')) return
+            if (!(record.library_release instanceof String)) {
+                throw new GradleException('CBBG finalization requires library_release for ' + id +
+                        '. Record the published immutable lib/v<version> dependency before finalizing; draft library assets are only valid for candidates.')
+            }
+            ReleaseIdentity library = ReleaseIdentity.parse(record.library_release as String)
+            library.requireProduct('lib')
+            String endpoint = 'repos/' + repo
+            Map release = releaseApi(endpoint + '/releases/tags/' + segment(library.tag), source, run)
+            Map snapshot = allowDraft && release.draft == true
+                    ? draftSnapshot(release, library.tag) : publishedSnapshot(release, library.tag)
+            String tagEndpoint = endpoint + '/commits/' + segment('refs/tags/' + library.tag)
+            String commit = api(tagEndpoint, source, run).sha as String
+            CandidateFiles.releaseIdentity(library.tag, commit)
+            List<String> kinds = ['library', 'library_sources', 'utilities', 'utilities_sources']
+            if (kinds.any { !(record[it] instanceof Map) }) {
+                throw new GradleException('Library dependency requires exact library and utility binary/source references for ' + id)
+            }
+            Set names = (kinds.collect { record[it].path } + ['provenance.jsonl']) as Set
+            if (!release.assets*.name.containsAll(names)) {
+                throw new GradleException('Immutable library release ' + library.tag + ' is missing dependency assets for ' + id)
+            }
+            File download = Files.createTempDirectory('cbbg-library-release-').toFile()
+            try {
+                List<String> command = ['gh', 'release', 'download', library.tag, '--repo', repo, '--dir', download.absolutePath]
+                names.each { command.addAll(['--pattern', it as String]) }
+                run(command, source)
+                kinds.each { kind ->
+                    Map reference = record[kind] as Map
+                    CandidateFiles.checked(download, reference)
+                    Map remote = release.assets.find { it.name == reference.path } as Map
+                    if (!(remote.digest in [null, 'sha256:' + reference.sha256])) {
+                        throw new GradleException('Published library asset digest differs: ' + reference.path)
+                    }
+                }
+                File bundle = new File(download, 'provenance.jsonl')
+                String provenanceHash = CandidateFiles.sha256(bundle)
+                Map remoteProvenance = release.assets.find { it.name == bundle.name } as Map
+                if (!(remoteProvenance.digest in [null, 'sha256:' + provenanceHash])) {
+                    throw new GradleException('Published library provenance digest differs: ' + library.tag)
+                }
+                kinds.each { kind ->
+                    File asset = CandidateFiles.checked(download, record[kind] as Map)
+                    Object verified = CandidateFiles.parse(new StringReader(run(['gh', 'attestation', 'verify', asset.absolutePath,
+                            '--bundle', bundle.absolutePath, '--repo', repo,
+                            '--signer-workflow', repo + '/.github/workflows/release.yml',
+                            '--signer-digest', commit, '--source-digest', commit,
+                            '--source-ref', 'refs/tags/' + library.tag, '--deny-self-hosted-runners',
+                            '--predicate-type', PREDICATE, '--format', 'json'], source) as String))
+                    if (!(verified instanceof List) || verified.isEmpty() || verified.any { item ->
+                        Map statement = item?.verificationResult?.statement as Map
+                        statement?.predicateType != PREDICATE || !(statement.subject instanceof List) ||
+                                !statement.subject.any { it.digest?.sha256 == record[kind].sha256 }
+                    }) throw new GradleException('Missing verified immutable library provenance: ' + asset.name)
+                    CandidateFiles.checked(download, record[kind] as Map)
+                }
+                if (CandidateFiles.sha256(bundle) != provenanceHash ||
+                        api(tagEndpoint, source, run).sha != commit ||
+                        (allowDraft && release.draft == true
+                                ? draftSnapshot(releaseApi(endpoint + '/releases/tags/' + segment(library.tag), source, run), library.tag)
+                                : publishedSnapshot(releaseApi(endpoint + '/releases/tags/' + segment(library.tag), source, run), library.tag)) != snapshot) {
+                    throw new GradleException('Library release or provenance changed during dependency verification: ' + library.tag)
+                }
+                if (record.containsKey('library_provenance') &&
+                        (record.library_provenance.sha256 != provenanceHash || record.library_source_commit != commit)) {
+                    throw new GradleException('Verified library provenance differs from the candidate dependency binding for ' + id)
+                }
+                if (saveEvidence) {
+                    File saved = new File(candidate.file.parentFile, 'cbbg-lib-' + library.version + '-provenance.jsonl')
+                    if (saved.exists() && CandidateFiles.sha256(saved) != provenanceHash) {
+                        throw new GradleException('Conflicting library provenance file: ' + saved.name)
+                    }
+                    if (!saved.exists()) Files.copy(bundle.toPath(), saved.toPath())
+                    record.library_provenance = CandidateFiles.reference(candidate.file.parentFile, saved.name)
+                    record.library_source_commit = commit
+                }
+                reports[id] = [release: library.tag, source_commit: commit,
+                               artifact: record.library, sources: record.library_sources,
+                               utilities: record.utilities, utilities_sources: record.utilities_sources,
+                               provenance_sha256: provenanceHash]
+            } finally {
+                removeTree(download)
+            }
+        }
+        reports
+    }
+
     static Map preparePublication(String tag, String repo, File sourceRoot, File assets, File output,
                                   File githubOutput, String services, Closure run, Closure fetch = null,
                                   boolean dryRun = false) {
         repository(repo)
-        CandidateFiles.releaseIdentity(tag, '0' * 40)
+        ReleaseIdentity.parse(tag).requireProduct('cbbg')
         File source = sourceRoot.canonicalFile
         File assetDir = assets.canonicalFile
         File metadataFile = output.canonicalFile
@@ -203,7 +297,7 @@ class ReleaseChecks {
         if (localTag != commit) throw new IllegalArgumentException('Source checkout differs from selected tag')
         String endpoint = 'repos/' + repo
         String tagEndpoint = endpoint + '/commits/' + segment('refs/tags/' + tag)
-        String releaseEndpoint = endpoint + '/releases/tags/' + tag
+        String releaseEndpoint = endpoint + '/releases/tags/' + segment(tag)
         if (api(tagEndpoint, source, run).sha != commit) {
             throw new IllegalArgumentException('Live release tag differs from source checkout')
         }
@@ -245,6 +339,7 @@ class ReleaseChecks {
             }
         }
         provenance(manifest, new File(assetDir, 'provenance.jsonl'), repo, run)
+        if (!draft) verifyLibraryDependencies(candidate, repo, source, run)
         Map metadata = Publication.resolve(Publication.metadata(manifest, source, snapshot.body as String),
                                             services, fetch)
         Map current = releaseApi(releaseEndpoint, source, run)
@@ -297,7 +392,7 @@ class ReleaseChecks {
         }
         String endpoint = 'repos/' + repo
         String tagEndpoint = endpoint + '/commits/' + segment('refs/tags/' + tag)
-        String releaseEndpoint = endpoint + '/releases/tags/' + tag
+        String releaseEndpoint = endpoint + '/releases/tags/' + segment(tag)
         if (api(tagEndpoint, source, run).sha != commit) {
             throw new IllegalArgumentException('Live release tag differs from source checkout')
         }
@@ -353,7 +448,7 @@ class ReleaseChecks {
         }
         String endpoint = 'repos/' + repo
         String tagEndpoint = endpoint + '/commits/' + segment('refs/tags/' + tag)
-        String releaseEndpoint = endpoint + '/releases/tags/' + tag
+        String releaseEndpoint = endpoint + '/releases/tags/' + segment(tag)
         if (api(tagEndpoint, sourceRoot, run).sha != commit) {
             throw new IllegalArgumentException('Live release tag differs from source checkout')
         }
@@ -365,7 +460,8 @@ class ReleaseChecks {
         Map snapshot
         if (metadata.legacy == true) {
             if (draft) throw new IllegalArgumentException('Legacy draft publication is unsupported')
-            snapshot = publishedSnapshot(release, tag, null, tag.substring(1).split(/\+mc/)[0].contains('-'))
+            // LegacyPublication validates historical tag syntax and its prerelease flag below.
+            snapshot = publishedSnapshot(release, tag, null, release.prerelease as Boolean)
             expected = LegacyPublication.metadata(sourceRoot, tag, snapshot.body as String,
                     release.prerelease as boolean, assets, commit)
             files = expected.records[0].subMap(['artifact', 'sources']).values().collectEntries {
@@ -470,7 +566,7 @@ class ReleaseChecks {
         String marker = '/releases/tags/'
         int split = endpoint.indexOf(marker)
         if (split < 0) throw new IllegalArgumentException('Invalid release endpoint')
-        String tag = endpoint.substring(split + marker.length())
+        String tag = java.net.URLDecoder.decode(endpoint.substring(split + marker.length()), 'UTF-8')
         String repo = endpoint.substring(0, split)
         for (int page = 1; ; page++) {
             Object parsed = CandidateFiles.parse(new StringReader(run(
@@ -545,8 +641,12 @@ class ReleaseChecks {
 
     static Map<String, String> publicFiles(CandidateManifest candidate) {
         Map<String, String> files = [:]
+        List<String> kinds = ['artifact', 'sources', 'library_provenance']
+        if (candidate.identity.product == 'lib' || !candidate.data.containsKey('product')) {
+            kinds += ['utilities', 'utilities_sources']
+        }
         candidate.records.values().each { record ->
-            ['artifact', 'sources', 'utilities', 'utilities_sources'].each { kind ->
+            kinds.each { kind ->
                 Map reference = record[kind] as Map
                 if (reference != null) {
                     String name = reference.path
@@ -648,7 +748,7 @@ class ReleaseChecks {
                       cf_relations: curseforge.relations, cf_changelog: curseforge.changelog]
         values.evidence = record.evidence
                 ? CandidateFiles.checked(artifact.parentFile, record.evidence as Map).absolutePath : ''
-        ['utilities', 'utilities_sources'].each { kind ->
+        ['utilities', 'utilities_sources', 'library', 'library_sources'].each { kind ->
             values[kind] = record[kind]
                     ? CandidateFiles.checked(artifact.parentFile, record[kind] as Map).absolutePath : ''
         }

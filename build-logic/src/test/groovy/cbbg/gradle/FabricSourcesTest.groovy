@@ -32,6 +32,22 @@ class FabricSourcesTest {
                 'com.qb20nh.cbbg.gametest.ReleaseSettingsGuiGameTest'))
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = ['1.21.1-fabric', '1.21.11-fabric', '26.1-fabric', '26.2-fabric', '26.3-fabric'])
+    void gpuApiSourcesAreOwnedByTheStandaloneLibrary(String id) {
+        File root = new File(System.getProperty('cbbg.repository'))
+        Map target = new JsonSlurper().parse(new File(root, 'targets.json')).targets.find { it.id == id }
+        Map layout = FabricSources.layout(target, target)
+        String relative = 'libraries/fabric/src/' + target.renderer + '/java/com/qb20nh/cbbg/render/DitherPass.java'
+        assertTrue(new File(root, relative).isFile(), id)
+        assertFalse(layout.main.java.any { FabricSources.contains(it, relative) }, id)
+        List<String> previous = ['renderers/' + target.renderer + '/src/main/java/com/qb20nh/cbbg/render/DitherPass.java',
+                                 'adapters/fabric/' + target.minecraft + '/src/main/java/com/qb20nh/cbbg/render/DitherPass.java']
+        assertFalse(previous.any { new File(root, it).isFile() }, id)
+        assertTrue(new File(root, 'libraries/utilities/src/main/java/com/qb20nh/cbbg/api/Dithering.java').isFile())
+        assertFalse(new File(root, 'core/src/main/java/com/qb20nh/cbbg/api/Dithering.java').exists())
+    }
+
     @Test void selectsTheGuiGraphicsCanvasOnlyForItsMinecraftVersions() {
         File root = new File(System.getProperty('cbbg.repository'))
         Map catalog = new JsonSlurper().parse(new File(root, 'targets.json'))

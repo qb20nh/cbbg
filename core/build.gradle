@@ -1,6 +1,5 @@
 plugins {
     id 'java-library'
-    id 'cbbg.utilities'
     id 'cbbg.private-gson'
     id 'cbbg.quality'
     id 'cbbg.formatting'
@@ -21,6 +20,9 @@ tasks.withType(JavaCompile).configureEach {
 }
 
 dependencies {
+    def libraryProperties = new Properties()
+    file('../libraries/utilities/gradle.properties').withInputStream { libraryProperties.load(it) }
+    api "com.qb20nh:cbbg-utilities:${providers.gradleProperty('library_version').getOrElse(libraryProperties.library_version)}"
     testImplementation project('rendering')
     testImplementation project('legacy')
     // Reference Gson remains available only to compare the private streaming codec in tests.
@@ -44,6 +46,14 @@ subprojects {
 }
 
 sourceSets.test.java.srcDir 'src/testSupport/java'
+
+if (project == rootProject) {
+    ['test', 'check', 'qualityCheck'].each { operation ->
+        tasks.named(operation) {
+            dependsOn gradle.includedBuild('cbbg-utilities').task(':' + operation)
+        }
+    }
+}
 
 ['check', 'qualityCheck'].each { operation ->
     tasks.named(operation) {

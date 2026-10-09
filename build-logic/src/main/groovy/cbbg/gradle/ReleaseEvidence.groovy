@@ -29,7 +29,7 @@ class ReleaseEvidence {
 
     private static File archive(CandidateManifest candidate, String target) {
         new File(candidate.file.parentFile,
-                'cbbg-' + CandidateFiles.releaseVersion(candidate.data.release as String) + '-' + target + '-evidence.zip')
+                (candidate.identity.product == 'lib' ? 'cbbg-lib-' : 'cbbg-') + candidate.identity.version + '-' + target + '-evidence.zip')
     }
 
     static Map assemble(CandidateManifest candidate, String target) {

@@ -2,33 +2,39 @@ package cbbg.gradle
 
 import org.gradle.api.Plugin
 import org.gradle.api.Project
+import org.gradle.api.JavaVersion
+import org.gradle.api.attributes.Bundling
+import org.gradle.api.attributes.Category
+import org.gradle.api.attributes.LibraryElements
+import org.gradle.api.attributes.Usage
+import org.gradle.api.attributes.java.TargetJvmVersion
+import org.gradle.api.publish.maven.MavenPublication
 import org.gradle.api.tasks.bundling.Jar
 import org.gradle.jvm.toolchain.JavaLanguageVersion
 import org.gradle.jvm.toolchain.JavaToolchainService
 import proguard.gradle.ProGuardTask
 
-/** Standalone Java 8 API, built from the same sources embedded in the mod. */
+/** Java 8 utilities with raw development and optimized release artifacts. */
 class UtilitiesPlugin implements Plugin<Project> {
     void apply(Project project) {
-        def core = project
-        def rendering = project.project("${project.path == ':' ? '' : project.path}:rendering")
-        File root = core.projectDir.parentFile
-        def properties = new Properties()
-        new File(root, 'gradle.properties').withInputStream { properties.load(it) }
-        String version = project.providers.gradleProperty('mod_version').getOrElse(properties.mod_version as String)
-        String name = "cbbg-utilities-${version}"
-        File shader = new File(root, 'src/main/resources/assets/cbbg/shaders/include/dither.glsl')
-        File license = new File(root, 'LICENSE')
-        def raw = project.tasks.register('rawUtilitiesJar', Jar) {
+        project.pluginManager.apply('java-library')
+        project.pluginManager.apply('maven-publish')
+        project.pluginManager.apply('cbbg.release-sbom')
+        project.group = 'com.qb20nh'
+        project.version = project.providers.gradleProperty('library_version').getOrElse('1.0.0')
+        String name = "cbbg-utilities-${project.version}"
+        File license = new File(project.projectDir, '../../LICENSE')
+        project.java {
+            sourceCompatibility = JavaVersion.VERSION_1_8
+            targetCompatibility = JavaVersion.VERSION_1_8
+            withSourcesJar()
+        }
+        project.tasks.withType(org.gradle.api.tasks.compile.JavaCompile).configureEach { options.release = 8 }
+        def raw = project.tasks.named('jar') {
             archiveFileName = "${name}-raw.jar"
-            destinationDirectory = project.layout.buildDirectory.dir('intermediates/utilities')
-            from(core.sourceSets.main.output) { include 'com/qb20nh/cbbg/math/MiniFFT*.class' }
-            from(rendering.sourceSets.main.output) {
-                include 'com/qb20nh/cbbg/api/**', 'com/qb20nh/cbbg/math/BlueNoise*.class'
-            }
-            from(shader) { into 'com/qb20nh/cbbg/api/shaders' }
             from(license)
         }
+        project.tasks.register('rawUtilitiesJar') { dependsOn raw }
         def output = project.layout.buildDirectory.file("libs/${name}.jar")
         def mapping = project.layout.buildDirectory.file("mapping/${name}.map")
         def toolchains = project.extensions.getByType(JavaToolchainService)
@@ -37,7 +43,7 @@ class UtilitiesPlugin implements Plugin<Project> {
                 'exportUtilitiesJdkLibraries', 'intermediates/utilities/jdk-runtime.jar')
         def optimized = project.tasks.register('optimizeUtilitiesJar', ProGuardTask) {
             group = 'build'
-            description = 'Build the standalone Java 8 noise and CPU dithering library.'
+            description = 'Build the optimized standalone Java 8 noise and CPU dithering library.'
             dependsOn raw
             inputs.file(raw.flatMap { it.archiveFile })
             inputs.files(jdkLibraries)
@@ -64,18 +70,35 @@ class UtilitiesPlugin implements Plugin<Project> {
             }
             doLast { ReproducibleJar.normalize(output.get().asFile) }
         }
-        project.tasks.register('utilitiesSourcesJar', Jar) {
-            group = 'build'
-            dependsOn optimized
+        project.tasks.named('sourcesJar') { archiveFileName = "${name}-raw-sources.jar" }
+        def sources = project.tasks.register('utilitiesSourcesJar', Jar) {
+            dependsOn optimized, project.tasks.named('releaseSbom')
             archiveFileName = "${name}-sources.jar"
-            destinationDirectory = project.layout.buildDirectory.dir('libs')
-            from(core.sourceSets.main.allSource) { include 'com/qb20nh/cbbg/math/MiniFFT.java' }
-            from(rendering.sourceSets.main.allSource) {
-                include 'com/qb20nh/cbbg/api/**', 'com/qb20nh/cbbg/math/BlueNoise.java'
-            }
-            from(shader) { into 'com/qb20nh/cbbg/api/shaders' }
+            from(project.sourceSets.main.allSource)
             from(mapping) { into 'META-INF/cbbg'; rename { 'proguard.map' } }
+            from(project.releaseSbomFile) { into 'META-INF/cbbg'; rename { 'sbom.cdx.json' } }
             from(license)
+        }
+        project.tasks.register('releaseSourcesJar') { dependsOn sources }
+        project.tasks.register('optimizedReleaseJar') { dependsOn optimized }
+        project.tasks.named('assemble') { dependsOn optimized }
+        project.configurations.create('releaseElements') {
+            canBeConsumed = true
+            canBeResolved = false
+            attributes {
+                attribute(Usage.USAGE_ATTRIBUTE, project.objects.named(Usage, Usage.JAVA_RUNTIME))
+                attribute(Category.CATEGORY_ATTRIBUTE, project.objects.named(Category, Category.LIBRARY))
+                attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE, project.objects.named(LibraryElements, LibraryElements.JAR))
+                attribute(Bundling.BUNDLING_ATTRIBUTE, project.objects.named(Bundling, Bundling.EXTERNAL))
+                attribute(TargetJvmVersion.TARGET_JVM_VERSION_ATTRIBUTE, 8)
+            }
+            outgoing.capability("com.qb20nh:cbbg-utilities-release:${project.version}")
+            outgoing.artifact(output) { builtBy optimized }
+        }
+        project.publishing.publications.create('utilities', MavenPublication) {
+            artifactId = 'cbbg-utilities'
+            artifact(output) { builtBy optimized }
+            artifact(sources)
         }
     }
 }

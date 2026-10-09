@@ -118,7 +118,6 @@ tasks.register('prepareProcessedRuntime') {
 apply from: new File(repositoryRoot, 'build-config/fabric-startup-tests.gradle')
 apply from: new File(repositoryRoot, 'build-config/source-inventory.gradle')
 ext.candidateTargetId = '26.2-fabric'
-apply from: new File(repositoryRoot, 'build-config/candidate-build-outputs.gradle')
 apply from: new File(repositoryRoot, 'build-config/fabric-compatibility.gradle')
 
 tasks.named('checkPackages') {
@@ -127,7 +126,7 @@ tasks.named('checkPackages') {
 		def target = TargetCatalog.read(new File(repositoryRoot, 'targets.json'))
 				.select(candidateTargetId).first()
 		PackageChecks.verifyFabricMetadata(
-				releaseOptimization.outputJar.get().asFile, target, project.version.toString())
+				releaseOptimization.outputJar.get().asFile, target, project.version.toString(), 'cbbg', '>=1.0.0 <2.0.0')
 	}
 }
 
@@ -225,6 +224,9 @@ releaseOptimization {
 }
 tasks.named('optimizeReleaseJar') { dependsOn tasks.named('jar', Jar) }
 tasks.named('assemble') { dependsOn tasks.named('optimizeReleaseJar') }
+
+apply from: new File(repositoryRoot, 'build-config/library-dependency.gradle')
+apply from: new File(repositoryRoot, 'build-config/candidate-build-outputs.gradle')
 
 // The Java component backs Maven publication. Point both binary variants at
 // the same optimized archive used for release assets.

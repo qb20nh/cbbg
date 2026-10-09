@@ -4,6 +4,8 @@ import groovy.json.JsonOutput
 import org.gradle.api.GradleException
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.ValueSource
 
 import java.nio.file.Files
 import java.util.concurrent.CountDownLatch
@@ -107,8 +109,23 @@ class FabricCandidateAcceptanceTest {
         }
     }
 
-    @Test void resumesOnlyMatchingInputsAndRevalidatesRecordedReceipts() {
+    @ParameterizedTest
+    @ValueSource(strings = ['main', 'external', 'lib'])
+    void resumesOnlyMatchingInputsAndRevalidatesRecordedReceipts(String product) {
         Map fixture = CandidateFixture.create(directory)
+        if (product == 'external') {
+            fixture.record.library = fixture.record.artifact
+            fixture.record.library_sources = fixture.record.sources
+        }
+        if (product == 'lib') {
+            fixture.manifest.release = 'lib/v1.0.0'
+            fixture.manifest.product = 'lib'
+            File contract = new File(fixture.bundle, fixture.record.client_tests.contract.path)
+            Map scenarios = CandidateFiles.read(contract) as Map
+            scenarios.product = 'lib'
+            contract.text = JsonOutput.toJson(scenarios)
+            fixture.record.client_tests.contract.sha256 = CandidateFiles.sha256(contract)
+        }
         new File(fixture.root, 'targets.json').bytes = new File(fixture.bundle, 'catalog.json').bytes
         Map lock = [schemaVersion: 1, target: fixture.target.id, dependencies: [:],
                     gametestApi: [sha256: CandidateFiles.sha256(new File(fixture.bundle, 'ordinary-driver.jar'))]]
@@ -145,7 +162,7 @@ class FabricCandidateAcceptanceTest {
         new File(runtime, 'cbbg-install-receipt.json').text = JsonOutput.toJson([target: fixture.target.id,
                 profile: 'fabric-loader-0.19.5-26.3', installed: true])
         Map requirement = [suite: 'ordinary', profile: 'none', backend: 'opengl', restart: false,
-                           startupMode: null, entrypoints: ['example.Test']]
+                           startupMode: null, entrypoints: ['example.Test'], externalLibrary: product == 'external']
         Map options = [root: fixture.root, candidate: fixture.file, output: new File(directory, 'acceptance'),
                        hostLibraryDirectories: [],
                        python: python, java21: python, java25: python, weston: python,
@@ -178,7 +195,9 @@ class FabricCandidateAcceptanceTest {
             launches++
             assertTrue(spec.strict)
             assertEquals(lockFile, spec.dependencyLock)
-            assertEquals(FabricCandidateAcceptance.INITIAL_CONFIG, CandidateFiles.read(spec.config as File))
+            if (product == 'lib') assertNull(spec.config)
+            else assertEquals(FabricCandidateAcceptance.INITIAL_CONFIG, CandidateFiles.read(spec.config as File))
+            assertEquals(product == 'external' ? new File(fixture.bundle, fixture.record.library.path) : null, spec.externalLibrary)
             File game = new File(spec.output as File, 'runs/client/game')
             game.mkdirs()
             ['.fabric', 'saves', 'natives'].each { new File(game, it).mkdirs() }
@@ -221,7 +240,7 @@ class FabricCandidateAcceptanceTest {
         Map imported = (CandidateFiles.read(importedIndex) as List)[0]
         assertEquals('a' * 40, CandidateFiles.read(CandidateFiles.checked(importedIndex.parentFile, imported.reuse.inputs)).source)
         assertEquals('b' * 40, CandidateFiles.read(new File(options.output as File, 'inputs.json')).source)
-        ['initial-cbbg.json', 'inputs.json'].each { name ->
+        (product == 'lib' ? ['inputs.json'] : ['initial-cbbg.json', 'inputs.json']).each { name ->
             File saved = name == 'inputs.json' ? new File(priorOutput, name) : new File(index.parentFile, name)
             byte[] contents = saved.bytes
             assertTrue(saved.delete())

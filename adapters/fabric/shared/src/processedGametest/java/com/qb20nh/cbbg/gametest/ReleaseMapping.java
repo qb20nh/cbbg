@@ -4,6 +4,7 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.List;
 import org.jspecify.annotations.NullMarked;
 
@@ -42,8 +43,17 @@ final class ReleaseMapping {
   }
 
   private static List<String> read() {
-    var resource = ReleaseMapping.class.getResourceAsStream("/cbbg-test.map");
-    if (resource == null) throw new AssertionError("Packaged test driver lacks cbbg-test.map");
+    List<String> lines = new ArrayList<>(read("/cbbg-test.map", true));
+    lines.addAll(read("/cbbg-library-test.map", false));
+    return lines;
+  }
+
+  private static List<String> read(String path, boolean required) {
+    var resource = ReleaseMapping.class.getResourceAsStream(path);
+    if (resource == null) {
+      if (required) throw new AssertionError("Packaged test driver lacks " + path.substring(1));
+      return List.of();
+    }
     try (var reader = new BufferedReader(new InputStreamReader(resource, StandardCharsets.UTF_8))) {
       return reader.lines().toList();
     } catch (IOException failure) {

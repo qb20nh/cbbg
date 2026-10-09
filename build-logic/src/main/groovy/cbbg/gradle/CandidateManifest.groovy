@@ -7,6 +7,7 @@ class CandidateManifest {
     final Map data
     final Map<String, Map> records
     final Map<String, Map> specifications
+    final ReleaseIdentity identity
 
     CandidateManifest(File file) {
         this.file = file.canonicalFile
@@ -15,6 +16,9 @@ class CandidateManifest {
             throw new GradleException('Client validation requires candidate schema 2 or 3')
         }
         CandidateFiles.releaseIdentity(data.release as String, data.commit as String)
+        identity = ReleaseIdentity.parse(data.release as String)
+        // Existing CBBG manifests predate explicit product metadata.
+        identity.requireProduct(data.containsKey('product') ? data.product as String : 'cbbg')
         records = [:]
         if (!(data.targets instanceof List) || data.targets.isEmpty()) {
             throw new GradleException('Candidate needs target records')
@@ -42,6 +46,10 @@ class CandidateManifest {
             }
             expected = selected
             references(record).each { CandidateFiles.checked(this.file.parentFile, it) }
+            Map contract = CandidateFiles.read(CandidateFiles.checked(this.file.parentFile, record.client_tests.contract)) as Map
+            if ((contract.product ?: 'cbbg') != identity.product) {
+                throw new GradleException("Candidate product '${identity.product}' requires its own acceptance contract: ${record.client_tests.contract.path}; found '${contract.product ?: 'cbbg'}'.")
+            }
         }
         specifications = expected
         CandidateFiles.releaseTargets(data.release as String, specifications.values())
@@ -53,7 +61,7 @@ class CandidateManifest {
                         throw new GradleException('Shared ' + kind + ' differs from owner: ' + id)
                     }
                 }
-                ['utilities', 'utilities_sources'].each { kind ->
+                ['utilities', 'utilities_sources', 'library', 'library_sources', 'library_release', 'library_provenance', 'library_source_commit'].each { kind ->
                     if (records[id][kind] != records[specification.artifactOf][kind]) {
                         throw new GradleException('Shared ' + kind + ' differs from owner: ' + id)
                     }
@@ -66,12 +74,22 @@ class CandidateManifest {
         if (target.containsKey('utilities') != target.containsKey('utilities_sources')) {
             throw new GradleException('Candidate requires utilities and utilities_sources together')
         }
+        if (target.containsKey('library') != target.containsKey('library_sources')) {
+            throw new GradleException('Candidate requires library and library_sources together')
+        }
+        if (target.containsKey('library_provenance') &&
+                (!target.containsKey('library') || !(target.library_source_commit ==~ /[0-9a-f]{40}/))) {
+            throw new GradleException('Library provenance requires its dependency artifact and source commit')
+        }
+        if (target.containsKey('library_release')) ReleaseIdentity.parse(target.library_release as String).requireProduct('lib')
         def tests = target.client_tests
         if (!(tests instanceof Map) || !(tests.drivers instanceof Map) || tests.drivers.isEmpty()) {
             throw new GradleException('Missing client test drivers')
         }
         (['artifact', 'sources', 'source_inventory'] + (target.containsKey('mapping') ? ['mapping'] : []) +
                 (target.containsKey('utilities') ? ['utilities', 'utilities_sources'] : []) +
+                (target.containsKey('library') ? ['library', 'library_sources'] : []) +
+                (target.containsKey('library_provenance') ? ['library_provenance'] : []) +
                 (target.containsKey('sbom') ? ['sbom'] : [])).collect { target[it] as Map } +
                 ['catalog', 'contract', 'ordinary_metadata', 'runtime_lock', 'dependency_lock'].collect { tests[it] as Map } +
                 tests.drivers.values().collect { it as Map } +
@@ -84,7 +102,18 @@ class CandidateManifest {
             def runtime = specifications[id]
             def target = specifications[runtime.artifactOf ?: id]
             String version = packageVersion(data.release as String, target)
-            PackageChecks.verifyCandidatePackage(file.parentFile, record, target, version, sourceRoot)
+            if (record.containsKey('utilities') && (identity.product == 'lib' || record.containsKey('library_release'))) {
+                String utilityVersion = identity.product == 'lib' ? identity.version :
+                        record.containsKey('library_release') ? ReleaseIdentity.parse(record.library_release as String).version : identity.version
+                ['utilities': 'cbbg-utilities-' + utilityVersion + '.jar',
+                 'utilities_sources': 'cbbg-utilities-' + utilityVersion + '-sources.jar'].each { kind, expected ->
+                    if (record[kind].path != expected) {
+                        throw new GradleException('Utility filename differs from its product version: ' + record[kind].path +
+                                '; expected ' + expected + '. Build utilities with the library version for library dependencies.')
+                    }
+                }
+            }
+            PackageChecks.verifyCandidatePackage(file.parentFile, record, target, version, sourceRoot, identity.product)
             reports[id] = [target: id, manifest_sha256: CandidateFiles.sha256(file),
                            source_commit: data.commit, release: data.release]
         }

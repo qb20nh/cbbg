@@ -36,6 +36,7 @@ final class ReleaseFallbackScreenshots {
     var main = client.getMainRenderTarget();
     int active = GL11.glGetInteger(org.lwjgl.opengl.GL13.GL_ACTIVE_TEXTURE);
     int texture = GL11.glGetInteger(GL11.GL_TEXTURE_BINDING_2D);
+    boolean depth = GL11.glIsEnabled(GL11.GL_DEPTH_TEST);
     long presentations = ReleaseObservations.presentations();
     @Nullable Object original;
     try {
@@ -51,6 +52,8 @@ final class ReleaseFallbackScreenshots {
               public void close() {
                 GlStateManager._activeTexture(active);
                 GlStateManager._bindTexture(texture);
+                if (depth) GlStateManager._enableDepthTest();
+                else GlStateManager._disableDepthTest();
                 try {
                   field.set(null, original);
                 } catch (IllegalAccessException failure) {
@@ -64,6 +67,7 @@ final class ReleaseFallbackScreenshots {
       pixel.flip();
       GL11.glTexSubImage2D(GL11.GL_TEXTURE_2D, 0, 0, 0, 1, 1, GL11.GL_RGBA, GL11.GL_FLOAT, pixel);
       GlStateManager._bindTexture(texture);
+      GlStateManager._disableDepthTest();
       try (var image = Screenshot.takeScreenshot(main)) {
         int actual = ReleaseImagePixels.argb(image, 0, main.height - 1);
         if (actual >>> 24 != 255
@@ -75,8 +79,10 @@ final class ReleaseFallbackScreenshots {
       }
       if (ReleaseObservations.presentations() != presentations
           || GL11.glGetInteger(org.lwjgl.opengl.GL13.GL_ACTIVE_TEXTURE) != active
-          || GL11.glGetInteger(GL11.GL_TEXTURE_BINDING_2D) != texture) {
-        throw new AssertionError("Fallback screenshot changed presentation or texture state");
+          || GL11.glGetInteger(GL11.GL_TEXTURE_BINDING_2D) != texture
+          || GL11.glIsEnabled(GL11.GL_DEPTH_TEST)) {
+        throw new AssertionError(
+            "Fallback screenshot changed presentation, texture or depth state");
       }
     }
   }

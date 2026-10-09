@@ -49,7 +49,7 @@ dependencies {
         File output = new File(directory, 'build/libs/release-test-1.4.0+mc26.3-fabric.cdx.json')
         Map bom = new JsonSlurper().parse(output) as Map
         assertEquals('CycloneDX', bom.bomFormat)
-        assertEquals('cbbg', bom.metadata.component.name)
+        assertEquals('release-test', bom.metadata.component.name)
         assertEquals('1.4.0+mc26.3-fabric', bom.metadata.component.version)
         assertEquals(['bundled', 'gson'] as Set, bom.components*.name as Set)
         Map gson = bom.components.find { it.name == 'gson' }
@@ -61,4 +61,37 @@ dependencies {
         runner.withArguments('releaseSbom', '--offline', '--rerun-tasks', '--stacktrace').build()
         assertArrayEquals(original, output.bytes, 'The same dependency inputs must produce the same SBOM')
     }
+    @Test void nestedLibraryHashAndDependencyEdgeTrackChangedArchiveBytes() {
+        new File(directory, 'settings.gradle').text = "rootProject.name = 'cbbg'\n"
+        File library = new File(directory, 'cbbg-lib.jar')
+        library.text = 'Library version one'
+        new File(directory, 'build.gradle').text = '''
+plugins { id 'java'; id 'cbbg.release-sbom' }
+group = 'com.qb20nh'
+version = '1.5.0+mc26.3-fabric'
+ext.libraryArchive = file('cbbg-lib.jar')
+ext.libraryPackageVersion = '1.0.0+mc26.3-fabric'
+'''
+        def runner = GradleRunner.create().withProjectDir(directory).withPluginClasspath()
+        runner.withArguments('releaseSbom', '--offline', '--stacktrace').build()
+        File output = new File(directory, 'build/libs/cbbg-1.5.0+mc26.3-fabric.cdx.json')
+        def verify = {
+            Map bom = new JsonSlurper().parse(output) as Map
+            String hash = CandidateFiles.sha256(library)
+            Map component = bom.components.find { it.name == 'cbbg-lib' }
+            assertEquals('1.0.0+mc26.3-fabric', component.version)
+            assertEquals([[alg: 'SHA-256', content: hash]], component.hashes)
+            assertEquals('cbbg-lib:' + hash, component['bom-ref'])
+            Map dependency = bom.dependencies.find { it.ref == bom.metadata.component['bom-ref'] }
+            assertTrue(dependency.dependsOn.contains(component['bom-ref']))
+        }
+        verify()
+        byte[] before = output.bytes
+        library.text = 'Library version two with the same declared version'
+        def changed = runner.withArguments('releaseSbom', '--offline', '--stacktrace').build()
+        assertEquals(org.gradle.testkit.runner.TaskOutcome.SUCCESS, changed.task(':releaseSbom').outcome)
+        verify()
+        assertFalse(Arrays.equals(before, output.bytes))
+    }
+
 }

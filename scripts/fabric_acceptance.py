@@ -25,9 +25,14 @@ def required_runs(target, contract, root=ROOT, metadata_path=None):
             raise EvidenceError('Ordinary metadata is outside the repository')
     metadata = read_json(metadata_path)
     ordinary = metadata['entrypoints']['fabric-client-gametest']
-    if metadata.get('id') != 'cbbg-renderer-test':
+    library = contract.get('product') == 'lib'
+    if metadata.get('id') != ('cbbg-library-test' if library else 'cbbg-renderer-test'):
         raise EvidenceError('Unexpected ordinary test metadata')
     profiles = target['compatibilityProfiles']
+    if library:
+        if contract.get('ordinaryProfiles') != ['none']:
+            raise EvidenceError('Library acceptance requires the independent consumer profile')
+        profiles = {'none': target['backends']}
     suites = [{'suite': 'ordinary', 'profiles': list(profiles),
                'backends': target['backends'], 'restart': False, 'entrypoints': ordinary}]
     for extra in contract['additionalRuns']:
@@ -71,7 +76,8 @@ def required_runs(target, contract, root=ROOT, metadata_path=None):
                 if backend in profiles[profile]:
                     runs.append({'suite': name, 'profile': profile, 'backend': backend,
                                  'restart': suite['restart'], 'entrypoints': scenarios,
-                                 'startupMode': startup_mode})
+                                 'startupMode': startup_mode,
+                                 **({'externalLibrary': True} if suite.get('externalLibrary') else {})})
                     count += 1
         if not count:
             raise EvidenceError('Suite has no applicable configurations: ' + name)
@@ -127,6 +133,8 @@ def verify_results(index_path, target, contract_path, driver_hashes, *, metadata
                 or result['scenarios'] != requirement['entrypoints']
                 or result.get('startupMode') != requirement['startupMode']):
             raise EvidenceError('Saved run differs from required configuration: ' + str(cell))
+        if result.get('externalLibrary', False) != requirement.get('externalLibrary', False):
+            raise EvidenceError('Separate library installation differs from the required configuration')
         results.append(dict(result, suite=cell[0]))
     if metadata_path is None:
         metadata_path = ROOT / read_json(contract_path)['ordinaryMetadata']

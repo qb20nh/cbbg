@@ -16,6 +16,59 @@ class CandidateManifestTest {
         assertEquals(fixture.bundle.listFiles()*.name as Set, candidate.releaseFiles().keySet())
     }
 
+    @Test void productMetadataAndAcceptanceContractsMustMatchTheTag() {
+        Map fixture = CandidateFixture.create(directory)
+        assertEquals('cbbg', new CandidateManifest(fixture.file).identity.product)
+        fixture.manifest.product = 'lib'
+        fixture.file.text = JsonOutput.toJson(fixture.manifest)
+        assertTrue(assertThrows(Exception) { new CandidateManifest(fixture.file) }.message.contains('belongs to product'))
+        fixture.manifest.release = 'lib/v1.0.0'
+        fixture.file.text = JsonOutput.toJson(fixture.manifest)
+        assertTrue(assertThrows(Exception) { new CandidateManifest(fixture.file) }.message.contains('own acceptance contract'))
+        File contract = new File(fixture.bundle, fixture.record.client_tests.contract.path)
+        Map scenarios = CandidateFiles.read(contract) as Map
+        scenarios.product = 'lib'
+        contract.text = JsonOutput.toJson(scenarios)
+        fixture.record.client_tests.contract.sha256 = CandidateFiles.sha256(contract)
+        fixture.file.text = JsonOutput.toJson(fixture.manifest)
+        assertEquals('lib', new CandidateManifest(fixture.file).identity.product)
+        assertEquals('1.0.0+mc26.3-fabric', CandidateManifest.packageVersion('lib/v1.0.0', fixture.target))
+        fixture.manifest.release = 'v1.4.0'
+        fixture.manifest.product = 'cbbg'
+        fixture.file.text = JsonOutput.toJson(fixture.manifest)
+        assertTrue(assertThrows(Exception) { new CandidateManifest(fixture.file) }.message.contains('own acceptance contract'))
+    }
+
+    @Test void utilityNamesFollowTheIndependentLibraryVersion() {
+        Map fixture = CandidateFixture.create(directory)
+        CandidateFixture.utilities(fixture)
+        fixture.record.library_release = 'lib/v1.0.0'
+        fixture.file.text = JsonOutput.toJson(fixture.manifest)
+        assertTrue(assertThrows(Exception) {
+            new CandidateManifest(fixture.file).verifyPackages(fixture.root)
+        }.message.contains('expected cbbg-utilities-1.0.0.jar'))
+        ['utilities': 'cbbg-utilities-1.0.0.jar', 'utilities_sources': 'cbbg-utilities-1.0.0-sources.jar'].each { kind, name ->
+            File renamed = new File(fixture.bundle, name)
+            renamed.bytes = new File(fixture.bundle, fixture.record[kind].path).bytes
+            fixture.record[kind] = CandidateFiles.reference(fixture.bundle, name)
+        }
+        fixture.file.text = JsonOutput.toJson(fixture.manifest)
+        new CandidateManifest(fixture.file).verifyPackages(fixture.root)
+    }
+
+    @Test void libraryDependencyReferencesAreCheckedAsAPair() {
+        Map fixture = CandidateFixture.create(directory)
+        CandidateFixture.utilities(fixture)
+        fixture.record.library = fixture.record.utilities
+        fixture.record.library_sources = fixture.record.utilities_sources
+        fixture.record.library_release = 'lib/v1.0.0'
+        fixture.file.text = JsonOutput.toJson(fixture.manifest)
+        new CandidateManifest(fixture.file)
+        fixture.record.remove('library_sources')
+        fixture.file.text = JsonOutput.toJson(fixture.manifest)
+        assertTrue(assertThrows(Exception) { new CandidateManifest(fixture.file) }.message.contains('library and library_sources together'))
+    }
+
     @Test void pendingTargetsBuildButCannotFinalize() {
         def fixture = CandidateFixture.create(directory, false)
         def candidate = new CandidateManifest(fixture.file)

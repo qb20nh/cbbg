@@ -1,0 +1,10 @@
+pluginManagement {
+    includeBuild('../../build-logic')
+    repositories {
+        maven { url = 'https://maven.fabricmc.net/' }
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+rootProject.name = 'cbbg-lib-fabric'
+includeBuild('../utilities') { name = 'cbbg-utilities' }

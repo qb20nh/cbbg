@@ -1,8 +1,7 @@
 package com.qb20nh.cbbg.render.stbn;
 
-import com.qb20nh.cbbg.math.BlueNoise;
+import com.qb20nh.cbbg.api.NoiseVolume;
 import com.qb20nh.cbbg.math.NoisePreparation;
-import java.util.Arrays;
 import java.util.concurrent.CompletableFuture;
 import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
@@ -19,42 +18,14 @@ public class STBNGenerator {
   private static @Nullable CompletableFuture<@Nullable STBNFields> pendingFuture;
 
   public static final class STBNFields {
-    private final double[] uField;
-    private final double[] vField;
+    private final NoiseVolume volume;
 
-    public STBNFields(double[] uField, double[] vField) {
-      this.uField = uField;
-      this.vField = vField;
+    public STBNFields(NoiseVolume volume) {
+      this.volume = volume;
     }
 
-    public double[] uField() {
-      return uField;
-    }
-
-    public double[] vField() {
-      return vField;
-    }
-
-    @Override
-    public boolean equals(@Nullable Object o) {
-      return this == o
-          || (o instanceof STBNFields that
-              && Arrays.equals(uField, that.uField)
-              && Arrays.equals(vField, that.vField));
-    }
-
-    @Override
-    public int hashCode() {
-      return 31 * Arrays.hashCode(uField) + Arrays.hashCode(vField);
-    }
-
-    @Override
-    public String toString() {
-      return "STBNFields{uField="
-          + Arrays.toString(uField)
-          + ", vField="
-          + Arrays.toString(vField)
-          + '}';
+    public NoiseVolume volume() {
+      return volume;
     }
   }
 
@@ -89,7 +60,7 @@ public class STBNGenerator {
                     "STBN preparation complete in {} ms ({})",
                     (System.nanoTime() - start) / 1_000_000,
                     fields == null ? "cache" : "generated");
-                return fields == null ? null : new STBNFields(fields.u(), fields.v());
+                return fields == null ? null : new STBNFields(fields.volume());
               });
     }
     return java.util.Objects.requireNonNull(pendingFuture);
@@ -108,9 +79,5 @@ public class STBNGenerator {
 
   public static boolean matches(int w, int h, int d, long seed) {
     return preparation.matches(w, h, d, seed);
-  }
-
-  public static int calculatePixelColor(double u, double v) {
-    return BlueNoise.calculatePixelColor(u, v);
   }
 }

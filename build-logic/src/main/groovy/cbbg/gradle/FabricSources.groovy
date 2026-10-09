@@ -22,6 +22,15 @@ class FabricSources {
                       copies: [main: [], gametest: [], processedGametest: []],
                       inputs: ['src/main/resources/fabric.mod.json'],
                       legacyGametestApi: owner.dependencies?.clientGametest?.startsWith('2.')]
+        result.libraryInputs = [tree('libraries/utilities/src/main'), tree('libraries/fabric/src/main'),
+                                tree("libraries/fabric/src/${owner.renderer}/java"),
+                                tree("libraries/fabric/src/${owner.renderer}/resources")]
+        if (owner.renderer == 'blaze-texture-format') {
+            result.libraryInputs += [tree("libraries/fabric/src/${owner.minecraft}/java"),
+                                     tree('libraries/fabric/src/gpu/resources')]
+        } else if (owner.renderer == 'renderpearl') {
+            result.libraryInputs << tree('libraries/fabric/src/blaze-gpu-format/resources')
+        }
         List<Map> processed = result.processedGametest.java
         List<String> progress = classes('gametest/mixin/ScenarioProgressMixin',
                 'gametest/IrisFixture', 'gametest/IrisImagePixels',
@@ -116,9 +125,7 @@ class FabricSources {
                 result.copies.processedGametest << tree('renderers/renderpearl/src/gametest/resources',
                         ['cbbg-world-goldens/**', 'cbbg.early-startup-test.mixins.json'])
             }
-            List<String> resources = ['assets/cbbg/icon.png', 'assets/cbbg/shaders/include/dither.glsl',
-                                      'assets/cbbg/lang/*.json']
-            if (textureFormat) resources << 'assets/cbbg/shaders/core/*.fsh'
+            List<String> resources = ['assets/cbbg/icon.png', 'assets/cbbg/lang/*.json']
             result.copies.main << tree('src/main/resources', resources)
         }
         if (owner.buildProfile == 'fabric-upstream' || owner.renderer in ['blaze-texture-format', 'gl3']) {
@@ -135,6 +142,7 @@ class FabricSources {
             processed << tree('adapters/fabric/shared/src/processedGametest/java',
                     owner.renderer == 'gl3' ? classes('gametest/ReleaseCacheGameTest',
                             'gametest/ReleaseSettingsGuiGameTest', 'gametest/ReleaseUtilitiesGameTest',
+                            'gametest/ReleaseLibraryResolutionGameTest',
                             'gametest/ReleaseSodiumConfigGameTest', 'gametest/ReleaseControlsGameTest',
                             'gametest/ReleaseModMenuGameTest', 'gametest/ReleaseIrisGameTest',
                             'gametest/ReleaseGenerationGameTest', 'gametest/ReleaseNotificationsGameTest',
@@ -159,6 +167,7 @@ class FabricSources {
                     classes('config/gui/ConfigScreenPlatform', 'render/HudPlatform'))
             processed << tree('adapters/fabric/shared/src/processedGametest/java',
                     classes('gametest/ReleaseSodiumConfigGameTest', 'gametest/ReleaseUtilitiesGameTest',
+                            'gametest/ReleaseLibraryResolutionGameTest',
                             'gametest/ReleaseUtilityCalls', 'gametest/ReleaseImagePixels',
                             'gametest/ReleaseSettingsGuiGameTest', 'gametest/ReleaseGuiInput',
                             'gametest/ReleaseMapping', 'gametest/ReleaseGuiCharacters',
@@ -208,7 +217,7 @@ class FabricSources {
     static List<Map> inputs(Map layout) {
         ['main', 'test', 'gametest', 'processedGametest'].collectMany { name ->
             layout[name].java + layout[name].resources + (layout.copies[name] ?: [])
-        } + layout.inputs.collect { [path: it, file: true] }
+        } + layout.inputs.collect { [path: it, file: true] } + (layout.libraryInputs ?: [])
     }
 
     static boolean contains(Map spec, String path) {

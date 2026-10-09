@@ -13,47 +13,39 @@ class UtilitiesPluginTest {
     @TempDir File directory
 
     @ParameterizedTest
-    @ValueSource(strings = ['1.4.2', '1.5.0'])
+    @ValueSource(strings = ['1.0.0', '1.1.0'])
     void optimizedLibraryRunsWithoutMinecraftOrConfigDependencies(String version) {
         File repository = new File(System.getProperty('cbbg.repository'))
-        new File(directory, 'settings.gradle').text = "include 'core', 'core:rendering'\n"
-        new File(directory, 'gradle.properties').text = 'mod_version=1.4.2\n'
-        new File(directory, 'LICENSE').text = 'Fixture license'
-        new File(directory, 'build.gradle').text = '''
-plugins { id 'java-library' }
-'''
-        for (String project : ['core', 'core/rendering']) {
-            File folder = new File(directory, project)
-            folder.mkdirs()
-            new File(folder, 'build.gradle').text = """
-plugins { id 'java-library'; ${project == 'core' ? "id 'cbbg.utilities'" : ''} }
+        new File(directory, 'settings.gradle').text = "rootProject.name = 'cbbg-utilities'\n"
+        new File(directory, 'gradle.properties').text = 'library_version=1.0.0\n'
+        new File(directory, 'build.gradle').text = """
+plugins { id 'java-library'; id 'cbbg.utilities' }
 repositories { mavenCentral() }
-dependencies { compileOnly 'org.jspecify:jspecify:1.0.1'
-    ${project == 'core/rendering' ? "implementation project(':core')" : ''}
-}
-tasks.withType(JavaCompile).configureEach { options.release = 8 }
+dependencies { compileOnly 'org.jspecify:jspecify:1.0.1' }
 """
+        File sourceRoot = new File(repository, 'libraries/utilities/src/main')
+        sourceRoot.eachFileRecurse { source ->
+            if (source.isFile()) {
+                File destination = new File(directory, 'src/main/' + sourceRoot.toPath().relativize(source.toPath()))
+                destination.parentFile.mkdirs()
+                destination.bytes = source.bytes
+            }
         }
-        List<String> sources = ['core/src/main/java/com/qb20nh/cbbg/math/MiniFFT.java',
-                'core/rendering/src/main/java/com/qb20nh/cbbg/math/BlueNoise.java']
-        new File(repository, 'core/rendering/src/main/java/com/qb20nh/cbbg/api').eachFile {
-            sources.add('core/rendering/src/main/java/com/qb20nh/cbbg/api/' + it.name)
-        }
-        sources.add('src/main/resources/assets/cbbg/shaders/include/dither.glsl')
-        sources.each { path ->
-            File destination = new File(directory, path)
-            destination.parentFile.mkdirs()
-            destination.bytes = new File(repository, path).bytes
-        }
-        List<String> arguments = [':core:utilitiesSourcesJar', '--offline', '--stacktrace']
-        if (version != '1.4.2') arguments.add("-Pmod_version=${version}".toString())
+        def rawBuild = GradleRunner.create().withProjectDir(directory).withPluginClasspath()
+                .withArguments('jar', '--offline', '--stacktrace').build()
+        assertNull(rawBuild.task(':optimizeUtilitiesJar'))
+        assertTrue(new File(directory, 'build/libs/cbbg-utilities-1.0.0-raw.jar').isFile())
+        List<String> arguments = ['utilitiesSourcesJar', '--offline', '--stacktrace']
+        if (version != '1.0.0') arguments.add("-Plibrary_version=${version}".toString())
         GradleRunner.create().withProjectDir(directory).withPluginClasspath()
                 .withArguments(arguments).build()
-        File artifact = new File(directory, "core/build/libs/cbbg-utilities-${version}.jar")
+        File artifact = new File(directory, "build/libs/cbbg-utilities-${version}.jar")
         try (JarFile jar = new JarFile(artifact)) {
             List names = jar.entries().toList()*.name
             assertTrue(names.contains('com/qb20nh/cbbg/api/NoiseVolume.class'))
             assertTrue(names.contains('com/qb20nh/cbbg/api/shaders/dither.glsl'))
+            assertFalse(names.contains('com/qb20nh/cbbg/math/BlueNoise.class'))
+            assertFalse(names.contains('com/qb20nh/cbbg/math/MiniFFT.class'))
             assertFalse(names.any { it.contains('/config/') || it.contains('/gson/') || it == 'fabric.mod.json' })
             names.findAll { it.endsWith('.class') }.each {
                 byte[] bytes = jar.getInputStream(jar.getEntry(it)).readAllBytes()
@@ -74,9 +66,10 @@ tasks.withType(JavaCompile).configureEach { options.release = 8 }
                     1, 1, volume, 0, settings)
             assertArrayEquals([0, -1, 102, 51] as byte[], result)
         }
-        try (JarFile sourcesJar = new JarFile(new File(directory, "core/build/libs/cbbg-utilities-${version}-sources.jar"))) {
+        try (JarFile sourcesJar = new JarFile(new File(directory, "build/libs/cbbg-utilities-${version}-sources.jar"))) {
             assertNotNull(sourcesJar.getEntry('META-INF/cbbg/proguard.map'))
             assertNotNull(sourcesJar.getEntry('com/qb20nh/cbbg/api/NoiseVolume.java'))
+            assertNotNull(sourcesJar.getEntry('com/qb20nh/cbbg/api/shaders/dither.glsl'))
         }
     }
 }

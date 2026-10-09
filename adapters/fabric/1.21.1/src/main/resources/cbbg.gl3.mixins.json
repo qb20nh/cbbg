@@ -7,7 +7,6 @@
     "RenderTargetCreateBuffersMixin",
     "PostChainMixin",
     "MinecraftMixin",
-    "GameRendererReloadShadersMixin",
     "RenderTargetBlitToScreenMixin",
     "ScreenshotMixin",
     "LightTextureAccessor",

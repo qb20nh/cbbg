@@ -58,6 +58,144 @@ class ReleaseChecksTest {
         }
     }
 
+    @Test void mainFinalizationPinsLibraryFilesToTheirOwnPublishedProvenance() {
+        Map fixture = CandidateFixture.create(directory)
+        CandidateFixture.utilities(fixture)
+        fixture.manifest.product = 'cbbg'
+        ['artifact': 'library', 'sources': 'library_sources'].each { sourceKind, libraryKind ->
+            File libraryFile = new File(fixture.bundle, 'library-' + fixture.record[sourceKind].path)
+            libraryFile.bytes = new File(fixture.bundle, fixture.record[sourceKind].path).bytes
+            fixture.record[libraryKind] = CandidateFiles.reference(fixture.bundle, libraryFile.name)
+        }
+        fixture.record.library_release = 'lib/v1.0.0'
+        fixture.file.text = JsonOutput.toJson(fixture.manifest)
+        Map dependency = [release: 'lib/v1.0.0', commit: 'b' * 40]
+        // Match the public library release shape: no candidate manifest or evidence ZIP.
+        new File(fixture.bundle, 'provenance.jsonl').text = '{}\n'
+        List<String> names = [fixture.record.library.path, fixture.record.library_sources.path,
+                              fixture.record.utilities.path, fixture.record.utilities_sources.path, 'provenance.jsonl']
+        List commands = []
+        boolean wrongSubject = false
+        boolean draftLibrary = false
+        boolean changedTag = false
+        int tagCalls = 0
+        boolean wrongDigest = false
+        boolean draftFallback = false
+        Closure run = { List<String> command, File cwd ->
+            commands << command
+            if (command.take(2) == ['gh', 'api']) {
+                if (command[2].contains('/commits/')) {
+                    tagCalls++
+                    return JsonOutput.toJson([sha: changedTag && tagCalls % 2 == 0 ? 'c' * 40 : dependency.commit])
+                }
+                if (draftFallback && command[2].contains('/releases/tags/')) {
+                    throw new GradleException('gh: Not Found (HTTP 404)')
+                }
+                Map release = [id: 17, tag_name: dependency.release, draft: draftLibrary, immutable: !draftLibrary,
+                        prerelease: false, body: 'Library notes', assets: names.collect { name ->
+                            [name: name, state: 'uploaded', digest: 'sha256:' + (wrongDigest ? '0' * 64 : CandidateFiles.sha256(new File(fixture.bundle, name)))]
+                        }]
+                return JsonOutput.toJson(command[2].contains('/releases?') ? [release] : release)
+            }
+            if (command.take(3) == ['gh', 'release', 'download']) {
+                File output = new File(command[command.indexOf('--dir') + 1])
+                assertFalse(command.any { it.endsWith('-evidence.zip') })
+                assertFalse(command.contains('candidate.json'))
+                names.each { new File(output, it).bytes = new File(fixture.bundle, it).bytes }
+                return ''
+            }
+            if (command.take(3) == ['gh', 'attestation', 'verify']) {
+                assertEquals('refs/tags/' + dependency.release, command[command.indexOf('--source-ref') + 1])
+                assertEquals(dependency.commit, command[command.indexOf('--source-digest') + 1])
+                return JsonOutput.toJson(attestation(wrongSubject ? '0' * 64 : CandidateFiles.sha256(new File(command[3]))))
+            }
+            throw new AssertionError('Unexpected command: ' + command)
+        }
+        CandidateManifest candidate = new CandidateManifest(fixture.file)
+        Map report = ReleaseChecks.verifyLibraryDependencies(candidate, 'owner/repo', fixture.root, run)
+        assertEquals(dependency.commit, report[fixture.target.id].source_commit)
+        assertEquals(4, commands.count { it.take(3) == ['gh', 'attestation', 'verify'] })
+        // Patch aliases resolve the same owner files, without per-runtime evidence assets.
+        ['26.1-fabric', '26.1.1-fabric'].each { id ->
+            candidate.records[id] = candidate.records[fixture.target.id] + [id: id]
+        }
+        Map aliases = ReleaseChecks.verifyLibraryDependencies(candidate, 'owner/repo', fixture.root, run)
+        assertEquals(aliases['26.1-fabric'].artifact, aliases['26.1.1-fabric'].artifact)
+        assertEquals(dependency.commit, aliases['26.1.1-fabric'].source_commit)
+        candidate.records.remove('26.1-fabric')
+        candidate.records.remove('26.1.1-fabric')
+        draftLibrary = true
+        assertThrows(Exception) { ReleaseChecks.verifyLibraryDependencies(candidate, 'owner/repo', fixture.root, run) }
+        Map draftReport = ReleaseChecks.verifyLibraryDependencies(candidate, 'owner/repo', fixture.root, run, true, true)
+        Map bound = candidate.records[fixture.target.id]
+        assertEquals(CandidateFiles.sha256(new File(fixture.bundle, bound.library_provenance.path)),
+                draftReport[fixture.target.id].provenance_sha256)
+        assertEquals(dependency.commit, bound.library_source_commit)
+        fixture.file.text = JsonOutput.toJson(candidate.data)
+        Map publicFiles = ReleaseChecks.publicFiles(new CandidateManifest(fixture.file))
+        assertEquals(bound.library_provenance.sha256, publicFiles[bound.library_provenance.path])
+        assertFalse(publicFiles.containsKey(bound.library.path))
+        assertFalse(publicFiles.containsKey(bound.utilities.path))
+        draftFallback = true
+        ['lib/v1.0.0', 'lib/v1.0.0+mc26.3-fabric'].each { tag ->
+            dependency.release = tag
+            bound.library_release = tag
+            assertEquals(tag, ReleaseChecks.verifyLibraryDependencies(candidate, 'owner/repo', fixture.root, run, true)[fixture.target.id].release)
+        }
+        dependency.release = 'lib/v1.0.0'
+        bound.library_release = dependency.release
+        draftFallback = false
+        draftLibrary = false
+        Map originalUtilities = bound.utilities
+        bound.utilities = originalUtilities + [sha256: '0' * 64]
+        assertThrows(Exception) { ReleaseChecks.verifyLibraryDependencies(candidate, 'owner/repo', fixture.root, run) }
+        bound.utilities = originalUtilities
+        Map originalUtilitySources = bound.utilities_sources
+        bound.remove('utilities_sources')
+        assertTrue(assertThrows(GradleException) {
+            ReleaseChecks.verifyLibraryDependencies(candidate, 'owner/repo', fixture.root, run)
+        }.message.contains('binary/source references'))
+        bound.utilities_sources = originalUtilitySources
+        wrongDigest = true
+        assertTrue(assertThrows(GradleException) {
+            ReleaseChecks.verifyLibraryDependencies(candidate, 'owner/repo', fixture.root, run)
+        }.message.contains('asset digest differs'))
+        wrongDigest = false
+        changedTag = true
+        tagCalls = 0
+        assertTrue(assertThrows(GradleException) {
+            ReleaseChecks.verifyLibraryDependencies(candidate, 'owner/repo', fixture.root, run)
+        }.message.contains('changed during dependency verification'))
+        changedTag = false
+        wrongSubject = true
+        assertTrue(assertThrows(GradleException) {
+            ReleaseChecks.verifyLibraryDependencies(candidate, 'owner/repo', fixture.root, run)
+        }.message.contains('verified immutable library provenance'))
+    }
+
+    @Test void mainFinalizationRejectsDraftLibraryDependencies() {
+        Map fixture = CandidateFixture.create(directory)
+        CandidateFixture.utilities(fixture)
+        fixture.record.library = fixture.record.utilities
+        fixture.record.library_sources = fixture.record.utilities_sources
+        fixture.file.text = JsonOutput.toJson(fixture.manifest)
+        CandidateManifest candidate = new CandidateManifest(fixture.file)
+        assertTrue(assertThrows(GradleException) {
+            ReleaseChecks.verifyLibraryDependencies(candidate, 'owner/repo', fixture.root) { command, cwd ->
+                throw new AssertionError('Missing library release must fail before remote calls')
+            }
+        }.message.contains('requires library_release'))
+        fixture.record.library_release = 'lib/v1.0.0'
+        fixture.file.text = JsonOutput.toJson(fixture.manifest)
+        candidate = new CandidateManifest(fixture.file)
+        assertTrue(assertThrows(Exception) {
+            ReleaseChecks.verifyLibraryDependencies(candidate, 'owner/repo', fixture.root) { command, cwd ->
+                JsonOutput.toJson([tag_name: 'lib/v1.0.0', draft: true, prerelease: false,
+                                  immutable: false, body: 'notes', assets: []])
+            }
+        }.message.contains('immutable published release'))
+    }
+
     @Test
     void provenanceUsesPinnedAttestationFlagsAndRejectsWrongSubject() {
         Map fixture = CandidateFixture.create(directory)
@@ -96,6 +234,29 @@ class ReleaseChecksTest {
         assertTrue(assertThrows(IllegalArgumentException) {
             ReleaseChecks.provenance(fixture.file, bundle, 'owner/repo', changing)
         }.message.contains('changed'))
+    }
+
+    @Test
+    void explicitProductsPublishTheirOwnArtifacts() {
+        Map fixture = CandidateFixture.create(directory)
+        CandidateFixture.utilities(fixture)
+        fixture.manifest.product = 'cbbg'
+        fixture.file.text = JsonOutput.toJson(fixture.manifest)
+        Map mainFiles = ReleaseChecks.publicFiles(new CandidateManifest(fixture.file))
+        assertFalse(mainFiles.containsKey(fixture.record.utilities.path))
+        assertFalse(mainFiles.containsKey(fixture.record.utilities_sources.path))
+
+        fixture.manifest.product = 'lib'
+        fixture.manifest.release = 'lib/v1.0.0'
+        File contract = new File(fixture.bundle, fixture.record.client_tests.contract.path)
+        Map scenarios = CandidateFiles.read(contract) as Map
+        scenarios.product = 'lib'
+        contract.text = JsonOutput.toJson(scenarios)
+        fixture.record.client_tests.contract.sha256 = CandidateFiles.sha256(contract)
+        fixture.file.text = JsonOutput.toJson(fixture.manifest)
+        Map libraryFiles = ReleaseChecks.publicFiles(new CandidateManifest(fixture.file))
+        assertEquals(fixture.record.utilities.sha256, libraryFiles[fixture.record.utilities.path])
+        assertEquals(fixture.record.utilities_sources.sha256, libraryFiles[fixture.record.utilities_sources.path])
     }
 
     @Test

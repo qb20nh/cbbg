@@ -53,6 +53,7 @@ abstract class BundleCandidate extends DefaultTask {
         String commit = state[0]
         String release = releaseTag.get()
         CandidateFiles.releaseIdentity(release, commit)
+        ReleaseIdentity identity = ReleaseIdentity.parse(release)
         if (state[1]) {
             throw new GradleException('Commit source changes before bundling a candidate. Run git status --short, commit or restore the listed changes, then rerun candidateBuildOutputs:\n' +
                     git(['status', '--short', '--untracked-files=all', '--', '.', ':(top,exclude)docs/**']))
@@ -93,20 +94,24 @@ abstract class BundleCandidate extends DefaultTask {
         Map<String, Map> records = [:]
         selected.values().sort { it.artifactOf ? 1 : 0 }.each { Map target ->
         Map owner = target.artifactOf ? selected[target.artifactOf] : target
-        File outputsFile = multipleInputs ? CandidateFiles.relativeFile(root, 'build/targets/' + owner.id + '/candidate-build-outputs.json') : buildOutputs.get().asFile
-        File contractFile = multipleInputs ? CandidateFiles.relativeFile(root, 'runtime-locks/' + target.id + '-scenarios.json') : contract.get().asFile
+        File outputsFile = multipleInputs ? CandidateFiles.relativeFile(root, (identity.product == 'lib' ? 'build/libraries/' : 'build/targets/') + owner.id + '/candidate-build-outputs.json') : buildOutputs.get().asFile
+        File contractFile = multipleInputs ? CandidateFiles.relativeFile(root, 'runtime-locks/' + (identity.product == 'lib' ? 'lib/' : '') + target.id + '-scenarios.json') : contract.get().asFile
         File runtimeFile = multipleInputs ? CandidateFiles.relativeFile(root, 'runtime-locks/' + target.id + '-linux-x86_64.json') : runtimeLock.get().asFile
         File dependencyFile = multipleInputs ? CandidateFiles.relativeFile(root, 'runtime-locks/' + target.id + '-mods.json') : dependencyLock.get().asFile
         Map built = CandidateFiles.read(outputsFile)
         if (!(built.schema instanceof Integer) || built.schema != 2 || built.source_commit != commit || built.source_dirty != false) {
             throw new GradleException("Build outputs do not identify the current clean source: ${outputsFile} records commit ${built.source_commit}, dirty=${built.source_dirty}, schema=${built.schema}; expected commit ${commit}, dirty=false, schema=2. Rerun candidateBuildOutputs with -Ptarget=${owner.id} from the committed source.")
         }
+        identity.requireProduct(built.containsKey('product') ? built.product as String : 'cbbg')
         if (built.target != owner.id) throw new GradleException("Build outputs identify target ${built.target}; expected ${owner.id}: ${outputsFile}. Rerun candidateBuildOutputs with -Ptarget=${owner.id}.")
         String version = CandidateManifest.packageVersion(release, owner)
-        if (built.version != version) throw new GradleException("Build version ${built.version} differs from requested release ${version} for ${owner.id}: ${outputsFile}. Set the intended mod_version and rerun candidateBuildOutputs before bundling.")
+        if (built.version != version) throw new GradleException("Build version ${built.version} differs from requested release ${version} for ${owner.id}: ${outputsFile}. Set the intended ${identity.product == 'lib' ? 'library_version' : 'mod_version'} and rerun candidateBuildOutputs before bundling.")
         Map scenarios = CandidateFiles.read(contractFile)
         if (scenarios.schemaVersion != 1 || scenarios.target != target.id) {
             throw new GradleException("Scenario contract ${contractFile} identifies target ${scenarios.target}, schema ${scenarios.schemaVersion}; expected ${target.id}, schema 1. Use the selected runtime's contract.")
+        }
+        if ((scenarios.product ?: 'cbbg') != identity.product) {
+            throw new GradleException("Scenario contract ${contractFile} belongs to '${scenarios.product ?: 'cbbg'}'; expected '${identity.product}'. Build and run the product's own acceptance driver.")
         }
         File metadata = CandidateFiles.relativeFile(root, scenarios.ordinaryMetadata)
         List suites = ['ordinary'] + scenarios.additionalRuns.collect { it.suite }
@@ -127,6 +132,19 @@ abstract class BundleCandidate extends DefaultTask {
                         addUtilities(built[kind].filename, CandidateFiles.checked(root, built[kind]))
             }
         }
+        if (built.containsKey('library') != built.containsKey('library_sources')) {
+            throw new GradleException('Build outputs require library and library_sources together')
+        }
+        if (built.containsKey('library')) {
+            ['library', 'library_sources'].each { kind ->
+                record[kind] = target.artifactOf ? records[owner.id][kind] :
+                        addUtilities(built[kind].filename, CandidateFiles.checked(root, built[kind]))
+            }
+            if (built.containsKey('library_release')) {
+                ReleaseIdentity.parse(built.library_release as String).requireProduct('lib')
+                record.library_release = built.library_release
+            }
+        }
         ['artifact', 'sources', 'source_inventory', 'mapping', 'sbom'].each { kind ->
             if (target.artifactOf) {
                 record[kind] = records[owner.id][kind]
@@ -140,7 +158,7 @@ abstract class BundleCandidate extends DefaultTask {
             files[it.client_tests.ordinary_metadata.path].file.canonicalFile == metadata.canonicalFile
         }?.client_tests?.ordinary_metadata
         record.client_tests = [catalog: catalogReference,
-                               contract: add(prefix + 'contract.json', contractFile),
+                               contract: add(prefix + (identity.product == 'lib' ? 'lib-contract.json' : 'contract.json'), contractFile),
                                ordinary_metadata: metadataReference ?: add(prefix + 'ordinary-metadata.json', metadata),
                                runtime_lock: add(prefix + 'runtime-lock.json', runtimeFile),
                                dependency_lock: add(prefix + 'dependency-lock.json', dependencyFile),
@@ -166,7 +184,7 @@ abstract class BundleCandidate extends DefaultTask {
                 }
             }
             File manifest = new File(output, 'candidate.json')
-            CandidateFiles.writeNew(manifest, [schema: 3, release: release, commit: commit,
+            CandidateFiles.writeNew(manifest, [schema: 3, product: identity.product, release: release, commit: commit,
                     catalog_sha256: CandidateFiles.canonicalHash(catalog.data), targets: records.values().toList(), selected_targets: ids])
             new CandidateManifest(manifest).verifyPackages(root)
             if (sourceState() != state) throw new GradleException('Source changed while bundling candidate')

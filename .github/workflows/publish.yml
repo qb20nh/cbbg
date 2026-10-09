@@ -104,6 +104,15 @@ jobs:
           distribution: temurin
       - uses: gradle/actions/setup-gradle@v6.3.0
 
+      - name: Require the CBBG publication product
+        if: startsWith(inputs.tag, 'lib/')
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          mkdir -p build
+          ./gradlew --no-daemon "-Prelease=$RELEASE_TAG" -PrequireProduct=cbbg \
+            -Poutput=build/publication-product.json releaseIdentity
+
       - name: Prepare publication
         id: publication
         env:
@@ -333,6 +342,58 @@ jobs:
             "-PutilitiesSourcesFileId=$CF_UTILITIES_SOURCES_FILE_ID" \
             -Poutput=build/curseforge-utilities-sources-result.json recordCurseForgeUpload
 
+      - name: Upload CBBG Lib to CurseForge
+        if: ${{ !inputs.dry_run && inputs.services != 'modrinth' && steps.publication.outputs.library != '' }}
+        id: curseforge_library_upload
+        uses: qb20nh/curseforge-upload@ca94ed0392ea2a4d975f0eef5e02f7805aa30469
+        with:
+          token: ${{ secrets.CF_API_TOKEN }}
+          project_id: ${{ steps.publication.outputs.cf_project_id }}
+          game_endpoint: minecraft
+          parent_file_id: ${{ steps.curseforge_upload.outputs.id }}
+          file_path: ${{ steps.publication.outputs.library }}
+          release_type: ${{ steps.publication.outputs.cf_release_type }}
+          display_name: ${{ steps.publication.outputs.cf_display_name }} CBBG Lib
+          changelog: ${{ steps.publication.outputs.cf_changelog }}
+          changelog_type: markdown
+
+      - name: Save CurseForge CBBG Lib upload record
+        if: ${{ !inputs.dry_run && inputs.services != 'modrinth' && steps.publication.outputs.library != '' }}
+        env:
+          CF_FILE_ID: ${{ steps.curseforge_upload.outputs.id }}
+          CF_LIBRARY_FILE_ID: ${{ steps.curseforge_library_upload.outputs.id }}
+          TARGET_ID: ${{ matrix.target }}
+        run: |
+          ./gradlew --no-daemon "-PpublicationMetadata=build/publication.json" \
+            "-Ptarget=$TARGET_ID" "-PfileId=$CF_FILE_ID" "-PlibraryFileId=$CF_LIBRARY_FILE_ID" \
+            -Poutput=build/curseforge-library-result.json recordCurseForgeUpload
+
+      - name: Upload CBBG Lib sources and mappings to CurseForge
+        if: ${{ !inputs.dry_run && inputs.services != 'modrinth' && steps.publication.outputs.library_sources != '' }}
+        id: curseforge_library_sources_upload
+        uses: qb20nh/curseforge-upload@ca94ed0392ea2a4d975f0eef5e02f7805aa30469
+        with:
+          token: ${{ secrets.CF_API_TOKEN }}
+          project_id: ${{ steps.publication.outputs.cf_project_id }}
+          game_endpoint: minecraft
+          parent_file_id: ${{ steps.curseforge_upload.outputs.id }}
+          file_path: ${{ steps.publication.outputs.library_sources }}
+          release_type: ${{ steps.publication.outputs.cf_release_type }}
+          display_name: ${{ steps.publication.outputs.cf_display_name }} CBBG Lib sources and mappings
+          changelog: ${{ steps.publication.outputs.cf_changelog }}
+          changelog_type: markdown
+
+      - name: Save CurseForge CBBG Lib sources and mappings upload record
+        if: ${{ !inputs.dry_run && inputs.services != 'modrinth' && steps.publication.outputs.library_sources != '' }}
+        env:
+          CF_FILE_ID: ${{ steps.curseforge_upload.outputs.id }}
+          CF_LIBRARY_SOURCES_FILE_ID: ${{ steps.curseforge_library_sources_upload.outputs.id }}
+          TARGET_ID: ${{ matrix.target }}
+        run: |
+          ./gradlew --no-daemon "-PpublicationMetadata=build/publication.json" \
+            "-Ptarget=$TARGET_ID" "-PfileId=$CF_FILE_ID" "-PlibrarySourcesFileId=$CF_LIBRARY_SOURCES_FILE_ID" \
+            -Poutput=build/curseforge-library-sources-result.json recordCurseForgeUpload
+
       - name: Upload SBOM and provenance to CurseForge
         if: ${{ !inputs.dry_run && inputs.services != 'modrinth' && steps.publication.outputs.evidence != '' }}
         id: curseforge_evidence_upload
@@ -372,6 +433,8 @@ jobs:
             build/curseforge-sources-result.json
             build/curseforge-utilities-result.json
             build/curseforge-utilities-sources-result.json
+            build/curseforge-library-result.json
+            build/curseforge-library-sources-result.json
             build/curseforge-evidence-result.json
             build/publishing/**/modrinth-plan.json
             build/publishing/**/modrinth-result.json

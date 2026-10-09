@@ -89,7 +89,8 @@ class ChangeImpactTest {
                         ['1.21.1-fabric', '1.21.11-fabric', '26.1-fabric', '26.3-fabric'],
                 'adapters/fabric/shared/src/gametest/java/com/qb20nh/cbbg/gametest/ClientTestAccess.java': [],
                 'src/main/resources/assets/cbbg/icon.png': ['1.21.1-fabric', '1.21.11-fabric', '26.1-fabric', '26.2-fabric', '26.3-fabric'],
-                'src/main/resources/assets/cbbg/shaders/core/cbbg_dither.fsh': ['1.21.11-fabric', '26.1-fabric', '26.2-fabric']
+                'libraries/fabric/src/gpu/resources/assets/cbbg/shaders/core/cbbg_dither.fsh': ['1.21.11-fabric', '26.1-fabric'],
+                'libraries/fabric/src/blaze-gpu-format/resources/assets/cbbg/shaders/core/cbbg_dither.fsh': ['26.2-fabric', '26.3-fabric']
         ]
         cases.each { String path, List<String> ids ->
             assertEquals(ids, ChangeImpact.ci(catalog, ChangeImpact.select(catalog, [path], true)).matrix.include*.id, path)

@@ -304,6 +304,23 @@ class FabricCompatibilityProbeTest {
         assertEquals(runtimeLock, command[command.indexOf('--runtime-lock') + 1])
         assertTrue(command.contains('--test-dependency-minimums'))
         assertTrue(command.contains('sodium=' + optional.absolutePath))
+        File external = new File(directory, 'cbbg-lib.jar')
+        external.text = 'External standalone library'
+        Map librarySpec = spec + [externalLibrary: external, config: null]
+        Map externalInputs = FabricCompatibilityProbe.cacheInputs(reportInputs, librarySpec, coordinator, search)
+        assertNull(externalInputs.initialConfig)
+        assertEquals(CandidateFiles.sha256(external), externalInputs.externalLibrary)
+        FabricCompatibilityProbe.execute(librarySpec) { List args, File log ->
+            assertFalse(args.contains('--cbbg-config'))
+            assertEquals(external, args[args.indexOf('--external-library') + 1])
+            File game = args[args.indexOf('--game-dir') + 1] as File
+            game.mkdirs()
+            new File(game, 'probe.json').text = JsonOutput.toJson([exitCode: 0, scenarios: [ok: true]])
+            log.text = 'External library probe completed'
+            0
+        }
+        external.append('changed bytes')
+        assertNotEquals(externalInputs, FabricCompatibilityProbe.cacheInputs(reportInputs, librarySpec, coordinator, search))
         assertFalse(command.contains('--startup-mode'))
         assertFalse(command.contains('--startup-cache'))
         ['cold', 'warm', 'damaged', 'seed-mismatch'].each { mode ->

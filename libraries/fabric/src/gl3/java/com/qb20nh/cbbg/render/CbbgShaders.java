@@ -1,13 +1,17 @@
 package com.qb20nh.cbbg.render;
 
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
-import com.qb20nh.cbbg.Cbbg;
 import net.minecraft.client.renderer.ShaderInstance;
 import net.minecraft.server.packs.resources.ResourceProvider;
+import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /** Shader resources managed alongside Minecraft's shader reload and shutdown. */
+@NullMarked
 public final class CbbgShaders {
+  private static final Logger LOGGER = LoggerFactory.getLogger("cbbg_lib");
   private static @Nullable ShaderInstance dither;
   private static @Nullable ShaderInstance demo;
 
@@ -24,7 +28,7 @@ public final class CbbgShaders {
       demo = new ShaderInstance(resources, "cbbg_demo", DefaultVertexFormat.BLIT_SCREEN);
     } catch (Exception failure) {
       close();
-      Cbbg.LOGGER.warn("Failed to load CBBG shaders; dithering will be unavailable", failure);
+      LOGGER.warn("Failed to load CBBG Lib shaders; dithering will be unavailable", failure);
     }
   }
 

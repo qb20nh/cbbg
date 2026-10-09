@@ -14,54 +14,56 @@ class CandidateBuildOutputsTest {
     @TempDir File directory
 
     @ParameterizedTest
-    @ValueSource(strings = ['ordinary', 'all-processed', 'selected-processed'])
+    @ValueSource(strings = ['ordinary', 'all-processed', 'selected-processed', 'library'])
     void recordsPackagedDriversAndCurrentSourceState(String selection) {
-        boolean processed = selection != 'ordinary'
+        boolean library = selection == 'library'
+        boolean processed = selection in ['all-processed', 'selected-processed']
         File profile = new File(directory, 'build-config/example')
         profile.mkdirs()
-        new File(profile, 'settings.gradle').text = "rootProject.name = 'example'\ninclude ':core'\nproject(':core').projectDir = file('../../core')\n"
-        File core = new File(directory, 'core')
-        core.mkdirs()
-        new File(core, 'build.gradle').text = '''
-plugins { id 'base' }
-tasks.register('optimizeUtilitiesJar') {
-    doLast {
-        def libs = layout.buildDirectory.dir('libs').get().asFile
-        libs.mkdirs()
-        new File(libs, 'cbbg-utilities-1.4.1.jar').text = 'optimized Java 8 utility fixture'
-    }
-}
-tasks.register('utilitiesSourcesJar', Jar) {
-    dependsOn 'optimizeUtilitiesJar'
-    archiveFileName = 'cbbg-utilities-1.4.1-sources.jar'
-    destinationDirectory = layout.buildDirectory.dir('libs')
-}
-'''
+        new File(profile, 'settings.gradle').text = "rootProject.name = 'example'\n"
         new File(profile, 'build.gradle').text = '''
 plugins { id 'java'; id 'cbbg.packaging' }
 java { withSourcesJar() }
-version = '1.4.1+mc26.2'
+version = 'VERSION'
+ext.candidateProduct = 'PRODUCT'
+ext.utilitiesArchive = rootProject.file('../../libraries/utilities/build/libs/cbbg-utilities-1.0.0.jar')
+ext.utilitiesSourcesArchive = rootProject.file('../../libraries/utilities/build/libs/cbbg-utilities-1.0.0-sources.jar')
+ext.libraryArchive = rootProject.file('../../build/libraries/26.2-fabric/libs/cbbg-lib-1.0.0+mc26.2-fabric.jar')
+ext.librarySourcesArchive = rootProject.file('../../build/libraries/26.2-fabric/libs/cbbg-lib-1.0.0+mc26.2-fabric-sources.jar')
+ext.libraryRelease = 'lib/v1.0.0'
+ext.libraryPackageVersion = '1.0.0+mc26.2-fabric'
+tasks.register(candidateProduct == 'lib' ? 'prepareLibraryOutputs' : 'prepareBundledLibrary') {
+    doLast {
+        [utilitiesArchive, utilitiesSourcesArchive, libraryArchive, librarySourcesArchive].each { output ->
+            output.parentFile.mkdirs()
+            output.text = output.name
+        }
+    }
+}
 ext.candidateTargetId = '26.2-fabric'
 releaseOptimization {
     outputJar.set(layout.buildDirectory.file('libs/example.jar'))
     mappingFile.set(layout.buildDirectory.file('mapping/example.map'))
 }
-tasks.register('ciCheck') {
-    doLast {
-        for (String path : ['libs/example.jar', 'mapping/example.map', 'libs/example-1.4.1+mc26.2-sources.jar',
-                            'libs/example-1.4.1+mc26.2.cdx.json', 'source-inventory.json']) {
+def fixtureOutputs = {
+        for (String path : ['libs/example.jar', 'mapping/example.map', "libs/example-${version}-sources.jar",
+                            "libs/example-${version}.cdx.json", 'source-inventory.json']) {
             def output = new File(layout.buildDirectory.get().asFile, path)
             output.parentFile.mkdirs()
             output.text = path
         }
-    }
 }
+if (candidateProduct == 'lib') tasks.named('check') { doLast fixtureOutputs }
+else tasks.register('ciCheck') { doLast fixtureOutputs }
 tasks.register('sourceInventory')
 tasks.register('parityDriverJar', Jar) { archiveClassifier = 'parity-driver' }
-tasks.register('earlyStartupDriverJar', Jar) { archiveClassifier = 'early-startup-driver' }
+EARLY_DRIVER
 PROCESSED
 apply from: file('../candidate-build-outputs.gradle')
-'''.replace('PROCESSED', processed ? '''
+'''.replace('VERSION', library ? '1.0.0+mc26.2-fabric' : '1.4.1+mc26.2')
+                .replace('PRODUCT', library ? 'lib' : 'cbbg')
+                .replace('EARLY_DRIVER', library ? '' : "tasks.register('earlyStartupDriverJar', Jar) { archiveClassifier = 'early-startup-driver' }")
+                .replace('PROCESSED', processed ? '''
 tasks.register('processedDriverJar', Jar) { archiveClassifier = 'processed-driver' }
 tasks.register('processedEarlyStartupDriverJar', Jar) { archiveClassifier = 'processed-early-startup-driver' }
 sourceSets.create('processedGametest')
@@ -107,17 +109,25 @@ sourceSets.processedGametest.java.setSrcDirs([mapped])
             GradleRunner.create().withProjectDir(profile).withPluginClasspath()
                     .withArguments('candidateBuildOutputs', '--offline', '--stacktrace').build()
             new JsonSlurper().parse(new File(directory,
-                    'build/targets/26.2-fabric/candidate-build-outputs.json'))
+                    'build/' + (library ? 'libraries' : 'targets') + '/26.2-fabric/candidate-build-outputs.json'))
         }
         def output = run()
         assertFalse(new File(profile, 'build/candidate-build-outputs.json').exists())
         assertEquals('26.2-fabric', output.target)
-        assertEquals('1.4.1+mc26.2', output.version)
-        assertEquals('cbbg-utilities-1.4.1.jar', output.utilities.filename)
-        assertEquals('cbbg-utilities-1.4.1-sources.jar', output.utilities_sources.filename)
+        assertEquals(library ? '1.0.0+mc26.2-fabric' : '1.4.1+mc26.2', output.version)
+        assertEquals(library ? 'lib' : 'cbbg', output.product)
+        if (library) {
+            assertFalse(output.containsKey('library'))
+            assertFalse(output.containsKey('library_sources'))
+        } else {
+            assertEquals('lib/v1.0.0', output.library_release)
+            assertTrue(output.library.path.startsWith('build/libraries/26.2-fabric/'))
+        }
+        assertEquals('cbbg-utilities-1.0.0.jar', output.utilities.filename)
+        assertEquals('cbbg-utilities-1.0.0-sources.jar', output.utilities_sources.filename)
         assertEquals(git('rev-parse', 'HEAD'), output.source_commit)
         assertFalse(output.source_dirty)
-        Set expected = ['ordinary', 'early-startup'] as Set
+        Set expected = (library ? ['ordinary'] : ['ordinary', 'early-startup']) as Set
         if (selection == 'all-processed') {
             expected.addAll(['startup-cold', 'startup-warm', 'startup-damaged', 'startup-seed-mismatch',
                              'generation', 'maximum-noise-cache', 'shutdown', 'generating-shutdown',
@@ -130,7 +140,7 @@ sourceSets.processedGametest.java.setSrcDirs([mapped])
             assertEquals(processed, driver.filename.contains('processed'))
         }
         ([output.artifact, output.mapping, output.sbom, output.sources, output.utilities, output.utilities_sources, output.source_inventory] +
-                output.drivers.values()).each { reference ->
+                (library ? [] : [output.library, output.library_sources]) + output.drivers.values()).each { reference ->
             File file = new File(directory, reference.path)
             assertTrue(file.isFile(), reference.path as String)
             assertEquals(file.name, reference.filename)
