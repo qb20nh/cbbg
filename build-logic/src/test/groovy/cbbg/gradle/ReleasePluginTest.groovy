@@ -110,7 +110,7 @@ cbbg.gradle.FabricCandidateAcceptance.metaClass.static.execute = { Map options, 
         Map identity = CandidateFiles.read(new File(directory, 'identity.json')) as Map
         assertEquals('lib', identity.product)
         assertEquals('1.0.0-rc.1', identity.version)
-        assertEquals('CBBG Lib 1.0.0-rc.1', identity.title)
+        assertEquals('cbbg lib 1.0.0-rc.1', identity.title)
         assertTrue(identity.prerelease)
         assertEquals('libraries/CHANGELOG.md', identity.changelog_path)
         assertTrue(runner('releaseIdentity', '-Prelease=lib/v1.0.0', '-PrequireProduct=cbbg',

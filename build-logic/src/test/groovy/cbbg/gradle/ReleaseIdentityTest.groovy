@@ -21,7 +21,7 @@ class ReleaseIdentityTest {
         assertEquals('CHANGELOG.md', mod.changelogPath)
         assertEquals('lib', lib.product)
         assertEquals('1.0.0', lib.version)
-        assertEquals('CBBG Lib 1.0.0', lib.releaseTitle)
+        assertEquals('cbbg lib 1.0.0', lib.releaseTitle)
         assertEquals('libraries/CHANGELOG.md', lib.changelogPath)
         assertFalse(lib.targeted)
         assertNull(lib.minecraft)

@@ -46,7 +46,7 @@ class ReleaseIdentity {
     String getTagPrefix() { product == 'lib' ? 'lib/v' : 'v' }
     String getDisplayName() { product == 'lib' ? 'CBBG Lib' : 'CBBG' }
     String getChangelogPath() { product == 'lib' ? 'libraries/CHANGELOG.md' : 'CHANGELOG.md' }
-    String getReleaseTitle() { (product == 'lib' ? displayName : 'cbbg') + ' ' + version }
+    String getReleaseTitle() { (product == 'lib' ? 'cbbg lib' : 'cbbg') + ' ' + version }
 
     String getLibraryRequirement() {
         requireProduct('lib')

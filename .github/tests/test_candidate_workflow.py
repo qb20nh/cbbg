@@ -50,7 +50,7 @@ class CandidateWorkflowTest(unittest.TestCase):
                             '  if not match: sys.exit(1)\n'
                             '  product="lib" if match[1] else "cbbg"; version=match[2]\n'
                             '  output=next(a.split("=",1)[1] for a in args if a.startswith("-Poutput="))\n'
-                            '  Path(output).write_text(json.dumps({"product":product,"version":version,"title":("CBBG Lib " if product == "lib" else "cbbg ")+version,"prerelease":"-" in version}))\n'
+                            '  Path(output).write_text(json.dumps({"product":product,"version":version,"title":("cbbg lib " if product == "lib" else "cbbg ")+version,"prerelease":"-" in version}))\n'
                             'if args[-1] == "targetMatrix":\n'
                             '  target=next(a.split("=",1)[1] for a in args if a.startswith("-Ptarget="))\n'
                             '  targets=target.split(",")\n'
@@ -301,7 +301,7 @@ class CandidateWorkflowTest(unittest.TestCase):
                 lib = tag.startswith('lib/')
                 version = tag.removeprefix('lib/')[1:].split('+')[0]
                 (self.root / 'build/release-identity.json').write_text(json.dumps({
-                    'version': version, 'title': ('CBBG Lib ' if lib else 'cbbg ') + version,
+                    'version': version, 'title': ('cbbg lib ' if lib else 'cbbg ') + version,
                     'prerelease': '-rc.' in tag}))
                 result = self.run_step('Create draft release', self.root)
                 self.assertEqual(result.returncode, 0, result.stderr)
@@ -309,7 +309,7 @@ class CandidateWorkflowTest(unittest.TestCase):
                 self.assertEqual(arguments[:3], ['release', 'create', tag])
                 self.assertIn('--draft', arguments)
                 self.assertIn('--verify-tag', arguments)
-                expected_title = ('CBBG Lib ' if lib else 'cbbg ') + version + scope
+                expected_title = ('cbbg lib ' if lib else 'cbbg ') + version + scope
                 self.assertEqual(arguments[arguments.index('--title') + 1], expected_title)
                 self.assertEqual(arguments[arguments.index('--notes-file') + 1], 'build/release-notes.md')
                 self.assertEqual('--prerelease' in arguments, '-rc.' in tag)
