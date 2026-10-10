@@ -227,20 +227,23 @@ print(json.dumps({'pythonVersion':sys.version,'launcherVersion':version('minecra
         def executor = Executors.newFixedThreadPool(workers)
         def completions = new ExecutorCompletionService<Map>(executor)
         int running = 0
+        boolean exclusiveRunning = false
         Exception failure = null
         try {
             while (pending || running) {
                 if (failure == null) {
                     try {
-                        while (running < workers) {
+                        while (running < workers && !exclusiveRunning) {
                             Map job = pending.find { Map candidate ->
-                                !(candidate.requirement.startupMode in ['warm', 'damaged']) ||
-                                        candidate.context.coldCaches[candidate.requirement.backend] != null
+                                (!(candidate.requirement.startupMode in ['warm', 'damaged']) ||
+                                        candidate.context.coldCaches[candidate.requirement.backend] != null) &&
+                                        (running == 0 || !memoryIntensive(candidate))
                             }
                             if (job == null) break
                             pending.remove(job)
                             Map spec = prepare.call(job)
                             completions.submit({ -> [job: job, result: probe.call(spec)] } as Callable<Map>)
+                            exclusiveRunning = memoryIntensive(job)
                             running++
                         }
                     } catch (Exception error) { failure = error }
@@ -251,6 +254,7 @@ print(json.dumps({'pythonVersion':sys.version,'launcherVersion':version('minecra
                 }
                 Future<Map> completed = completions.take()
                 running--
+                exclusiveRunning = false
                 try {
                     Map result = completed.get()
                     finished.call(result.job, result.result)
@@ -262,6 +266,10 @@ print(json.dumps({'pythonVersion':sys.version,'launcherVersion':version('minecra
             }
         } finally { executor.shutdown() }
         if (failure != null) throw failure
+    }
+
+    private static boolean memoryIntensive(Map job) {
+        job.requirement.suite in ['generation', 'maximum-noise-cache']
     }
 
     static void requireSource(File root, CandidateManifest candidate, Closure<String> command) {

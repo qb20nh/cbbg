@@ -17,6 +17,54 @@ import static org.junit.jupiter.api.Assertions.*
 class FabricCandidateAcceptanceTest {
     @TempDir File directory
 
+    @ParameterizedTest
+    @ValueSource(strings = ['generation', 'maximum-noise-cache'])
+    void memoryIntensiveScenarioFinishesBeforeTheNextWorkerStarts(String suite) {
+        boolean heavySaved = false
+        List<Map> jobs = [suite, 'ordinary'].collect { name ->
+            [context: [coldCaches: [:]], requirement: [suite: name, startupMode: null]]
+        }
+        FabricCandidateAcceptance.runPending(jobs, 2, { job ->
+            if (job.requirement.suite == 'ordinary') assertTrue(heavySaved)
+            [name: job.requirement.suite]
+        }, { spec -> [name: spec.name] }, { job, result ->
+            if (job.requirement.suite == suite) heavySaved = true
+        })
+        assertTrue(jobs.empty)
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = ['generation', 'maximum-noise-cache'])
+    void ordinaryScenariosKeepBothWorkersBusyWhileMemoryIntensiveWorkWaits(String suite) {
+        def slowStarted = new CountDownLatch(1)
+        def releaseSlow = new CountDownLatch(1)
+        def active = new AtomicInteger()
+        def maximum = new AtomicInteger()
+        List<String> saved = []
+        List<Map> jobs = ['slow', suite, 'next'].collect { name ->
+            [context: [coldCaches: [:]], requirement: [suite: name, startupMode: null]]
+        }
+        FabricCandidateAcceptance.runPending(jobs, 2, { job -> [name: job.requirement.suite] }, { spec ->
+            int count = active.incrementAndGet()
+            maximum.accumulateAndGet(count, Math.&max)
+            try {
+                if (spec.name == 'slow') {
+                    slowStarted.countDown()
+                    assertTrue(releaseSlow.await(10, TimeUnit.SECONDS))
+                } else if (spec.name == 'next') {
+                    assertTrue(slowStarted.await(10, TimeUnit.SECONDS))
+                    releaseSlow.countDown()
+                } else {
+                    assertEquals(1, count, 'Memory-intensive work must run alone')
+                }
+                [name: spec.name]
+            } finally { active.decrementAndGet() }
+        }, { job, result -> saved.add(result.name as String) })
+        assertEquals(2, maximum.get())
+        assertEquals(suite, saved.last())
+        assertTrue(jobs.empty)
+    }
+
     @Test void idleWorkerTakesTheNextScenarioWhileAnotherWorkerIsBusy() {
         def slowStarted = new CountDownLatch(1)
         def releaseSlow = new CountDownLatch(1)
