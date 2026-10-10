@@ -22,7 +22,7 @@ class UtilitiesPlugin implements Plugin<Project> {
         project.pluginManager.apply('maven-publish')
         project.pluginManager.apply('cbbg.release-sbom')
         ReproducibleText.configureResources(project)
-        project.tasks.withType(Jar).configureEach {
+        project.tasks.withType(org.gradle.jvm.tasks.Jar).configureEach {
             doLast { ReproducibleJar.normalize(archiveFile.get().asFile) }
         }
         project.group = 'com.qb20nh'

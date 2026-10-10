@@ -67,7 +67,7 @@ class PackagingPlugin implements Plugin<Project> {
             }
         }
         project.afterEvaluate {
-            project.tasks.withType(Jar).configureEach {
+            project.tasks.withType(org.gradle.jvm.tasks.Jar).configureEach {
                 doLast { ReproducibleJar.normalize(archiveFile.get().asFile) }
             }
             if (optimization.mappingFile.isPresent()) {

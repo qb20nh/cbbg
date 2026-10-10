@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import org.apache.commons.compress.archivers.zip.ZipArchiveEntry
 import org.apache.commons.compress.archivers.zip.ZipArchiveOutputStream
+import org.gradle.testkit.runner.GradleRunner
 
 import java.time.LocalDateTime
 import java.security.MessageDigest
@@ -15,6 +16,37 @@ import static org.junit.jupiter.api.Assertions.*
 
 class ReproducibleJarTest {
     @TempDir File directory
+
+    @Test void normalizesBothGradleJarTypes() {
+        checkJarTypes('cbbg.packaging')
+    }
+
+    @Test void normalizesUtilitiesJarTypes() {
+        checkJarTypes('cbbg.utilities')
+    }
+
+    private void checkJarTypes(String plugin) {
+        new File(directory, 'settings.gradle').text = "rootProject.name = 'portable-jars'\n"
+        new File(directory, 'payload.txt').setText(payload('a.txt'), 'UTF-8')
+        new File(directory, 'build.gradle').text = '''
+plugins { id 'java'; id 'cbbg.packaging' }
+tasks.register('legacyJar', org.gradle.api.tasks.bundling.Jar) {
+    archiveFileName = 'legacy.jar'
+    from('payload.txt')
+}
+tasks.register('modernJar', org.gradle.jvm.tasks.Jar) {
+    archiveFileName = 'modern.jar'
+    from('payload.txt')
+}
+'''.replace('cbbg.packaging', plugin)
+        GradleRunner.create().withProjectDir(directory).withPluginClasspath()
+                .withArguments('legacyJar', 'modernJar', '--offline', '--stacktrace').build()
+        File modern = new File(directory, 'build/libs/modern.jar')
+        byte[] original = modern.bytes
+        ReproducibleJar.normalize(modern)
+        assertArrayEquals(original, modern.bytes, 'Modern Gradle JAR tasks must already be normalized')
+        assertArrayEquals(new File(directory, 'build/libs/legacy.jar').bytes, modern.bytes)
+    }
 
     @Test void ignoresOriginalCompressionOrderAndTimestamps() {
         File first = archive('first.jar', 1, ['z.txt', 'a.txt'])
