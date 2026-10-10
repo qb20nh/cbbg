@@ -83,6 +83,25 @@ class UtilitiesTest {
   }
 
   @Test
+  void clampsRgbBeforeAddingNoise() {
+    NoiseVolume noise = NoiseVolume.generate(2, 2, 1, 0);
+    DitherOptions options = new DitherOptions(4, 1, 1, false);
+    float[] source = new float[16];
+    float[] clamped = new float[16];
+    for (float value : new float[] {-0.002f, 1.002f}) {
+      Arrays.fill(source, value);
+      Arrays.fill(clamped, value < 0 ? 0 : 1);
+      for (int i = 3; i < source.length; i += 4) {
+        source[i] = clamped[i] = 0.5f;
+      }
+      byte[] expected = Dithering.rgba8(clamped, 2, 2, noise, 0, options);
+      byte[] actual = Dithering.rgba8(source, 2, 2, noise, 0, options);
+      assertArrayEquals(expected, actual);
+      for (int i = 3; i < actual.length; i += 4) assertEquals(128, actual[i] & 255);
+    }
+  }
+
+  @Test
   void clampsAfterDitheringAndSupportsDemo() {
     NoiseVolume noise = NoiseVolume.generate(2, 2, 1, 0);
     float[] source = {-2, 2, 0.4f, -1, 0.6f, 0.7f, 0.8f, 2};

@@ -72,21 +72,26 @@ public final class DitherPass implements AutoCloseable {
 
   private static TextureTarget createTarget(int width, int height) {
     var target = new TextureTarget(width, height, false, Minecraft.ON_OSX);
-    GlStateManager._bindTexture(target.getColorTextureId());
-    // The embedding application's framebuffer mixins may change vanilla's allocation format.
-    GL11.glTexImage2D(
-        GL11.GL_TEXTURE_2D,
-        0,
-        GL11.GL_RGBA8,
-        width,
-        height,
-        0,
-        GL11.GL_RGBA,
-        GL11.GL_UNSIGNED_BYTE,
-        (ByteBuffer) null);
-    target.bindWrite(false);
-    target.checkStatus();
-    return target;
+    try {
+      GlStateManager._bindTexture(target.getColorTextureId());
+      // The embedding application's framebuffer mixins may change vanilla's allocation format.
+      GL11.glTexImage2D(
+          GL11.GL_TEXTURE_2D,
+          0,
+          GL11.GL_RGBA8,
+          width,
+          height,
+          0,
+          GL11.GL_RGBA,
+          GL11.GL_UNSIGNED_BYTE,
+          (ByteBuffer) null);
+      target.bindWrite(false);
+      target.checkStatus();
+      return target;
+    } catch (RuntimeException | Error failure) {
+      target.destroyBuffers();
+      throw failure;
+    }
   }
 
   @Override

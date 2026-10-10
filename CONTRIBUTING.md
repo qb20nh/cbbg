@@ -48,7 +48,7 @@ APIs. Discuss new ports before adding a profile.
 CBBG and CBBG Lib have independent release versions. Set CBBG
 `mod_version=X.Y.Z` or `X.Y.Z-rc.1` in root `gradle.properties` (currently
 `1.5.0`). Set `library_version` in `libraries/utilities/gradle.properties`
-(currently `1.0.0`); `-Plibrary_version=...` overrides it for a build. Both
+(currently `1.0.0-beta.1`); `-Plibrary_version=...` overrides it for a build. Both
 products use `<version>+mc<minecraft_version>-<loader>` artifact versions.
 Tag CBBG releases `vX.Y.Z` and library releases `lib/vX.Y.Z`. Append
 `+mc<minecraft_version>-<loader>` for a single-target release.
@@ -135,7 +135,7 @@ Extract the selected entry with Gradle:
 
 ```sh
 ./gradlew releaseNotes -Prelease=v1.4.1 -Ptarget=26.3-fabric -Poutput=build/release-notes.md
-./gradlew releaseNotes -Prelease=lib/v1.0.0 -Ptarget=26.3-fabric -Poutput=build/library-release-notes.md
+./gradlew releaseNotes -Prelease=lib/v1.0.0-beta.1 -Ptarget=26.3-fabric -Poutput=build/library-release-notes.md
 # For a shared release, use -Ptargets=id,id instead of -Ptarget=id.
 ```
 

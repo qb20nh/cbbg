@@ -31,6 +31,7 @@ public final class Dithering {
           if (!Float.isFinite(value)) {
             throw new IllegalArgumentException("Image components must be finite");
           }
+          if (channel < 3) value = Math.max(0, Math.min(1, value));
           double amount =
               channel == 3 ? 0 : ((pixel >>> (channel * 8) & 255) / 255.0 - 0.5) * strength;
           int quantized =

@@ -4,6 +4,9 @@ import com.mojang.blaze3d.pipeline.MainTarget;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.pipeline.TextureTarget;
 import com.mojang.blaze3d.platform.GlStateManager;
+import com.qb20nh.cbbg.api.DitherOptions;
+import com.qb20nh.cbbg.api.NoiseVolume;
+import com.qb20nh.cbbg.render.DitherPass;
 import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -31,6 +34,7 @@ public final class ReleaseAllocationGameTest implements FabricClientGameTest {
   private static int disposals;
   private static @Nullable RenderTarget failedTarget;
   private static boolean allocationReady;
+  private static boolean utilityScope;
   private static int failedColor;
   private static int failedDepth;
   private static int failedFramebuffer;
@@ -63,6 +67,13 @@ public final class ReleaseAllocationGameTest implements FabricClientGameTest {
     if (GL11.glIsTexture(color) || GL11.glIsTexture(depth) || GL30.glIsFramebuffer(framebuffer))
       throw new AssertionError("Fixture-owned target destruction retained GL attachments");
     disposals++;
+  }
+
+  @SuppressWarnings("ReferenceEquality") // Fail only the utility pass's newly allocated target.
+  public static void checking(RenderTarget target) {
+    if (!utilityScope || !allocationReady || target != owned) return;
+    failed(target);
+    throw new IllegalStateException("Utility target initialization failure");
   }
 
   @SuppressWarnings("ReferenceEquality") // Capture attachments belonging to the selected instance.
@@ -113,6 +124,7 @@ public final class ReleaseAllocationGameTest implements FabricClientGameTest {
   }
 
   private static void runAllocations(ClientGameTestContext context) {
+    context.runOnClient(client -> checkUtilityInitializationFailure());
     context.runOnClient(
         client -> {
           // Auxiliary allocations must not poison the session's main-format capability policy.
@@ -163,6 +175,46 @@ public final class ReleaseAllocationGameTest implements FabricClientGameTest {
     try (var world = context.worldBuilder().create()) {
       ReleaseViewport.waitForChunks(world);
       context.runOnClient(client -> checkMain());
+    }
+  }
+
+  private static void checkUtilityInitializationFailure() {
+    var input = UtilitiesBackend.input(4, 4);
+    try (var noise = UtilitiesBackend.noise(NoiseVolume.generate(2, 2, 1, 0), 0);
+        var pass = new DitherPass()) {
+      var options = new DitherOptions(1, 1, 1, false);
+      for (int attempt = 0; attempt < 2; attempt++) {
+        utilityScope = true;
+        auxiliaryScope = true;
+        try {
+          try {
+            pass.render(input, noise.texture(), options);
+            throw new AssertionError("Utility initialization failure was not applied");
+          } catch (IllegalStateException expected) {
+            if (!Objects.equals(expected.getMessage(), "Utility target initialization failure"))
+              throw new AssertionError("Unexpected utility initialization failure", expected);
+          }
+          if (failedTarget == null
+              || GL11.glIsTexture(failedColor)
+              || GL30.glIsFramebuffer(failedFramebuffer))
+            throw new AssertionError("Failed utility initialization retained GL resources");
+          if (!GL11.glIsTexture(input.getColorTextureId()) || !GL11.glIsTexture(noise.texture()))
+            throw new AssertionError("Failed utility initialization destroyed input textures");
+        } finally {
+          utilityScope = false;
+          auxiliaryScope = false;
+          RenderTarget failed = failedTarget;
+          if (failed != null
+              && (GL11.glIsTexture(failedColor) || GL30.glIsFramebuffer(failedFramebuffer)))
+            failed.destroyBuffers();
+          owned = null;
+          failedTarget = null;
+        }
+      }
+      var output = pass.render(input, noise.texture(), options);
+      ReleaseUtilityCalls.checkClosed(pass, output, input, noise);
+    } finally {
+      input.destroyBuffers();
     }
   }
 

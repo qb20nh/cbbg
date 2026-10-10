@@ -12,6 +12,11 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 /** Checks old GL identities at destruction before resize can reuse their numeric names. */
 @Mixin(value = RenderTarget.class, priority = 2000)
 public abstract class ReleaseAllocationDisposalMixin {
+  @Inject(method = "checkStatus", at = @At("HEAD"))
+  private void cbbg$checking(CallbackInfo info) {
+    ReleaseAllocationGameTest.checking((RenderTarget) (Object) this);
+  }
+
   @Inject(method = "createBuffers", at = @At("HEAD"))
   private void cbbg$begin(int width, int height, boolean clearError, CallbackInfo info) {
     ReleaseAllocationGameTest.allocating((RenderTarget) (Object) this, false);
