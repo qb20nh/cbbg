@@ -5,6 +5,13 @@ import org.junit.jupiter.api.Test
 import static org.junit.jupiter.api.Assertions.*
 
 class ReleaseIdentityTest {
+    @Test void libraryRequirementsAcceptTheSelectedPrerelease() {
+        assertEquals('>=1.0.0 <2.0.0', ReleaseIdentity.parse('lib/v1.0.0').libraryRequirement)
+        assertEquals('>=1.0.0-beta.1 <2.0.0',
+                ReleaseIdentity.parse('lib/v1.0.0-beta.1').libraryRequirement)
+        assertThrows(GradleException) { ReleaseIdentity.parse('v1.5.0').libraryRequirement }
+    }
+
     @Test void productsHaveIndependentVersionsAndNotes() {
         ReleaseIdentity mod = ReleaseIdentity.parse('v1.5.0')
         ReleaseIdentity lib = ReleaseIdentity.parse('lib/v1.0.0')

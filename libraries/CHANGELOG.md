@@ -4,7 +4,7 @@ This project uses [Keep a Changelog](https://keepachangelog.com/) and [Semantic 
 
 ## [Unreleased]
 
-## [1.0.0] - 2026-10-10 <!-- [1.0.0-mc1.21.1-fabric] [1.0.0-mc1.21.11-fabric] [1.0.0-mc26.1-fabric] [1.0.0-mc26.1.1-fabric] [1.0.0-mc26.1.2-fabric] [1.0.0-mc26.2-fabric] [1.0.0-mc26.3-fabric] -->
+## [1.0.0-beta.1] - 2026-10-10 <!-- [1.0.0-beta.1-mc1.21.1-fabric] [1.0.0-beta.1-mc1.21.11-fabric] [1.0.0-beta.1-mc26.1-fabric] [1.0.0-beta.1-mc26.1.1-fabric] [1.0.0-beta.1-mc26.1.2-fabric] [1.0.0-beta.1-mc26.2-fabric] [1.0.0-beta.1-mc26.3-fabric] -->
 
 ### Added
 

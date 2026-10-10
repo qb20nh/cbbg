@@ -126,7 +126,7 @@ tasks.named('checkPackages') {
 		def target = TargetCatalog.read(new File(repositoryRoot, 'targets.json'))
 				.select(candidateTargetId).first()
 		PackageChecks.verifyFabricMetadata(
-				releaseOptimization.outputJar.get().asFile, target, project.version.toString(), 'cbbg', '>=1.0.0 <2.0.0')
+				releaseOptimization.outputJar.get().asFile, target, project.version.toString(), 'cbbg', libraryRequirement)
 	}
 }
 

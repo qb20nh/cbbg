@@ -48,6 +48,11 @@ class ReleaseIdentity {
     String getChangelogPath() { product == 'lib' ? 'libraries/CHANGELOG.md' : 'CHANGELOG.md' }
     String getReleaseTitle() { (product == 'lib' ? displayName : 'cbbg') + ' ' + version }
 
+    String getLibraryRequirement() {
+        requireProduct('lib')
+        '>=' + version + ' <2.0.0'
+    }
+
     void requireProduct(String expected) {
         if (product != expected) {
             throw new GradleException("Release tag '${tag}' belongs to product '${product}', but this operation requires '${expected}'. Use ${expected == 'lib' ? 'lib/v' : 'v'}<version> for that product.")

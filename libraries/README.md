@@ -11,20 +11,20 @@ Download your Minecraft variant from the
 [GitHub releases](https://github.com/qb20nh/cbbg/releases) and put its binary JAR
 in `mods/`.
 
-| Minecraft | Library JAR for 1.0.0 | Java |
+| Minecraft | Library JAR for 1.0.0-beta.1 | Java |
 | --- | --- | --- |
-| 1.21.1 | `cbbg-lib-1.0.0+mc1.21.1-fabric.jar` | 21+ |
-| 1.21.11 | `cbbg-lib-1.0.0+mc1.21.11-fabric.jar` | 21+ |
-| 26.1, 26.1.1, 26.1.2 | `cbbg-lib-1.0.0+mc26.1-fabric.jar` | 25+ |
-| 26.2 | `cbbg-lib-1.0.0+mc26.2-fabric.jar` | 25+ |
-| 26.3 | `cbbg-lib-1.0.0+mc26.3-fabric.jar` | 25+ |
+| 1.21.1 | `cbbg-lib-1.0.0-beta.1+mc1.21.1-fabric.jar` | 21+ |
+| 1.21.11 | `cbbg-lib-1.0.0-beta.1+mc1.21.11-fabric.jar` | 21+ |
+| 26.1, 26.1.1, 26.1.2 | `cbbg-lib-1.0.0-beta.1+mc26.1-fabric.jar` | 25+ |
+| 26.2 | `cbbg-lib-1.0.0-beta.1+mc26.2-fabric.jar` | 25+ |
+| 26.3 | `cbbg-lib-1.0.0-beta.1+mc26.3-fabric.jar` | 25+ |
 
 The library requires Fabric Loader; Fabric API is optional. Its mod ID is
 `cbbg_lib`. CBBG bundles the matching library JAR. If you also install that same
 version separately, Fabric loads one instance. Put binary mod JARs in `mods/`
 and attach `*-sources.jar` files in your IDE.
 
-For Java applications, add `cbbg-utilities-1.0.0.jar` to your classpath. It provides
+For Java applications, add `cbbg-utilities-1.0.0-beta.1.jar` to your classpath. It provides
 noise generation, CPU dithering and reusable GLSL on Java 8 and newer, with no
 Minecraft dependency or mod entrypoint. The GPU pass requires a Minecraft
 library variant.
@@ -39,7 +39,7 @@ Download the binary library JAR into your mod project's `libs/` directory.
 For Minecraft 26.3, add this to `build.gradle`:
 
 ```groovy
-def cbbgLib = files('libs/cbbg-lib-1.0.0+mc26.3-fabric.jar')
+def cbbgLib = files('libs/cbbg-lib-1.0.0-beta.1+mc26.3-fabric.jar')
 
 dependencies {
     implementation cbbgLib
@@ -62,7 +62,7 @@ Minecraft, Fabric Loader and Java requirements:
 {
   "environment": "client",
   "depends": {
-    "cbbg_lib": ">=1.0.0 <2.0.0"
+    "cbbg_lib": ">=1.0.0-beta.1 <2.0.0"
   }
 }
 ```

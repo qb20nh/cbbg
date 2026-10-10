@@ -90,6 +90,7 @@ tasks.named('sourcesJar', Jar) {
     dependsOn tasks.named('processResources')
 }
 tasks.named('jar', Jar) {
+    dependsOn configurations.utilitiesRaw
     from({ configurations.utilitiesRaw.collect { zipTree(it) } }) { exclude 'META-INF/**', 'LICENSE' }
     from(new File(repositoryRoot, 'LICENSE'))
     destinationDirectory = layout.buildDirectory.dir('intermediates/raw-jar')

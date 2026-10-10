@@ -280,7 +280,9 @@ class PackageChecks {
                 sharedRoots, targetRecord.mapping == null ? null : CandidateFiles.checked(base, (Map) targetRecord.mapping),
                 targetRecord.sbom == null ? null : CandidateFiles.checked(base, (Map) targetRecord.sbom)),
          metadata: verifyFabricMetadata(artifact, specification, version, product,
-                 product == 'cbbg' && targetRecord.containsKey('library') ? '>=1.0.0 <2.0.0' : null),
+                 product == 'cbbg' && targetRecord.containsKey('library')
+                         ? ReleaseIdentity.parse((targetRecord.library_release ?: 'lib/v1.0.0') as String).libraryRequirement
+                         : null),
          sources: sourceCheck]
     }
 

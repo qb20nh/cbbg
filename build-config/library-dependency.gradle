@@ -22,6 +22,7 @@ if (libraryIdentity.version != libraryVersion) {
     throw new GradleException('Library release tag must match library_version: ' + libraryVersion)
 }
 ext.libraryRelease = libraryIdentity.tag
+ext.libraryRequirement = libraryIdentity.libraryRequirement
 ext.libraryArchive = new File(libraryOutput, "libs/cbbg-lib-${libraryPackageVersion}.jar")
 def libraryDevelopmentArchive = new File(libraryOutput, "intermediates/raw-jar/cbbg-lib-${libraryPackageVersion}-raw.jar")
 def libraryRuntimeDevelopmentArchive = (libraryOwner.java as int) < 25 ?
@@ -80,7 +81,7 @@ tasks.named('processResources') {
     filesMatching('fabric.mod.json') {
         filter { line ->
             line.replace('"depends": {', '"jars": [{"file": "META-INF/jars/cbbg-lib-' +
-                    libraryPackageVersion + '.jar"}], "depends": { "cbbg_lib": ">=1.0.0 <2.0.0",')
+                    libraryPackageVersion + '.jar"}], "depends": { "cbbg_lib": "' + libraryRequirement + '",')
         }
     }
 }
