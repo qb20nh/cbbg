@@ -132,7 +132,7 @@ class CandidateFiles {
     }
 
     static void writeNew(File file, Object value) {
-        Files.writeString(file.toPath(), JsonOutput.prettyPrint(JsonOutput.toJson(value)) + '\n',
+        Files.writeString(file.toPath(), ReproducibleText.json(value),
                 StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)
     }
 }

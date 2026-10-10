@@ -17,6 +17,9 @@ dependencies {
     implementation 'com.google.code.gson:gson:2.14.0'
     implementation 'com.guardsquare:proguard-gradle:7.10.0'
     implementation 'com.guardsquare:proguard-retrace:7.10.0'
+    // Pin the compressor as well as ZIP metadata; native zlib differs between JDKs.
+    implementation 'com.jcraft:jzlib:1.1.3'
+    implementation 'org.apache.commons:commons-compress:1.28.0'
     implementation 'org.cyclonedx:cyclonedx-gradle-plugin:3.4.1'
     implementation platform('com.fasterxml.jackson:jackson-bom:2.22.3')
     testImplementation platform('org.junit:junit-bom:6.1.3')

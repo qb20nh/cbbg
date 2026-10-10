@@ -75,7 +75,7 @@ tasks.named('processResources') {
             File descriptor = new File(destinationDir, 'fabric.mod.json')
             Map metadata = new groovy.json.JsonSlurper().parse(descriptor)
             metadata.mixins = ['cbbg_lib.gl3.mixins.json']
-            descriptor.text = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(metadata)) + '\n'
+            cbbg.gradle.ReproducibleText.writeJson(descriptor, metadata)
         }
     }
 }
@@ -111,7 +111,6 @@ if (remappedGame) {
         archiveClassifier = 'dev'
         destinationDirectory = layout.buildDirectory.dir('intermediates/dev')
         addNestedDependencies = false
-        doLast { cbbg.gradle.ReproducibleJar.normalize(archiveFile.get().asFile) }
     }
     releaseOptimization.optimizedJar.set(layout.buildDirectory.file("intermediates/proguard/cbbg-lib-${project.version}-named.jar"))
     def remapped = tasks.register('remapReleaseJar', net.fabricmc.loom.task.RemapJarTask) {
@@ -120,7 +119,6 @@ if (remappedGame) {
         archiveClassifier = ''
         destinationDirectory = layout.buildDirectory.dir('libs')
         addNestedDependencies = false
-        doLast { cbbg.gradle.ReproducibleJar.normalize(archiveFile.get().asFile) }
     }
     releaseOptimization.outputJar.set(remapped.flatMap { it.archiveFile })
 }

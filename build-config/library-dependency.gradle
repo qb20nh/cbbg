@@ -1,4 +1,5 @@
 def conventionLoader = plugins.getPlugin('cbbg.packaging').class.classLoader
+def ReproducibleText = conventionLoader.loadClass('cbbg.gradle.ReproducibleText')
 def TargetCatalog = conventionLoader.loadClass('cbbg.gradle.TargetCatalog')
 def CandidateManifest = conventionLoader.loadClass('cbbg.gradle.CandidateManifest')
 def repositoryRoot = file('../..')
@@ -109,7 +110,7 @@ def externalMetadata = tasks.register('processedLibraryExternalMetadata') {
                 'com.qb20nh.cbbg.gametest.ReleaseLibraryResolutionGameTest',
                 'com.qb20nh.cbbg.gametest.ReleaseUtilitiesGameTest']
         destination.get().asFile.parentFile.mkdirs()
-        destination.get().asFile.text = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(metadata)) + '\n'
+        ReproducibleText.writeJson(destination.get().asFile, metadata)
     }
 }
 tasks.register('processedLibraryExternalDriverJar', Jar) {

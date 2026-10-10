@@ -32,9 +32,9 @@ tasks.register('sourceInventory') {
         }
         if (entries.isEmpty()) throw new GradleException('No production Java sources selected')
         destination.parentFile.mkdirs()
-        destination.text = JsonOutput.prettyPrint(JsonOutput.toJson([
+        destination.setText(JsonOutput.prettyPrint(JsonOutput.toJson([
             schema: 1, sources: entries.values().toList()
-        ])) + '\n'
+        ])) + '\n', 'UTF-8')
         logger.lifecycle('Recorded {} production Java sources', entries.size())
     }
 }

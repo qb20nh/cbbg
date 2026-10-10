@@ -21,6 +21,10 @@ class UtilitiesPlugin implements Plugin<Project> {
         project.pluginManager.apply('java-library')
         project.pluginManager.apply('maven-publish')
         project.pluginManager.apply('cbbg.release-sbom')
+        ReproducibleText.configureResources(project)
+        project.tasks.withType(Jar).configureEach {
+            doLast { ReproducibleJar.normalize(archiveFile.get().asFile) }
+        }
         project.group = 'com.qb20nh'
         project.version = project.providers.gradleProperty('library_version').getOrElse('1.0.0')
         String name = "cbbg-utilities-${project.version}"
@@ -30,7 +34,10 @@ class UtilitiesPlugin implements Plugin<Project> {
             targetCompatibility = JavaVersion.VERSION_1_8
             withSourcesJar()
         }
-        project.tasks.withType(org.gradle.api.tasks.compile.JavaCompile).configureEach { options.release = 8 }
+        project.tasks.withType(org.gradle.api.tasks.compile.JavaCompile).configureEach {
+            options.release = 8
+            options.encoding = 'UTF-8'
+        }
         def raw = project.tasks.named('jar') {
             archiveFileName = "${name}-raw.jar"
             from(license)
@@ -69,7 +76,10 @@ class UtilitiesPlugin implements Plugin<Project> {
                 keepattributes '*'
                 printmapping mapping.get().asFile
             }
-            doLast { ReproducibleJar.normalize(output.get().asFile) }
+            doLast {
+                ReproducibleText.normalize(mapping.get().asFile)
+                ReproducibleJar.normalize(output.get().asFile)
+            }
         }
         def processedTest = project.tasks.register('processedUtilitiesTest', Test) {
             group = 'verification'

@@ -44,7 +44,7 @@ abstract class ExportJdkLibraries extends DefaultTask {
                 new ZipOutputStream(new BufferedOutputStream(new FileOutputStream(temporary))).withCloseable { jar ->
                     classes.each { path ->
                         def relative = root.relativize(path)
-                        String name = relative.subpath(1, relative.nameCount).toString()
+                        String name = relative.subpath(1, relative.nameCount).toString().replace('\\', '/')
                         if (!names.add(name)) throw new GradleException('Duplicate runtime class: ' + name)
                         ZipEntry entry = new ZipEntry(name)
                         entry.time = 0L
@@ -54,6 +54,7 @@ abstract class ExportJdkLibraries extends DefaultTask {
                     }
                 }
             }
+            ReproducibleJar.normalize(temporary)
             Files.move(temporary.toPath(), output.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING)
         } finally {
             temporary.delete()

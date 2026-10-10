@@ -168,9 +168,9 @@ abstract class BundleCandidate extends DefaultTask {
                                            add(prefix + built.drivers[suite].filename, CandidateFiles.checked(root, built.drivers[suite]))]
                                }]
         File dependencies = new File(outputsFile.parentFile, target.id + '-test-dependencies.json')
-        dependencies.text = groovy.json.JsonOutput.toJson(suites.collectEntries { suite ->
+        ReproducibleText.writeJson(dependencies, suites.collectEntries { suite ->
             [(suite): DriverDependencies.inventory(CandidateFiles.checked(root, built.drivers[suite]))]
-        }) + '\n'
+        })
         record.client_tests.test_dependencies = add(prefix + 'test-dependencies.json', dependencies)
         records[target.id] = record
         }

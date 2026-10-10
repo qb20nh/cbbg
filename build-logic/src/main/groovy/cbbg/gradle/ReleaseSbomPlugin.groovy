@@ -27,6 +27,10 @@ class ReleaseSbomPlugin implements Plugin<Project> {
                 Map bom = new JsonSlurper().parse(file) as Map
                 // Build time is recorded in provenance; keep dependency metadata reproducible.
                 bom.metadata?.remove('timestamp')
+                // Checkout remotes may use SSH, HTTPS, or a .git suffix.
+                bom.metadata.component.externalReferences =
+                        (bom.metadata.component.externalReferences ?: []).findAll { it.type != 'vcs' } +
+                        [[type: 'vcs', url: 'https://github.com/qb20nh/cbbg']]
                 bom.components?.findAll { it.group == 'com.google.code.gson' && it.name == 'gson' }.each {
                     it.properties = (it.properties ?: []) + [[name: 'cbbg:distribution',
                             value: 'Only the streaming API is embedded; shrunk and relocated with ProGuard. ' +
@@ -51,7 +55,11 @@ class ReleaseSbomPlugin implements Plugin<Project> {
                     root.dependsOn = (root.dependsOn ?: []) + reference
                     bom.dependencies = dependencies
                 }
-                file.text = JsonOutput.prettyPrint(JsonOutput.toJson(bom)) + '\n'
+                bom.components = (bom.components ?: []).sort { JsonOutput.toJson(CandidateFiles.sorted(it)) }
+                bom.dependencies = (bom.dependencies ?: []).each {
+                    if (it.dependsOn != null) it.dependsOn = it.dependsOn.sort()
+                }.sort { it.ref }
+                ReproducibleText.writeJson(file, bom)
             }
         }
         project.extensions.extraProperties.set('releaseSbomFile', sbom.flatMap { it.jsonOutput })

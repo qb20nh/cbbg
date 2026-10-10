@@ -94,7 +94,7 @@ class ReleasePlugin implements Plugin<Project> {
             CandidateManifest candidate = new CandidateManifest(manifest)
             candidate.identity.requireProduct('cbbg')
             Map report = ReleaseChecks.verifyLibraryDependencies(candidate, required('repo'), source(), run, true, true)
-            manifest.setText(JsonOutput.prettyPrint(JsonOutput.toJson(candidate.data)) + '\n', 'UTF-8')
+            ReproducibleText.writeJson(manifest, candidate.data)
             File checksums = new File(manifest.parentFile, 'SHA256SUMS')
             checksums.setText(manifest.parentFile.listFiles().findAll { it.name != 'SHA256SUMS' }
                     .sort { it.name }.collect { CandidateFiles.sha256(it) + '  ' + it.name }.join('\n') + '\n', 'UTF-8')

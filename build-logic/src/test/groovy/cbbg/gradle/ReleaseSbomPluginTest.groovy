@@ -60,6 +60,10 @@ dependencies {
         byte[] original = output.bytes
         runner.withArguments('releaseSbom', '--offline', '--rerun-tasks', '--stacktrace').build()
         assertArrayEquals(original, output.bytes, 'The same dependency inputs must produce the same SBOM')
+        File build = new File(directory, 'build.gradle')
+        build.text = build.text.replace("include 'fixture:bundled:1.0'", "include 'fixture:bundled:1.0'\n    include 'com.google.code.gson:gson:2.8.9'")
+        runner.withArguments('releaseSbom', '--offline', '--rerun-tasks', '--stacktrace').build()
+        assertArrayEquals(original, output.bytes, 'Dependency declaration order and duplicates must not change the SBOM')
     }
     @Test void nestedLibraryHashAndDependencyEdgeTrackChangedArchiveBytes() {
         new File(directory, 'settings.gradle').text = "rootProject.name = 'cbbg'\n"
@@ -92,6 +96,34 @@ ext.libraryPackageVersion = '1.0.0+mc26.3-fabric'
         assertEquals(org.gradle.testkit.runner.TaskOutcome.SUCCESS, changed.task(':releaseSbom').outcome)
         verify()
         assertFalse(Arrays.equals(before, output.bytes))
+    }
+
+    @Test void checkoutRemoteDoesNotChangeTheReleaseSbom() {
+        new File(directory, 'settings.gradle').text = "rootProject.name = 'cbbg'\n"
+        new File(directory, 'build.gradle').text = '''
+plugins { id 'java'; id 'cbbg.release-sbom' }
+group = 'com.qb20nh'
+version = '1.5.0'
+'''
+        git('init', '--quiet')
+        git('remote', 'add', 'origin', 'git@github.com:qb20nh/cbbg.git')
+        def runner = GradleRunner.create().withProjectDir(directory).withPluginClasspath()
+        runner.withArguments('releaseSbom', '--offline', '--stacktrace').build()
+        File output = new File(directory, 'build/libs/cbbg-1.5.0.cdx.json')
+        Map bom = new JsonSlurper().parse(output) as Map
+        assertEquals([[type: 'vcs', url: 'https://github.com/qb20nh/cbbg']],
+                bom.metadata.component.externalReferences)
+        byte[] original = output.bytes
+        git('remote', 'set-url', 'origin', 'https://github.com/qb20nh/cbbg')
+        runner.withArguments('releaseSbom', '--offline', '--rerun-tasks', '--stacktrace').build()
+        assertArrayEquals(original, output.bytes)
+    }
+
+    private void git(String... arguments) {
+        def process = new ProcessBuilder(['git'] + arguments.toList()).directory(directory)
+                .redirectErrorStream(true).start()
+        String output = process.inputStream.text
+        assertEquals(0, process.waitFor(), output)
     }
 
 }

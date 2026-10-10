@@ -269,8 +269,7 @@ if (targetId == '26.3-fabric') {
                     metadata.mixins.add('cbbg.early-startup-test.mixins.json')
                 }
                 destination.get().asFile.parentFile.mkdirs()
-                destination.get().asFile.text = groovy.json.JsonOutput.prettyPrint(
-                        groovy.json.JsonOutput.toJson(metadata))
+                cbbg.gradle.ReproducibleText.writeJson(destination.get().asFile, metadata)
             }
         }
         tasks.register("processed${suite}DriverJar", Jar) {
@@ -322,7 +321,6 @@ if (remappedGame) {
         archiveVersion = project.version.toString()
         destinationDirectory = layout.buildDirectory.dir('libs')
         addNestedDependencies = false
-        doLast { cbbg.gradle.ReproducibleJar.normalize(archiveFile.get().asFile) }
     }
     releaseOptimization.outputJar.set(remappedRelease.flatMap { it.archiveFile })
 }
@@ -360,8 +358,7 @@ tasks.named('processResources') {
         if (artifactOwner.minecraft == '1.21.1') {
             Map descriptor = new groovy.json.JsonSlurper().parse(descriptorFile)
             descriptor.depends.mixinextras = '>=' + cbbg.gradle.PackageChecks.MINECRAFT_1211_MIXIN_EXTRAS_MINIMUM
-            descriptorFile.text = groovy.json.JsonOutput.prettyPrint(
-                    groovy.json.JsonOutput.toJson(descriptor)) + '\n'
+            cbbg.gradle.ReproducibleText.writeJson(descriptorFile, descriptor)
         }
     }
     if (target.renderer == 'blaze-gpu-format') {
@@ -431,8 +428,7 @@ if (target.renderer == 'renderpearl') {
                     metadata.entrypoints.client = ['com.qb20nh.cbbg.gametest.DsaBenchmarkSettings']
                 }
                 destination.get().asFile.parentFile.mkdirs()
-                destination.get().asFile.text = groovy.json.JsonOutput.prettyPrint(
-                        groovy.json.JsonOutput.toJson(metadata))
+                cbbg.gradle.ReproducibleText.writeJson(destination.get().asFile, metadata)
             }
         }
         tasks.register("${fixture}DriverJar", Jar) {

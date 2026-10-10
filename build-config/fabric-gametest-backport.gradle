@@ -1,7 +1,7 @@
-import groovy.json.JsonOutput
 import groovy.json.JsonSlurper
 import java.security.MessageDigest
 
+def ReproducibleText = plugins.getPlugin('cbbg.packaging').class.classLoader.loadClass('cbbg.gradle.ReproducibleText')
 // Fabric first published client gametests for 1.21.4. Adapt its world setup for 1.21.1.
 def apiVersion = '2.0.0+99ff640a04'
 if (gameTarget.dependencies.clientGametest != apiVersion) {
@@ -120,7 +120,7 @@ def metadata = tasks.register('prepareClientGametestBackportMetadata') {
                                     'ChunkTrackingView.isWithinDistance', 'TestSingleplayerContext.close']]
         ['fabric.mod.json': descriptor, 'fabric-client-gametest-api-v1.mixins.json': mixins,
          'cbbg-client-gametest-backport.json': provenance].each { name, value ->
-            new File(directory, name).text = JsonOutput.prettyPrint(JsonOutput.toJson(value)) + '\n'
+            ReproducibleText.writeJson(new File(directory, name), value)
         }
     }
 }

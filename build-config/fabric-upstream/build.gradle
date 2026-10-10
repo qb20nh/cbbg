@@ -413,12 +413,12 @@ def earlyStartupMetadata = tasks.register('earlyStartupMetadata') {
     doLast {
         File metadata = new File(output.get().asFile, 'fabric.mod.json')
         metadata.parentFile.mkdirs()
-        metadata.text = groovy.json.JsonOutput.toJson([
+        cbbg.gradle.ReproducibleText.writeJson(metadata, [
             schemaVersion: 1, id: 'cbbg-early-startup-test', version: '1.0.0', environment: 'client',
             entrypoints: ['fabric-client-gametest': ['com.qb20nh.cbbg.gametest.EarlyStartupGameTest']],
             mixins: ['cbbg-early-startup-test.mixins.json']
         ])
-        new File(metadata.parentFile, 'cbbg-early-startup-test.mixins.json').text = groovy.json.JsonOutput.toJson([
+        cbbg.gradle.ReproducibleText.writeJson(new File(metadata.parentFile, 'cbbg-early-startup-test.mixins.json'), [
             required: true, package: 'com.qb20nh.cbbg.gametest.mixin', compatibilityLevel: 'JAVA_25',
             client: ['EarlyRenderPassMixin'], injectors: [defaultRequire: 1]
         ])

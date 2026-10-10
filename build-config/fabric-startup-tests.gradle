@@ -1,4 +1,5 @@
 // Legacy API imports are generated later; inspect the original selected sources.
+def ReproducibleText = plugins.getPlugin('cbbg.packaging').class.classLoader.loadClass('cbbg.gradle.ReproducibleText')
 def importMapping = tasks.findByName('mapProcessedGametestApiImports')
 def processedSources = importMapping == null ? sourceSets.processedGametest.java : importMapping.source
 def includesFixture = { String name ->
@@ -23,8 +24,7 @@ def includesFixture = { String name ->
             descriptor.entrypoints.preLaunch = ['com.qb20nh.cbbg.gametest.ReleaseStartupPreLaunch']
             descriptor.mixins.add('cbbg.release-startup.mixins.json')
             destination.get().asFile.parentFile.mkdirs()
-            destination.get().asFile.text = groovy.json.JsonOutput.prettyPrint(
-                    groovy.json.JsonOutput.toJson(descriptor)) + '\n'
+            ReproducibleText.writeJson(destination.get().asFile, descriptor)
         }
     }
     tasks.register("processedEarlyStartup${mode}DriverJar", Jar) {
@@ -67,8 +67,7 @@ def includesFixture = { String name ->
             if (name in ['IrisRestart', 'ShaderFailure']) descriptor.mixins.add('cbbg.release-startup.mixins.json')
             if (name == 'Allocation') descriptor.mixins.add('cbbg.release-allocation.mixins.json')
             destination.get().asFile.parentFile.mkdirs()
-            destination.get().asFile.text = groovy.json.JsonOutput.prettyPrint(
-                    groovy.json.JsonOutput.toJson(descriptor)) + '\n'
+            ReproducibleText.writeJson(destination.get().asFile, descriptor)
         }
     }
     tasks.register("processed${name}DriverJar", Jar) {

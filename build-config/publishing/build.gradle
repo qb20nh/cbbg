@@ -2,7 +2,7 @@ import cbbg.gradle.CandidateFiles
 import cbbg.gradle.LegacyPublication
 import cbbg.gradle.Publication
 import cbbg.gradle.ReleaseIdentity
-import groovy.json.JsonOutput
+import cbbg.gradle.ReproducibleText
 
 plugins {
     id 'base'
@@ -120,7 +120,7 @@ tasks.register('planModrinthUpload') {
         def plan = planUpload()
         def output = uploadPlan.get().asFile
         output.parentFile.mkdirs()
-        output.text = JsonOutput.prettyPrint(JsonOutput.toJson(plan)) + '\n'
+        ReproducibleText.writeJson(output, plan)
         logger.lifecycle('Modrinth retry plan: ' + plan.action + ' ' + plan.version_number)
     }
 }
@@ -145,7 +145,7 @@ tasks.named('modrinth') {
             if (result.action != 'reuse') throw new GradleException('Uploaded Modrinth version was not found')
             def output = uploadResult.get().asFile
             output.parentFile.mkdirs()
-            output.text = JsonOutput.prettyPrint(JsonOutput.toJson(result)) + '\n'
+            ReproducibleText.writeJson(output, result)
             logger.lifecycle('Modrinth retry plan: reuse ' + result.version_number)
         }
     }

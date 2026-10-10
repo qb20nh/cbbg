@@ -151,7 +151,9 @@ public class SampleMixin { public void shadow() {} }
                         }.toList()
                     }
                     assertEquals(targetClasses.toSet(), names.toSet())
-                    assertTrue(zip.entries().toList().every { it.time == 0L })
+                    assertTrue(zip.entries().toList().every {
+                        it.timeLocal == java.time.LocalDateTime.of(1980, 1, 1, 0, 0)
+                    })
                 }
             }
         } else {

@@ -7,6 +7,7 @@ import proguard.gradle.ProGuardTask
 
 class PackagingPlugin implements Plugin<Project> {
     void apply(Project project) {
+        ReproducibleText.configureResources(project)
         project.pluginManager.apply('cbbg.release-sbom')
         def optimization = project.extensions.create('releaseOptimization', ReleaseOptimization, project.objects, project)
         optimization.usageFile.convention(project.layout.buildDirectory.file('reports/proguard/usage.txt'))
@@ -49,7 +50,10 @@ class PackagingPlugin implements Plugin<Project> {
                 printusage(usage)
                 printconfiguration(configurationDump)
             }
-            doLast { ReproducibleJar.normalize(optimization.optimizedJar.get().asFile) }
+            doLast {
+                ReproducibleText.normalize(optimization.mappingFile.get().asFile)
+                ReproducibleJar.normalize(optimization.optimizedJar.get().asFile)
+            }
         }
         project.tasks.register('optimizeReleaseJar') {
             group = 'build'
@@ -63,6 +67,9 @@ class PackagingPlugin implements Plugin<Project> {
             }
         }
         project.afterEvaluate {
+            project.tasks.withType(Jar).configureEach {
+                doLast { ReproducibleJar.normalize(archiveFile.get().asFile) }
+            }
             if (optimization.mappingFile.isPresent()) {
                 def sources = project.tasks.named('sourcesJar', Jar)
                 sources.configure { destinationDirectory = project.layout.buildDirectory.dir('intermediates/source-jar') }

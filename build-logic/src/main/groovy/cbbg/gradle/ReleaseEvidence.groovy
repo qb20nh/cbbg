@@ -55,6 +55,7 @@ class ReleaseEvidence {
                     zip.close()
                 }
             }
+            ReproducibleJar.normalize(output)
             if (files.any { name, file -> CandidateFiles.sha256(file) != hashes[name] } ||
                     !Arrays.equals(checksumList, checksums(candidate))) {
                 throw new GradleException('Release evidence changed while packaging')
