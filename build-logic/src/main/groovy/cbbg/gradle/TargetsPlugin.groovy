@@ -30,6 +30,11 @@ class TargetsPlugin implements Plugin<Project> {
             if (value.present) forwarded[key] = value.get()
         }
         List<String> options = []
+        Map<String, String> systemProperties = project.gradle.startParameter.systemPropertiesArgs
+        String jvmArgs = systemProperties.containsKey('org.gradle.jvmargs')
+                ? systemProperties['org.gradle.jvmargs'] : project.providers.gradleProperty('org.gradle.jvmargs').orNull
+        if (jvmArgs != null) options.add('-Dorg.gradle.jvmargs=' + jvmArgs)
+        options.add('--max-workers=' + project.gradle.startParameter.maxWorkerCount)
         if (project.gradle.startParameter.rerunTasks) options.add('--rerun-tasks')
         options.add(project.gradle.startParameter.buildCacheEnabled ? '--build-cache' : '--no-build-cache')
         List<String> requested = project.gradle.startParameter.taskNames

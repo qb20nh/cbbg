@@ -82,6 +82,20 @@ case "$*" in *-Pcompat=fail*) exit 7;; esac
         assertFalse(arguments.readLines().contains('--build-cache'))
     }
 
+    @Test void forwardsBuildMemoryAndWorkerLimits() {
+        fixture()
+        new File(directory, 'gradle.properties').text = 'org.gradle.jvmargs=-Xmx768m\norg.gradle.workers.max=2\n'
+        File arguments = new File(directory, 'build/arguments.txt')
+        runner('build').build()
+        assertTrue(arguments.readLines().contains('-Dorg.gradle.jvmargs=-Xmx768m'))
+        assertTrue(arguments.readLines().contains('--max-workers=2'))
+        arguments.delete()
+        runner('build', '-Dorg.gradle.jvmargs=-Xmx512m', '--max-workers=1').build()
+        assertTrue(arguments.readLines().contains('-Dorg.gradle.jvmargs=-Xmx512m'))
+        assertTrue(arguments.readLines().contains('--max-workers=1'))
+        assertFalse(arguments.readLines().contains('-Dorg.gradle.jvmargs=-Xmx768m'))
+    }
+
     @Test void checksAndDevelopmentArtifactsUseOneChildBuildPerOwner() {
         fixture()
         runner(':ciCheck', ':dev', '-Ptargets=26.3-fabric,26.3-quilt').build()
