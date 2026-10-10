@@ -69,6 +69,13 @@ Valid values: `ENABLED`, `DISABLED`, `DEMO`.
 - **Iris shaderpacks**: when an Iris shaderpack is active, cbbg is **forced OFF** to avoid pipeline conflicts.
 - **GPU support**: if RGBA16F allocation fails on your device/driver, cbbg will automatically fall back to RGBA8 for the remainder of the session.
 
+## CBBG Lib
+
+Use [CBBG Lib](libraries/README.md) for noise generation, CPU image dithering and
+GPU dithering in your own mod or Java application. CBBG bundles its Minecraft
+library variant; the library and plain Java utilities are also released separately.
+The library README includes dependency setup and CPU/GPU integration examples.
+
 ## Development
 
 Use Java 25 to run Gradle. The root commands select targets from `targets.json`;
