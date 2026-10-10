@@ -377,7 +377,8 @@ print(json.dumps(reuse_arguments(json.loads(sys.argv[1]),Path(sys.argv[2]),json.
         else if (row.containsKey('control_receipt')) throw new GradleException('Ordinary cell has a restart control receipt')
         Map verified = parse(command.call(args.collect { it.toString() }, options.root as File))
         if (verified.profile != requirement.profile || verified.backend != requirement.backend ||
-                verified.scenarios != requirement.entrypoints || verified.startupMode != requirement.startupMode) {
+                verified.scenarios != requirement.entrypoints || verified.startupMode != requirement.startupMode ||
+                verified.externalLibrary != (requirement.externalLibrary == true)) {
             throw new GradleException('Verified receipt differs from acceptance cell: ' + key(requirement))
         }
     }

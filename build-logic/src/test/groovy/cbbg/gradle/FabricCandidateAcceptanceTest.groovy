@@ -211,6 +211,7 @@ class FabricCandidateAcceptanceTest {
                 profile: 'fabric-loader-0.19.5-26.3', installed: true])
         Map requirement = [suite: 'ordinary', profile: 'none', backend: 'opengl', restart: false,
                            startupMode: null, entrypoints: ['example.Test'], externalLibrary: product == 'external']
+        if (product != 'external') requirement.remove('externalLibrary')
         Map options = [root: fixture.root, candidate: fixture.file, output: new File(directory, 'acceptance'),
                        hostLibraryDirectories: [],
                        python: python, java21: python, java25: python, weston: python,
@@ -221,6 +222,7 @@ class FabricCandidateAcceptanceTest {
         Map entry = [pin: 'api', sha256: CandidateFiles.sha256(python)]
         int verifications = 0
         String head = 'a' * 40
+        boolean wrongCachedLibrary = false
         Closure command = { List args, File root ->
             if (args[0] == 'git') return args[1] == 'rev-parse' ? head :
                     args[1] == 'show' ? 'runner implementation' : ''
@@ -234,6 +236,11 @@ class FabricCandidateAcceptanceTest {
             if (args[1].toString().endsWith('fabric_run_evidence.py')) {
                 verifications++
                 File receipt = new File(args[args.indexOf('--receipt') + 1].toString())
+                if (wrongCachedLibrary && receipt.toPath().startsWith(new File(options.output as File, fixture.target.id + '/reuse').toPath())) {
+                    Map verified = CandidateFiles.read(receipt) as Map
+                    verified.externalLibrary = product != 'external'
+                    return JsonOutput.toJson(verified)
+                }
                 return receipt.text
             }
             ''
@@ -250,7 +257,8 @@ class FabricCandidateAcceptanceTest {
             game.mkdirs()
             ['.fabric', 'saves', 'natives'].each { new File(game, it).mkdirs() }
             File receipt = new File(game, 'probe.json')
-            receipt.text = JsonOutput.toJson([profile: 'none', backend: 'opengl', scenarios: ['example.Test'], startupMode: null])
+            receipt.text = JsonOutput.toJson([profile: 'none', backend: 'opengl', scenarios: ['example.Test'],
+                                             startupMode: null, externalLibrary: product == 'external'])
             [status: 'passed', receipt: receipt.absolutePath]
         }
         // Create dependencies after the input identity is established, as downloads normally do.
@@ -288,6 +296,16 @@ class FabricCandidateAcceptanceTest {
         Map imported = (CandidateFiles.read(importedIndex) as List)[0]
         assertEquals('a' * 40, CandidateFiles.read(CandidateFiles.checked(importedIndex.parentFile, imported.reuse.inputs)).source)
         assertEquals('b' * 40, CandidateFiles.read(new File(options.output as File, 'inputs.json')).source)
+        wrongCachedLibrary = true
+        options.output = new File(directory, 'wrong-cached-library')
+        FabricCandidateAcceptance.execute(options, prepareCommand, probe)
+        assertEquals(2, launches, 'An external-library mismatch must run a fresh client')
+        File freshIndex = new File(options.output as File, fixture.target.id + '/results.json')
+        Map fresh = (CandidateFiles.read(freshIndex) as List)[0]
+        assertFalse(fresh.containsKey('reuse'))
+        FabricCandidateAcceptance.execute(options, prepareCommand, probe)
+        assertEquals(2, launches, 'The replacement result must be reusable on retry')
+        wrongCachedLibrary = false
         (product == 'lib' ? ['inputs.json'] : ['initial-cbbg.json', 'inputs.json']).each { name ->
             File saved = name == 'inputs.json' ? new File(priorOutput, name) : new File(index.parentFile, name)
             byte[] contents = saved.bytes
