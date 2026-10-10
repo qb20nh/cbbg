@@ -91,7 +91,7 @@ in one HTML comment. For a single target:
 For a shared release:
 
 ```md
-## [1.5.0] - YYYY-MM-DD <!-- [1.5.0-mc26.3-fabric] [1.5.0-mc1.20.1-neoforge] -->
+## [1.5.0] - YYYY-MM-DD <!-- [1.5.0-mc26.2-fabric] [1.5.0-mc26.3-fabric] [1.5.0-mc26.3-neoforge] -->
 
 ### Added
 
@@ -99,9 +99,13 @@ For a shared release:
 
 ### Fixed
 
-#### Minecraft 26.3 — Fabric
+#### Minecraft 26.2, 26.3 — Fabric
 
-- Fix specific to this target.
+- Fix shared by these Fabric targets.
+
+#### Minecraft 26.3
+
+- Fix shared by both 26.3 loaders.
 ```
 
 Use `<version>-mc<minecraft_version>-<loader>` for each identifier, with that
@@ -111,16 +115,21 @@ GitHub release.
 
 Keep shared changes directly under the standard `### Added`, `### Changed`,
 `### Deprecated`, `### Removed`, `### Fixed` and `### Security` categories. Use
-`####` headings for changes limited to `Minecraft 26.3`, `Fabric`, or
-`Minecraft 26.3 — Fabric`; substitute the applicable version and loader. Loader
-labels are Fabric, Quilt, Forge, NeoForge and Legacy Fabric, regardless of case.
+`####` headings to group each change by its applicable targets. List exact versions
+with commas, such as `Minecraft 1.21.1, 1.21.11`. An optional loader suffix applies
+to the whole list: `Minecraft 26.2, 26.3 — Fabric`. Single-version and loader-only
+headings such as `Minecraft 26.3` or `Fabric` also work. Loader labels are Fabric,
+Quilt, Forge, NeoForge and Legacy Fabric, regardless of case.
 These headings apply through the next H4 or category heading. Reserve H4s for
 these scopes. Single-target entries can keep changes directly under categories.
 
-Describe every change users can experience compared with the relevant previous
-published release, and combine related items. Shared descriptions should apply to
-every listed target. Write briefly without dropping information and give readers
-enough context to understand the change without following development.
+Describe every change users can experience compared with each target's previous
+published release. Write each change once per category and group changes with the
+same target set under one H4. Groups may overlap; each description must apply to
+every target in its group. Combine related items and write briefly without dropping
+information. Give readers enough context to understand the change without following
+development. Each platform upload must include all shared changes and every group
+matching any version and loader supported by its artifact.
 
 Extract the selected entry with Gradle:
 

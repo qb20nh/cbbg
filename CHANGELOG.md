@@ -15,18 +15,18 @@ This project uses [Keep a Changelog](https://keepachangelog.com/) and [Semantic 
 
 ### Changed
 
-#### Minecraft 1.21.1
+#### Minecraft 1.21.1, 1.21.11
 
 - Generate noise images and load/save their caches in the background. Cancel replaced calculations and pause dithering until the requested noise is ready.
 - Regenerate caches from previous releases on first use.
 - Reduce the release jar size; include source mappings and dependency information in the sources jar.
+
+#### Minecraft 1.21.1
+
 - Support Fabric Loader `>=0.16.0 <1.0.0` and require Fabric API `>=0.101.2+1.21.1 <1.0.0`.
 
 #### Minecraft 1.21.11
 
-- Generate noise images and load/save their caches in the background. Cancel replaced calculations and pause dithering until the requested noise is ready.
-- Regenerate caches from previous releases on first use.
-- Reduce the release jar size; include source mappings and dependency information in the sources jar.
 - Support Fabric Loader `>=0.17.3 <1.0.0` and require Fabric API `>=0.139.4+1.21.11 <1.0.0`.
 
 ### Fixed
@@ -34,33 +34,25 @@ This project uses [Keep a Changelog](https://keepachangelog.com/) and [Semantic 
 - Align dithering with RenderScale's rendered pixels, including in screenshots ([#20](https://github.com/qb20nh/cbbg/issues/20)).
 - Lock or unlock settings controls immediately when changing Mode.
 
-#### Minecraft 1.21.1
+#### Minecraft 1.21.1, 1.21.11
 
 - Apply the requested noise size, depth and seed consistently, including resets during generation and forced regeneration of cached defaults.
 - Restart the noise-frame sequence after reloading, and use the displayed noise frame in screenshots.
 - Clear generation toasts after cancellation, failure, or completion with notifications disabled; keep them separate from Minecraft's periodic notifications.
 - Release replaced noise images and GPU resources, and cancel generation when Minecraft closes.
 - Parse mode and pixel-format commands consistently across system languages.
+
+#### Minecraft 1.21.1, 1.21.11, 26.1, 26.1.1, 26.1.2, 26.2
+
 - Preserve float precision with improved transparency and Fabulous graphics, including when Sodium is installed ([#19](https://github.com/qb20nh/cbbg/issues/19)).
+
+#### Minecraft 1.21.1
+
 - Convert float screenshots correctly when dithering is unavailable.
 - Release framebuffer resources after a failed allocation.
 
-#### Minecraft 1.21.11
-
-- Apply the requested noise size, depth and seed consistently, including resets during generation and forced regeneration of cached defaults.
-- Restart the noise-frame sequence after reloading, and use the displayed noise frame in screenshots.
-- Clear generation toasts after cancellation, failure, or completion with notifications disabled; keep them separate from Minecraft's periodic notifications.
-- Release replaced noise images and GPU resources, and cancel generation when Minecraft closes.
-- Parse mode and pixel-format commands consistently across system languages.
-- Preserve float precision with improved transparency and Fabulous graphics, including when Sodium is installed ([#19](https://github.com/qb20nh/cbbg/issues/19)).
-
-#### Minecraft 26.1
-
-- Preserve float precision with improved transparency and Fabulous graphics on 26.1.x, including when Sodium is installed ([#19](https://github.com/qb20nh/cbbg/issues/19)).
-
 #### Minecraft 26.2
 
-- Preserve float precision with improved transparency and Fabulous graphics, including when Sodium is installed ([#19](https://github.com/qb20nh/cbbg/issues/19)).
 - Update RenderScale's target precision when changing CBBG's mode or pixel format.
 
 ## [1.4.2 for Minecraft 26.2 Fabric] - 2026-10-05 <!-- [1.4.2-mc26.2-fabric] -->

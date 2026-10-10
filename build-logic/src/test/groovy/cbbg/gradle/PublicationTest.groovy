@@ -95,6 +95,9 @@ class PublicationTest {
     void sharedReleaseGeneratesIndependentRecordsWithApplicableNotes() {
         fixture = SharedPublicationFixture.multiple(new File(directory, 'multiple-notes'))
         String notes = '''### Fixed
+- Shared fix.
+#### Minecraft 26.2, 26.3 — Fabric
+- Grouped fix.
 #### Minecraft 26.3 — Fabric
 - New target fix.
 #### Minecraft 26.2 — Fabric
@@ -110,6 +113,12 @@ class PublicationTest {
         assertFalse(value.records[1].curseforge.changelog.contains('New target fix.'))
         assertTrue(value.records[1].curseforge.changelog.contains('Older target fix.'))
         assertTrue(value.records.every { it.modrinth.changelog.contains('Common loader fix.') })
+        value.records.eachWithIndex { record, index ->
+            List<String> changes = record.modrinth.changelog.readLines().findAll { it.startsWith('- ') }
+            assertEquals(['- Shared fix.', '- Grouped fix.',
+                          index == 0 ? '- New target fix.' : '- Older target fix.', '- Common loader fix.'], changes)
+            assertEquals(record.modrinth.changelog, record.curseforge.changelog)
+        }
         writeMetadata(value)
         assertEquals(['26.2-fabric'], Publication.checkedRecord(fixture.file, publication,
                 '26.2-fabric', fixture.root)[1].targets)
@@ -165,7 +174,16 @@ class PublicationTest {
         fixture.manifest.catalog_sha256 = CandidateFiles.canonicalHash(fixture.catalog)
         fixture.file.text = JsonOutput.toJson(fixture.manifest)
         Map value = Publication.metadata(fixture.file, fixture.root,
-                '### Fixed\n#### Fabric\n- Fabric fix.\n#### Quilt\n- Quilt fix.\n#### Forge\n- Other fix.\n')
+                '''### Fixed
+#### Fabric
+- Fabric fix.
+#### Quilt
+- Quilt fix.
+#### Minecraft 26.3.1, 26.3.2 — Fabric
+- Patch fix.
+#### Forge
+- Other fix.
+''')
         assertEquals(1, value.records.size())
         assertEquals(['26.3-fabric', '26.3-quilt', '26.3.1-fabric'], value.records[0].targets)
         assertEquals(['fabric', 'quilt'], value.records[0].modrinth.loaders)
@@ -174,7 +192,11 @@ class PublicationTest {
                 value.records[0].curseforge.version_labels)
         assertTrue(value.records[0].modrinth.changelog.contains('Fabric fix.'))
         assertTrue(value.records[0].modrinth.changelog.contains('Quilt fix.'))
+        assertTrue(value.records[0].modrinth.changelog.contains('Patch fix.'))
         assertFalse(value.records[0].modrinth.changelog.contains('Other fix.'))
+        assertEquals(['- Fabric fix.', '- Quilt fix.', '- Patch fix.'],
+                value.records[0].modrinth.changelog.readLines().findAll { it.startsWith('- ') })
+        assertEquals(value.records[0].modrinth.changelog, value.records[0].curseforge.changelog)
         writeMetadata(value)
         assertEquals(value.records[0], Publication.checkedRecord(fixture.file, publication,
                 fixture.target.id, fixture.root)[1])
