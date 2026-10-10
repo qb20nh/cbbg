@@ -50,8 +50,13 @@ This project uses [Keep a Changelog](https://keepachangelog.com/) and [Semantic 
 
 - Convert float screenshots correctly when dithering is unavailable.
 - Release framebuffer resources after a failed allocation.
+- Keep settings cards and labels visible above the menu background, including in generation confirmations.
 
-#### Minecraft 26.2
+#### Minecraft 1.21.11
+
+- Avoid crashes when other renderers allocate unnamed framebuffer targets during menu blur.
+
+#### Minecraft 1.21.1, 26.2
 
 - Update RenderScale's target precision when changing CBBG's mode or pixel format.
 

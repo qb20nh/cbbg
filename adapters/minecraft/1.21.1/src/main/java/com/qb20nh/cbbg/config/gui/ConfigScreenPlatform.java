@@ -19,6 +19,7 @@ public abstract class ConfigScreenPlatform extends Screen {
   @Override
   public void renderBackground(GuiGraphics graphics, int x, int y, float delta) {
     safeBackground(graphics, delta);
+    drawConfig(new GuiGraphicsCanvas(graphics));
   }
 
   private void safeBackground(GuiGraphics graphics, float delta) {
@@ -30,28 +31,17 @@ public abstract class ConfigScreenPlatform extends Screen {
     }
   }
 
-  @Override
-  public void render(GuiGraphics graphics, int x, int y, float delta) {
-    drawConfig(new GuiGraphicsCanvas(graphics));
-    super.render(graphics, x, y, delta);
-  }
-
   protected ConfirmScreen confirmation(BooleanConsumer action, Component title, Component message) {
     return new ConfirmScreen(action, title, message) {
       @Override
       public void renderBackground(GuiGraphics graphics, int x, int y, float delta) {
         ConfigScreenPlatform.this.safeBackground(graphics, delta);
-      }
-
-      @Override
-      public void render(GuiGraphics graphics, int x, int y, float delta) {
         new GuiGraphicsCanvas(graphics)
             .card(
                 Math.max(0, width / 2 - 172),
                 40,
                 Math.min(width, width / 2 + 172),
                 Math.max(40, height - 24));
-        super.render(graphics, x, y, delta);
       }
     };
   }
