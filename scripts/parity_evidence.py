@@ -82,10 +82,12 @@ def validate_release_identity(release, commit):
 
 def validate_release_targets(release, targets):
     if "+" in release:
-        suffixes = ["mc" + target["minecraft"] + "-" + target["loader"]
-                    for target in targets.values()]
-        if len(suffixes) != 1 or release.split("+", 1)[1] != suffixes[0]:
-            raise EvidenceError("Release tag must match the single selected target")
+        owners = {target.get("artifactOf") or identifier
+                  for identifier, target in targets.items()}
+        owner = targets.get(next(iter(owners))) if len(owners) == 1 else None
+        if (owner is None or release.split("+", 1)[1]
+                != "mc" + owner["minecraft"] + "-" + owner["loader"]):
+            raise EvidenceError("Release tag must match the selected artifact owner")
 
 
 def selected_target_specs(catalog, selection):

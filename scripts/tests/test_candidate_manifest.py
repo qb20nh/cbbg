@@ -105,6 +105,25 @@ class CandidateManifestTest(unittest.TestCase):
             with self.subTest(tag=tag), self.assertRaises(EvidenceError):
                 self.read()
 
+    def test_targeted_release_accepts_shared_patch_runtimes(self):
+        selection = ['26.1-fabric', '26.1.1-fabric', '26.1.2-fabric']
+        self.manifest['selected_targets'] = selection
+        self.manifest['targets'] = []
+        for identifier in selection:
+            target = copy.deepcopy(self.target)
+            target['id'] = identifier
+            self.manifest['targets'].append(target)
+        for product, tag in (('cbbg', 'v1.5.0+mc26.1-fabric'),
+                             ('lib', 'lib/v1.0.0-beta.1+mc26.1-fabric')):
+            self.manifest.update(product=product, release=tag)
+            self.write()
+            for identifier in selection:
+                with self.subTest(product=product, target=identifier):
+                    manifest, target, specification = client_candidate(self.path, identifier)
+                    self.assertEqual(tag, manifest['release'])
+                    self.assertEqual(identifier, target['id'])
+                    self.assertEqual(identifier, specification['id'])
+
     def utilities(self):
         for kind, name in (('utilities', 'cbbg-utilities-1.4.0.jar'),
                            ('utilities_sources', 'cbbg-utilities-1.4.0-sources.jar')):
