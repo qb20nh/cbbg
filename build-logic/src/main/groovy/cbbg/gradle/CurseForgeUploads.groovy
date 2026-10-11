@@ -4,8 +4,8 @@ import org.gradle.api.GradleException
 
 /** Select a complete upload family, or resume a previously submitted family. */
 class CurseForgeUploads {
-    static final List<String> ATTACHMENTS = ['sources', 'utilities', 'utilities_sources',
-                                           'library', 'library_sources', 'evidence']
+    static final List<String> LEGACY_ATTACHMENTS = ['sources', 'utilities', 'utilities_sources',
+                                                  'library', 'library_sources', 'evidence']
 
     static Map plan(File metadataFile, File receiptsDirectory, File assets, String target,
                     boolean resuming = false, boolean confirmedUnattempted = false) {
@@ -77,12 +77,14 @@ class CurseForgeUploads {
             if (!(saved.file_id instanceof String) || !(saved.file_id ==~ /[1-9][0-9]*/)) {
                 throw new GradleException('Invalid CurseForge parent ID')
             }
-            if (ATTACHMENTS.any { saved[it + '_file_id'] != null }) {
+            if (LEGACY_ATTACHMENTS.any { saved[it + '_file_id'] != null }) {
                 throw new GradleException('Legacy receipt includes attachments; reconcile them before migration')
             }
             parent = saved.file_id
         }
-        List<String> kinds = (parent ? [] : ['artifact']) + ATTACHMENTS.findAll { record[it] instanceof Map }
+        List<String> kinds = Publication.uploadKinds(record).findAll {
+            record[it] instanceof Map && (it != 'artifact' || !parent)
+        }
         List<String> files = kinds.collect { CandidateFiles.checked(assets, (Map) record[it]).absolutePath }
         if (files.isEmpty()) throw new GradleException('No CurseForge files selected')
         Map result = [target: target, release: metadata.release, source_commit: metadata.source_commit, record: record,

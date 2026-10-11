@@ -72,8 +72,9 @@ dependency provenance, `provenance.jsonl`, and `SHA256SUMS`. CBBG Lib GitHub
 releases contain library mod and sources JARs plus
 `cbbg-utilities-<library_version>.jar` and its sources JAR once per release,
 with their release provenance and checksums. CBBG packages the matching library
-JAR inside its mod; standalone library and utility files are attached to CBBG
-Modrinth and CurseForge uploads from the verified candidate references.
+JAR inside its mod. Modrinth and CurseForge receive the main mod, its sources and
+release evidence. Standalone library and utility downloads are for developers
+and belong in the separate CBBG Lib GitHub release.
 The sources JAR includes the ProGuard mapping and CycloneDX SBOM under
 `META-INF/cbbg/`; they need no separate release assets.
 

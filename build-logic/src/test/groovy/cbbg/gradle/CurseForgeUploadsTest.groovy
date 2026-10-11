@@ -19,7 +19,7 @@ class CurseForgeUploadsTest {
         receipts = new File(directory, 'receipts')
         receipts.mkdirs()
         Map record = [targets: ['26.3-fabric'], curseforge: [display_name: 'cbbg 1.5.0+mc26.3-fabric']]
-        (['artifact'] + CurseForgeUploads.ATTACHMENTS).each { kind ->
+        (['artifact'] + CurseForgeUploads.LEGACY_ATTACHMENTS).each { kind ->
             File file = new File(directory, kind + '.jar')
             file.text = kind
             record[kind] = [path: file.name, sha256: CandidateFiles.sha256(file)]
@@ -44,11 +44,12 @@ class CurseForgeUploadsTest {
     }
 
     @Test
-    void newFamilyIncludesEveryAttachment() {
+    void newFamilyIncludesOnlyMainSourcesAndEvidence() {
         Map result = plan()
         assertEquals('', result.parent_file_id)
         assertEquals(new File(directory, 'artifact.jar').absolutePath, result.file_path)
-        assertEquals(6, result.additional_files.readLines().size())
+        assertEquals(['sources.jar', 'evidence.jar'],
+                result.additional_files.readLines().collect { new File(it).name })
         assertEquals('', result.receipt)
     }
 
@@ -58,7 +59,7 @@ class CurseForgeUploadsTest {
         Map result = plan()
         assertEquals('9126989', result.parent_file_id)
         assertEquals(new File(directory, 'sources.jar').absolutePath, result.file_path)
-        assertEquals(5, result.additional_files.readLines().size())
+        assertEquals([new File(directory, 'evidence.jar').absolutePath], result.additional_files.readLines())
         assertFalse(result.additional_files.contains('artifact.jar'))
     }
 
@@ -84,7 +85,7 @@ class CurseForgeUploadsTest {
     void separateLegacyAttachmentReceiptsRequireReconciliation() {
         legacy()
         Map saved = CandidateFiles.read(new File(receipts, 'curseforge-result.json'))
-        CurseForgeUploads.ATTACHMENTS.each { kind ->
+        CurseForgeUploads.LEGACY_ATTACHMENTS.each { kind ->
             File attachment = new File(receipts, 'curseforge-' + kind.replace('_', '-') + '-result.json')
             write(attachment, saved + [file_id: '123'])
             GradleException error = assertThrows(GradleException) { plan() }

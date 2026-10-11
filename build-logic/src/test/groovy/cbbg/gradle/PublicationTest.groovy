@@ -370,12 +370,11 @@ class PublicationTest {
          status: 'listed', changelog: upload.changelog,
          loaders: ['fabric'], game_versions: ['26.3'],
          dependencies: [[project_id: 'P7dR8mSH', dependency_type: 'required']],
-         files: (['artifact', 'sources'] + (record.containsKey('utilities') ? ['utilities', 'utilities_sources'] : []) +
-                 (record.containsKey('library') ? ['library', 'library_sources'] : []) +
+         files: (['artifact', 'sources'] +
                  (record.containsKey('evidence') ? ['evidence'] : [])).collect { String kind ->
              File file = new File(fixture.bundle, record[kind].path)
              [filename: file.name, hashes: [sha512: sha512(file)],
-              primary: kind == 'artifact', file_type: kind in ['sources', 'utilities_sources', 'library_sources'] ? 'sources-jar' : null]
+              primary: kind == 'artifact', file_type: kind == 'sources' ? 'sources-jar' : null]
          }]
     }
 
@@ -424,7 +423,7 @@ class PublicationTest {
         fails("requires 'cbbg'") { metadata() }
     }
 
-    @Test void libraryAttachmentsRequireExactRemoteFilesAndSourceTypes() {
+    @Test void nestedLibraryIsVerifiedWithoutUploadingStandaloneDeveloperFiles() {
         File artifact = new File(fixture.bundle, fixture.record.artifact.path)
         Map entries = [:]
         new ZipFile(artifact).withCloseable { zip ->
@@ -455,44 +454,31 @@ class PublicationTest {
         assertEquals(fixture.record.library_sources, value.records[0].library_sources)
         writeMetadata(value)
         Map remote = existing(value.records[0])
-        assertEquals(4, remote.files.size())
+        assertEquals(2, remote.files.size())
         Map result = Publication.plan(fixture.file, publication, fixture.target.id, fixture.root, fetch([remote], []))
         assertEquals('reuse', result.action)
-        assertEquals(fixture.record.library, result.library)
-        remote.files[2].file_type = 'other'
-        assertEquals('reuse', Publication.plan(fixture.file, publication, fixture.target.id, fixture.root, fetch([remote], [])).action)
-        remote.files[3].file_type = null
-        fails('Existing Modrinth file') {
-            Publication.plan(fixture.file, publication, fixture.target.id, fixture.root, fetch([remote], []))
-        }
+        assertFalse(result.containsKey('library'))
+        assertFalse(result.containsKey('library_sources'))
+        assertEquals(['artifact', 'sources'], Publication.uploadKinds(value.records[0]))
         value.records[0].library.sha256 = '0' * 64
         writeMetadata(value)
         fails('checked candidate') { Publication.checkedRecord(fixture.file, publication, fixture.target.id, fixture.root) }
     }
 
     @Test
-    void utilityAttachmentsRequireExactRemoteFilesHashesAndTypes() {
+    void utilityReferencesAreVerifiedWithoutUploadingDeveloperFiles() {
         CandidateFixture.utilities(fixture)
         Map value = metadata()
         assertEquals(fixture.record.utilities, value.records[0].utilities)
         assertEquals(fixture.record.utilities_sources, value.records[0].utilities_sources)
         writeMetadata(value)
         Map remote = existing(value.records[0])
-        assertEquals(4, remote.files.size())
+        assertEquals(2, remote.files.size())
         Map result = Publication.plan(fixture.file, publication, '26.3-fabric', fixture.root, fetch([remote], []))
         assertEquals('reuse', result.action)
-        assertEquals(fixture.record.utilities, result.utilities)
-        remote.files[2].file_type = 'other'
-        assertEquals('reuse', Publication.plan(fixture.file, publication, '26.3-fabric', fixture.root, fetch([remote], [])).action)
-        for (Closure change : [{ it.files.remove(3) }, { it.files.add(it.files[3]) },
-                              { it.files[2].primary = true }, { it.files[2].file_type = 'sources-jar' },
-                              { it.files[3].file_type = null }, { it.files[3].hashes.sha512 = '0' * 128 }]) {
-            Map wrong = CandidateFiles.parse(new StringReader(JsonOutput.toJson(remote))) as Map
-            change(wrong)
-            fails('Existing Modrinth') {
-                Publication.plan(fixture.file, publication, '26.3-fabric', fixture.root, fetch([wrong], []))
-            }
-        }
+        assertFalse(result.containsKey('utilities'))
+        assertFalse(result.containsKey('utilities_sources'))
+        assertEquals(['artifact', 'sources'], Publication.uploadKinds(value.records[0]))
         value.records[0].remove('utilities_sources')
         writeMetadata(value)
         fails('checked candidate') {

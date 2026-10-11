@@ -130,9 +130,8 @@ tasks.register('sendUpload') {
             assertEquals(record.modrinth.loaders, actual.data.loaders)
             assertEquals(record.artifact.path, actual.data.primary_file)
             Map types = [(record.sources.path): 'sources-jar']
-            if (utilities) types[record.utilities_sources.path] = 'sources-jar'
             assertEquals(types, actual.data.file_types)
-            List<String> kinds = ['artifact', 'sources'] + (utilities ? ['utilities', 'utilities_sources'] : []) + ['evidence']
+            List<String> kinds = ['artifact', 'sources', 'evidence']
             List<String> names = kinds.collect { record[it].path }
             assertEquals(names.size(), actual.data.file_parts.size())
             assertEquals(names.toSet(), actual.data.file_parts.toSet())
