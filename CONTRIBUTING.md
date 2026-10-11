@@ -187,6 +187,11 @@ To resume, dispatch Publish with `curseforge_resume_run` set to the previous
 run ID. Saved receipts retain accepted file IDs and validate the submitted files
 and metadata. An uncertain response requires dashboard reconciliation before
 resuming; do not start a fresh upload of that family.
+Resume requires a usable receipt for every artifact owner. Missing action receipts
+or plans require reconciliation. If a target never reached uploading, check the
+previous run and dashboard, then list its owner ID in
+`curseforge_unattempted_targets` (comma-separated). This confirmation permits
+only targets with no upload receipts; it cannot override incomplete records.
 
 See [the build command reference](build-config/README.md) for task inputs.
 Hotfix checks take explicit prior release manifests and expand testing to

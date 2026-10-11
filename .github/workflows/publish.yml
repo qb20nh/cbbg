@@ -26,6 +26,11 @@ on:
         required: false
         default: ""
         type: string
+      curseforge_unattempted_targets:
+        description: "Resume only: comma-separated artifact owner IDs confirmed never attempted, after checking the previous run and CurseForge dashboard"
+        required: false
+        default: ""
+        type: string
 
 permissions:
   contents: read
@@ -156,9 +161,14 @@ jobs:
 
       - name: Check all CurseForge retry plans
         if: inputs.services != 'modrinth'
+        env:
+          RESUME_RUN: ${{ inputs.curseforge_resume_run }}
+          UNATTEMPTED_TARGETS: ${{ inputs.curseforge_unattempted_targets }}
         run: |
           ./gradlew --no-daemon -PpublicationMetadata=build/publication.json \
-            -PcurseforgeReceipts=build/curseforge-receipts -Passets=release-assets planCurseForgeUploads
+            -PcurseforgeReceipts=build/curseforge-receipts -Passets=release-assets \
+            "-PcurseforgeResumeRun=$RESUME_RUN" "-PcurseforgeUnattemptedTargets=$UNATTEMPTED_TARGETS" \
+            planCurseForgeUploads
 
       - name: Check all Modrinth retry plans
         if: inputs.services != 'curseforge'
@@ -267,9 +277,12 @@ jobs:
         id: curseforge_plan
         env:
           TARGET_ID: ${{ matrix.target }}
+          RESUME_RUN: ${{ inputs.curseforge_resume_run }}
+          UNATTEMPTED_TARGETS: ${{ inputs.curseforge_unattempted_targets }}
         run: |
           ./gradlew --no-daemon -PpublicationMetadata=build/publication.json \
             -PcurseforgeReceipts=build/curseforge-receipts -Passets=release-assets \
+            "-PcurseforgeResumeRun=$RESUME_RUN" "-PcurseforgeUnattemptedTargets=$UNATTEMPTED_TARGETS" \
             "-Ptarget=$TARGET_ID" "-PgithubOutput=$GITHUB_OUTPUT" \
             -Poutput=build/curseforge-plan.json planCurseForgeUploads
 

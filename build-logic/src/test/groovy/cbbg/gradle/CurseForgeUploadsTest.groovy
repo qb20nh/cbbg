@@ -31,7 +31,9 @@ class CurseForgeUploadsTest {
 
     private static void write(File file, Map value) { file.text = JsonOutput.toJson(value) }
 
-    private Map plan() { CurseForgeUploads.plan(metadataFile, receipts, directory, '26.3-fabric') }
+    private Map plan(boolean resuming = false, boolean confirmedUnattempted = false) {
+        CurseForgeUploads.plan(metadataFile, receipts, directory, '26.3-fabric', resuming, confirmedUnattempted)
+    }
 
     private void legacy() {
         write(new File(receipts, 'publication.json'), metadata)
@@ -117,11 +119,48 @@ class CurseForgeUploadsTest {
     }
 
     @Test
+    void resumeWithoutReceiptsRequiresConfirmationBeforeStartingANewFamily() {
+        GradleException error = assertThrows(GradleException) { plan(true) }
+        assertTrue(error.message.contains('No usable CurseForge receipt'), error.message)
+        Map confirmed = plan(true, true)
+        assertEquals(new File(directory, 'artifact.jar').absolutePath, confirmed.file_path)
+        assertTrue(confirmed.confirmed_unattempted)
+    }
+
+    @Test
+    void incompletePlansCannotBeIgnoredOrOverridden() {
+        write(new File(receipts, 'curseforge-plan.json'), plan())
+        [false, true].each { confirmation ->
+            GradleException error = assertThrows(GradleException) { plan(true, confirmation) }
+            assertTrue(error.message.contains('missing its action receipt'), error.message)
+        }
+        assertThrows(GradleException) { plan() }
+    }
+
+    @Test
+    void actionReceiptWithoutItsPlanRequiresReconciliation() {
+        write(new File(receipts, 'curseforge-action-receipt.json'), [parentID: 123])
+        assertThrows(GradleException) { plan(true, true) }
+    }
+
+    @Test
+    void unattemptedConfirmationCannotOverrideAnExistingReceipt() {
+        legacy()
+        assertEquals('9126989', plan(true).parent_file_id)
+        assertThrows(GradleException) { plan(true, true) }
+    }
+
+    @Test
+    void unattemptedConfirmationRequiresResumeMode() {
+        assertThrows(GradleException) { plan(false, true) }
+    }
+
+    @Test
     void resumePreservesOriginalFamilyAndDelegatesAcceptedStatesToUploader() {
         Map original = plan()
         write(new File(receipts, 'curseforge-plan.json'), original)
         write(new File(receipts, 'curseforge-action-receipt.json'), [parentID: 123, selectedParentID: null])
-        Map resumed = plan()
+        Map resumed = plan(true)
         assertEquals(original.file_path, resumed.file_path)
         assertEquals(original.additional_files, resumed.additional_files)
         assertEquals('', resumed.parent_file_id)

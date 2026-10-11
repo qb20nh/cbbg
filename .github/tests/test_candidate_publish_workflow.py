@@ -18,7 +18,8 @@ class CandidatePublishWorkflowTests(unittest.TestCase):
         self.env = dict(os.environ, DRY_RUN='true', TARGET_ID='26.3-fabric',
                         MODRINTH_TOKEN='', RELEASE_TAG='v1.4.0', GH_REPO='example/mod',
                         SERVICES='both', GITHUB_OUTPUT=str(self.root / 'output'),
-                        GITHUB_STEP_SUMMARY=str(self.root / 'summary'))
+                        GITHUB_STEP_SUMMARY=str(self.root / 'summary'),
+                        RESUME_RUN='', UNATTEMPTED_TARGETS='')
         launcher = self.root / 'gradlew'
         launcher.write_text('#!/usr/bin/env python3\nimport json,sys\n'
                             'from pathlib import Path\n'
@@ -271,6 +272,24 @@ class CandidatePublishWorkflowTests(unittest.TestCase):
         result = self.run_step('Restore CurseForge upload receipts')
         self.assertNotEqual(result.returncode, 0)
         self.assertIn('numeric Publish workflow run ID', result.stdout)
+        self.assertFalse((self.root / 'bad').exists())
+
+    def test_resume_intent_and_confirmations_reach_both_planning_steps(self):
+        for resume, unattempted in [('', ''), ('123', '26.1-fabric')]:
+            self.env.update(RESUME_RUN=resume, UNATTEMPTED_TARGETS=unattempted)
+            for step in ['Check all CurseForge retry plans', 'Plan CurseForge upload family']:
+                result = self.run_step(step)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                arguments = json.loads((self.root / 'gradle-arguments.json').read_text())
+                self.assertIn('-PcurseforgeResumeRun=' + resume, arguments)
+                self.assertIn('-PcurseforgeUnattemptedTargets=' + unattempted, arguments)
+
+    def test_confirmation_input_is_passed_as_data(self):
+        self.env.update(RESUME_RUN='123', UNATTEMPTED_TARGETS='26.1-fabric;touch bad')
+        result = self.run_step('Plan CurseForge upload family')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        arguments = json.loads((self.root / 'gradle-arguments.json').read_text())
+        self.assertIn('-PcurseforgeUnattemptedTargets=26.1-fabric;touch bad', arguments)
         self.assertFalse((self.root / 'bad').exists())
 
     def test_curseforge_retry_requires_new_dispatch(self):

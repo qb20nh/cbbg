@@ -158,6 +158,34 @@ cbbg.gradle.FabricCandidateAcceptance.metaClass.static.execute = { Map options, 
         }
     }
 
+    @Test void resumePlanningRequiresReceiptsOrExplicitOwnerConfirmation() {
+        File artifact = new File(directory, 'mod.jar')
+        artifact.text = 'fixture'
+        new File(directory, 'receipts').mkdirs()
+        new File(directory, 'publication.json').text = JsonOutput.toJson([
+                release: 'v1.5.0', source_commit: 'a' * 40, records: [[
+                targets: ['26.3-fabric', '26.3-quilt'],
+                artifact: [path: artifact.name, sha256: CandidateFiles.sha256(artifact)],
+                curseforge: [display_name: 'cbbg 1.5.0+mc26.3-fabric']]]])
+        List<String> arguments = ['planCurseForgeUploads', '-PpublicationMetadata=publication.json',
+                '-PcurseforgeReceipts=receipts', '-Passets=.', '-Ptarget=26.3-fabric',
+                '-Poutput=plan.json', '-PgithubOutput=output']
+        assertTrue(runner(*((arguments + ['-PcurseforgeResumeRun=123']) as String[]))
+                .buildAndFail().output.contains('No usable CurseForge receipt'))
+        for (List<String> extra : [
+                ['-PcurseforgeUnattemptedTargets=26.3-fabric'],
+                ['-PcurseforgeResumeRun=123', '-PcurseforgeUnattemptedTargets=26.3-quilt'],
+                ['-PcurseforgeResumeRun=123', '-PcurseforgeUnattemptedTargets=26.3-fabric,26.3-fabric']]) {
+            assertTrue(runner(*((arguments + extra) as String[])).buildAndFail().output
+                    .contains('Confirm unattempted artifact owners'))
+        }
+        assertTrue(runner(*((arguments + ['-PcurseforgeResumeRun=invalid']) as String[]))
+                .buildAndFail().output.contains('Expected a numeric -PcurseforgeResumeRun'))
+        runner(*((arguments + ['-PcurseforgeResumeRun=123',
+                '-PcurseforgeUnattemptedTargets=26.3-fabric']) as String[])).build()
+        assertTrue(CandidateFiles.read(new File(directory, 'plan.json')).confirmed_unattempted)
+    }
+
     @Test void workflowUploadsOneFamilyAndSavesItsResumeReceipt() {
         String workflow = new File('../.github/workflows/publish.yml').text
         assertEquals(1, workflow.count('uses: qb20nh/curseforge-upload@'))

@@ -205,9 +205,21 @@ class ReleasePlugin implements Plugin<Project> {
             File metadataFile = input('publicationMetadata')
             Map metadata = CandidateFiles.read(metadataFile)
             String selected = project.providers.gradleProperty('target').orNull
-            List<String> targets = selected ? [selected] : metadata.records.collect { it.targets[0] as String }
+            List<String> owners = metadata.records.collect { it.targets[0] as String }
+            String resumeRun = project.providers.gradleProperty('curseforgeResumeRun').getOrElse('')
+            if (resumeRun && !(resumeRun ==~ /[1-9][0-9]*/)) {
+                throw new GradleException('Expected a numeric -PcurseforgeResumeRun')
+            }
+            String confirmations = project.providers.gradleProperty('curseforgeUnattemptedTargets').getOrElse('')
+            List<String> unattempted = confirmations ? confirmations.split(',', -1).collect { it.trim() } : []
+            if (unattempted && (!resumeRun || unattempted.size() != unattempted.unique(false).size() ||
+                    unattempted.any { !owners.contains(it) })) {
+                throw new GradleException('Confirm unattempted artifact owners from this release only, once each, with a CurseForge resume run')
+            }
+            List<String> targets = selected ? [selected] : owners
             targets.each { target ->
-                Map plan = CurseForgeUploads.plan(metadataFile, input('curseforgeReceipts'), input('assets'), target)
+                Map plan = CurseForgeUploads.plan(metadataFile, input('curseforgeReceipts'), input('assets'), target,
+                        !resumeRun.isEmpty(), unattempted.contains(target))
                 if (selected) {
                     CandidateFiles.writeNew(input('output'), plan)
                     File githubOutput = input('githubOutput')

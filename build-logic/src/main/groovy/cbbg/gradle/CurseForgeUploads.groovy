@@ -7,17 +7,30 @@ class CurseForgeUploads {
     static final List<String> ATTACHMENTS = ['sources', 'utilities', 'utilities_sources',
                                            'library', 'library_sources', 'evidence']
 
-    static Map plan(File metadataFile, File receiptsDirectory, File assets, String target) {
+    static Map plan(File metadataFile, File receiptsDirectory, File assets, String target,
+                    boolean resuming = false, boolean confirmedUnattempted = false) {
         Map metadata = CandidateFiles.read(metadataFile)
         List records = metadata.records.findAll { it.targets[0] == target }
         if (records.size() != 1) throw new GradleException('Select one CurseForge artifact owner: ' + target)
+        if (confirmedUnattempted && !resuming) {
+            throw new GradleException('Unattempted target confirmation requires a CurseForge resume run')
+        }
         Map record = records[0]
         List<File> plans = []
         List<File> legacy = []
         List<File> legacyAttachments = []
         receiptsDirectory.eachFileRecurse { file ->
-            if (file.name == 'curseforge-plan.json' && CandidateFiles.read(file).target == target &&
-                    new File(file.parentFile, 'curseforge-action-receipt.json').isFile()) plans.add(file)
+            if (file.name == 'curseforge-plan.json' && CandidateFiles.read(file).target == target) {
+                if (!new File(file.parentFile, 'curseforge-action-receipt.json').isFile()) {
+                    throw new GradleException('CurseForge plan for ' + target +
+                            ' is missing its action receipt; reconcile the upload before retrying')
+                }
+                plans.add(file)
+            }
+            if (file.name == 'curseforge-action-receipt.json' &&
+                    !new File(file.parentFile, 'curseforge-plan.json').isFile()) {
+                throw new GradleException('CurseForge action receipt is missing its plan; reconcile the upload before retrying')
+            }
             if (file.name == 'curseforge-result.json' && CandidateFiles.read(file).targets == record.targets) legacy.add(file)
             if (file.name ==~ /curseforge-.+-result\.json/ &&
                     CandidateFiles.read(file).targets?.contains(target)) legacyAttachments.add(file)
@@ -28,6 +41,13 @@ class CurseForgeUploads {
         }
         if (plans.size() > 1 || legacy.size() > 1) {
             throw new GradleException('Conflicting CurseForge receipts for ' + target)
+        }
+        if (resuming && !plans && !legacy && !confirmedUnattempted) {
+            throw new GradleException('No usable CurseForge receipt for ' + target +
+                    '; check the previous run and CurseForge dashboard before confirming it was never attempted')
+        }
+        if (confirmedUnattempted && (plans || legacy)) {
+            throw new GradleException('Unattempted target confirmation conflicts with the saved CurseForge receipt for ' + target)
         }
         String receipt = ''
         String parent = ''
@@ -69,6 +89,7 @@ class CurseForgeUploads {
          file_path: files.first(), additional_files: files.drop(1).join('\n'), parent_file_id: parent,
          display_name: parent ? new File(files.first()).name : record.curseforge.display_name,
          receipt: receipt]
+        if (confirmedUnattempted) result.confirmed_unattempted = true
         if (previousPlan && ['file_path', 'additional_files', 'display_name'].any { previousPlan[it] != result[it] }) {
             throw new GradleException('CurseForge upload file selection changed')
         }
