@@ -253,8 +253,14 @@ class Publication {
             Map existing = matches[0]
             Map fields = [project_id: project.id, name: upload.version_name,
                     version_number: upload.version_number, version_type: upload.version_type,
-                    changelog: upload.changelog, status: 'listed']
-            if (fields.any { key, value -> existing[key] != value }) {
+                    status: 'listed']
+            List<String> changelogs = [upload.changelog]
+            if (uploadedVersionId == null && candidate != null) {
+                CandidateManifest manifest = new CandidateManifest(candidate)
+                changelogs.add(ChangelogNotes.forTargets(expected.release_notes as String,
+                        record.targets.collect { manifest.specifications[it] }))
+            }
+            if (fields.any { key, value -> existing[key] != value } || !changelogs.contains(existing.changelog)) {
                 throw new GradleException('Existing Modrinth version has different metadata')
             }
             for (String key : ['loaders', 'game_versions']) {
@@ -279,10 +285,17 @@ class Publication {
             if (actual.size() != dependencies.size() || actual.toSet() != dependencies.toSet()) {
                 throw new GradleException('Existing Modrinth version has different dependencies')
             }
-            if (!(existing.files instanceof List) || existing.files.size() != kinds.size()) {
+            List<String> checkedKinds = kinds
+            if (uploadedVersionId == null && existing.files instanceof List && existing.files.size() != kinds.size()) {
+                checkedKinds = ['artifact', 'sources'] +
+                        (record.containsKey('utilities') ? ['utilities', 'utilities_sources'] : []) +
+                        (record.containsKey('library') ? ['library', 'library_sources'] : []) +
+                        (record.containsKey('evidence') ? ['evidence'] : [])
+            }
+            if (!(existing.files instanceof List) || existing.files.size() != checkedKinds.size()) {
                 throw new GradleException('Existing Modrinth version has different files')
             }
-            for (String kind : kinds) {
+            for (String kind : checkedKinds) {
                 File file = CandidateFiles.checked(assets, (Map) record[kind])
                 List fileMatches = existing.files.findAll { it instanceof Map && it.filename == file.name }
                 if (fileMatches.size() != 1) {
