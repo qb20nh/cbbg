@@ -14,10 +14,17 @@ class CurseForgeUploads {
         Map record = records[0]
         List<File> plans = []
         List<File> legacy = []
+        List<File> legacyAttachments = []
         receiptsDirectory.eachFileRecurse { file ->
             if (file.name == 'curseforge-plan.json' && CandidateFiles.read(file).target == target &&
                     new File(file.parentFile, 'curseforge-action-receipt.json').isFile()) plans.add(file)
             if (file.name == 'curseforge-result.json' && CandidateFiles.read(file).targets == record.targets) legacy.add(file)
+            if (file.name ==~ /curseforge-.+-result\.json/ &&
+                    CandidateFiles.read(file).targets?.contains(target)) legacyAttachments.add(file)
+        }
+        if (legacyAttachments) {
+            throw new GradleException('Legacy attachment receipts for ' + target + '; reconcile them before retrying: ' +
+                    legacyAttachments.collect { it.name }.sort().join(', '))
         }
         if (plans.size() > 1 || legacy.size() > 1) {
             throw new GradleException('Conflicting CurseForge receipts for ' + target)

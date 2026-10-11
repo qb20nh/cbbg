@@ -79,6 +79,44 @@ class CurseForgeUploadsTest {
     }
 
     @Test
+    void separateLegacyAttachmentReceiptsRequireReconciliation() {
+        legacy()
+        Map saved = CandidateFiles.read(new File(receipts, 'curseforge-result.json'))
+        CurseForgeUploads.ATTACHMENTS.each { kind ->
+            File attachment = new File(receipts, 'curseforge-' + kind.replace('_', '-') + '-result.json')
+            write(attachment, saved + [file_id: '123'])
+            GradleException error = assertThrows(GradleException) { plan() }
+            assertTrue(error.message.contains('reconcile'), error.message)
+            assertTrue(attachment.delete())
+        }
+    }
+
+    @Test
+    void attachmentReceiptWithoutMainReceiptCannotStartAnotherUpload() {
+        write(new File(receipts, 'curseforge-sources-result.json'),
+                [targets: ['26.3-fabric'], file_id: '123'])
+        assertThrows(GradleException) { plan() }
+    }
+
+    @Test
+    void separateLegacyAttachmentsCannotBeHiddenByAnActionReceipt() {
+        Map original = plan()
+        write(new File(receipts, 'curseforge-plan.json'), original)
+        write(new File(receipts, 'curseforge-action-receipt.json'), [parentID: 123])
+        write(new File(receipts, 'curseforge-sources-result.json'),
+                [targets: ['26.3-fabric'], file_id: '456'])
+        assertThrows(GradleException) { plan() }
+    }
+
+    @Test
+    void anotherTargetsAttachmentReceiptDoesNotBlockTheSelectedTarget() {
+        legacy()
+        write(new File(receipts, 'curseforge-sources-result.json'),
+                [targets: ['26.2-fabric'], file_id: '123'])
+        assertEquals('9126989', plan().parent_file_id)
+    }
+
+    @Test
     void resumePreservesOriginalFamilyAndDelegatesAcceptedStatesToUploader() {
         Map original = plan()
         write(new File(receipts, 'curseforge-plan.json'), original)
