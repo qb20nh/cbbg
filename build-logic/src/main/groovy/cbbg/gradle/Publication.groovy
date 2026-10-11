@@ -303,10 +303,11 @@ class Publication {
                 }
                 Map item = fileMatches[0]
                 String sha512 = digest(file, 'SHA-512')
-                List fileTypes = kind == 'sources' ? ['sources-jar'] :
-                        (kind == 'evidence'
-                                ? (uploadedVersionId != null ? [null] : [null, 'signature'])
-                                : [null])
+                List fileTypes = [null]
+                if (kind == 'sources') fileTypes = ['sources-jar']
+                else if (kind in ['utilities_sources', 'library_sources']) fileTypes = [null, 'sources-jar']
+                else if (kind in ['utilities', 'library']) fileTypes = [null, 'other']
+                else if (kind == 'evidence' && uploadedVersionId == null) fileTypes = [null, 'signature']
                 if (item.hashes?.sha512 != sha512 || item.primary != (kind == 'artifact') ||
                         !fileTypes.contains(item.file_type)) {
                     throw new GradleException('Existing Modrinth file differs from candidate: ' + kind)

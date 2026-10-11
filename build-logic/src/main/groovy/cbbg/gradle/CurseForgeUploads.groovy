@@ -8,7 +8,8 @@ class CurseForgeUploads {
                                                   'library', 'library_sources', 'evidence']
 
     static Map plan(File metadataFile, File receiptsDirectory, File assets, String target,
-                    boolean resuming = false, boolean confirmedUnattempted = false, Map resumeEvidence = [:]) {
+                    boolean resuming = false, boolean confirmedUnattempted = false, Map resumeEvidence = [:],
+                    File sourceRoot = null) {
         Map metadata = CandidateFiles.read(metadataFile)
         List records = metadata.records.findAll { it.targets[0] == target }
         if (records.size() != 1) throw new GradleException('Select one CurseForge artifact owner: ' + target)
@@ -59,7 +60,8 @@ class CurseForgeUploads {
         Map previousPlan = null
         if (plans || unattemptedPlans) {
             Map saved = CandidateFiles.read((plans ?: unattemptedPlans)[0])
-            if (saved.release != metadata.release || saved.source_commit != metadata.source_commit || saved.record != record) {
+            if (saved.release != metadata.release || saved.source_commit != metadata.source_commit ||
+                    !sameRecord(saved.record, record, metadata, sourceRoot)) {
                 throw new GradleException('CurseForge upload inputs changed; inspect the saved receipt before retrying')
             }
             previousPlan = saved
@@ -79,7 +81,7 @@ class CurseForgeUploads {
             if (saved.release != metadata.release || saved.source_commit != metadata.source_commit ||
                     saved.artifact != record.artifact || saved.metadata_sha256 != CandidateFiles.sha256(submittedFile) ||
                     submitted.release != metadata.release || submitted.source_commit != metadata.source_commit ||
-                    submitted.records.find { it.targets == record.targets } != record) {
+                    !sameRecord(submitted.records.find { it.targets == record.targets }, record, metadata, sourceRoot)) {
                 throw new GradleException('CurseForge receipt differs from the selected publication')
             }
             if (!(saved.file_id instanceof String) || !(saved.file_id ==~ /[1-9][0-9]*/)) {
@@ -104,6 +106,22 @@ class CurseForgeUploads {
             throw new GradleException('CurseForge upload file selection changed')
         }
         result
+    }
+
+    private static boolean sameRecord(Object previous, Map record, Map metadata, File sourceRoot) {
+        if (previous == record) return true
+        if (!(previous instanceof Map) || sourceRoot == null || !(metadata.release_notes instanceof String)) return false
+        List<Map> targets = TargetCatalog.read(new File(sourceRoot, 'targets.json')).select(record.targets.join(','))
+        String oldNotes = ChangelogNotes.forTargets(metadata.release_notes, targets)
+        String newNotes = ChangelogNotes.forPublication(metadata.release_notes, targets)
+        Map adjusted = new LinkedHashMap((Map) previous)
+        for (String service : ['modrinth', 'curseforge']) {
+            if (!(previous[service] instanceof Map) || !(record[service] instanceof Map) ||
+                    previous[service].changelog != oldNotes || record[service].changelog != newNotes) return false
+            adjusted[service] = new LinkedHashMap((Map) previous[service])
+            adjusted[service].changelog = newNotes
+        }
+        adjusted == record
     }
 
     private static boolean uploaderWasSkipped(Map evidence, String target) {

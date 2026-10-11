@@ -431,11 +431,20 @@ class PublicationTest {
         Map remote = existing(record)
         kinds.each { String kind ->
             File file = new File(fixture.bundle, record[kind].path)
-            remote.files.add([filename: file.name, hashes: [sha512: sha512(file)], primary: false, file_type: null])
+            remote.files.add([filename: file.name, hashes: [sha512: sha512(file)], primary: false,
+                              file_type: kind.endsWith('_sources') ? 'sources-jar' : 'other'])
         }
         Map result = Publication.plan(fixture.file, publication, fixture.target.id, fixture.root, fetch([remote], []))
         assertEquals('reuse', result.action)
         assertTrue(kinds.every { !result.containsKey(it) })
+        List attachments = remote.files.findAll { item -> kinds.any { item.filename == record[it].path } }
+        attachments.each { it.file_type = null }
+        assertEquals('reuse', Publication.plan(fixture.file, publication, fixture.target.id,
+                fixture.root, fetch([remote], [])).action)
+        kinds.each { kind ->
+            remote.files.find { it.filename == record[kind].path }.file_type =
+                    kind.endsWith('_sources') ? 'sources-jar' : 'other'
+        }
         fails('different files') {
             Publication.plan(fixture.file, publication, fixture.target.id, fixture.root,
                     { url -> url.endsWith('/version/Version1') ? remote :
@@ -443,6 +452,12 @@ class PublicationTest {
                     null, 'Version1')
         }
         Map attachment = remote.files.last()
+        String type = attachment.file_type
+        attachment.file_type = 'signature'
+        fails('differs from candidate') {
+            Publication.plan(fixture.file, publication, fixture.target.id, fixture.root, fetch([remote], []))
+        }
+        attachment.file_type = type
         String hash = attachment.hashes.sha512
         attachment.hashes.sha512 = '0' * 128
         fails('differs from candidate') {
@@ -472,7 +487,8 @@ class PublicationTest {
         remote.changelog = ChangelogNotes.forTargets(notes, [fixture.target])
         ['utilities', 'utilities_sources'].each { String kind ->
             File file = new File(fixture.bundle, record[kind].path)
-            remote.files.add([filename: file.name, hashes: [sha512: sha512(file)], primary: false, file_type: null])
+            remote.files.add([filename: file.name, hashes: [sha512: sha512(file)], primary: false,
+                              file_type: kind.endsWith('_sources') ? 'sources-jar' : 'other'])
         }
         assertEquals('reuse', Publication.plan(fixture.file, publication, fixture.target.id, fixture.root,
                 fetch([remote], [])).action)

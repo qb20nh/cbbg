@@ -69,6 +69,40 @@ class CurseForgeUploadsTest {
     }
 
     @Test
+    void legacyMainAcceptsPreviousChangelogFormat() {
+        Map fixture = CandidateFixture.create(new File(directory, 'candidate'))
+        String notes = '### Fixed\n\n#### Minecraft 26.3\n\n- Example fix.\n\n<!-- cbbg-candidate-run: 123 -->\n'
+        String previous = ChangelogNotes.forTargets(notes, [fixture.target])
+        String current = ChangelogNotes.forPublication(notes, [fixture.target])
+        metadata.release_notes = notes
+        metadata.records[0].modrinth = [changelog: previous]
+        metadata.records[0].curseforge.changelog = previous
+        write(metadataFile, metadata)
+        legacy()
+        metadata.records[0].modrinth.changelog = current
+        metadata.records[0].curseforge.changelog = current
+        write(metadataFile, metadata)
+        Map resumed = CurseForgeUploads.plan(metadataFile, receipts, directory,
+                '26.3-fabric', true, false, [:], fixture.root)
+        assertEquals('9126989', resumed.parent_file_id)
+        assertThrows(GradleException) { plan(true) }
+        File submittedFile = new File(receipts, 'publication.json')
+        Map submitted = CandidateFiles.read(submittedFile)
+        resumed.record = submitted.records[0]
+        write(new File(receipts, 'curseforge-plan.json'), resumed)
+        write(new File(receipts, 'curseforge-action-receipt.json'), [parentID: 9126989])
+        assertEquals('9126989', CurseForgeUploads.plan(metadataFile, receipts, directory,
+                '26.3-fabric', true, false, [:], fixture.root).parent_file_id)
+        assertEquals(previous, CandidateFiles.read(submittedFile).records[0].curseforge.changelog)
+        metadata.records[0].curseforge.changelog = current.replace('Example fix.', 'Different fix.')
+        write(metadataFile, metadata)
+        assertThrows(GradleException) {
+            CurseForgeUploads.plan(metadataFile, receipts, directory,
+                    '26.3-fabric', true, false, [:], fixture.root)
+        }
+    }
+
+    @Test
     void changedPublicationAndFilesRejectLegacyReceipts() {
         legacy()
         metadata.records[0].curseforge.display_name = 'changed'

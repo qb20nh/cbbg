@@ -222,7 +222,7 @@ class ReleasePlugin implements Plugin<Project> {
                     ? [run_id: resumeRun, pages: CandidateFiles.read(project.file(jobsFile))] : [:]
             targets.each { target ->
                 Map plan = CurseForgeUploads.plan(metadataFile, input('curseforgeReceipts'), input('assets'), target,
-                        !resumeRun.isEmpty(), unattempted.contains(target), resumeEvidence)
+                        !resumeRun.isEmpty(), unattempted.contains(target), resumeEvidence, source())
                 if (selected) {
                     CandidateFiles.writeNew(input('output'), plan)
                     File githubOutput = input('githubOutput')

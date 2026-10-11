@@ -197,6 +197,33 @@ cbbg.gradle.FabricCandidateAcceptance.metaClass.static.execute = { Map options, 
         assertTrue(CandidateFiles.read(planFile).confirmed_unattempted)
     }
 
+    @Test void curseForgeTaskReusesLegacyParentWithPreviousNotes() {
+        Map fixture = CandidateFixture.create(new File(directory, 'candidate'))
+        String notes = '### Fixed\n\n#### Minecraft 26.3\n\n- Example fix.\n\n<!-- cbbg-candidate-run: 123 -->\n'
+        Map current = Publication.metadata(fixture.file, fixture.root, notes)
+        File metadataFile = new File(directory, 'publication.json')
+        metadataFile.text = JsonOutput.toJson(current)
+        Map previous = CandidateFiles.read(metadataFile)
+        previous.records[0].modrinth.changelog = ChangelogNotes.forTargets(notes, [fixture.target])
+        previous.records[0].curseforge.changelog = previous.records[0].modrinth.changelog
+        File receipts = new File(directory, 'receipts')
+        receipts.mkdirs()
+        File submitted = new File(receipts, 'publication.json')
+        submitted.text = JsonOutput.toJson(previous)
+        new File(receipts, 'curseforge-result.json').text = JsonOutput.toJson([
+                release: current.release, source_commit: current.source_commit,
+                targets: current.records[0].targets, artifact: current.records[0].artifact,
+                file_id: '9126989', metadata_sha256: CandidateFiles.sha256(submitted)])
+        runner('planCurseForgeUploads', '-PpublicationMetadata=publication.json',
+                '-PcurseforgeReceipts=receipts', '-Passets=' + fixture.bundle.absolutePath,
+                '-PsourceRoot=' + fixture.root.absolutePath, '-Ptarget=26.3-fabric',
+                '-PcurseforgeResumeRun=123', '-Poutput=plan.json', '-PgithubOutput=outputs.txt').build()
+        Map result = CandidateFiles.read(new File(directory, 'plan.json'))
+        assertEquals('9126989', result.parent_file_id)
+        assertEquals(current.records[0], result.record)
+        assertFalse(result.additional_files.contains(current.records[0].artifact.path))
+    }
+
     @Test void workflowUploadsOneFamilyAndSavesItsResumeReceipt() {
         String workflow = new File('../.github/workflows/publish.yml').text
         assertEquals(1, workflow.count('uses: qb20nh/curseforge-upload@'))
