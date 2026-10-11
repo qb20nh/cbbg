@@ -313,7 +313,7 @@ jobs:
           parent_file_id: ${{ steps.curseforge_plan.outputs.parent_file_id }}
           receipt: ${{ steps.curseforge_plan.outputs.receipt }}
           manual_release: auto
-          game_versions: ${{ steps.publication.outputs.cf_game_versions }}
+          game_versions: ${{ steps.curseforge_plan.outputs.parent_file_id == '' && steps.publication.outputs.cf_game_versions || '' }}
           release_type: ${{ steps.publication.outputs.cf_release_type }}
           display_name: ${{ steps.curseforge_plan.outputs.display_name }}
           changelog: ${{ steps.publication.outputs.cf_changelog }}

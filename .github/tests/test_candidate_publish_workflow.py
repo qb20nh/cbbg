@@ -143,6 +143,7 @@ class CandidatePublishWorkflowTests(unittest.TestCase):
         self.assertIn('parent_file_id: ${{ steps.curseforge_plan.outputs.parent_file_id }}', step)
         self.assertIn('receipt: ${{ steps.curseforge_plan.outputs.receipt }}', step)
         self.assertIn('manual_release: auto', step)
+        self.assertIn("game_versions: ${{ steps.curseforge_plan.outputs.parent_file_id == '' && steps.publication.outputs.cf_game_versions || '' }}", step)
         self.assertIn('qb20nh/curseforge-upload@bbaa5053cfd75b1dece0ee4bdb3df1b740ef47d8', step)
         publisher = (ROOT / 'build-config/publishing/build.gradle').read_text()
         self.assertIn('Publication.requireUploadAllowed(CandidateFiles.read(metadataFile))', publisher)
