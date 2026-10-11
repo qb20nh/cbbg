@@ -28,6 +28,9 @@ gradle.beforeProject { project ->
 }
 
 rootProject.name = 'cbbg'
+gradle.startParameter.projectProperties = gradle.startParameter.projectProperties +
+        [target: gradle.startParameter.projectProperties.target ?: '26.2-fabric']
+includeBuild('../../libraries/fabric') { name = 'cbbg-lib-fabric' }
 include 'core'
 include 'core:rendering', 'core:legacy'
 project(':core').projectDir = file('../../core')

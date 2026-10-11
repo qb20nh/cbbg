@@ -49,10 +49,7 @@ public class STBNLoader {
       images[z] = new NativeImage(width, height, false);
       for (int y = 0; y < height; y++) {
         for (int x = 0; x < width; x++) {
-          int idx = (z * height + y) * width + x;
-          double u = fields.uField()[idx];
-          double v = fields.vField()[idx];
-          StbnImagePixels.set(images[z], x, y, STBNGenerator.calculatePixelColor(u, v));
+          StbnImagePixels.set(images[z], x, y, fields.volume().pixelABGR(x, y, z));
         }
       }
     }

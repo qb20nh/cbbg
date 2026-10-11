@@ -27,12 +27,12 @@ class TargetCatalogTest {
     @Test
     void actualCatalogSelectsRuntimeTargetsAndArtifactOwners() {
         TargetCatalog catalog = TargetCatalog.read(CATALOG)
-        List<String> implemented = ['26.1-fabric', '26.1.1-fabric', '26.1.2-fabric', '26.2-fabric', '26.3-fabric']
-        assertEquals(33, catalog.select().size())
+        List<String> implemented = ['1.21.1-fabric', '1.21.11-fabric', '26.1-fabric', '26.1.1-fabric', '26.1.2-fabric', '26.2-fabric', '26.3-fabric']
+        assertEquals(34, catalog.select().size())
         assertEquals(implemented, catalog.defaults()*.id)
         assertEquals(implemented, catalog.select().findAll { it.implemented }*.id)
         assertEquals(implemented, catalog.defaults(true)*.id)
-        assertEquals(['26.1-fabric', '26.2-fabric', '26.3-fabric'], catalog.matrix(implemented.join(','), true)*.id)
+        assertEquals(['1.21.1-fabric', '1.21.11-fabric', '26.1-fabric', '26.2-fabric', '26.3-fabric'], catalog.matrix(implemented.join(','), true)*.id)
         assertEquals(['26.3-fabric'], catalog.matrix('26.3-fabric', true)*.id)
         assertEquals(['1.21.11-neoforge', '26.1.2-neoforge', '26.2-neoforge'],
                 catalog.selectProfile('neoforge-modern')*.id)
@@ -53,6 +53,34 @@ class TargetCatalogTest {
         assertThrows(IllegalArgumentException) {
             catalog.releaseTargets(['26.1.1-fabric', '26.1.2-fabric'])
         }
+    }
+
+    @Test
+    void shaderImportsFollowTheMinecraftRenderer() {
+        TargetCatalog catalog = TargetCatalog.read(CATALOG)
+        ['1.21.1-fabric', '1.21.11-fabric', '26.1-fabric', '26.1.1-fabric',
+         '26.1.2-fabric', '26.2-fabric'].each { id ->
+            assertEquals('#moj_import', TargetCatalog.shaderImport(catalog.select(id)[0]))
+        }
+        assertEquals('#include', TargetCatalog.shaderImport(catalog.select('26.3-fabric')[0]))
+    }
+
+    @Test
+    void olderFabricTargetDeclaresItsSeparateClientTestModule() {
+        Map entry = target(copyData(), '1.21.1-fabric')
+        assertEquals(21, entry.java)
+        assertEquals('gl3', entry.renderer)
+        assertTrue(entry.implemented)
+        assertEquals('0.16.0', entry.dependencies.minimumLoader)
+        assertEquals('0.101.2+1.21.1', entry.dependencies.minimumFabricApi)
+        assertEquals('2.0.0+99ff640a04', entry.dependencies.clientGametest)
+        assertEquals(['opengl'], entry.backends)
+        Map stableIris = TargetCatalog.effectiveDependencies(entry, 'iris')
+        assertEquals('zsoi0dso', stableIris.iris)
+        assertEquals('u1OEbNKx', stableIris.sodium)
+        assertEquals('SMxNOGZ6', TargetCatalog.effectiveDependencies(entry, 'sodium').sodium)
+        assertTrue(entry.compatibilityProfiles.containsKey(
+                'modmenu+sodium+iris+renderscale+chatpatches+immediatelyfast'))
     }
 
     @Test
@@ -179,6 +207,21 @@ class TargetCatalogTest {
             target(data, '26.2-fabric').compatibilityDependencyOverrides = overrides
             rejects(data, 'compatibility dependency overrides')
         }
+    }
+
+    @Test
+    void glChangerProfilesHaveDependenciesForBothMinecraft121Targets() {
+        Map data = copyData()
+        for (String id : ['1.21.1-fabric', '1.21.11-fabric']) {
+            Map fabric = target(data, id)
+            String forceProfile = id == '1.21.1-fabric' ? 'forcegl2' : 'forcegl2+yacl'
+            assertEquals(['opengl'], fabric.compatibilityProfiles[forceProfile])
+            assertEquals(['opengl'], fabric.compatibilityProfiles.threatengl)
+            assertEquals(id == '1.21.1-fabric' ? 'x831iJzz' : 'PK6vSUU6',
+                    TargetCatalog.effectiveDependencies(fabric, forceProfile).forceGl2)
+            assertEquals('nK30v84J', TargetCatalog.effectiveDependencies(fabric, 'threatengl').threatenGl)
+        }
+        new TargetCatalog(data)
     }
 
     @Test

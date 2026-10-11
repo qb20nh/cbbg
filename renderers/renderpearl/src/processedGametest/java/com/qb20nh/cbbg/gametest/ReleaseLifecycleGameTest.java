@@ -14,7 +14,7 @@ public final class ReleaseLifecycleGameTest implements FabricClientGameTest {
   @Override
   public void runTest(ClientGameTestContext context) {
     ReleaseClient.checkArtifactAndBackend(context);
-    if (Files.exists(ReleaseClient.manifest(16, 8))) {
+    if (ReleaseClient.cacheValid(16, 8, SEED)) {
       throw new AssertionError("Expected a cold 16x16x8 STBN cache in the fresh game directory");
     }
 

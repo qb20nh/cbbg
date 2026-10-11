@@ -78,14 +78,31 @@ def restart_state(game):
     return {path.relative_to(game).as_posix(): digest(path) for path in files}
 
 
+def verify_external_library(candidate, library):
+    with zipfile.ZipFile(candidate) as jar:
+        metadata = json.loads(jar.read('fabric.mod.json'))
+        nested = metadata.get('jars', [])
+        if metadata.get('id') != 'cbbg' or len(nested) != 1:
+            raise ValueError('External library requires a CBBG candidate with one nested library')
+        path = nested[0].get('file')
+        if not isinstance(path, str) or not path.startswith('META-INF/jars/'):
+            raise ValueError('Invalid nested library path')
+        if jar.read(path) != Path(library).read_bytes():
+            raise ValueError('External library differs from the nested library')
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--target', choices=['26.1-fabric', '26.1.1-fabric', '26.1.2-fabric',
-                                            '26.2-fabric', '26.3-fabric'], default='26.3-fabric')
+    parser.add_argument('--target', choices=[target['id'] for target in load_catalog()['targets']
+                                            if target['loader'] == 'fabric'
+                                            and target.get('buildProfile') in ('fabric-modern', 'fabric-upstream')],
+                        default='26.3-fabric')
     for name in ('runtime', 'java', 'game-dir', 'candidate', 'driver', 'gametest-api',
                  'runtime-lock', 'dependency-lock', 'xdg-runtime-dir'):
         parser.add_argument('--' + name, type=Path, required=True)
     parser.add_argument('--dependency', action='append', default=[], metavar='NAME=JAR')
+    parser.add_argument('--external-library', type=Path,
+                        help='Install the exact nested library as a separate mod too')
     parser.add_argument('--backend', choices=['opengl', 'vulkan'], required=True)
     parser.add_argument('--compat', default='none')
     parser.add_argument('--loader-version', help='Loader under compatibility testing')
@@ -147,8 +164,11 @@ def main():
     with zipfile.ZipFile(args.driver) as jar:
         metadata = json.loads(jar.read('fabric.mod.json'))
         expected = metadata['entrypoints']['fabric-client-gametest']
-        if metadata['id'] != 'cbbg-renderer-test' or not expected:
+        if metadata['id'] not in ('cbbg-renderer-test', 'cbbg-library-test') or not expected:
             raise ValueError('Unexpected packaged test driver')
+        driver_id = metadata['id']
+    if args.external_library:
+        verify_external_library(args.candidate, args.external_library)
     if args.dsa_mode and (args.backend != 'opengl'
                          or 'com.qb20nh.cbbg.gametest.DsaBenchmarkGameTest' not in expected):
         parser.error('DSA selection requires the OpenGL benchmark driver')
@@ -174,11 +194,13 @@ def main():
     command = get_minecraft_command(identity, str(runtime), {
         'username': 'CbbgParity', 'uuid': '00000000000000000000000000000001', 'token': '0',
         'executablePath': str(args.java.resolve()), 'gameDirectory': str(game),
-        'jvmArguments': ['-Xmx2G', '-XX:-CreateCoredumpOnCrash', *display_jvm_arguments, '-Dfabric.client.gametest',
+        'jvmArguments': ['-Xmx2G', '-XX:-CreateCoredumpOnCrash', '-Djava.awt.headless=true',
+                        *display_jvm_arguments, '-Dfabric.client.gametest',
                         '-Dcbbg.test.dsa=' + (args.dsa_mode or 'auto'),
                         '-Dcbbg.test.restart=' + (args.restart_phase or ''),
-                        '-Dfabric.client.gametest.modid=cbbg-renderer-test',
+                        '-Dfabric.client.gametest.modid=' + driver_id,
                         '-Dcbbg.test.backend=' + args.backend,
+                        '-Dcbbg.test.artifact-target=' + (gametest_target.get('artifactOf') or gametest_target['id']),
                         '-Dcbbg.test.compat=' + args.compat,
                         '-Dcbbg.test.modmenu.version=' + target['dependencies']['modMenu'],
                         '-Dcbbg.test.evidence=' + str(evidence)],
@@ -213,6 +235,8 @@ def main():
     sources = {'candidate.jar': args.candidate, 'driver.jar': args.driver,
                'fabric-gametest-api.jar': args.gametest_api}
     sources.update({name + '.jar': path for name, path in dependencies.items()})
+    if args.external_library:
+        sources['external-library.jar'] = args.external_library
     receipt = {'target': args.target, 'backendRequested': args.backend, 'profile': args.compat,
                'gametestApiVersion': gametest_version,
                'timeoutSeconds': args.timeout, 'releaseAcceptance': False,

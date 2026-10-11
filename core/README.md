@@ -1,7 +1,8 @@
 # Shared Java 8 core
 
-This module provides FFT/STBN math, configuration, format fallback rules and
-cache validation. It can be built and tested independently of Minecraft, loaders
+This module provides configuration, noise-request coordination, format fallback rules and
+cache validation. Calculations come from `libraries/utilities` through its public API.
+The core can be built and tested independently of Minecraft, loaders
 and graphics libraries. Compilation and standalone tests use a private, relocated
 Gson 2.8.9 streaming API. Fabric release jars bundle the parser and core classes;
 sources ship in a separate jar. Compatibility tests use reference Gson 2.8.9;

@@ -1,0 +1,8 @@
+{
+  "required": true,
+  "package": "com.qb20nh.cbbg.gametest.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "client": ["ReleasePassMixin", "ReleasePresentMixin", "ScenarioProgressMixin",
+    "ReleaseDebugOverlayAccess", "ReleaseLightTextureAccess", "ReleaseTransparencyAccess", "ReleasePostTargetsAccess", "ReleaseTransparencyPassMixin"],
+  "injectors": {"defaultRequire": 1}
+}

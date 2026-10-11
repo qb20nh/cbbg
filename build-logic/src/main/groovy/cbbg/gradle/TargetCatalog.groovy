@@ -4,13 +4,17 @@ class TargetCatalog {
     final Map data
     private static final Set OPTIONAL_DEPENDENCIES = [
             'modMenu', 'clothConfig', 'yacl', 'sodium', 'iris', 'sulkan', 'renderScale',
-            'chatPatches', 'immediatelyFast', 'threatenGl', 'forceGl3'
+            'chatPatches', 'immediatelyFast', 'threatenGl', 'forceGl3', 'forceGl2', 'satin'
     ] as Set
 
     static Map effectiveDependencies(Map target, String profile) {
         Map effective = new LinkedHashMap(target.dependencies)
         effective.putAll(target.compatibilityDependencyOverrides?.get(profile) ?: [:])
         effective
+    }
+
+    static String shaderImport(Map target) {
+        target.renderer == 'renderpearl' ? '#include' : '#moj_import'
     }
 
     static TargetCatalog read(File file) {

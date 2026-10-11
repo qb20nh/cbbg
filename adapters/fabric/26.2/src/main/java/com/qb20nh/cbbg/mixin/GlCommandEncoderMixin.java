@@ -6,6 +6,7 @@ import com.mojang.blaze3d.textures.GpuTexture;
 import com.mojang.blaze3d.textures.GpuTextureView;
 import com.qb20nh.cbbg.Cbbg;
 import com.qb20nh.cbbg.CbbgClient;
+import com.qb20nh.cbbg.compat.renderscale.RenderScaleCompat;
 import com.qb20nh.cbbg.config.CbbgConfig;
 import com.qb20nh.cbbg.debug.CbbgDebugState;
 import com.qb20nh.cbbg.debug.CbbgGlNames;
@@ -114,6 +115,7 @@ public abstract class GlCommandEncoderMixin {
           mc.gameRenderer
               .mainRenderTarget()
               .resize(mc.getWindow().getWidth(), mc.getWindow().getHeight());
+          RenderScaleCompat.refreshTargets();
           loggedOnce.set(false);
         });
   }
@@ -149,6 +151,7 @@ public abstract class GlCommandEncoderMixin {
           mc.gameRenderer
               .mainRenderTarget()
               .resize(mc.getWindow().getWidth(), mc.getWindow().getHeight());
+          RenderScaleCompat.refreshTargets();
           loggedOnce.set(false);
         });
   }

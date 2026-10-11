@@ -1,0 +1,87 @@
+{
+  "schemaVersion": 1,
+  "target": "1.21.1-fabric",
+  "gametestApi": {
+    "fabricApiPin": "0.116.17+1.21.1",
+    "coordinate": "CBBG local Fabric client-gametest backport:2.0.0+99ff640a04",
+    "sha256": "ee72431f876ba90e12320acc2213ac060b998bd18f99b9c45802bbf1a803ac0e",
+    "sourceCommit": "99ff640a5d543bab0316924fb669304c25d8f293",
+    "sourceSha256": "b8b0b559cf1a383e54acebceb8c8681e938d26e221cfe21f0d8f626bcfbadc80",
+    "verification": "Test-only backport of Fabric client-gametest API, built from the recorded source commit."
+  },
+  "verification": "Downloaded jars matched the primary file SHA-512 from each Modrinth version; SHA-256 recorded below.",
+  "dependencies": {
+    "chatPatches": {
+      "pin": "lIUP93Uo",
+      "sha256": "fbf2c45789df0b7ab008e12666fb3eefc3a6d5710db03cf3bd137423b9bf8ac8",
+      "source": "https://api.modrinth.com/v2/version/lIUP93Uo"
+    },
+    "clothConfig": {
+      "pin": "HpMb5wGb",
+      "sha256": "33894e95da3af59014b39d126586d5241e07ea39f8618763e30dab637405f95f",
+      "source": "https://api.modrinth.com/v2/version/HpMb5wGb"
+    },
+    "fabricApi": {
+      "pin": "0.116.17+1.21.1",
+      "sha256": "79ac44b40780acbd884b34c50be1e39af682847e5f5cb3b1fddeeaa768dce800",
+      "source": "https://api.modrinth.com/v2/version/Mys3P7lK"
+    },
+    "forceGl2": {
+      "pin": "x831iJzz",
+      "sha256": "2867fe5f33120ddb64ec4c0fcd06eee17e1c47a72c1a390606e718bac7c00559",
+      "source": "https://api.modrinth.com/v2/version/x831iJzz"
+    },
+    "immediatelyFast": {
+      "pin": "7XKnsIC8",
+      "sha256": "b35d2f212eca85102a74830f901d5e5b60b6dc3d0f803a06074517a15ed7520f",
+      "source": "https://api.modrinth.com/v2/version/7XKnsIC8"
+    },
+    "iris": {
+      "pin": "bAo1Qhte",
+      "sha256": "0ceb694040b4628bf3fa02286cfe5f0db833195669ab07f8caa4001359763eff",
+      "source": "https://api.modrinth.com/v2/version/bAo1Qhte",
+      "alternatives": {
+        "zsoi0dso": {
+          "sha256": "b5ad39a6cb113ca0a1765f06689f9f4b29ccd0c81247de90b06c42f5da1092f5",
+          "source": "https://api.modrinth.com/v2/version/zsoi0dso"
+        }
+      }
+    },
+    "modMenu": {
+      "pin": "11.0.5",
+      "sha256": "afa55fe4e7c48560126dbe654fa9647f141bc6ffd3ce35525b65dd65d88251b5",
+      "source": "https://api.modrinth.com/v2/version/6lgOkclV"
+    },
+    "renderScale": {
+      "pin": "yU2mpYMp",
+      "sha256": "1da40458139045d58d7fb91d64f14ac94576991c03a42fba4021957befcab9ee",
+      "source": "https://api.modrinth.com/v2/version/yU2mpYMp"
+    },
+    "satin": {
+      "pin": "Tq9qJzQz",
+      "sha256": "3e6747bf333aa67e21ecf96c404b0095e46045389c1d5fc497412f67e63ea136",
+      "source": "https://api.modrinth.com/v2/version/Tq9qJzQz"
+    },
+    "sodium": {
+      "pin": "SMxNOGZ6",
+      "sha256": "3d43c14985a4deb19c654aad3393b454cf57e1ebcbba86c4ae6a98dfc60eca2d",
+      "source": "https://api.modrinth.com/v2/version/SMxNOGZ6",
+      "alternatives": {
+        "u1OEbNKx": {
+          "sha256": "e04599514d88e41765f710eeba59e3814909833396bc11b977f48fc2e7e50353",
+          "source": "https://api.modrinth.com/v2/version/u1OEbNKx"
+        }
+      }
+    },
+    "threatenGl": {
+      "pin": "nK30v84J",
+      "sha256": "6b86c83ea88cc0b64bb201526d1347b392ad0006227befebdc511e5bd1ef562e",
+      "source": "https://api.modrinth.com/v2/version/nK30v84J"
+    },
+    "yacl": {
+      "pin": "o3cDn8Vp",
+      "sha256": "6ab420b7d1326fc9851b96a8967504bd644da421ed6438ceb9a9d9c993a408b1",
+      "source": "https://api.modrinth.com/v2/version/o3cDn8Vp"
+    }
+  }
+}

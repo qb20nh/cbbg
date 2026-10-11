@@ -31,6 +31,9 @@
 		],
 		"modmenu": [
 			"com.qb20nh.cbbg.compat.modmenu.CbbgModMenuApi"
+		],
+		"sodium:config_api_user": [
+			"com.qb20nh.cbbg.compat.sodium.CbbgSodiumConfig"
 		]
 	},
 	"languageAdapters": {

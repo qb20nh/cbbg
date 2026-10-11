@@ -46,6 +46,56 @@ class CandidateManifestTest(unittest.TestCase):
         self.assertEqual(target['artifact'], self.reference('artifact.jar'))
         self.assertEqual(specification['minecraft'], '26.3')
 
+    def test_library_release_has_its_own_product(self):
+        self.manifest.update(release='lib/v1.0.0', product='lib')
+        self.assertEqual('lib', self.read()[0]['product'])
+        self.manifest['product'] = 'cbbg'
+        with self.assertRaisesRegex(EvidenceError, 'product'):
+            self.read()
+
+    def test_acceptance_contract_must_match_candidate_product(self):
+        contract = self.root / 'contract.json'
+        for product, release in (('cbbg', 'v1.5.0'), ('lib', 'lib/v1.0.0')):
+            with self.subTest(product=product):
+                self.manifest.update(product=product, release=release)
+                contract.write_text(json.dumps({'product': product}))
+                self.target['client_tests']['contract'] = self.reference(contract.name)
+                self.read()
+                contract.write_text(json.dumps({'product': 'lib' if product == 'cbbg' else 'cbbg'}))
+                self.target['client_tests']['contract'] = self.reference(contract.name)
+                with self.assertRaisesRegex(EvidenceError, 'own acceptance contract'):
+                    self.read()
+
+    def test_main_library_dependency_checks_both_artifacts(self):
+        for kind, name in (('library', 'cbbg-lib-1.0.0.jar'),
+                           ('library_sources', 'cbbg-lib-1.0.0-sources.jar')):
+            (self.root / name).write_bytes(name.encode())
+            self.target[kind] = self.reference(name)
+        self.target['library_release'] = 'lib/v1.0.0'
+        self.read()
+        (self.root / 'cbbg-lib-1.0.0.jar').write_bytes(b'changed')
+        with self.assertRaises(EvidenceError):
+            self.read()
+
+    def test_library_dependency_requires_its_own_release(self):
+        self.target.update(library=self.reference('artifact.jar'),
+                           library_sources=self.reference('sources.jar'),
+                           library_release='v1.0.0')
+        with self.assertRaisesRegex(EvidenceError, 'library release'):
+            self.read()
+
+    def test_library_provenance_requires_dependency_and_source_commit(self):
+        self.target['library_provenance'] = self.reference('inventory.json')
+        with self.assertRaisesRegex(EvidenceError, 'provenance requires'):
+            self.read()
+        self.target.update(library=self.reference('artifact.jar'),
+                           library_sources=self.reference('sources.jar'),
+                           library_release='lib/v1.0.0', library_source_commit='b' * 40)
+        self.read()
+        (self.root / 'inventory.json').write_text('changed')
+        with self.assertRaisesRegex(EvidenceError, 'Changed evidence file'):
+            self.read()
+
     def test_target_tag_must_match_selected_runtime(self):
         for tag in ('v1.4.0+mc26.3-fabric', 'v1.4.0-rc.1+mc26.3-fabric'):
             self.manifest['release'] = tag
@@ -54,6 +104,48 @@ class CandidateManifestTest(unittest.TestCase):
             self.manifest['release'] = tag
             with self.subTest(tag=tag), self.assertRaises(EvidenceError):
                 self.read()
+
+    def test_targeted_release_accepts_shared_patch_runtimes(self):
+        selection = ['26.1-fabric', '26.1.1-fabric', '26.1.2-fabric']
+        self.manifest['selected_targets'] = selection
+        self.manifest['targets'] = []
+        for identifier in selection:
+            target = copy.deepcopy(self.target)
+            target['id'] = identifier
+            self.manifest['targets'].append(target)
+        for product, tag in (('cbbg', 'v1.5.0+mc26.1-fabric'),
+                             ('lib', 'lib/v1.0.0-beta.1+mc26.1-fabric')):
+            self.manifest.update(product=product, release=tag)
+            self.write()
+            for identifier in selection:
+                with self.subTest(product=product, target=identifier):
+                    manifest, target, specification = client_candidate(self.path, identifier)
+                    self.assertEqual(tag, manifest['release'])
+                    self.assertEqual(identifier, target['id'])
+                    self.assertEqual(identifier, specification['id'])
+
+    def utilities(self):
+        for kind, name in (('utilities', 'cbbg-utilities-1.4.0.jar'),
+                           ('utilities_sources', 'cbbg-utilities-1.4.0-sources.jar')):
+            (self.root / name).write_bytes(name.encode())
+            self.target[kind] = self.reference(name)
+
+    def test_utility_pair_is_optional_but_both_files_are_checked(self):
+        self.assertNotIn('utilities', self.read()[1])
+        self.utilities()
+        self.assertEqual(self.target['utilities'], self.read()[1]['utilities'])
+        sources = self.target.pop('utilities_sources')
+        with self.assertRaisesRegex(EvidenceError, 'together'):
+            self.read()
+        self.target['utilities_sources'] = sources
+        for kind in ('utilities', 'utilities_sources'):
+            with self.subTest(kind=kind):
+                path = self.root / self.target[kind]['path']
+                previous = path.read_bytes()
+                path.write_text('changed')
+                with self.assertRaisesRegex(EvidenceError, 'Changed evidence file'):
+                    self.read()
+                path.write_bytes(previous)
 
     def test_saved_runtime_candidates_without_inventory_remain_readable(self):
         del self.target['source_inventory']
@@ -92,6 +184,7 @@ class CandidateManifestTest(unittest.TestCase):
             self.read()
 
     def test_shared_runtime_requires_matching_artifact_and_sources(self):
+        self.utilities()
         self.manifest['selected_targets'].append('26.3-quilt')
         quilt = copy.deepcopy(self.target)
         quilt['id'] = '26.3-quilt'
@@ -104,6 +197,15 @@ class CandidateManifestTest(unittest.TestCase):
                 with self.assertRaisesRegex(EvidenceError, 'Shared ' + kind):
                     self.read()
                 quilt[kind]['sha256'] = original
+        for kind in ('utilities', 'utilities_sources'):
+            with self.subTest(kind=kind):
+                previous = quilt[kind]
+                name = 'alias-' + previous['path']
+                (self.root / name).write_bytes((self.root / previous['path']).read_bytes())
+                quilt[kind] = self.reference(name)
+                with self.assertRaisesRegex(EvidenceError, 'Shared ' + kind):
+                    self.read()
+                quilt[kind] = previous
 
 
 if __name__ == '__main__':

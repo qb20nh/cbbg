@@ -28,7 +28,7 @@ public final class ReleaseLifecycleGameTest implements FabricClientGameTest {
   public void runTest(ClientGameTestContext context) {
     checkBackend(context);
     try (var world = context.worldBuilder().create()) {
-      world.getClientLevel().waitForChunksRender();
+      ReleaseWorldAccess.waitForChunksRender(world);
       command(context, "mode set disabled");
       command(context, "stbn size 16");
       command(context, "stbn depth 8");
@@ -106,7 +106,7 @@ public final class ReleaseLifecycleGameTest implements FabricClientGameTest {
       awaitPresentation(context);
     }
     try (var world = context.worldBuilder().create()) {
-      world.getClientLevel().waitForChunksRender();
+      ReleaseWorldAccess.waitForChunksRender(world);
       awaitPresentation(context);
       screenshot(context, "world-transition");
     }
@@ -183,7 +183,8 @@ public final class ReleaseLifecycleGameTest implements FabricClientGameTest {
             .getMetadata()
             .getVersion()
             .getFriendlyString();
-    if (!version.endsWith("+mc26.1-fabric"))
+    String expectedTarget = System.getProperty("cbbg.test.artifact-target", "26.1-fabric");
+    if (!version.endsWith("+mc" + expectedTarget))
       throw new AssertionError("Unexpected artifact: " + version);
     context.runOnClient(
         client -> {

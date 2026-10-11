@@ -1,6 +1,7 @@
 package com.qb20nh.cbbg.gametest;
 
 import com.mojang.blaze3d.platform.NativeImage;
+import com.qb20nh.cbbg.api.NoiseVolume;
 import com.qb20nh.cbbg.config.CbbgConfig;
 import com.qb20nh.cbbg.render.DitherController;
 import com.qb20nh.cbbg.render.stbn.STBNCache;
@@ -53,8 +54,9 @@ public final class NoiseCancellationGameTest implements FabricClientGameTest {
       if (!old.isCancelled()
           || fields == null
           || fields.seed() != 913726L
-          || fields.uField().length != 16 * 16 * 8
-          || fields.vField().length != 16 * 16 * 8) {
+          || fields.volume().width() != 16
+          || fields.volume().height() != 16
+          || fields.volume().depth() != 8) {
         throw new AssertionError(
             "Replacement generation did not complete with its requested identity");
       }
@@ -124,8 +126,13 @@ public final class NoiseCancellationGameTest implements FabricClientGameTest {
       throw new AssertionError("Forced noise fixture requires an unused cache");
     }
     try {
-      int[] stale =
-          readFixture(new STBNGenerator.STBNFields(new double[4], new double[4], seed), seed);
+      NoiseVolume expected = NoiseVolume.generate(2, 2, 1, seed);
+      long staleSeed = seed;
+      NoiseVolume staleVolume;
+      do {
+        staleVolume = NoiseVolume.generate(2, 2, 1, ++staleSeed);
+      } while (Arrays.equals(expected.frameRGBA(0), staleVolume.frameRGBA(0)));
+      int[] stale = readFixture(new STBNGenerator.STBNFields(staleVolume, seed), seed);
       if (!STBNCache.isCacheValid(2, 2, 1, seed)) {
         throw new AssertionError("Forced noise fixture did not create a valid cache");
       }
@@ -134,7 +141,7 @@ public final class NoiseCancellationGameTest implements FabricClientGameTest {
               STBNGenerator.generateAsync(2, 2, 1, seed, true).get(10, TimeUnit.SECONDS));
       int[] fresh = readFixture(fields, seed);
       for (int i = 0; i < fresh.length; i++) {
-        if (fresh[i] != STBNGenerator.calculatePixelColor(fields.uField()[i], fields.vField()[i])) {
+        if (fresh[i] != expected.pixelABGR(i % 2, i / 2, 0)) {
           throw new AssertionError("Forced loading reused cached pixels");
         }
       }
@@ -169,7 +176,7 @@ public final class NoiseCancellationGameTest implements FabricClientGameTest {
 
   private static boolean generating(Thread thread) {
     for (StackTraceElement frame : thread.getStackTrace()) {
-      if (frame.getClassName().equals("com.qb20nh.cbbg.math.BlueNoise")) return true;
+      if (frame.getClassName().equals(NoiseVolume.class.getName())) return true;
     }
     return false;
   }

@@ -5,6 +5,7 @@ import com.mojang.blaze3d.pipeline.TextureTarget;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.textures.GpuTextureView;
 import com.qb20nh.cbbg.CbbgClient;
+import com.qb20nh.cbbg.compat.renderscale.RenderScaleCompat;
 import com.qb20nh.cbbg.config.CbbgConfig;
 import com.qb20nh.cbbg.render.CbbgDither;
 import com.qb20nh.cbbg.render.DitherController;
@@ -77,6 +78,7 @@ public abstract class MinecraftMixin {
             mc.gameRenderer
                 .mainRenderTarget()
                 .resize(mc.getWindow().getWidth(), mc.getWindow().getHeight());
+            RenderScaleCompat.refreshTargets();
           });
     }
     if (!mode.isActive()) {

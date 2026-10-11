@@ -4,6 +4,14 @@
   "ordinaryMetadata": "adapters/fabric/26.2/src/processedGametest/resources/fabric.mod.json",
   "additionalRuns": [
     {
+      "suite": "library-external",
+      "profiles": ["none"],
+      "backends": ["opengl", "vulkan"],
+      "restart": false,
+      "externalLibrary": true,
+      "entrypoints": ["ReleaseLibraryResolutionGameTest", "ReleaseUtilitiesGameTest"]
+    },
+    {
       "suite": "generation",
       "profiles": [
         "none"
@@ -198,6 +206,35 @@
       "startupMode": "seed-mismatch",
       "entrypoints": [
         "ReleaseEarlyStartupGameTest"
+      ]
+    },
+    {
+      "suite": "transparency",
+      "profiles": [
+        "none",
+        "sodium"
+      ],
+      "backends": [
+        "opengl",
+        "vulkan"
+      ],
+      "restart": false,
+      "entrypoints": [
+        "ReleaseTransparencyGameTest"
+      ]
+    },
+    {
+      "suite": "render-scale",
+      "profiles": [
+        "renderscale"
+      ],
+      "backends": [
+        "opengl",
+        "vulkan"
+      ],
+      "restart": false,
+      "entrypoints": [
+        "ReleaseRenderScaleGameTest"
       ]
     }
   ]

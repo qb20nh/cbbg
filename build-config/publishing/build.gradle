@@ -1,7 +1,8 @@
 import cbbg.gradle.CandidateFiles
 import cbbg.gradle.LegacyPublication
 import cbbg.gradle.Publication
-import groovy.json.JsonOutput
+import cbbg.gradle.ReleaseIdentity
+import cbbg.gradle.ReproducibleText
 
 plugins {
     id 'base'
@@ -31,6 +32,7 @@ if (!(metadata instanceof Map) || metadata.schema != 1 || !targetId) {
     throw new GradleException('Expected schema 1 publishing metadata and an explicit -Ptarget')
 }
 def legacy = metadata.legacy == true
+if (!legacy) ReleaseIdentity.parse(metadata.release as String).requireProduct('cbbg')
 def candidateProperty = providers.gradleProperty('candidate').orNull
 def assetsProperty = providers.gradleProperty('legacyAssets').orNull
 if (legacy == (candidateProperty != null) || legacy != (assetsProperty != null)) {
@@ -57,7 +59,9 @@ def verifyInputs = {
             ? LegacyPublication.checkedRecord(metadataFile, sourceRoot, legacyAssets)
             : Publication.checkedRecord(candidateFile, metadataFile, targetId, sourceRoot)
     if (current[1] != record) throw new GradleException('Publishing record changed')
-    (['artifact', 'sources'] + (record.containsKey('evidence') ? ['evidence'] : [])).each { kind ->
+    (['artifact', 'sources'] + (record.containsKey('utilities') ? ['utilities', 'utilities_sources'] : []) +
+            (record.containsKey('library') ? ['library', 'library_sources'] : []) +
+            (record.containsKey('evidence') ? ['evidence'] : [])).each { kind ->
         uploadFiles[kind] = CandidateFiles.checked(assets, (Map) record[kind])
     }
 }
@@ -77,6 +81,14 @@ modrinth {
     uploadFile = uploadFiles.artifact
     additionalFiles {
         sourcesJar uploadFiles.sources
+        if (uploadFiles.utilities) {
+            other uploadFiles.utilities
+            sourcesJar uploadFiles.utilities_sources
+        }
+        if (uploadFiles.library) {
+            other uploadFiles.library
+            sourcesJar uploadFiles.library_sources
+        }
         if (uploadFiles.evidence) other uploadFiles.evidence
     }
     detectLoaders = false
@@ -108,7 +120,7 @@ tasks.register('planModrinthUpload') {
         def plan = planUpload()
         def output = uploadPlan.get().asFile
         output.parentFile.mkdirs()
-        output.text = JsonOutput.prettyPrint(JsonOutput.toJson(plan)) + '\n'
+        ReproducibleText.writeJson(output, plan)
         logger.lifecycle('Modrinth retry plan: ' + plan.action + ' ' + plan.version_number)
     }
 }
@@ -133,7 +145,7 @@ tasks.named('modrinth') {
             if (result.action != 'reuse') throw new GradleException('Uploaded Modrinth version was not found')
             def output = uploadResult.get().asFile
             output.parentFile.mkdirs()
-            output.text = JsonOutput.prettyPrint(JsonOutput.toJson(result)) + '\n'
+            ReproducibleText.writeJson(output, result)
             logger.lifecycle('Modrinth retry plan: reuse ' + result.version_number)
         }
     }

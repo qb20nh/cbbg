@@ -1,0 +1,18 @@
+{
+  "required": true,
+  "package": "com.qb20nh.cbbg.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "client": [
+    "MainTargetMixin",
+    "RenderTargetCreateBuffersMixin",
+    "PostChainMixin",
+    "MinecraftMixin",
+    "RenderTargetBlitToScreenMixin",
+    "ScreenshotMixin",
+    "LightTextureAccessor",
+    "DebugScreenOverlayMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

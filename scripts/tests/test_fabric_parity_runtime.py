@@ -104,6 +104,7 @@ class LauncherFailureTests(unittest.TestCase):
               self.assertRaises(subprocess.TimeoutExpired)):
             launcher.main()
         self.assertEqual(self.launch_identity, 'fabric-loader-0.19.5-26.1.2')
+        self.assertIn('-Djava.awt.headless=true', self.launch_options['jvmArguments'])
         self.assertEqual(self.receipt()['target'], '26.1.2-fabric')
         self.assertEqual(self.receipt()['renderer'], 'blaze-texture-format')
         selected = launcher.verify_dependencies.call_args.args[0]

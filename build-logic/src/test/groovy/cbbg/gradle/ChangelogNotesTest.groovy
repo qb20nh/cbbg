@@ -131,6 +131,47 @@ Previous release.
         }
     }
 
+    @Test void groupedVersionsSelectEachApplicableTargetOnce() {
+        String body = '''### Fixed
+- Shared fix.
+#### Minecraft 1.21.1, 1.21.11
+- Older-version fix.
+#### Minecraft 1.21.11, 26.1, 26.1.1, 26.1.2, 26.2
+- Overlapping fix.
+#### Minecraft 26.2, 26.3 — Fabric
+- Fabric fix.
+'''
+        List<Map> cases = [
+                [minecraft: '1.21.1', loader: 'fabric', expected: ['Older-version fix.']],
+                [minecraft: '1.21.11', loader: 'fabric', expected: ['Older-version fix.', 'Overlapping fix.']],
+                [minecraft: '26.1', loader: 'fabric', expected: ['Overlapping fix.']],
+                [minecraft: '26.1.1', loader: 'fabric', expected: ['Overlapping fix.']],
+                [minecraft: '26.1.2', loader: 'fabric', expected: ['Overlapping fix.']],
+                [minecraft: '26.2', loader: 'fabric', expected: ['Overlapping fix.', 'Fabric fix.']],
+                [minecraft: '26.3', loader: 'fabric', expected: ['Fabric fix.']],
+                [minecraft: '26.2', loader: 'neoforge', expected: ['Overlapping fix.']],
+                [minecraft: '26.3', loader: 'neoforge', expected: []]
+        ]
+        cases.each { selected ->
+            String notes = ChangelogNotes.forTargets(body, [selected])
+            assertTrue(notes.contains('Shared fix.'), selected.toString())
+            ['Older-version fix.', 'Overlapping fix.', 'Fabric fix.'].each { change ->
+                assertEquals(selected.expected.contains(change), notes.contains(change), selected.toString())
+            }
+        }
+        String shared = ChangelogNotes.forTargets(body, cases)
+        ['Shared fix.', 'Older-version fix.', 'Overlapping fix.', 'Fabric fix.'].each { change ->
+            assertEquals(1, shared.count(change))
+        }
+    }
+
+    @Test void rejectsMalformedGroupedScopes() {
+        for (String scope : ['Minecraft 26.2,', 'Minecraft 26.2,, 26.3',
+                             'Minecraft 26.2, Fabric', 'Minecraft 26.2, 26.3 — Fabrci']) {
+            assertThrows(GradleException) { ChangelogNotes.forTargets('#### ' + scope + '\n- Fix.\n', [target]) }
+        }
+    }
+
     @Test void requiresMultiTargetSelectionToReferToOneRelease() {
         assertThrows(GradleException) {
             ChangelogNotes.select(changelog('''## [Fabric] <!-- [1.5.0-mc26.3-fabric] -->

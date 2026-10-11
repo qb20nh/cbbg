@@ -1,0 +1,161 @@
+plugins {
+    id 'net.fabricmc.fabric-loom' version '1.17.21' apply false
+    id 'net.fabricmc.fabric-loom-remap' version '1.17.21' apply false
+    id 'cbbg.packaging'
+    id 'cbbg.quality'
+    id 'cbbg.formatting'
+}
+
+def repositoryRoot = file('../..')
+def catalog = cbbg.gradle.TargetCatalog.read(new File(repositoryRoot, 'targets.json'))
+def selected = catalog.select(providers.gradleProperty('target').getOrElse('26.3-fabric'))[0]
+def target = selected.artifactOf ? catalog.select(selected.artifactOf)[0] : selected
+if (target.loader != 'fabric' || !(target.buildProfile in ['fabric-modern', 'fabric-upstream'])) {
+    throw new GradleException("No Fabric library implementation for ${target.id}")
+}
+def remappedGame = (target.java as int) < 25
+apply plugin: remappedGame ? 'net.fabricmc.fabric-loom-remap' : 'net.fabricmc.fabric-loom'
+def libraryProperties = new Properties()
+new File(repositoryRoot, 'libraries/utilities/gradle.properties').withInputStream { libraryProperties.load(it) }
+def libraryVersion = providers.gradleProperty('library_version').getOrElse(libraryProperties.library_version)
+version = cbbg.gradle.CandidateManifest.packageVersion('lib/v' + libraryVersion, target)
+group = 'com.qb20nh'
+base.archivesName = 'cbbg-lib'
+layout.buildDirectory = new File(repositoryRoot, "build/libraries/${target.id}")
+repositories { mavenCentral() }
+configurations.create('utilitiesRaw') { canBeConsumed = false; transitive = false }
+dependencies {
+    minecraft "com.mojang:minecraft:${target.minecraft}"
+    if (remappedGame) mappings loom.officialMojangMappings()
+    add(remappedGame ? 'modImplementation' : 'implementation', "net.fabricmc:fabric-loader:${target.dependencies.loader}")
+    implementation "com.qb20nh:cbbg-utilities:${libraryVersion}"
+    utilitiesRaw "com.qb20nh:cbbg-utilities:${libraryVersion}"
+    compileOnly 'org.jspecify:jspecify:1.0.1'
+}
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(target.java as int)
+    withSourcesJar()
+}
+tasks.withType(JavaCompile).configureEach { options.release = target.java as int }
+tasks.withType(Jar).configureEach { preserveFileTimestamps = false; reproducibleFileOrder = true }
+sourceSets.main.java.srcDirs = ["src/${target.renderer}/java"]
+if (target.renderer == 'blaze-texture-format') sourceSets.main.java.srcDir "src/${target.minecraft}/java"
+sourceSets.main.resources.srcDirs = ['src/main/resources', "src/${target.renderer}/resources"]
+tasks.named('processResources') {
+    inputs.property('target', target)
+    inputs.property('version', project.version)
+    filesMatching('fabric.mod.json') {
+        expand(version: project.version, minecraft: target.minecraftDependency ?: target.minecraft,
+                java: target.java, loader: target.dependencies.minimumLoader ?: target.dependencies.loader,
+                loader_upper_bound: target.dependencies.loaderUpperExclusive ? ' <' + target.dependencies.loaderUpperExclusive : '')
+    }
+    def shader = new File(repositoryRoot, 'libraries/utilities/src/main/resources/com/qb20nh/cbbg/api/shaders/dither.glsl')
+    def directive = cbbg.gradle.TargetCatalog.shaderImport(target) + ' <'
+    def shaderImports = { line -> line.replace('#moj_import <', directive).replace('#include <', directive) }
+    from(shader) { into 'assets/cbbg/shaders/include' }
+    if (target.renderer == 'gl3') {
+        from(shader) { into 'assets/minecraft/shaders/include'; rename { 'cbbg_dither.glsl' } }
+    } else if (target.renderer == 'blaze-texture-format') {
+        from('src/gpu/resources')
+    } else if (target.renderer == 'blaze-gpu-format') {
+        from('src/blaze-gpu-format/resources/assets/cbbg/shaders/core/cbbg_dither.fsh') {
+            into 'assets/cbbg/shaders/core'
+            rename { 'cbbg_demo.fsh' }
+            filter(shaderImports)
+            filter { line -> line.startsWith('#version ') ? line + '\n#define CBBG_DEMO' : line }
+        }
+    } else {
+        if (target.renderer == 'renderpearl') from('src/blaze-gpu-format/resources')
+    }
+    filesMatching('assets/cbbg/shaders/core/*.fsh') {
+        filter(shaderImports)
+    }
+    doLast {
+        if (target.renderer == 'gl3') {
+            File descriptor = new File(destinationDir, 'fabric.mod.json')
+            Map metadata = new groovy.json.JsonSlurper().parse(descriptor)
+            metadata.mixins = ['cbbg_lib.gl3.mixins.json']
+            cbbg.gradle.ReproducibleText.writeJson(descriptor, metadata)
+        }
+    }
+}
+tasks.named('sourcesJar', Jar) {
+    from(new File(repositoryRoot, 'libraries/utilities/src/main/java'))
+    from(sourceSets.main.output.resourcesDir) {
+        exclude 'fabric.mod.json'
+        eachFile { detail ->
+            if (sourceSets.main.resources.matching { include detail.path }.files) detail.exclude()
+        }
+    }
+    dependsOn tasks.named('processResources')
+}
+tasks.named('jar', Jar) {
+    dependsOn configurations.utilitiesRaw
+    from({ configurations.utilitiesRaw.collect { zipTree(it) } }) { exclude 'META-INF/**', 'LICENSE' }
+    from(new File(repositoryRoot, 'LICENSE'))
+    destinationDirectory = layout.buildDirectory.dir('intermediates/raw-jar')
+    archiveClassifier = 'raw'
+}
+releaseOptimization {
+    targetJdk(javaToolchains, target.java as int)
+    inputJar.set(tasks.named('jar', Jar).flatMap { it.archiveFile })
+    outputJar.set(layout.buildDirectory.file("libs/cbbg-lib-${project.version}.jar"))
+    mappingFile.set(layout.buildDirectory.file("mapping/cbbg-lib-${project.version}.map"))
+    rulesFile.set(file('proguard-release.pro'))
+    libraryJars.from(providers.provider {
+        sourceSets.main.compileClasspath.files.findAll { !it.name.startsWith('cbbg-utilities-') }
+    })
+}
+tasks.named('optimizeReleaseJar') { dependsOn tasks.named('jar') }
+if (remappedGame) {
+    tasks.named('remapJar', net.fabricmc.loom.task.RemapJarTask) {
+        archiveClassifier = 'dev'
+        destinationDirectory = layout.buildDirectory.dir('intermediates/dev')
+        addNestedDependencies = false
+    }
+    releaseOptimization.optimizedJar.set(layout.buildDirectory.file("intermediates/proguard/cbbg-lib-${project.version}-named.jar"))
+    def remapped = tasks.register('remapReleaseJar', net.fabricmc.loom.task.RemapJarTask) {
+        dependsOn tasks.named('minifyReleaseJar')
+        inputFile.set(releaseOptimization.optimizedJar)
+        archiveClassifier = ''
+        destinationDirectory = layout.buildDirectory.dir('libs')
+        addNestedDependencies = false
+    }
+    releaseOptimization.outputJar.set(remapped.flatMap { it.archiveFile })
+}
+tasks.register('developmentRuntimeJar') {
+    dependsOn tasks.named(remappedGame ? 'remapJar' : 'jar')
+}
+configurations.create('releaseElements') {
+    canBeResolved = false
+    outgoing.artifact(releaseOptimization.outputJar) { builtBy tasks.named('optimizeReleaseJar') }
+}
+tasks.named('assemble') { dependsOn tasks.named('optimizeReleaseJar') }
+ext.libraryTarget = target
+ext.libraryRemappedGame = remappedGame
+ext.fabricRemapTaskType = net.fabricmc.loom.task.RemapJarTask
+apply from: file('library-testing.gradle')
+ext.candidateProduct = 'lib'
+ext.candidateTargetId = target.id
+ext.utilitiesArchive = new File(repositoryRoot, "libraries/utilities/build/libs/cbbg-utilities-${libraryVersion}.jar")
+ext.utilitiesSourcesArchive = new File(repositoryRoot, "libraries/utilities/build/libs/cbbg-utilities-${libraryVersion}-sources.jar")
+ext.additionalInventorySources = [fileTree(new File(repositoryRoot, 'libraries/utilities/src/main/java'))]
+apply from: new File(repositoryRoot, 'build-config/source-inventory.gradle')
+tasks.register('prepareLibraryOutputs') {
+    dependsOn tasks.named('releaseSourcesJar'), gradle.includedBuild('cbbg-utilities').task(':utilitiesSourcesJar')
+}
+tasks.named('checkPackages') {
+    dependsOn tasks.named('releaseSourcesJar')
+    artifact.set(releaseOptimization.outputJar)
+    sources.set(tasks.named('releaseSourcesJar', Jar).flatMap { it.archiveFile })
+    mapping.set(releaseOptimization.mappingFile)
+    sbom.set(releaseSbomFile)
+    coreSources.set(new File(repositoryRoot, 'libraries/utilities/src/main/java'))
+    javaVersion.set(target.java as int)
+    doLast { cbbg.gradle.PackageChecks.verifyFabricMetadata(artifact.get().asFile, target, project.version.toString(), 'lib') }
+}
+tasks.named('check') {
+    dependsOn tasks.named('checkPackages'), tasks.named('processedDriverJar'),
+            gradle.includedBuild('cbbg-utilities').task(':check')
+}
+apply from: new File(repositoryRoot, 'build-config/candidate-build-outputs.gradle')

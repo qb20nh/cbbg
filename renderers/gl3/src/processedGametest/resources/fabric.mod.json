@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "id": "cbbg-renderer-test",
+  "version": "1.0.0",
+  "name": "CBBG GL3 packaged lifecycle tests",
+  "environment": "client",
+  "mixins": ["cbbg.gl3-test.mixins.json"],
+  "entrypoints": {
+    "fabric-client-gametest": [
+      "com.qb20nh.cbbg.gametest.ReleaseLifecycleGameTest",
+      "com.qb20nh.cbbg.gametest.ReleaseCacheGameTest",
+      "com.qb20nh.cbbg.gametest.ReleaseControlsGameTest",
+      "com.qb20nh.cbbg.gametest.ReleaseDebugOverlayGameTest",
+      "com.qb20nh.cbbg.gametest.ReleaseModMenuGameTest",
+      "com.qb20nh.cbbg.gametest.ReleaseIrisGameTest",
+      "com.qb20nh.cbbg.gametest.ReleaseSettingsGuiGameTest",
+      "com.qb20nh.cbbg.gametest.ReleaseUtilitiesGameTest",
+      "com.qb20nh.cbbg.gametest.ReleaseSodiumConfigGameTest",
+      "com.qb20nh.cbbg.gametest.ReleaseGenerationGameTest",
+      "com.qb20nh.cbbg.gametest.ReleaseNotificationsGameTest"
+    ]
+  },
+  "depends": {
+    "cbbg": "*",
+    "fabricloader": ">=${loader_minimum}",
+    "minecraft": "${minecraft_version}",
+    "fabric-client-gametest-api-v1": "*"
+  }
+}

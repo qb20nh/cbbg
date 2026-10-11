@@ -20,8 +20,10 @@ class PublishingBuildTest {
     @TempDir File directory
 
     @ParameterizedTest
-    @ValueSource(strings = ['26.1', '26.3'])
-    void uploadRequestUsesAcceptedFileTypes(String minecraft) {
+    @ValueSource(strings = ['26.1', '26.3', '26.3-utilities'])
+    void uploadRequestUsesAcceptedFileTypes(String selection) {
+        boolean utilities = selection.endsWith('-utilities')
+        String minecraft = selection.replace('-utilities', '')
         Map fixture = CandidateFixture.create(directory, true, true, minecraft,
                 minecraft == '26.1' ? '>=26.1 <26.2' : null)
         if (minecraft == '26.1') {
@@ -45,6 +47,7 @@ class PublishingBuildTest {
             fixture.file.text = JsonOutput.toJson(fixture.manifest)
             CandidateFixture.checksums(fixture.bundle)
         }
+        if (utilities) CandidateFixture.utilities(fixture)
         ReleaseEvidence.assemble(new CandidateManifest(fixture.file), fixture.target.id)
         File metadata = new File(directory, 'publication.json')
         Map publication = Publication.metadata(fixture.file, fixture.root, 'Release notes')
@@ -126,10 +129,13 @@ tasks.register('sendUpload') {
             assertEquals(record.modrinth.game_versions, actual.data.game_versions)
             assertEquals(record.modrinth.loaders, actual.data.loaders)
             assertEquals(record.artifact.path, actual.data.primary_file)
-            assertEquals(['sources-jar'], actual.data.file_types.values().toList())
-            assertEquals(record.sources.path, actual.data.file_types.keySet().first())
-            List<String> names = ['artifact', 'sources', 'evidence'].collect { record[it].path }
-            assertEquals(names, actual.data.file_parts)
+            Map types = [(record.sources.path): 'sources-jar']
+            if (utilities) types[record.utilities_sources.path] = 'sources-jar'
+            assertEquals(types, actual.data.file_types)
+            List<String> kinds = ['artifact', 'sources'] + (utilities ? ['utilities', 'utilities_sources'] : []) + ['evidence']
+            List<String> names = kinds.collect { record[it].path }
+            assertEquals(names.size(), actual.data.file_parts.size())
+            assertEquals(names.toSet(), actual.data.file_parts.toSet())
             assertEquals(names.toSet(), actual.files.keySet())
             names.each { name ->
                 assertArrayEquals(new File(fixture.bundle, name).bytes, (byte[]) actual.files[name])

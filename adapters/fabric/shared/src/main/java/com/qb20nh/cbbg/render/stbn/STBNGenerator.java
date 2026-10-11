@@ -1,7 +1,6 @@
 package com.qb20nh.cbbg.render.stbn;
 
-import com.qb20nh.cbbg.math.BlueNoise;
-import java.util.*;
+import com.qb20nh.cbbg.api.NoiseVolume;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
@@ -26,56 +25,20 @@ public class STBNGenerator {
 
   // Pure data container
   public static final class STBNFields {
-    private final double[] uField;
-    private final double[] vField;
+    private final NoiseVolume volume;
     private final long seed;
 
-    public STBNFields(double[] uField, double[] vField, long seed) {
-      this.uField = uField;
-      this.vField = vField;
+    public STBNFields(NoiseVolume volume, long seed) {
+      this.volume = volume;
       this.seed = seed;
     }
 
-    public STBNFields(double[] uField, double[] vField) {
-      this(uField, vField, 0L);
-    }
-
-    public double[] uField() {
-      return uField;
-    }
-
-    public double[] vField() {
-      return vField;
+    public NoiseVolume volume() {
+      return volume;
     }
 
     public long seed() {
       return seed;
-    }
-
-    @Override
-    public boolean equals(@Nullable Object o) {
-      if (this == o) return true;
-      if (!(o instanceof STBNFields that)) return false;
-      return seed == that.seed
-          && Arrays.equals(uField, that.uField)
-          && Arrays.equals(vField, that.vField);
-    }
-
-    @Override
-    public int hashCode() {
-      int result = Arrays.hashCode(uField);
-      result = 31 * result + Arrays.hashCode(vField);
-      return result + Long.hashCode(seed);
-    }
-
-    @Override
-    public String toString() {
-      return "STBNFields{"
-          + "uField="
-          + Arrays.toString(uField)
-          + ", vField="
-          + Arrays.toString(vField)
-          + '}';
     }
   }
 
@@ -216,21 +179,13 @@ public class STBNGenerator {
                     LOGGER.info("Starting Async STBN Math Generation ({}x{}x{})...", w, h, d);
                     long start = System.currentTimeMillis();
 
-                    // Generate U and V fields (Spatio-Temporal Blue Noise)
-                    // If seed is 0, use existing constants, otherwise mix.
-                    long seedU = BlueNoise.stbnUSeed(seed);
-                    long seedV = BlueNoise.stbnVSeed(seed);
-
-                    double[] uField = BlueNoise.generateScalarField(w, h, d, seedU);
-                    if (Thread.currentThread().isInterrupted()) return null;
-
-                    double[] vField = BlueNoise.generateScalarField(w, h, d, seedV);
+                    NoiseVolume volume = NoiseVolume.generate(w, h, d, seed);
                     if (Thread.currentThread().isInterrupted()) return null;
 
                     long dt = System.currentTimeMillis() - start;
                     LOGGER.info("STBN Math Complete in {} ms", dt);
 
-                    return new STBNFields(uField, vField, seed);
+                    return new STBNFields(volume, seed);
                   } catch (Exception e) {
                     // If interrupted, just return null silently
                     if (e instanceof InterruptedException) return null;
@@ -286,9 +241,5 @@ public class STBNGenerator {
     CompletableFuture<@Nullable STBNFields> pending = pendingFuture.getAndSet(null);
     if (pending != null) pending.cancel(true);
     WORKER.shutdownNow();
-  }
-
-  public static int calculatePixelColor(double u, double v) {
-    return BlueNoise.calculatePixelColor(u, v);
   }
 }

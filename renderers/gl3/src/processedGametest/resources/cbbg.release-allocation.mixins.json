@@ -1,0 +1,11 @@
+{
+  "required": true,
+  "package": "com.qb20nh.cbbg.gametest.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "client": [
+    "ReleaseAllocationFailureMixin",
+    "ReleaseAllocationDisposalMixin",
+    "ReleaseMainAllocationMixin"
+  ],
+  "injectors": {"defaultRequire": 1}
+}

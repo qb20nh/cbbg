@@ -1,5 +1,15 @@
+// Legacy API imports are generated later; inspect the original selected sources.
+def ReproducibleText = plugins.getPlugin('cbbg.packaging').class.classLoader.loadClass('cbbg.gradle.ReproducibleText')
+def importMapping = tasks.findByName('mapProcessedGametestApiImports')
+def processedSources = importMapping == null ? sourceSets.processedGametest.java : importMapping.source
+def includesFixture = { String name ->
+    !processedSources.matching { include "**/${name}.java" }.isEmpty()
+}
+
 // Separate launches retain each initial cache state.
 ['Cold', 'Warm', 'Damaged', 'SeedMismatch'].each { mode ->
+    if (!includesFixture('ReleaseEarlyStartupGameTest') ||
+            !includesFixture('ReleaseStartupPreLaunch')) return
     String classifier = 'startup-' + mode.replaceAll(/([a-z])([A-Z])/, '$1-$2').toLowerCase(Locale.ROOT)
     def metadata = tasks.register("processedEarlyStartup${mode}Metadata") {
         dependsOn tasks.named('processProcessedGametestResources')
@@ -14,11 +24,11 @@
             descriptor.entrypoints.preLaunch = ['com.qb20nh.cbbg.gametest.ReleaseStartupPreLaunch']
             descriptor.mixins.add('cbbg.release-startup.mixins.json')
             destination.get().asFile.parentFile.mkdirs()
-            destination.get().asFile.text = groovy.json.JsonOutput.prettyPrint(
-                    groovy.json.JsonOutput.toJson(descriptor)) + '\n'
+            ReproducibleText.writeJson(destination.get().asFile, descriptor)
         }
     }
     tasks.register("processedEarlyStartup${mode}DriverJar", Jar) {
+        ext.startupMode = classifier.substring('startup-'.length())
         archiveClassifier = "processed-${classifier}-driver"
         from(sourceSets.processedGametest.output) { exclude 'fabric.mod.json' }
         from(metadata)
@@ -33,10 +43,13 @@
     IrisRestart: 'ReleaseIrisRestartGameTest',
     Allocation: 'ReleaseAllocationGameTest',
     WorldPixels: 'ReleaseWorldPixelsGameTest',
+    Transparency: 'ReleaseTransparencyGameTest',
+    RenderScale: 'ReleaseRenderScaleGameTest',
     ShaderFailure: 'ReleaseShaderFailureGameTest',
     DebugOverlay: 'ReleaseDebugOverlayGameTest',
-    Notifications: 'ReleaseNotificationsGameTest'
-].each { name, testClass ->
+    Notifications: 'ReleaseNotificationsGameTest',
+    Satin: 'ReleaseSatinGameTest'
+].findAll { name, testClass -> includesFixture(testClass) }.each { name, testClass ->
     def metadata = tasks.register("processed${name}Metadata") {
         dependsOn tasks.named('processProcessedGametestResources')
         def source = layout.buildDirectory.file('resources/processedGametest/fabric.mod.json')
@@ -51,14 +64,14 @@
             if (name in ['Shutdown', 'GeneratingShutdown']) {
                 descriptor.mixins.addAll(['cbbg.release-startup.mixins.json', 'cbbg.release-shutdown.mixins.json'])
             }
-            if (name == 'IrisRestart') descriptor.mixins.add('cbbg.release-startup.mixins.json')
+            if (name in ['IrisRestart', 'ShaderFailure']) descriptor.mixins.add('cbbg.release-startup.mixins.json')
             if (name == 'Allocation') descriptor.mixins.add('cbbg.release-allocation.mixins.json')
             destination.get().asFile.parentFile.mkdirs()
-            destination.get().asFile.text = groovy.json.JsonOutput.prettyPrint(
-                    groovy.json.JsonOutput.toJson(descriptor)) + '\n'
+            ReproducibleText.writeJson(destination.get().asFile, descriptor)
         }
     }
     tasks.register("processed${name}DriverJar", Jar) {
+        ext.restart = name == 'IrisRestart'
         String suite = name.replaceAll(/([a-z])([A-Z])/, '$1-$2').toLowerCase(Locale.ROOT)
         archiveClassifier = "processed-${suite}-driver"
         from(sourceSets.processedGametest.output) { exclude 'fabric.mod.json' }

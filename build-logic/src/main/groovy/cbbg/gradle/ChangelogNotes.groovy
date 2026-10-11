@@ -50,7 +50,7 @@ class ChangelogNotes {
             if (levels[i] == 4) {
                 Map scope = scope(lines[i].substring(5).replaceFirst(/\s+#+\s*$/, '').trim())
                 include = targets.any { target ->
-                    (!scope.minecraft || scope.minecraft == target.minecraft) &&
+                    (!scope.minecraft || scope.minecraft.contains(target.minecraft)) &&
                             (!scope.loader || scope.loader == target.loader)
                 }
             }
@@ -82,12 +82,12 @@ class ChangelogNotes {
     private static Map scope(String title) {
         Map loaders = ['fabric': 'fabric', 'quilt': 'quilt', 'forge': 'forge',
                        'neoforge': 'neoforge', 'legacy fabric': 'legacy-fabric']
-        def version = title =~ /(?i)^Minecraft ([0-9][0-9A-Za-z._-]*)(?:\s+[—–-]\s+(.+))?$/
+        def version = title =~ /(?i)^Minecraft ([0-9][0-9A-Za-z._-]*(?:,\s*[0-9][0-9A-Za-z._-]*)*)(?:\s+[—–-]\s+(.+))?$/
         if (version.matches()) {
             String label = version[0][2]
             String loader = label == null ? null : loaders[label.toLowerCase(Locale.ROOT)]
             if (label != null && loader == null) throw new GradleException('Unknown changelog loader: ' + label)
-            return [minecraft: version[0][1], loader: loader]
+            return [minecraft: version[0][1].split(/,\s*/).toList(), loader: loader]
         }
         String loader = loaders[title.toLowerCase(Locale.ROOT)]
         if (loader == null) throw new GradleException('Expected a Minecraft version or loader scope: ' + title)

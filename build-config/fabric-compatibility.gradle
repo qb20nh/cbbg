@@ -24,10 +24,19 @@ def familyTargets = sharedArtifactFamily ? compatibilityTargets.findAll {
     it.loader == 'fabric' && (it.id == compatibilityOwner.id || it.artifactOf == compatibilityOwner.id)
 } : [compatibilityTarget]
 def compatibilityOutput = layout.buildDirectory.dir('fabric-compatibility')
-def compatibilityReport = compatibilityOutput.map { it.file('minimums.json') }
+def compatibilityDriverName = providers.gradleProperty('compatibilityDriver').getOrElse('processedDriverJar')
+if (!(compatibilityDriverName ==~ /processed[A-Za-z0-9]*DriverJar/)) {
+    throw new GradleException('compatibilityDriver must name a processed test driver task')
+}
+def ordinaryDriver = compatibilityDriverName == 'processedDriverJar'
+def compatibilityReportName = ordinaryDriver ? 'minimums.json' : compatibilityDriverName + '.json'
+def compatibilityReport = compatibilityOutput.map { it.file(compatibilityReportName) }
 def compatibilityLastSuccess = compatibilityOutput.map { it.file('last-successful.json') }
 def resolvePinnedGametest = { Map target ->
-    String version = fabricApi.moduleVersion('fabric-client-gametest-api-v1',
+    if (target.minecraft == '1.21.1' && project.ext.has('clientGametestBackport')) {
+        return project.ext.clientGametestBackport.get().archiveFile.get().asFile
+    }
+    String version = target.dependencies.clientGametest ?: fabricApi.moduleVersion('fabric-client-gametest-api-v1',
             target.dependencies.fabricApi)
     def configuration = configurations.detachedConfiguration(dependencies.create(
             'net.fabricmc.fabric-api:fabric-client-gametest-api-v1:' + version))
@@ -85,6 +94,11 @@ tasks.register('verifyFabricCompatibility') {
     group = 'verification'
     description = 'Find cached Loader/API compatibility boundaries using the processed release jar.'
     dependsOn 'prepareProcessedRuntime'
+    dependsOn {
+        def driver = tasks.named(compatibilityDriverName, Jar).get()
+        driver.hasProperty('runtimeArchiveFile') ? driver.runtimeArchiveFile : driver
+    }
+    if (project.ext.has('clientGametestBackport')) dependsOn project.ext.clientGametestBackport
     doLast {
         if (System.getenv('CI')?.equalsIgnoreCase('true') || System.getenv('GITHUB_ACTIONS') == 'true') {
             throw new GradleException('Packaged graphics tests require a local test display')
@@ -114,6 +128,9 @@ tasks.register('verifyFabricCompatibility') {
             throw new GradleException('verifyBuildDependenciesOnly must be true or false')
         }
         boolean buildOnly = buildOnlyOption == 'true'
+        if (!ordinaryDriver && (!buildOnly || strict)) {
+            throw new GradleException('A selected test driver requires -PverifyBuildDependenciesOnly=true')
+        }
         boolean familySearch = sharedArtifactFamily && compatibilityTarget.id == compatibilityOwner.id &&
                 !strict && !buildOnly
         String profile = providers.gradleProperty('compatibilityProfile').getOrElse('none')
@@ -124,11 +141,24 @@ tasks.register('verifyFabricCompatibility') {
         if (profile != 'none' && !buildOnly) {
             throw new GradleException('Optional compatibility profiles require -PverifyBuildDependenciesOnly=true')
         }
+        def driverTask = tasks.named(compatibilityDriverName, Jar).get()
+        String startupMode = driverTask.extensions.extraProperties.has('startupMode') ?
+                driverTask.extensions.extraProperties.get('startupMode') as String : null
+        boolean restart = driverTask.extensions.extraProperties.has('restart') &&
+                driverTask.extensions.extraProperties.get('restart') == true
+        File suppliedConfig = providers.gradleProperty('compatibilityConfig').isPresent() ?
+                file(providers.gradleProperty('compatibilityConfig').get()) : null
+        File startupCache = providers.gradleProperty('compatibilityStartupCache').isPresent() ?
+                file(providers.gradleProperty('compatibilityStartupCache').get()) : null
+        FabricCompatibilityProbe.requireLocalInputs(buildOnly, startupMode, suppliedConfig, startupCache,
+                profile, restart, compatibilityDriverName)
         File output = compatibilityOutput.get().asFile
         output.mkdirs()
-        File initialConfig = new File(output, 'initial-cbbg.json')
+        File initialConfig = suppliedConfig ?: new File(output, 'initial-cbbg.json')
         String initialSettings = JsonOutput.toJson([strength: 2.0]) + '\n'
-        if (!initialConfig.isFile() || initialConfig.text != initialSettings) initialConfig.text = initialSettings
+        if (suppliedConfig == null && (!initialConfig.isFile() || initialConfig.text != initialSettings)) {
+            initialConfig.text = initialSettings
+        }
         def readUrl = { String url ->
             URLConnection connection = new URI(url).toURL().openConnection()
             connection.connectTimeout = 30000
@@ -139,9 +169,9 @@ tasks.register('verifyFabricCompatibility') {
             FabricCompatibilityProbe.run(command, log, providers, compatibilityRoot)
         }
         Map<String, String> modNames = [modmenu: 'modMenu', clothconfig: 'clothConfig', yacl: 'yacl',
-                sodium: 'sodium', iris: 'iris', sulkan: 'sulkan', renderscale: 'renderScale',
+                sodium: 'sodium', iris: 'iris', sulkan: 'sulkan', satin: 'satin', renderscale: 'renderScale',
                 chatpatches: 'chatPatches', immediatelyfast: 'immediatelyFast',
-                threatengl: 'threatenGl', forcegl3: 'forceGl3']
+                threatengl: 'threatenGl', forcegl3: 'forceGl3', forcegl2: 'forceGl2']
         Set<String> selected = profile == 'none' ? [] as Set : profile.tokenize('+') as Set
         if (selected.contains('iris') || selected.contains('sulkan')) selected.add('sodium')
         if (selected.contains('renderscale')) selected.add('clothconfig')
@@ -209,7 +239,8 @@ tasks.register('verifyFabricCompatibility') {
                 'v' + project.version.toString().split(/\+/, 2)[0], compatibilityOwner)) {
             throw new GradleException('Compatibility search requires the artifact owner package version')
         }
-        File driver = tasks.named('processedDriverJar', Jar).get().archiveFile.get().asFile
+        def driverArchive = driverTask.hasProperty('runtimeArchiveFile') ? driverTask.runtimeArchiveFile : driverTask.archiveFile
+        File driver = driverArchive.get().asFile
         def resolveJar = { String coordinate ->
             def configuration = configurations.detachedConfiguration(dependencies.create(coordinate))
             configuration.transitive = false
@@ -225,7 +256,7 @@ tasks.register('verifyFabricCompatibility') {
                 },
                 initialConfig: CandidateFiles.sha256(initialConfig),
                 display: manageDisplay ? [managed: true] : [directory: displayDirectory.canonicalPath, wayland: display],
-                minimumOverrides: !strict, host: System.getProperty('os.name') + '/' +
+                minimumOverrides: !strict && !buildOnly, host: System.getProperty('os.name') + '/' +
                         System.getProperty('os.arch') + '/' + System.getProperty('os.version')]
         List<File> identityFiles = [new File(compatibilityRoot, 'build-config/fabric-compatibility.gradle'),
                 new File(compatibilityRoot, 'build-config/fabric-startup-tests.gradle'),
@@ -364,7 +395,7 @@ tasks.register('verifyFabricCompatibility') {
         }
         def save = {
             reports.each { String targetId, Map runtimeReport ->
-                File destination = new File(runtimeOutputs[targetId], 'minimums.json')
+                File destination = new File(runtimeOutputs[targetId], compatibilityReportName)
                 String content = JsonOutput.prettyPrint(JsonOutput.toJson(runtimeReport)) + '\n'
                 if (!destination.isFile() || destination.text != content) destination.text = content
             }
@@ -423,7 +454,8 @@ tasks.register('verifyFabricCompatibility') {
                         target: target, loaderVersion: loaderVersion, apiVersion: apiVersion,
                         api: api, gametest: gametest, runtime: runtime, optionalMods: optionalMods,
                         candidate: candidate, driver: driver, profile: profile, backend: backend,
-                        config: targetConfig, python: python, java: java, strict: strict,
+                        config: targetConfig, python: python, java: java, strict: strict || buildOnly,
+                        startupMode: startupMode, startupCache: startupCache, restart: restart,
                         manageDisplay: manageDisplay, displayDirectory: displayDirectory,
                         display: display, weston: weston, eglVendor: eglVendor]
                 Map inputs = FabricCompatibilityProbe.cacheInputs(targetFixed, spec,
@@ -618,7 +650,7 @@ tasks.register('verifyFabricCompatibility') {
         } finally {
             save()
         }
-        logger.lifecycle('Tested dependency boundaries: ' + compatibilityReport.get().asFile)
+        logger.lifecycle('Verification report: ' + compatibilityReport.get().asFile)
     }
 }
 

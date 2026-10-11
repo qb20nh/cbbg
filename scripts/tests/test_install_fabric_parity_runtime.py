@@ -43,6 +43,9 @@ class FabricProfileTests(unittest.TestCase):
 
                 def install_version(selected, location, callback):
                     self.assertEqual(selected, identity)
+                    pending = json.loads((location / 'cbbg-install-receipt.json').read_text())
+                    self.assertEqual((pending['target'], pending['profile'], pending['installed']),
+                                     (target_id, identity, False))
                     jar = location / 'libraries/net/fabricmc/fabric-loader/0.19.5/fabric-loader-0.19.5.jar'
                     jar.parent.mkdir(parents=True)
                     jar.write_bytes(b'loader')

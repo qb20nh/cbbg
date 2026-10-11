@@ -62,13 +62,13 @@ public final class DitherPresentation {
             settings.strength(),
             screen != null && !screen.isInGameUi(),
             client.options.getMenuBackgroundBlurriness());
-    float coordScale = RenderScaleCompat.getDitherCoordScale();
+    double coordScale = RenderScaleCompat.getDitherScale();
     return PASS.render(
         input,
         Objects.requireNonNull(noiseView),
         strength,
-        coordScale,
-        coordScale,
+        DitherScale.forDimension(coordScale, input.getWidth(0)),
+        DitherScale.forDimension(coordScale, input.getHeight(0)),
         settings.mode() == CbbgConfig.Mode.DEMO);
   }
 

@@ -29,7 +29,7 @@ public final class CbbgDebugEntry implements DebugScreenEntry {
     CbbgConfig.Mode effective = CbbgClient.getEffectiveMode();
     Minecraft client = Minecraft.getInstance();
     GpuTexture main = client.getMainRenderTarget().getColorTexture();
-    GpuTexture lightmap = client.gameRenderer.levelLightmap().texture();
+    GpuTexture lightmap = com.qb20nh.cbbg.render.RenderPlatform.lightmap(client);
     displayer.addLine(
         "cbbg: mode="
             + effective

@@ -74,7 +74,7 @@ def validate_release_identity(release, commit):
     prerelease = r"(?:-[A-Za-z][0-9A-Za-z-]*(?:\.[A-Za-z][0-9A-Za-z-]*)*\.[1-9][0-9]*)?"
     target = r"(?:\+mc[0-9][0-9A-Za-z-]*(?:\.[0-9A-Za-z-]+)*-(?:fabric|quilt|forge|neoforge|legacy-fabric))?"
     if not isinstance(release, str) or not re.fullmatch(
-            "v" + number + r"\." + number + r"\." + number + prerelease + target, release):
+            r"(?:lib/)?v" + number + r"\." + number + r"\." + number + prerelease + target, release):
         raise EvidenceError("Invalid release tag")
     if not isinstance(commit, str) or not re.fullmatch(r"[0-9a-f]{40}", commit):
         raise EvidenceError("Invalid source commit")
@@ -82,10 +82,12 @@ def validate_release_identity(release, commit):
 
 def validate_release_targets(release, targets):
     if "+" in release:
-        suffixes = ["mc" + target["minecraft"] + "-" + target["loader"]
-                    for target in targets.values()]
-        if len(suffixes) != 1 or release.split("+", 1)[1] != suffixes[0]:
-            raise EvidenceError("Release tag must match the single selected target")
+        owners = {target.get("artifactOf") or identifier
+                  for identifier, target in targets.items()}
+        owner = targets.get(next(iter(owners))) if len(owners) == 1 else None
+        if (owner is None or release.split("+", 1)[1]
+                != "mc" + owner["minecraft"] + "-" + owner["loader"]):
+            raise EvidenceError("Release tag must match the selected artifact owner")
 
 
 def selected_target_specs(catalog, selection):

@@ -31,7 +31,8 @@ def minecraftOrigins = [
 
 gradle.projectsEvaluated {
     gradle.rootProject.allprojects { project ->
-        if (project.plugins.hasPlugin('net.fabricmc.fabric-loom')) {
+        if (project.plugins.hasPlugin('net.fabricmc.fabric-loom') ||
+                project.plugins.hasPlugin('net.fabricmc.fabric-loom-remap')) {
             project.configurations.each { configuration ->
                 def parents = configuration.extendsFrom
                 def retained = parents.findAll { !minecraftOrigins.contains(it.name) }

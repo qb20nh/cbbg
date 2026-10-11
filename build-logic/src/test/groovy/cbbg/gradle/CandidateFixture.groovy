@@ -85,6 +85,21 @@ class CandidateFixture {
         [root: root, bundle: bundle, file: manifestFile, manifest: manifest, record: record, catalog: catalog, target: target]
     }
 
+    static void utilities(Map fixture) {
+        String name = 'cbbg-utilities-1.4.0'
+        archive(new File(fixture.bundle, name + '.jar'),
+                ['com/qb20nh/cbbg/api/NoiseVolume.class': [0xca, 0xfe, 0xba, 0xbe, 0, 0, 0, 52] as byte[]])
+        archive(new File(fixture.bundle, name + '-sources.jar'),
+                ['com/qb20nh/cbbg/api/NoiseVolume.java': 'class NoiseVolume {}'.bytes,
+                 'META-INF/cbbg/proguard.map': 'com.qb20nh.cbbg.api.NoiseVolume -> com.qb20nh.cbbg.api.NoiseVolume:\n'.bytes])
+        fixture.manifest.targets.each { record ->
+            record.utilities = CandidateFiles.reference(fixture.bundle, name + '.jar')
+            record.utilities_sources = CandidateFiles.reference(fixture.bundle, name + '-sources.jar')
+        }
+        fixture.file.text = JsonOutput.toJson(fixture.manifest)
+        checksums(fixture.bundle)
+    }
+
     static void checksums(File bundle) {
         new File(bundle, 'SHA256SUMS').text = bundle.listFiles().findAll { !(it.name in ['SHA256SUMS', 'provenance.jsonl']) }
                 .sort { it.name }.collect { CandidateFiles.sha256(it) + '  ' + it.name }.join('\n') + '\n'

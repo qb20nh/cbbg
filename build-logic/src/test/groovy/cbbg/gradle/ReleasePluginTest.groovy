@@ -4,6 +4,7 @@ import groovy.json.JsonOutput
 import org.gradle.testkit.runner.GradleRunner
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
+import java.nio.file.Files
 import static org.junit.jupiter.api.Assertions.*
 
 class ReleasePluginTest {
@@ -12,17 +13,55 @@ class ReleasePluginTest {
     private GradleRunner runner(String... arguments) {
         new File(directory, 'settings.gradle').text = "rootProject.name = 'release-test'\n"
         new File(directory, 'build.gradle').text = "plugins { id 'cbbg.release' }\n"
+        Map environment = new HashMap(System.getenv())
+        environment.remove('CI')
         GradleRunner.create().withProjectDir(directory).withPluginClasspath()
+                .withEnvironment(environment)
                 .withArguments(arguments.toList() + ['--stacktrace'])
     }
 
     @Test void acceptanceAndPublicationRequireLocalExecution() {
         Map environment = new HashMap(System.getenv())
         environment.CI = 'true'
-        ['verifyCandidate', 'checkRelease', 'publishRelease'].each { name ->
+        ['runCandidateAcceptance', 'verifyCandidate', 'checkRelease', 'publishRelease'].each { name ->
             assertTrue(runner(name).withEnvironment(environment).buildAndFail().output
                     .contains('Candidate runtime acceptance and finalization run locally'))
         }
+    }
+
+    @Test void candidateAcceptanceRequiresInputsWithoutBuildingAndHasNoOverallTimeout() {
+        assertTrue(runner('runCandidateAcceptance').buildAndFail().output.contains('Missing -Pcandidate'))
+        def configured = runner('runCandidateAcceptance', '--dry-run')
+        new File(directory, 'build.gradle').append("\nassert tasks.runCandidateAcceptance.timeout.orNull == null\n")
+        String output = configured.build().output
+        assertTrue(output.contains(':runCandidateAcceptance SKIPPED'))
+        assertFalse(output.contains(':compileJava '))
+    }
+
+    @Test void candidateAcceptanceKeepsTheVirtualenvPythonPath() {
+        File interpreter = new File(directory, 'interpreter')
+        interpreter.text = '#!/bin/sh\nexit 0\n'
+        interpreter.setExecutable(true)
+        File bin = new File(directory, 'venv/bin')
+        bin.mkdirs()
+        Files.createSymbolicLink(new File(bin, 'python').toPath(), interpreter.toPath())
+        File weston = new File(bin, 'weston')
+        weston.text = interpreter.text
+        weston.setExecutable(true)
+        Map environment = new HashMap(System.getenv())
+        environment.remove('CI')
+        environment.PATH = bin.absolutePath + File.pathSeparator + environment.PATH
+        def configured = runner('runCandidateAcceptance', '-Pcandidate=candidate.json', '-Poutput=acceptance',
+                '-PacceptancePython=venv/bin/python', '-PacceptanceJava21=interpreter',
+                '-PacceptanceJava25=interpreter').withEnvironment(environment)
+        new File(directory, 'build.gradle').append('''
+cbbg.gradle.FabricCandidateAcceptance.metaClass.static.execute = { Map options, Closure command, Closure probe ->
+    assert options.python.absolutePath == new File(rootDir, 'venv/bin/python').absolutePath
+    assert options.python.canonicalPath == new File(rootDir, 'interpreter').canonicalPath
+    println 'Using the virtualenv executable'
+}
+''')
+        assertTrue(configured.build().output.contains('Using the virtualenv executable'))
     }
 
     @Test void publicationRequiresExplicitInputsWithoutBuilding() {
@@ -66,6 +105,32 @@ class ReleasePluginTest {
                 '-Ptargets=26.3-neoforge', '-Poutput=notes.md').buildAndFail().output.contains('Use either'))
     }
 
+    @Test void releaseIdentityTaskUsesTheSharedProductParser() {
+        runner('releaseIdentity', '-Prelease=lib/v1.0.0-rc.1+mc26.3-fabric', '-Poutput=identity.json').build()
+        Map identity = CandidateFiles.read(new File(directory, 'identity.json')) as Map
+        assertEquals('lib', identity.product)
+        assertEquals('1.0.0-rc.1', identity.version)
+        assertEquals('cbbg lib 1.0.0-rc.1', identity.title)
+        assertTrue(identity.prerelease)
+        assertEquals('libraries/CHANGELOG.md', identity.changelog_path)
+        assertTrue(runner('releaseIdentity', '-Prelease=lib/v1.0.0', '-PrequireProduct=cbbg',
+                '-Poutput=rejected.json').buildAndFail().output.contains("requires 'cbbg'"))
+        assertFalse(new File(directory, 'rejected.json').exists())
+    }
+
+    @Test void libraryReleaseNotesSelectTheIndependentChangelog() {
+        Map target = [id: '26.3-fabric', minecraft: '26.3', loader: 'fabric', java: 25,
+                      renderer: 'renderpearl', backends: ['opengl', 'vulkan'], implemented: false]
+        new File(directory, 'targets.json').text = JsonOutput.toJson([schema: 1, targets: [target]])
+        new File(directory, 'CHANGELOG.md').text = '## [1.5.0]\n### Added\n- Main notes.\n'
+        File library = new File(directory, 'libraries/CHANGELOG.md')
+        library.parentFile.mkdirs()
+        library.text = '## [1.0.0]\n### Added\n- Library notes.\n'
+        runner('releaseNotes', '-Prelease=lib/v1.0.0', '-Ptarget=26.3-fabric', '-Poutput=notes.md').build()
+        assertTrue(new File(directory, 'notes.md').text.contains('Library notes.'))
+        assertFalse(new File(directory, 'notes.md').text.contains('Main notes.'))
+    }
+
     @Test void curseForgeReceiptsSelectAnArtifactWithinASharedRelease() {
         new File(directory, 'publication.json').text = JsonOutput.toJson([release: 'v1.5.0',
                 source_commit: 'a' * 40, records: [
@@ -93,11 +158,34 @@ class ReleasePluginTest {
         }
     }
 
+    @Test void workflowUploadsUtilityPairAsOptionalCurseForgeChildFilesAndSavesReceipts() {
+        String workflow = new File('../.github/workflows/publish.yml').text
+        ['utilities', 'utilities_sources', 'library', 'library_sources'].each { kind ->
+            String step = workflow.split(/\n      - name: /).find { it.contains('id: curseforge_' + kind + '_upload\n') }
+            assertNotNull(step)
+            assertTrue(step.contains("!inputs.dry_run && inputs.services != 'modrinth' && steps.publication.outputs.${kind} != ''"))
+            assertTrue(step.contains('parent_file_id: ${{ steps.curseforge_upload.outputs.id }}'))
+            assertTrue(step.contains('file_path: ${{ steps.publication.outputs.' + kind + ' }}'))
+        }
+        assertTrue(workflow.contains('"-PutilitiesFileId=$CF_UTILITIES_FILE_ID"'))
+        assertTrue(workflow.contains('"-PutilitiesSourcesFileId=$CF_UTILITIES_SOURCES_FILE_ID"'))
+        assertTrue(workflow.contains('"-PlibraryFileId=$CF_LIBRARY_FILE_ID"'))
+        assertTrue(workflow.contains('"-PlibrarySourcesFileId=$CF_LIBRARY_SOURCES_FILE_ID"'))
+        assertTrue(workflow.contains('            build/curseforge-library-result.json\n'))
+        assertTrue(workflow.contains('            build/curseforge-library-sources-result.json\n'))
+        assertTrue(workflow.contains('            build/curseforge-utilities-result.json\n'))
+        assertTrue(workflow.contains('            build/curseforge-utilities-sources-result.json\n'))
+    }
+
     @Test void curseForgeReceiptBindsFileIdToSubmittedMetadata() {
         File metadata = new File(directory, 'publication.json')
         metadata.text = JsonOutput.toJson([release: 'v1.4.0', source_commit: 'a' * 40,
                 records: [[targets: ['26.3-fabric'], artifact: [path: 'cbbg.jar', sha256: 'b' * 64],
                            sources: [path: 'cbbg-sources.jar', sha256: 'c' * 64],
+                           utilities: [path: 'cbbg-utilities.jar', sha256: 'e' * 64],
+                           utilities_sources: [path: 'cbbg-utilities-sources.jar', sha256: 'f' * 64],
+                           library: [path: 'cbbg-lib.jar', sha256: '1' * 64],
+                           library_sources: [path: 'cbbg-lib-sources.jar', sha256: '2' * 64],
                            evidence: [path: 'cbbg-evidence.zip', sha256: 'd' * 64]]]])
         String[] arguments = ['recordCurseForgeUpload', '-PpublicationMetadata=publication.json',
                               '-Poutput=receipt.json', '-PfileId=123']
@@ -123,6 +211,30 @@ class ReleasePluginTest {
         assertEquals('789', evidenceResult.evidence_file_id)
         assertEquals([path: 'cbbg-evidence.zip', sha256: 'd' * 64], evidenceResult.evidence)
         assertTrue(evidenceResult.evidence_url.endsWith('/789'))
+        runner('recordCurseForgeUpload', '-PpublicationMetadata=publication.json',
+                '-Poutput=utilities-receipt.json', '-PfileId=123', '-PutilitiesFileId=234',
+                '-PutilitiesSourcesFileId=345').build()
+        Map utilitiesResult = CandidateFiles.read(new File(directory, 'utilities-receipt.json'))
+        assertEquals('234', utilitiesResult.utilities_file_id)
+        assertEquals('345', utilitiesResult.utilities_sources_file_id)
+        assertEquals([path: 'cbbg-utilities.jar', sha256: 'e' * 64], utilitiesResult.utilities)
+        assertEquals([path: 'cbbg-utilities-sources.jar', sha256: 'f' * 64], utilitiesResult.utilities_sources)
+        assertTrue(utilitiesResult.utilities_url.endsWith('/234'))
+        assertTrue(utilitiesResult.utilities_sources_url.endsWith('/345'))
+        runner('recordCurseForgeUpload', '-PpublicationMetadata=publication.json',
+                '-Poutput=library-receipt.json', '-PfileId=123', '-PlibraryFileId=567',
+                '-PlibrarySourcesFileId=678').build()
+        Map libraryResult = CandidateFiles.read(new File(directory, 'library-receipt.json'))
+        assertEquals('567', libraryResult.library_file_id)
+        assertEquals('678', libraryResult.library_sources_file_id)
+        assertEquals([path: 'cbbg-lib.jar', sha256: '1' * 64], libraryResult.library)
+        assertEquals([path: 'cbbg-lib-sources.jar', sha256: '2' * 64], libraryResult.library_sources)
+        assertTrue(runner('recordCurseForgeUpload', '-PpublicationMetadata=publication.json',
+                '-Poutput=invalid-utilities.json', '-PfileId=123', '-PutilitiesFileId=0')
+                .buildAndFail().output.contains('no valid utilities file ID'))
+        assertTrue(runner('recordCurseForgeUpload', '-PpublicationMetadata=publication.json',
+                '-Poutput=invalid-utilities-sources.json', '-PfileId=123', '-PutilitiesSourcesFileId=abc')
+                .buildAndFail().output.contains('no valid utilities_sources file ID'))
         ['0', '-1', 'abc', '１２'].each { id ->
             assertTrue(runner('recordCurseForgeUpload', '-PfileId=' + id).buildAndFail().output
                     .contains('no valid file ID'))

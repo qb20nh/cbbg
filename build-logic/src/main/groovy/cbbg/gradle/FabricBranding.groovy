@@ -1,6 +1,5 @@
 package cbbg.gradle
 
-import groovy.json.JsonOutput
 import groovy.json.JsonSlurper
 import org.gradle.api.GradleException
 
@@ -17,7 +16,7 @@ class FabricBranding {
         for (String field : FIELDS) {
             target[field] = shared[field]
         }
-        targetDescriptor.setText(JsonOutput.prettyPrint(JsonOutput.toJson(target)) + '\n', 'UTF-8')
+        ReproducibleText.writeJson(targetDescriptor, target)
     }
 
     static void verify(File sharedDescriptor, File artifact) {

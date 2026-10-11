@@ -1,5 +1,6 @@
 package com.qb20nh.cbbg.math;
 
+import com.qb20nh.cbbg.api.NoiseVolume;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -12,20 +13,14 @@ import org.jspecify.annotations.Nullable;
 @NullMarked
 public final class NoisePreparation implements AutoCloseable {
   public static final class Fields {
-    private final double[] u;
-    private final double[] v;
+    private final NoiseVolume volume;
 
-    private Fields(double[] u, double[] v) {
-      this.u = u;
-      this.v = v;
+    private Fields(NoiseVolume volume) {
+      this.volume = volume;
     }
 
-    public double[] u() {
-      return u;
-    }
-
-    public double[] v() {
-      return v;
+    public NoiseVolume volume() {
+      return volume;
     }
   }
 
@@ -66,10 +61,8 @@ public final class NoisePreparation implements AutoCloseable {
                   return;
                 }
                 if (Thread.currentThread().isInterrupted()) return;
-                double[] u = BlueNoise.generateScalarField(w, h, d, BlueNoise.stbnUSeed(value));
-                if (Thread.currentThread().isInterrupted()) return;
-                double[] v = BlueNoise.generateScalarField(w, h, d, BlueNoise.stbnVSeed(value));
-                if (!Thread.currentThread().isInterrupted()) next.complete(new Fields(u, v));
+                NoiseVolume volume = NoiseVolume.generate(w, h, d, value);
+                if (!Thread.currentThread().isInterrupted()) next.complete(new Fields(volume));
               } catch (Throwable failure) {
                 next.completeExceptionally(failure);
               }

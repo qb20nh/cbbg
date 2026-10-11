@@ -1,5 +1,6 @@
 package com.qb20nh.cbbg.compat.renderscale;
 
+import com.qb20nh.cbbg.Cbbg;
 import java.lang.reflect.Method;
 import java.util.Objects;
 import java.util.function.Supplier;
@@ -34,6 +35,23 @@ public final class RenderScaleCompat {
     return RENDER_SCALE_LOADED;
   }
 
+  /** Recreates RenderScale's targets after CBBG changes their required color format. */
+  public static void refreshTargets() {
+    if (!RENDER_SCALE_LOADED) {
+      return;
+    }
+    try {
+      Class<?> type = Class.forName("dev.zelo.renderscale.RenderScale");
+      Object renderer = type.getMethod("getInstance").invoke(null);
+      if (renderer != null) {
+        type.getMethod("onResolutionChanged").invoke(renderer);
+      }
+    } catch (ReflectiveOperationException failure) {
+      Cbbg.LOGGER.warn(
+          "Could not refresh RenderScale targets after a color format change", failure);
+    }
+  }
+
   public static boolean isRenderScaleColorTextureLabel(@Nullable Supplier<String> label) {
     if (!RENDER_SCALE_LOADED || label == null) {
       return false;
@@ -46,18 +64,22 @@ public final class RenderScaleCompat {
    * This is only meaningful for downscaling; for {@code scale >= 1} this returns {@code 1}.
    */
   public static float getDitherCoordScale() {
+    return (float) getDitherScale();
+  }
+
+  public static double getDitherScale() {
     if (!RENDER_SCALE_LOADED) {
       return 1.0F;
     }
 
-    float scale = tryGetConfiguredScale();
+    double scale = tryGetConfiguredScale();
     if (!(scale > 0.0F) || scale >= 1.0F) {
       return 1.0F;
     }
     return scale;
   }
 
-  private static float tryGetConfiguredScale() {
+  private static double tryGetConfiguredScale() {
     ensureScaleReflection();
     if (scaleReflectionFailed) {
       return 1.0F;
@@ -67,7 +89,7 @@ public final class RenderScaleCompat {
       Object cfg = Objects.requireNonNull(commonGetConfig).invoke(null);
       Object scale = Objects.requireNonNull(configGetScale).invoke(cfg);
       if (scale instanceof Number n) {
-        return n.floatValue();
+        return n.doubleValue();
       }
       return 1.0F;
     } catch (Exception e) {

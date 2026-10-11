@@ -3,15 +3,14 @@ package com.qb20nh.cbbg.gametest;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.mojang.brigadier.CommandDispatcher;
-import java.lang.reflect.Proxy;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.regex.Pattern;
-import net.fabricmc.fabric.api.client.command.v2.ClientCommands;
 import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
@@ -52,7 +51,7 @@ public final class ReleaseDebugOverlayGameTest implements FabricClientGameTest {
       ReleaseViewport.waitForChunks(world);
       CommandDispatcher<FabricClientCommandSource> dispatcher =
           Objects.requireNonNull(
-              context.computeOnClient(client -> ClientCommands.getActiveDispatcher()));
+              context.computeOnClient(client -> ReleaseCommands.getActiveDispatcher()));
       try {
         for (String mode : new String[] {"enabled", "disabled", "demo"}) {
           context.runOnClient(client -> command(dispatcher, source, "mode set " + mode));
@@ -129,15 +128,27 @@ public final class ReleaseDebugOverlayGameTest implements FabricClientGameTest {
   static List<String> output(Minecraft client) {
     List<String> lines = new ArrayList<>();
     DebugScreenDisplayer displayer =
-        (DebugScreenDisplayer)
-            Proxy.newProxyInstance(
-                DebugScreenDisplayer.class.getClassLoader(),
-                new Class<?>[] {DebugScreenDisplayer.class},
-                (proxy, method, args) -> {
-                  if (!method.getName().equals("addLine")) throw new AssertionError(method);
-                  lines.add((String) Objects.requireNonNull(args)[0]);
-                  return null;
-                });
+        new DebugScreenDisplayer() {
+          @Override
+          public void addLine(String line) {
+            lines.add(line);
+          }
+
+          @Override
+          public void addPriorityLine(String line) {
+            throw new AssertionError("Unexpected priority debug line");
+          }
+
+          @Override
+          public void addToGroup(Identifier group, Collection<String> groupLines) {
+            throw new AssertionError("Unexpected debug group");
+          }
+
+          @Override
+          public void addToGroup(Identifier group, String line) {
+            throw new AssertionError("Unexpected debug group line");
+          }
+        };
     var entry = DebugScreenEntries.getEntry(ID);
     if (entry == null) throw new AssertionError("Packaged CBBG F3 entry is missing");
     entry.display(displayer, client.level, null, null);

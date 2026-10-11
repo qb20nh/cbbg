@@ -10,7 +10,7 @@ class FabricMetadataTest {
         int start = script.indexOf('def properties = [version: project.version')
         String properties = script.substring(start, script.indexOf('inputs.properties(properties)', start))
         Map owner = [minecraft: '26.1', dependencies: [loader: '0.18.4']]
-        Binding binding = new Binding([project: [version: '1.4.1'], artifactOwner: owner,
+        Binding binding = new Binding([project: [version: '1.4.1'], artifactOwner: owner, remappedGame: false,
                                        target: [minecraft: '26.1.2', java: 25, renderer: 'blaze-texture-format']])
         GroovyShell shell = new GroovyShell(binding)
         String code = properties + '\nproperties'

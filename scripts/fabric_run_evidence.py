@@ -8,7 +8,7 @@ import re
 import zipfile
 
 from fabric_dependency_lock import verify_dependencies, verify_gametest_api
-from fabric_parity_runtime import RESTART_DRIVERS, restart_state
+from fabric_parity_runtime import RESTART_DRIVERS, restart_state, verify_external_library
 from fabric_scenario_evidence import graphics_identity, validate_scenarios, validate_shutdown, validate_startup
 from parity_evidence import EvidenceError, checked_file, digest, read_json
 from runtime_catalog import load_catalog, select_targets
@@ -59,14 +59,16 @@ def _verify_run(receipt_path, target, *, source_commit, candidate_sha256,
         raise EvidenceError('Installed mod inventory differs')
     lock = read_json(dependency_lock_path)
     dependencies = {name[:-4]: path for name, path in installed.items()
-                    if name not in ('candidate.jar', 'driver.jar', 'fabric-gametest-api.jar')}
+                    if name not in ('candidate.jar', 'driver.jar', 'fabric-gametest-api.jar', 'external-library.jar')}
+    if 'external-library.jar' in installed:
+        verify_external_library(installed['candidate.jar'], installed['external-library.jar'])
     verify_dependencies(target, profile, dependencies, lock)
     if 'fabric-gametest-api.jar' not in installed:
         raise EvidenceError('Missing gametest API')
     verify_gametest_api(target, installed['fabric-gametest-api.jar'], lock)
     with zipfile.ZipFile(installed['driver.jar']) as jar:
         metadata = json.loads(jar.read('fabric.mod.json'))
-    if metadata.get('id') != 'cbbg-renderer-test':
+    if metadata.get('id') not in ('cbbg-renderer-test', 'cbbg-library-test'):
         raise EvidenceError('Unexpected test driver')
     expected = metadata['entrypoints']['fabric-client-gametest']
     expected_hash = hashlib.sha256(json.dumps(expected, separators=(',', ':')).encode()).hexdigest()
@@ -104,6 +106,7 @@ def _verify_run(receipt_path, target, *, source_commit, candidate_sha256,
     return {'target': target['id'], 'profile': profile, 'backend': backend,
             'startupMode': report.get('startupMode'),
             'source_commit': source_commit, 'receipt_sha256': digest(receipt_path),
+            'externalLibrary': 'external-library.jar' in installed,
             'scenarios': expected, 'evidence_files': len(paths), 'releaseAcceptance': False}
 
 

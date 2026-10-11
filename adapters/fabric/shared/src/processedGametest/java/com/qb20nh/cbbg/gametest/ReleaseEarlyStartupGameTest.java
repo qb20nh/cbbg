@@ -136,7 +136,7 @@ public final class ReleaseEarlyStartupGameTest implements FabricClientGameTest {
         try (NativeImage image = NativeImage.read(bytes)) {
           if (image.getWidth() != SIZE || image.getHeight() != SIZE) return null;
           for (int y = 0; y < SIZE; y++) {
-            for (int x = 0; x < SIZE; x++) pixels.putInt(image.getPixel(x, y));
+            for (int x = 0; x < SIZE; x++) pixels.putInt(ReleaseImagePixels.argb(image, x, y));
           }
         }
       }

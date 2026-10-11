@@ -1,0 +1,8 @@
+{
+  "required": true,
+  "package": "com.qb20nh.cbbg.gametest.backport",
+  "compatibilityLevel": "JAVA_21",
+  "plugin": "net.fabricmc.fabric.impl.client.gametest.ClientGameTestMixinConfigPlugin",
+  "client": ["CreateWorldScreenMixin"],
+  "injectors": {"defaultRequire": 1}
+}

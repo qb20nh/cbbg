@@ -54,9 +54,19 @@ class ReleasePlugin implements Plugin<Project> {
                 doLast(action)
             }
         }
+        task('releaseIdentity', 'Resolve the shared release product and tag identity.') {
+            ReleaseIdentity identity = ReleaseIdentity.parse(required('release'))
+            String expected = project.providers.gradleProperty('requireProduct').orNull
+            if (expected != null) identity.requireProduct(expected)
+            File output = input('output')
+            output.parentFile.mkdirs()
+            output.setText(JsonOutput.toJson([product: identity.product, version: identity.version,
+                    title: identity.releaseTitle, prerelease: identity.prerelease,
+                    changelog_path: identity.changelogPath]) + '\n', 'UTF-8')
+        }
         task('releaseNotes', 'Select shared and target-specific changelog notes for a release.') {
             String tag = required('release')
-            CandidateFiles.releaseIdentity(tag, '0' * 40)
+            ReleaseIdentity identity = ReleaseIdentity.parse(tag)
             if (project.providers.gradleProperty('targets').isPresent() && project.providers.gradleProperty('target').isPresent()) {
                 throw new GradleException('Use either -Ptarget or -Ptargets')
             }
@@ -64,13 +74,31 @@ class ReleasePlugin implements Plugin<Project> {
             if (!selection) throw new GradleException('Release notes require an explicit target selection. Use -Ptarget=<id> for one runtime or -Ptargets=<id,id> for a shared release; IDs are listed in targets.json.')
             List<Map> targets = TargetCatalog.read(new File(source(), 'targets.json')).select(selection)
             CandidateFiles.releaseTargets(tag, targets)
-            String notes = ChangelogNotes.select(new File(source(), 'CHANGELOG.md'), CandidateFiles.releaseVersion(tag), targets)
+            String notes = ChangelogNotes.select(new File(source(), identity.changelogPath), identity.version, targets)
             File output = input('output')
             output.parentFile.mkdirs()
             output.setText(notes, 'UTF-8')
         }
         task('retrace', 'Decode a crash with its release mapping.') {
             RetraceLog.translate(input('candidate'), required('target'), input('crash'), input('output'))
+        }
+        task('verifyLibraryDependencies', 'Verify and bind library draft or immutable dependency provenance before candidate attestation.') {
+            File manifest = input('candidate')
+            File output = input('output')
+            if (output.exists() || output.toPath().startsWith(manifest.parentFile.toPath())) {
+                throw new GradleException('Choose a new library verification report path outside the candidate directory')
+            }
+            if (new File(manifest.parentFile, 'provenance.jsonl').exists()) {
+                throw new GradleException('Bind library dependencies before candidate attestation; rebuild an unattested candidate before retrying.')
+            }
+            CandidateManifest candidate = new CandidateManifest(manifest)
+            candidate.identity.requireProduct('cbbg')
+            Map report = ReleaseChecks.verifyLibraryDependencies(candidate, required('repo'), source(), run, true, true)
+            ReproducibleText.writeJson(manifest, candidate.data)
+            File checksums = new File(manifest.parentFile, 'SHA256SUMS')
+            checksums.setText(manifest.parentFile.listFiles().findAll { it.name != 'SHA256SUMS' }
+                    .sort { it.name }.collect { CandidateFiles.sha256(it) + '  ' + it.name }.join('\n') + '\n', 'UTF-8')
+            CandidateFiles.writeNew(output, report)
         }
         task('verifyProvenance', 'Check candidate build attestations.') {
             CandidateFiles.writeNew(input('output'), ReleaseChecks.provenance(
@@ -84,6 +112,62 @@ class ReleasePlugin implements Plugin<Project> {
         }
         task('preparePublicReleaseAssets', 'Select public files from a verified candidate.') {
             ReleaseChecks.preparePublicAssets(input('candidate'), input('output'))
+        }
+        project.tasks.register('runCandidateAcceptance') {
+            group = 'distribution'
+            description = 'Run and resume the packaged Fabric candidate acceptance matrix locally.'
+            outputs.upToDateWhen { false }
+            doLast {
+                local()
+                File manifest = input('candidate')
+                File output = input('output')
+                def paths = { String prefix ->
+                    project.properties.findAll { key, value -> key.startsWith(prefix + '.') }
+                            .collectEntries { key, value -> [(key.substring(prefix.length() + 1)): project.file(value.toString()).canonicalFile] }
+                }
+                def optional = { String name ->
+                    String value = project.providers.gradleProperty(name).orNull
+                    value ? project.file(value).canonicalFile : null
+                }
+                File weston = System.getenv('PATH').tokenize(File.pathSeparator)
+                        .collect { new File(it, 'weston') }.find { it.canExecute() }
+                if (weston == null) throw new GradleException('Fresh candidate acceptance displays require Weston')
+                String selection = project.providers.gradleProperty('targets').orElse(project.providers.gradleProperty('target')).orNull
+                if (project.providers.gradleProperty('targets').isPresent() && project.providers.gradleProperty('target').isPresent()) {
+                    throw new GradleException('Use either -Ptarget or -Ptargets')
+                }
+                Map options = [root: source(), candidate: manifest, output: output,
+                               reuse: ([optional('acceptanceReuse')] + paths('acceptanceReuse').values()).findAll { it != null },
+                               python: project.file(required('acceptancePython')).absoluteFile,
+                               java21: input('acceptanceJava21'), java25: input('acceptanceJava25'),
+                               weston: weston, eglVendor: optional('acceptanceEglVendorFile'),
+                               sharedRuntime: optional('acceptanceSharedRuntime'), runtimes: paths('acceptanceRuntime'),
+                               gametestApis: paths('acceptanceGametestApi'), seedCaches: paths('acceptanceSeedZeroCache'),
+                               workers: project.providers.gradleProperty('acceptanceWorkers').getOrElse('1').toInteger()]
+                options.cacheDecision = { String id, List cell, String decision, String reason ->
+                    project.logger.lifecycle('Acceptance cache: {} {} {}{}', id, cell, decision,
+                            reason == null ? '' : ': ' + reason)
+                }
+                if (selection != null) options.targets = selection.split(',', -1).toList()
+                FabricCandidateAcceptance.execute(options, run) { Map spec ->
+                    project.logger.lifecycle('Candidate acceptance: {} {} {} (startup={}, restart={})',
+                            spec.target.id, spec.profile, spec.backend, spec.startupMode, spec.restart)
+                    FabricCompatibilityProbe.execute(spec) { List command, File log ->
+                        def stdout = new ByteArrayOutputStream()
+                        def stderr = new ByteArrayOutputStream()
+                        def result = execOperations.exec {
+                            commandLine command.collect { it.toString() }
+                            workingDir spec.root as File
+                            standardOutput = stdout
+                            errorOutput = stderr
+                            ignoreExitValue = true
+                        }
+                        log.text = stdout.toString('UTF-8') + stderr.toString('UTF-8')
+                        result.exitValue
+                    }
+                }
+                project.logger.lifecycle('Candidate acceptance indexes: {}/<target>/results.json', output)
+            }
         }
         task('verifyCandidate', 'Check packaged candidate and complete local runtime results.') {
             local()
@@ -154,6 +238,19 @@ class ReleasePlugin implements Plugin<Project> {
                 result.evidence = record.evidence
                 result.evidence_file_id = evidenceIdentifier
                 result.evidence_url = 'https://www.curseforge.com/minecraft/mc-mods/cbbg/files/' + evidenceIdentifier
+            }
+            [utilities: 'utilitiesFileId', utilities_sources: 'utilitiesSourcesFileId',
+             library: 'libraryFileId', library_sources: 'librarySourcesFileId'].each { kind, property ->
+                String fileIdentifier = project.providers.gradleProperty(property).orNull
+                if (fileIdentifier != null) {
+                    if (!(fileIdentifier ==~ /[0-9]+/) || new BigInteger(fileIdentifier) <= 0) {
+                        throw new GradleException('CurseForge returned no valid ' + kind + ' file ID; check the project before retrying')
+                    }
+                    if (!(record[kind] instanceof Map)) throw new GradleException('Missing ' + kind + ' publication record')
+                    result[kind] = record[kind]
+                    result[kind + '_file_id'] = fileIdentifier
+                    result[kind + '_url'] = 'https://www.curseforge.com/minecraft/mc-mods/cbbg/files/' + fileIdentifier
+                }
             }
             CandidateFiles.writeNew(input('output'), result)
             project.logger.lifecycle(result.url as String)

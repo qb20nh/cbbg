@@ -40,7 +40,7 @@ class ChangeImpact {
                 checks.add('publication')
             } else {
                 checks.addAll(['catalog', 'compile', 'unit', 'runtime'])
-                if (path.startsWith('core/')) {
+                if (path.startsWith('core/') || path.startsWith('libraries/utilities/')) {
                     reason = 'shared core'
                     selected.addAll(allIds)
                     checks.add('core-java-8-17-21-25')

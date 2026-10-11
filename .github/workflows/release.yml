@@ -48,28 +48,36 @@ jobs:
             message="${message//$'\n'/'%0A'}"
             printf '::error::%s\n' "$message"
           }
-          if [[ "$GITHUB_REF_TYPE" != "tag" || ! "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z][0-9A-Za-z.-]*\.[1-9][0-9]*)?(\+mc[0-9][0-9A-Za-z.-]*-(fabric|quilt|forge|neoforge|legacy-fabric))?$ ]]; then
-            error "Release requires a version tag; selected '$GITHUB_REF_NAME' ($GITHUB_REF_TYPE). In Run workflow, choose a pushed tag under Use workflow from, e.g. v1.4.2+mc26.2-fabric or v1.4.2 for a shared release."
+          if [[ "$GITHUB_REF_TYPE" != "tag" ]]; then
+            error "Release requires a pushed version tag; selected '$GITHUB_REF_NAME' ($GITHUB_REF_TYPE). Choose v<version> for CBBG or lib/v<version> for CBBG Lib under Use workflow from, e.g. v1.4.2+mc26.2-fabric."
             exit 1
           fi
           mkdir -p build
+          ./gradlew --no-daemon "-Prelease=$GITHUB_REF_NAME" \
+            -Poutput=build/release-identity.json releaseIdentity
+          product="$(jq -er '.product' build/release-identity.json)"
           ./gradlew --no-daemon "-Ptarget=$REQUESTED_TARGET" \
             -PrequireImplemented=true -Poutput=build/release-selection.json targetMatrix
           while IFS=$'\t' read -r target profile java; do
-            if [[ ! -f "build-config/$profile/build.gradle" ]]; then
-              error "Missing build-config/$profile/build.gradle for target $target. Check its buildProfile in targets.json and commit the profile before creating a candidate."
+            build_file="build-config/$profile/build.gradle"
+            if [[ "$product" == 'lib' ]]; then build_file='libraries/fabric/build.gradle'; fi
+            if [[ ! -f "$build_file" ]]; then
+              error "Missing $build_file for target $target. Check its buildProfile in targets.json and commit the profile before creating a candidate."
               exit 1
             fi
           done < <(jq -r '.include[] | [.id, .buildProfile, .java] | @tsv' build/release-selection.json)
           IFS=',' read -ra targets <<< "$REQUESTED_TARGET"
           for target in "${targets[@]}"; do
             for suffix in scenarios mods linux-x86_64; do
-              if [[ ! -f "runtime-locks/$target-$suffix.json" ]]; then
-                error "Missing runtime-locks/$target-$suffix.json. Add and commit the target's test contract and dependency/runtime locks before creating a candidate."
+              lock="runtime-locks/$target-$suffix.json"
+              if [[ "$product" == 'lib' && "$suffix" == 'scenarios' ]]; then lock="runtime-locks/lib/$target-$suffix.json"; fi
+              if [[ ! -f "$lock" ]]; then
+                error "Missing $lock. Add and commit the target's test contract and dependency/runtime locks before creating a candidate."
                 exit 1
               fi
             done
           done
+          printf 'product=%s\n' "$product" >> "$GITHUB_OUTPUT"
           printf 'targets=%s\n' "$REQUESTED_TARGET" >> "$GITHUB_OUTPUT"
           echo 'java<<JAVA_VERSIONS' >> "$GITHUB_OUTPUT"
           jq -r --slurpfile catalog targets.json \
@@ -110,15 +118,32 @@ jobs:
       - name: Build and bundle candidate
         env:
           TARGETS: ${{ steps.selection.outputs.targets }}
+          PRODUCT: ${{ steps.selection.outputs.product }}
         run: |
           export JAVA_HOME="$JAVA_HOME_25_X64"
           while IFS= read -r target; do
-            ./gradlew --no-daemon --console=plain "-Ptarget=${target}" candidateBuildOutputs
+            if [[ "$PRODUCT" == 'lib' ]]; then
+              version="$(jq -er '.version' build/release-identity.json)"
+              ./gradlew --no-daemon --console=plain -p libraries/fabric \
+                "-Ptarget=${target}" "-Plibrary_version=${version}" candidateBuildOutputs
+            else
+              ./gradlew --no-daemon --console=plain "-Ptarget=${target}" candidateBuildOutputs
+            fi
           done < <(jq -r '.include[].id' build/release-selection.json)
           ./gradlew --no-daemon --console=plain \
             "-Ptargets=${TARGETS}" \
             -Poutput=build/release-candidate "-Prelease=${GITHUB_REF_NAME}" \
             bundleCandidate
+
+      - name: Verify library candidate dependencies
+        if: steps.selection.outputs.product == 'cbbg'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          ./gradlew --no-daemon \
+            -Pcandidate=build/release-candidate/candidate.json \
+            "-Prepo=${GH_REPO}" -Poutput=build/library-dependencies.json verifyLibraryDependencies
 
       - name: Attest candidate files
         id: provenance
@@ -161,9 +186,8 @@ jobs:
           TARGETS: ${{ steps.selection.outputs.targets }}
         run: |
           printf '\n<!-- cbbg-candidate-run: %s -->\n' "${GITHUB_RUN_ID}" >> build/release-notes.md
-          version="${GITHUB_REF_NAME#v}"
-          version="${version%%+*}"
-          title="cbbg $version"
+          version="$(jq -er '.version' build/release-identity.json)"
+          title="$(jq -er '.title' build/release-identity.json)"
           if [[ "$GITHUB_REF_NAME" == *+mc* ]]; then
             scope="$(jq -er --arg ids "$TARGETS" '
               {fabric: "Fabric", quilt: "Quilt", forge: "Forge",
@@ -182,10 +206,10 @@ jobs:
                 unique | join(", ")) as $loaders |
               "Minecraft \($minecraft) \($loaders)"
             ' targets.json)"
-            title="cbbg $version for $scope"
+            title="$title for $scope"
           fi
           flags=()
-          if [[ "$version" == *-* ]]; then
+          if jq -e '.prerelease == true' build/release-identity.json >/dev/null; then
             flags+=(--prerelease)
           fi
           gh release create "${GITHUB_REF_NAME}" build/release-assets/* \
