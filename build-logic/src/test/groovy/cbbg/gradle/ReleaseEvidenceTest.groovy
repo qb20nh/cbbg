@@ -32,6 +32,25 @@ class ReleaseEvidenceTest {
         assertThrows(Exception) { ReleaseEvidence.assemble(candidate, fixture.target.id) }
     }
 
+    @Test void evidenceArchiveDoesNotDependOnTheDefaultTimeZone() {
+        Map fixture = CandidateFixture.create(directory, true, true)
+        CandidateManifest candidate = new CandidateManifest(fixture.file)
+        TimeZone previous = TimeZone.default
+        try {
+            TimeZone.default = TimeZone.getTimeZone('UTC')
+            Map first = ReleaseEvidence.assemble(candidate, fixture.target.id)
+            File output = CandidateFiles.checked(fixture.bundle, first)
+            byte[] original = output.bytes
+            assertTrue(output.delete())
+            TimeZone.default = TimeZone.getTimeZone('Asia/Seoul')
+            Map second = ReleaseEvidence.assemble(candidate, fixture.target.id)
+            assertArrayEquals(original, CandidateFiles.checked(fixture.bundle, second).bytes)
+            assertEquals(first, second)
+        } finally {
+            TimeZone.default = previous
+        }
+    }
+
     @Test void rejectsMissingChangedAndExtraEvidence() {
         Map fixture = CandidateFixture.create(directory, true, true)
         CandidateManifest candidate = new CandidateManifest(fixture.file)

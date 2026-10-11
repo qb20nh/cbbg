@@ -1,0 +1,121 @@
+def conventionLoader = plugins.getPlugin('cbbg.packaging').class.classLoader
+def ReproducibleText = conventionLoader.loadClass('cbbg.gradle.ReproducibleText')
+def TargetCatalog = conventionLoader.loadClass('cbbg.gradle.TargetCatalog')
+def CandidateManifest = conventionLoader.loadClass('cbbg.gradle.CandidateManifest')
+def repositoryRoot = file('../..')
+def utilitiesRoot = new File(repositoryRoot, 'libraries/utilities')
+def libraryProperties = new Properties()
+new File(utilitiesRoot, 'gradle.properties').withInputStream { libraryProperties.load(it) }
+def libraryVersion = providers.gradleProperty('library_version').getOrElse(libraryProperties.library_version)
+def libraryCatalog = TargetCatalog.read(new File(repositoryRoot, 'targets.json'))
+def selectedLibraryTarget = libraryCatalog.select(candidateTargetId)[0]
+def libraryOwner = selectedLibraryTarget.artifactOf ? libraryCatalog.select(selectedLibraryTarget.artifactOf)[0] : selectedLibraryTarget
+def libraryPackageVersion = CandidateManifest.packageVersion('lib/v' + libraryVersion, libraryOwner)
+ext.libraryPackageVersion = libraryPackageVersion
+def libraryBuild = gradle.includedBuild('cbbg-lib-fabric')
+def libraryOutput = new File(repositoryRoot, "build/libraries/${libraryOwner.id}")
+def libraryIdentity = conventionLoader.loadClass('cbbg.gradle.ReleaseIdentity').parse(
+        providers.gradleProperty('library_release').getOrElse('lib/v' + libraryVersion))
+libraryIdentity.requireProduct('lib')
+libraryIdentity.requireTargets([libraryOwner])
+if (libraryIdentity.version != libraryVersion) {
+    throw new GradleException('Library release tag must match library_version: ' + libraryVersion)
+}
+ext.libraryRelease = libraryIdentity.tag
+ext.libraryRequirement = libraryIdentity.libraryRequirement
+ext.libraryArchive = new File(libraryOutput, "libs/cbbg-lib-${libraryPackageVersion}.jar")
+def libraryDevelopmentArchive = new File(libraryOutput, "intermediates/raw-jar/cbbg-lib-${libraryPackageVersion}-raw.jar")
+def libraryRuntimeDevelopmentArchive = (libraryOwner.java as int) < 25 ?
+        new File(libraryOutput, "intermediates/dev/cbbg-lib-${libraryPackageVersion}-dev.jar") : libraryDevelopmentArchive
+ext.librarySourcesArchive = new File(libraryOutput, "libs/cbbg-lib-${libraryPackageVersion}-sources.jar")
+ext.utilitiesArchive = new File(utilitiesRoot, "build/libs/cbbg-utilities-${libraryVersion}.jar")
+ext.utilitiesSourcesArchive = new File(utilitiesRoot, "build/libs/cbbg-utilities-${libraryVersion}-sources.jar")
+dependencies.add('implementation', "com.qb20nh:cbbg-lib-fabric:${libraryPackageVersion}")
+
+tasks.register('prepareBundledLibrary') {
+    dependsOn libraryBuild.task(':prepareLibraryOutputs')
+    outputs.files(libraryArchive, librarySourcesArchive, utilitiesArchive, utilitiesSourcesArchive)
+}
+tasks.named('ciCheck') { dependsOn libraryBuild.task(':check') }
+tasks.named('jar', Jar) {
+    dependsOn libraryBuild.task(':jar')
+}
+def releaseInput = tasks.register('releaseInputJar', Jar) {
+    dependsOn tasks.named('jar'), tasks.named('prepareBundledLibrary')
+    archiveFileName = "${base.archivesName.get()}-${project.version}-release-input.jar"
+    destinationDirectory = layout.buildDirectory.dir('intermediates/release-input')
+    from({ zipTree(tasks.named('jar', Jar).get().archiveFile.get().asFile) }) {
+        exclude "META-INF/jars/${libraryArchive.name}"
+    }
+    from(libraryArchive) { into 'META-INF/jars' }
+    preserveFileTimestamps = false
+    reproducibleFileOrder = true
+}
+releaseOptimization.inputJar.set(releaseInput.flatMap { it.archiveFile })
+tasks.named('minifyReleaseJar') { dependsOn releaseInput }
+if ((libraryOwner.java as int) < 25) {
+    def developmentInput = tasks.register('developmentInputJar', Jar) {
+        dependsOn tasks.named('jar'), libraryBuild.task(':developmentRuntimeJar')
+        archiveFileName = "${base.archivesName.get()}-${project.version}-development-input.jar"
+        destinationDirectory = layout.buildDirectory.dir('intermediates/dev-input')
+        from({ zipTree(tasks.named('jar', Jar).get().archiveFile.get().asFile) }) {
+            exclude "META-INF/jars/${libraryArchive.name}"
+        }
+        from(libraryRuntimeDevelopmentArchive) { into 'META-INF/jars'; rename { libraryArchive.name } }
+        preserveFileTimestamps = false
+        reproducibleFileOrder = true
+    }
+    tasks.named('remapJar') {
+        dependsOn developmentInput
+        inputFile.set(developmentInput.flatMap { it.archiveFile })
+    }
+}
+tasks.named('releaseSbom') { dependsOn tasks.named('prepareBundledLibrary') }
+tasks.named('processResources') {
+    dependsOn libraryBuild.task(':jar')
+    from(libraryDevelopmentArchive) {
+        into 'META-INF/jars'
+        rename { libraryArchive.name }
+    }
+    inputs.property('libraryVersion', libraryPackageVersion)
+    filesMatching('fabric.mod.json') {
+        filter { line ->
+            line.replace('"depends": {', '"jars": [{"file": "META-INF/jars/cbbg-lib-' +
+                    libraryPackageVersion + '.jar"}], "depends": { "cbbg_lib": "' + libraryRequirement + '",')
+        }
+    }
+}
+tasks.named('processProcessedGametestResources') {
+    dependsOn libraryBuild.task(':optimizeReleaseJar')
+    from(new File(libraryOutput, "mapping/cbbg-lib-${libraryPackageVersion}.map")) {
+        rename { 'cbbg-library-test.map' }
+    }
+}
+sourceSets.processedGametest.compileClasspath += files(libraryDevelopmentArchive)
+tasks.named('compileProcessedGametestJava') { dependsOn libraryBuild.task(':jar') }
+tasks.named('checkPackages') {
+    doLast {
+        conventionLoader.loadClass('cbbg.gradle.PackageChecks').verifyNestedLibrary(
+                releaseOptimization.outputJar.get().asFile, libraryArchive)
+    }
+}
+def externalMetadata = tasks.register('processedLibraryExternalMetadata') {
+    dependsOn tasks.named('processProcessedGametestResources')
+    def source = layout.buildDirectory.file('resources/processedGametest/fabric.mod.json')
+    def destination = layout.buildDirectory.file('processedLibraryExternal/fabric.mod.json')
+    inputs.file(source)
+    outputs.file(destination)
+    doLast {
+        Map metadata = new groovy.json.JsonSlurper().parse(source.get().asFile)
+        metadata.entrypoints['fabric-client-gametest'] = [
+                'com.qb20nh.cbbg.gametest.ReleaseLibraryResolutionGameTest',
+                'com.qb20nh.cbbg.gametest.ReleaseUtilitiesGameTest']
+        destination.get().asFile.parentFile.mkdirs()
+        ReproducibleText.writeJson(destination.get().asFile, metadata)
+    }
+}
+tasks.register('processedLibraryExternalDriverJar', Jar) {
+    archiveClassifier = 'processed-library-external-driver'
+    from(sourceSets.processedGametest.output) { exclude 'fabric.mod.json' }
+    from(externalMetadata)
+}

@@ -82,6 +82,20 @@ case "$*" in *-Pcompat=fail*) exit 7;; esac
         assertFalse(arguments.readLines().contains('--build-cache'))
     }
 
+    @Test void forwardsBuildMemoryAndWorkerLimits() {
+        fixture()
+        new File(directory, 'gradle.properties').text = 'org.gradle.jvmargs=-Xmx768m\norg.gradle.workers.max=2\n'
+        File arguments = new File(directory, 'build/arguments.txt')
+        runner('build').build()
+        assertTrue(arguments.readLines().contains('-Dorg.gradle.jvmargs=-Xmx768m'))
+        assertTrue(arguments.readLines().contains('--max-workers=2'))
+        arguments.delete()
+        runner('build', '-Dorg.gradle.jvmargs=-Xmx512m', '--max-workers=1').build()
+        assertTrue(arguments.readLines().contains('-Dorg.gradle.jvmargs=-Xmx512m'))
+        assertTrue(arguments.readLines().contains('--max-workers=1'))
+        assertFalse(arguments.readLines().contains('-Dorg.gradle.jvmargs=-Xmx768m'))
+    }
+
     @Test void checksAndDevelopmentArtifactsUseOneChildBuildPerOwner() {
         fixture()
         runner(':ciCheck', ':dev', '-Ptargets=26.3-fabric,26.3-quilt').build()
@@ -148,6 +162,30 @@ case "$*" in *-Pcompat=fail*) exit 7;; esac
         assertEquals(2, args.count('-PcompatibilityRuntime=/local/runtime'))
         assertTrue(args.contains('-PverifyDeclaredMinimums=false'))
         assertTrue(args.contains('-PverifyDeclaredMinimums=true'))
+    }
+
+    @Test void singleRuntimeFabricMinimumSearchSupportsGl3AndBlazeTextureFormat() {
+        [['1.21.1', 'gl3'], ['1.21.11', 'blaze-texture-format']].each { runtime ->
+            fixture()
+            File arguments = new File(directory, 'build/arguments.txt')
+            if (arguments.exists()) assertTrue(arguments.delete())
+            Map target = [id: runtime[0] + '-fabric', minecraft: runtime[0], loader: 'fabric', java: 21,
+                          renderer: runtime[1], backends: ['opengl'], implemented: false, buildProfile: 'fixture']
+            new File(directory, 'targets.json').text = JsonOutput.toJson(
+                    [schema: 1, ciTargets: [target.id], targets: [target]])
+            Map environment = new HashMap(System.getenv())
+            environment.remove('CI')
+            environment.remove('GITHUB_ACTIONS')
+            runner('determineFabricMinimums', '-Ptarget=' + target.id, '-PcompatibilityRuntime=/local/runtime')
+                    .withEnvironment(environment).build()
+            List<String> args = arguments.readLines()
+            assertEquals(['updateFabricMinimums', 'verifyFabricCompatibility'],
+                    args.findAll { it in ['updateFabricMinimums', 'verifyFabricCompatibility'] })
+            assertEquals(['-PverifyDeclaredMinimums=false', '-PverifyDeclaredMinimums=true'],
+                    args.findAll { it.startsWith('-PverifyDeclaredMinimums=') })
+            assertEquals(2, args.count('-Ptarget=' + target.id))
+            assertEquals(2, args.count('-PcompatibilityRuntime=/local/runtime'))
+        }
     }
 
     @Test void ciCannotRunTheMinimumSearch() {

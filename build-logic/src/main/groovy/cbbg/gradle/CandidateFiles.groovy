@@ -107,44 +107,32 @@ class CandidateFiles {
     }
 
     static void releaseIdentity(String tag, String commit) {
-        String number = '(?:0|[1-9][0-9]*)'
-        String suffix = '(?:-[A-Za-z][0-9A-Za-z-]*(?:\\.[A-Za-z][0-9A-Za-z-]*)*\\.[1-9][0-9]*)?'
-        if (!(tag ==~ ('v' + number + '\\.' + number + '\\.' + number + suffix + '(?:\\+' + TARGET_METADATA + ')?'))) {
-            throw new GradleException("Invalid release tag '${tag}'. Use v<major>.<minor>.<patch> for shared releases or v<version>+mc<minecraft>-<loader> for one artifact owner, e.g. v1.4.2+mc26.2-fabric.")
-        }
+        ReleaseIdentity.parse(tag)
         if (!(commit ==~ /[0-9a-f]{40}/)) throw new GradleException('Invalid source commit')
     }
 
-    private static final String TARGET_METADATA =
-            'mc[0-9][0-9A-Za-z-]*(?:\\.[0-9A-Za-z-]+)*-(?:fabric|quilt|forge|neoforge|legacy-fabric)'
-
     static String releaseVersion(String tag) {
-        tag.substring(1).split(/\+/, 2)[0]
+        ReleaseIdentity.parse(tag).version
     }
 
     static boolean targetedRelease(String tag) {
-        tag.contains('+') && tag.substring(tag.indexOf('+') + 1) ==~ TARGET_METADATA
-    }
-
-    static boolean prerelease(String tag) {
-        releaseVersion(tag).contains('-')
-    }
-
-    static void releaseTargets(String tag, Collection<Map> targets) {
-        if (tag.contains('+')) {
-            Set owners = targets.collect { it.artifactOf ?: (it.id ?: "${it.minecraft}-${it.loader}") } as Set
-            Map owner = owners.size() == 1 ? targets.find {
-                (it.id ?: "${it.minecraft}-${it.loader}") == owners.first()
-            } : null
-            if (owner == null ||
-                    tag != 'v' + releaseVersion(tag) + '+mc' + owner.minecraft + '-' + owner.loader) {
-                throw new GradleException("Release tag '${tag}' must match the selected artifact owner. Selected owners: ${owners.join(', ')}. Use +mc<minecraft>-<loader> for one owner or v${releaseVersion(tag)} for multiple owners.")
-            }
+        try {
+            return ReleaseIdentity.parse(tag).targeted
+        } catch (GradleException ignored) {
+            return false
         }
     }
 
+    static boolean prerelease(String tag) {
+        ReleaseIdentity.parse(tag).prerelease
+    }
+
+    static void releaseTargets(String tag, Collection<Map> targets) {
+        ReleaseIdentity.parse(tag).requireTargets(targets)
+    }
+
     static void writeNew(File file, Object value) {
-        Files.writeString(file.toPath(), JsonOutput.prettyPrint(JsonOutput.toJson(value)) + '\n',
+        Files.writeString(file.toPath(), ReproducibleText.json(value),
                 StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)
     }
 }

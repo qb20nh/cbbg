@@ -6,10 +6,36 @@ import tempfile
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from parity_evidence import EvidenceError, catalog_digest, checked_file, digest, verify
+from parity_evidence import (EvidenceError, catalog_digest, checked_file, digest,
+                             validate_release_targets, verify)
 
 
 class ParityEvidenceTest(unittest.TestCase):
+    def test_targeted_release_uses_owner_version_and_loader(self):
+        targets = {
+            '26.1-fabric': {'minecraft': '26.1', 'loader': 'fabric'},
+            '26.1.1-fabric': {'minecraft': '26.1.1', 'loader': 'fabric',
+                              'artifactOf': '26.1-fabric'},
+            '26.1.2-quilt': {'minecraft': '26.1.2', 'loader': 'quilt',
+                             'artifactOf': '26.1-fabric'},
+        }
+        for prefix in ('v1.5.0', 'lib/v1.0.0-beta.1'):
+            validate_release_targets(prefix + '+mc26.1-fabric', targets)
+            for suffix in ('mc26.1.1-fabric', 'mc26.1.2-quilt', 'mc26.2-fabric'):
+                with self.subTest(prefix=prefix, suffix=suffix), self.assertRaisesRegex(
+                        EvidenceError, 'selected artifact owner'):
+                    validate_release_targets(prefix + '+' + suffix, targets)
+
+    def test_targeted_release_requires_one_selected_owner(self):
+        owner = {'minecraft': '26.1', 'loader': 'fabric'}
+        alias = {'minecraft': '26.1.1', 'loader': 'fabric', 'artifactOf': '26.1-fabric'}
+        for targets in ({}, {'26.1.1-fabric': alias},
+                        {'26.1-fabric': owner, '26.2-fabric': {
+                            'minecraft': '26.2', 'loader': 'fabric'}}):
+            with self.subTest(targets=targets), self.assertRaisesRegex(
+                    EvidenceError, 'selected artifact owner'):
+                validate_release_targets('v1.5.0+mc26.1-fabric', targets)
+
     def test_candidate_tags_require_canonical_version_and_numbered_prerelease(self):
         for tag in ("v02.0.0", "v2.00.0", "v2.0.00", "v2.0.0-rc", "v2.0.0-rc.0",
                     "v2.0.0-rc.01", "v2.0.0-rc..1", "v2.0.0+mc26.2", "v٢.0.0", None):

@@ -30,6 +30,11 @@ class TargetsPlugin implements Plugin<Project> {
             if (value.present) forwarded[key] = value.get()
         }
         List<String> options = []
+        Map<String, String> systemProperties = project.gradle.startParameter.systemPropertiesArgs
+        String jvmArgs = systemProperties.containsKey('org.gradle.jvmargs')
+                ? systemProperties['org.gradle.jvmargs'] : project.providers.gradleProperty('org.gradle.jvmargs').orNull
+        if (jvmArgs != null) options.add('-Dorg.gradle.jvmargs=' + jvmArgs)
+        options.add('--max-workers=' + project.gradle.startParameter.maxWorkerCount)
         if (project.gradle.startParameter.rerunTasks) options.add('--rerun-tasks')
         options.add(project.gradle.startParameter.buildCacheEnabled ? '--build-cache' : '--no-build-cache')
         List<String> requested = project.gradle.startParameter.taskNames
@@ -90,11 +95,11 @@ class TargetsPlugin implements Plugin<Project> {
         Map owner = owners.size() == 1 ? owners.first() : null
         List<Map> family = []
         if (selected.size() == 1 && selected.first().loader == 'fabric' && owner != null) {
-            if (owner.renderer in ['renderpearl', 'blaze-gpu-format']) {
-                family = [selected.first()]
-            } else if (owner.renderer == 'blaze-texture-format' && owner.compatibleMinecraft) {
+            if (owner.renderer == 'blaze-texture-format' && owner.compatibleMinecraft) {
                 String ids = ([owner.minecraft] + owner.compatibleMinecraft).collect { it + '-fabric' }.join(',')
                 family = catalog.select(ids)
+            } else if (owner.renderer in ['gl3', 'blaze-texture-format', 'blaze-gpu-format', 'renderpearl']) {
+                family = [selected.first()]
             }
         }
         if (family.isEmpty()) {

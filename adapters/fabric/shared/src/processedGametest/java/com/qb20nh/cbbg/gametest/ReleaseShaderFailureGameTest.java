@@ -199,7 +199,7 @@ public final class ReleaseShaderFailureGameTest implements FabricClientGameTest 
               }
               boolean vulkan = "vulkan".equalsIgnoreCase(ReleaseBackend.identity()[0]);
               CompletableFuture<byte[]> source =
-                  ReleaseWorldPixelsGameTest.read(color, width * height * 16, true);
+                  ReleaseWorldReadback.read(color, width * height * 16, true);
               CompletableFuture<int[]> screenshot = new CompletableFuture<>();
               Screenshot.takeScreenshot(
                   main,
@@ -328,7 +328,13 @@ public final class ReleaseShaderFailureGameTest implements FabricClientGameTest 
     command(
         context,
         "mode set " + original.get("mode").getAsString().toLowerCase(java.util.Locale.ROOT));
-    context.waitFor(client -> original.equals(settings()), WAIT_TICKS);
+    context.waitFor(
+        client -> {
+          JsonObject restored = settings();
+          return original.entrySet().stream()
+              .allMatch(entry -> entry.getValue().equals(restored.get(entry.getKey())));
+        },
+        WAIT_TICKS);
   }
 
   private static void waitForFormat(ClientGameTestContext context, String format) {
@@ -347,6 +353,10 @@ public final class ReleaseShaderFailureGameTest implements FabricClientGameTest 
       Files.writeString(
           directory.resolve("pack.mcmeta"),
           "{\"pack\":{\"pack_format\":"
+              + format
+              + ",\"min_format\":"
+              + format
+              + ",\"max_format\":"
               + format
               + ",\"description\":\"CBBG shader failure fixture\"}}\n",
           StandardCharsets.UTF_8);

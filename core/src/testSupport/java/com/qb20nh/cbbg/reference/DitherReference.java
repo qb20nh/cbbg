@@ -8,7 +8,7 @@ public final class DitherReference {
   private DitherReference() {}
 
   public static int noiseCoordinate(int pixel, double scale, int tileSize) {
-    return Math.floorMod((int) Math.floor(pixel * scale), tileSize);
+    return Math.floorMod((int) Math.floor((pixel + 0.5) * scale), tileSize);
   }
 
   /** Quantized RGB channel; alpha is preserved by the shader and handled by the readback path. */

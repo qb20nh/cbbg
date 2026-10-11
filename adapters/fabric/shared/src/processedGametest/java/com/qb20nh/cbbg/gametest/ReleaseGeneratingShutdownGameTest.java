@@ -4,7 +4,6 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Objects;
-import net.fabricmc.fabric.api.client.command.v2.ClientCommands;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.loader.api.FabricLoader;
@@ -21,7 +20,7 @@ public final class ReleaseGeneratingShutdownGameTest implements FabricClientGame
     assertNoOutput();
     context.runOnClient(
         client -> {
-          var dispatcher = Objects.requireNonNull(ClientCommands.getActiveDispatcher());
+          var dispatcher = Objects.requireNonNull(ReleaseCommands.getActiveDispatcher());
           var source = ReleaseGenerationGameTest.silentSource();
           ReleaseGenerationGameTest.command(dispatcher, source, "mode set disabled");
           ReleaseGenerationGameTest.command(dispatcher, source, "stbn size 256");

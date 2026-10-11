@@ -36,7 +36,12 @@ final class ReleaseFramebuffers {
 
   static void blur(Minecraft client, int expected) {
     long before = ReleaseObservations.blurAllocations();
-    client.gameRenderer.processBlurEffect();
+    ReleaseObservations.observingBlur(true);
+    try {
+      client.gameRenderer.processBlurEffect();
+    } finally {
+      ReleaseObservations.observingBlur(false);
+    }
     if (ReleaseObservations.blurAllocations() <= before
         || ReleaseObservations.blurFormat() != expected) {
       throw new AssertionError(

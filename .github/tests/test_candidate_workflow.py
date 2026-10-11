@@ -21,7 +21,7 @@ class CandidateWorkflowTest(unittest.TestCase):
         self.root = Path(temporary.name)
         self.env = dict(os.environ, GITHUB_REF_TYPE='tag', GITHUB_REF_NAME='v1.4.0',
                         REQUESTED_TARGET='26.3-fabric', GITHUB_OUTPUT=str(self.root / 'output'),
-                        GITHUB_RUN_ID='123456')
+                        GITHUB_RUN_ID='123456', PRODUCT='cbbg')
         locks = self.root / 'runtime-locks'
         locks.mkdir()
         profile = self.root / 'build-config/fabric-modern'
@@ -41,9 +41,16 @@ class CandidateWorkflowTest(unittest.TestCase):
         for suffix in ('scenarios', 'mods', 'linux-x86_64'):
             (locks / f'26.3-fabric-{suffix}.json').write_text('{}')
         launcher = self.root / 'gradlew'
-        launcher.write_text('#!/usr/bin/env python3\nimport json,os,sys\nfrom pathlib import Path\n'
+        launcher.write_text('#!/usr/bin/env python3\nimport json,os,re,sys\nfrom pathlib import Path\n'
                             'args=sys.argv[1:]\n'
                             'with Path("gradle-arguments.jsonl").open("a") as out: out.write(json.dumps(args)+"\\n")\n'
+                            'if args[-1] == "releaseIdentity":\n'
+                            '  tag=next(a.split("=",1)[1] for a in args if a.startswith("-Prelease="))\n'
+                            '  match=re.fullmatch(r"(lib/)?v([0-9]+\\.[0-9]+\\.[0-9]+(?:-[A-Za-z][0-9A-Za-z.-]*\\.[1-9][0-9]*)?)(?:\\+mc[0-9][0-9A-Za-z.-]*-(?:fabric|quilt|forge|neoforge|legacy-fabric))?", tag)\n'
+                            '  if not match: sys.exit(1)\n'
+                            '  product="lib" if match[1] else "cbbg"; version=match[2]\n'
+                            '  output=next(a.split("=",1)[1] for a in args if a.startswith("-Poutput="))\n'
+                            '  Path(output).write_text(json.dumps({"product":product,"version":version,"title":("cbbg lib " if product == "lib" else "cbbg ")+version,"prerelease":"-" in version}))\n'
                             'if args[-1] == "targetMatrix":\n'
                             '  target=next(a.split("=",1)[1] for a in args if a.startswith("-Ptarget="))\n'
                             '  targets=target.split(",")\n'
@@ -61,7 +68,7 @@ class CandidateWorkflowTest(unittest.TestCase):
         result = self.run_step('Validate release selection')
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual((self.root / 'output').read_text(),
-                         'targets=26.3-fabric\njava<<JAVA_VERSIONS\n25\nJAVA_VERSIONS\n')
+                         'product=cbbg\ntargets=26.3-fabric\njava<<JAVA_VERSIONS\n25\nJAVA_VERSIONS\n')
         args = json.loads((self.root / 'gradle-arguments.jsonl').read_text().splitlines()[-1])
         self.assertIn('-PrequireImplemented=true', args)
         self.assertEqual(args[-1], 'targetMatrix')
@@ -120,12 +127,31 @@ class CandidateWorkflowTest(unittest.TestCase):
         result = self.run_step('Build and bundle candidate')
         self.assertEqual(result.returncode, 0, result.stderr)
         calls = [json.loads(line) for line in
-                 (self.root / 'gradle-arguments.jsonl').read_text().splitlines()[1:]]
+                 (self.root / 'gradle-arguments.jsonl').read_text().splitlines()[2:]]
         self.assertEqual([args[-1] for args in calls], ['candidateBuildOutputs', 'bundleCandidate'])
         self.assertIn('-Ptargets=26.3-fabric',
                       calls[1])
         self.assertIn('-Prelease=v1.4.0', calls[1])
         self.assertIn('-Poutput=build/release-candidate', calls[1])
+
+    def test_library_tags_use_the_library_profile_and_contract(self):
+        self.env.update(GITHUB_REF_NAME='lib/v1.0.0', PRODUCT='lib', TARGETS='26.3-fabric',
+                        JAVA_HOME_25_X64=self.env.get('JAVA_HOME', '/tmp/java25'))
+        (self.root / 'libraries/fabric').mkdir(parents=True)
+        (self.root / 'libraries/fabric/build.gradle').write_text('')
+        (self.root / 'runtime-locks/lib').mkdir()
+        (self.root / 'runtime-locks/lib/26.3-fabric-scenarios.json').write_text('{}')
+        (self.root / 'runtime-locks/26.3-fabric-scenarios.json').unlink()
+        result = self.run_step('Validate release selection')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn('product=lib', (self.root / 'output').read_text())
+        result = self.run_step('Build and bundle candidate')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        calls = [json.loads(line) for line in (self.root / 'gradle-arguments.jsonl').read_text().splitlines()]
+        build = next(args for args in calls if args[-1] == 'candidateBuildOutputs')
+        self.assertEqual(build[build.index('-p') + 1], 'libraries/fabric')
+        self.assertIn('-Plibrary_version=1.0.0', build)
+        self.assertIn('-Prelease=lib/v1.0.0', calls[-1])
 
     def test_selects_notes_for_the_release_tag_and_target(self):
         self.env['TARGETS'] = '26.3-fabric'
@@ -147,11 +173,11 @@ class CandidateWorkflowTest(unittest.TestCase):
             (self.root / f'runtime-locks/26.2-fabric-{suffix}.json').write_text('{}')
         self.assertEqual(self.run_step('Validate release selection').returncode, 0)
         self.assertEqual((self.root / 'output').read_text(),
-                         'targets=26.3-fabric,26.2-fabric\njava<<JAVA_VERSIONS\n8\n21\n25\nJAVA_VERSIONS\n')
+                         'product=cbbg\ntargets=26.3-fabric,26.2-fabric\njava<<JAVA_VERSIONS\n8\n21\n25\nJAVA_VERSIONS\n')
         self.assertEqual(self.run_step('Build and bundle candidate').returncode, 0)
         calls = [json.loads(line) for line in (self.root / 'gradle-arguments.jsonl').read_text().splitlines()]
         self.assertEqual([args[-1] for args in calls],
-                         ['targetMatrix', 'candidateBuildOutputs', 'candidateBuildOutputs', 'bundleCandidate'])
+                         ['releaseIdentity', 'targetMatrix', 'candidateBuildOutputs', 'candidateBuildOutputs', 'bundleCandidate'])
         self.assertIn('-Ptargets=26.3-fabric,26.2-fabric', calls[-1])
         (self.root / 'runtime-locks/26.2-fabric-mods.json').unlink()
         self.assertNotEqual(self.run_step('Validate release selection').returncode, 0)
@@ -213,6 +239,21 @@ class CandidateWorkflowTest(unittest.TestCase):
                       '        with:\n          name: cbbg-candidate\n'
                       '          path: build/release-candidate/\n', workflow)
 
+    def test_main_library_dependencies_are_verified_before_candidate_attestation(self):
+        workflow = WORKFLOW.read_text()
+        self.assertLess(workflow.index('- name: Verify library candidate dependencies'),
+                        workflow.index('- name: Attest candidate files'))
+        step = next(step for step in workflow.split('\n      - name: ')
+                    if step.startswith('Verify library candidate dependencies'))
+        self.assertIn("if: steps.selection.outputs.product == 'cbbg'", step)
+        self.env['GH_REPO'] = 'example/cbbg'
+        result = self.run_step('Verify library candidate dependencies')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        args = json.loads((self.root / 'gradle-arguments.jsonl').read_text().splitlines()[-1])
+        self.assertEqual(args[-1], 'verifyLibraryDependencies')
+        self.assertIn('-Pcandidate=build/release-candidate/candidate.json', args)
+        self.assertIn('-Prepo=example/cbbg', args)
+
     def test_verify_provenance_and_package_evidence_with_gradle(self):
         bundle = self.candidate_fixture()
         provenance = self.root / 'attestation.jsonl'
@@ -252,17 +293,23 @@ class CandidateWorkflowTest(unittest.TestCase):
             ('v1.4.0+mc26.3-fabric', '26.3-fabric,26.3-quilt',
              ' for Minecraft 26.3 Fabric, Quilt'),
         ])
+        cases.append(('lib/v1.0.0', '26.3-fabric', ''))
         for tag, targets, scope in cases:
             with self.subTest(tag=tag, targets=targets):
                 self.env['GITHUB_REF_NAME'] = tag
                 self.env['TARGETS'] = targets
+                lib = tag.startswith('lib/')
+                version = tag.removeprefix('lib/')[1:].split('+')[0]
+                (self.root / 'build/release-identity.json').write_text(json.dumps({
+                    'version': version, 'title': ('cbbg lib ' if lib else 'cbbg ') + version,
+                    'prerelease': '-rc.' in tag}))
                 result = self.run_step('Create draft release', self.root)
                 self.assertEqual(result.returncode, 0, result.stderr)
                 arguments = json.loads((self.root / 'arguments.json').read_text())
                 self.assertEqual(arguments[:3], ['release', 'create', tag])
                 self.assertIn('--draft', arguments)
                 self.assertIn('--verify-tag', arguments)
-                expected_title = 'cbbg ' + tag[1:].split('+')[0] + scope
+                expected_title = ('cbbg lib ' if lib else 'cbbg ') + version + scope
                 self.assertEqual(arguments[arguments.index('--title') + 1], expected_title)
                 self.assertEqual(arguments[arguments.index('--notes-file') + 1], 'build/release-notes.md')
                 self.assertEqual('--prerelease' in arguments, '-rc.' in tag)

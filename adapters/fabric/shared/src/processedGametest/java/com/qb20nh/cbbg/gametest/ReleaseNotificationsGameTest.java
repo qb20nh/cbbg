@@ -9,7 +9,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
-import net.fabricmc.fabric.api.client.command.v2.ClientCommands;
+import java.util.regex.Pattern;
 import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
@@ -17,7 +17,6 @@ import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.ChatComponent;
 import net.minecraft.client.gui.components.toasts.SystemToast;
-import net.minecraft.client.multiplayer.chat.GuiMessage;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.FormattedCharSequence;
 import org.apache.logging.log4j.LogManager;
@@ -33,17 +32,20 @@ import org.jspecify.annotations.Nullable;
 @NullMarked
 public final class ReleaseNotificationsGameTest implements FabricClientGameTest {
   private static final int WAIT_TICKS = 600;
+  private static final Pattern CHAT_PATCHES_COUNT = Pattern.compile(" \\(x([1-9][0-9]*)\\)$");
 
   @Override
   public void runTest(ClientGameTestContext context) {
     ReleaseGraphics.check(context);
     JsonObject original = settings().deepCopy();
+    boolean originalChat = notificationSetting("notifyChat");
+    boolean originalToast = notificationSetting("notifyToast");
     FabricClientCommandSource source = ReleaseGenerationGameTest.silentSource();
     try (var world = context.worldBuilder().create()) {
       ReleaseViewport.waitForChunks(world);
       CommandDispatcher<FabricClientCommandSource> dispatcher =
           Objects.requireNonNull(
-              context.computeOnClient(client -> ClientCommands.getActiveDispatcher()));
+              context.computeOnClient(client -> ReleaseCommands.getActiveDispatcher()));
       try {
         context.runOnClient(
             client -> {
@@ -211,14 +213,8 @@ public final class ReleaseNotificationsGameTest implements FabricClientGameTest 
               command(dispatcher, source, "stbn size " + original.get("stbnSize").getAsInt());
               command(dispatcher, source, "stbn depth " + original.get("stbnDepth").getAsInt());
               command(dispatcher, source, "stbn seed " + original.get("stbnSeed").getAsLong());
-              command(
-                  dispatcher,
-                  source,
-                  "notification chat " + original.get("notifyChat").getAsBoolean());
-              command(
-                  dispatcher,
-                  source,
-                  "notification toast " + original.get("notifyToast").getAsBoolean());
+              command(dispatcher, source, "notification chat " + originalChat);
+              command(dispatcher, source, "notification toast " + originalToast);
               command(
                   dispatcher,
                   source,
@@ -261,6 +257,22 @@ public final class ReleaseNotificationsGameTest implements FabricClientGameTest 
     }
   }
 
+  private static boolean notificationSetting(String name) {
+    try {
+      String owner = "com.qb20nh.cbbg.config.CbbgConfig";
+      Class<?> type = Class.forName(ReleaseMapping.className(owner));
+      Object config =
+          Objects.requireNonNull(
+              type.getMethod(ReleaseMapping.memberName(owner, owner + " get()")).invoke(null));
+      return (boolean)
+          Objects.requireNonNull(
+              type.getMethod(ReleaseMapping.memberName(owner, "boolean " + name + "()"))
+                  .invoke(config));
+    } catch (ReflectiveOperationException failure) {
+      throw new LinkageError("Packaged notification settings changed", failure);
+    }
+  }
+
   private static void clear(Minecraft client) {
     ReleaseNotificationUi.chat(client).clearMessages(false);
     ReleaseNotificationUi.toasts(client).clear();
@@ -268,28 +280,57 @@ public final class ReleaseNotificationsGameTest implements FabricClientGameTest 
 
   private static boolean completionVisible(Minecraft client) {
     String expected = Component.translatable("cbbg.chat.stbn.complete").getString();
-    return messages(client).stream().anyMatch(text -> text.endsWith(expected));
+    return messages(client).stream().anyMatch(text -> messageCount(text, expected) > 0);
   }
 
   private static void checkMessages(Minecraft client, int starts, int completions) {
     List<String> messages = messages(client);
     String start = Component.translatable("cbbg.chat.stbn.generating").getString();
     String complete = Component.translatable("cbbg.chat.stbn.complete").getString();
-    long actualStarts = messages.stream().filter(text -> text.endsWith(start)).count();
-    long actualCompletions = messages.stream().filter(text -> text.endsWith(complete)).count();
+    long actualStarts = messages.stream().mapToLong(text -> messageCount(text, start)).sum();
+    long actualCompletions =
+        messages.stream().mapToLong(text -> messageCount(text, complete)).sum();
     if (actualStarts != starts || actualCompletions != completions) {
       throw new AssertionError(
-          "Wrong generation chat notifications: " + actualStarts + "/" + actualCompletions);
+          "Wrong generation chat notifications: "
+              + actualStarts
+              + "/"
+              + actualCompletions
+              + "; displayed messages: "
+              + messages);
     }
   }
 
-  @SuppressWarnings("unchecked")
+  private static long messageCount(String text, String expected) {
+    String plain = Objects.requireNonNull(net.minecraft.ChatFormatting.stripFormatting(text));
+    if (plain.endsWith(expected)) return 1;
+    if (!FabricLoader.getInstance().isModLoaded("chatpatches")) return 0;
+    var count = CHAT_PATCHES_COUNT.matcher(plain);
+    return count.find() && plain.substring(0, count.start()).endsWith(expected)
+        ? Long.parseLong(Objects.requireNonNull(count.group(1)))
+        : 0;
+  }
+
   private static List<String> messages(Minecraft client) {
-    List<GuiMessage> messages =
-        (List<GuiMessage>)
+    List<?> messages =
+        (List<?>)
             Objects.requireNonNull(
                 field(ChatComponent.class, "allMessages", ReleaseNotificationUi.chat(client)));
-    return messages.stream().map(message -> message.content().getString()).toList();
+    return messages.stream()
+        .map(
+            message -> {
+              try {
+                var type = message.getClass();
+                return ((Component)
+                        Objects.requireNonNull(
+                            type.getMethod(ReleaseGameNames.noArgMethod(type, "content"))
+                                .invoke(message)))
+                    .getString();
+              } catch (ReflectiveOperationException failure) {
+                throw new LinkageError("Minecraft chat message content changed", failure);
+              }
+            })
+        .toList();
   }
 
   private static void checkToast(Minecraft client, @Nullable String state) {
@@ -339,7 +380,7 @@ public final class ReleaseNotificationsGameTest implements FabricClientGameTest 
 
   private static @Nullable Object field(Class<?> owner, String name, Object instance) {
     try {
-      Field field = owner.getDeclaredField(name);
+      Field field = owner.getDeclaredField(ReleaseGameNames.field(owner, name));
       field.setAccessible(true);
       return field.get(instance);
     } catch (ReflectiveOperationException failure) {

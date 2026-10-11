@@ -8,6 +8,7 @@ pluginManagement {
 }
 
 rootProject.name = 'cbbg-fabric-modern'
+includeBuild('../../libraries/fabric') { name = 'cbbg-lib-fabric' }
 include 'core'
 include 'core:rendering', 'core:legacy'
 project(':core').projectDir = file('../../core')

@@ -1,0 +1,154 @@
+import groovy.json.JsonSlurper
+import java.security.MessageDigest
+
+def ReproducibleText = plugins.getPlugin('cbbg.packaging').class.classLoader.loadClass('cbbg.gradle.ReproducibleText')
+// Fabric first published client gametests for 1.21.4. Adapt its world setup for 1.21.1.
+def apiVersion = '2.0.0+99ff640a04'
+if (gameTarget.dependencies.clientGametest != apiVersion) {
+    throw new GradleException('The 1.21.1 test-library backport requires Fabric client gametests ' + apiVersion)
+}
+def coordinate = 'net.fabricmc.fabric-api:fabric-client-gametest-api-v1:' + apiVersion
+def loomClasses = plugins.getPlugin('net.fabricmc.fabric-loom-remap').class.classLoader
+def RemapJarTask = loomClasses.loadClass('net.fabricmc.loom.task.RemapJarTask')
+def RemapSourcesJarTask = loomClasses.loadClass('net.fabricmc.loom.task.RemapSourcesJarTask')
+def upstreamSources = configurations.detachedConfiguration(dependencies.create(coordinate + ':sources'))
+upstreamSources.transitive = false
+def upstreamBinary = configurations.detachedConfiguration(dependencies.create(coordinate))
+upstreamBinary.transitive = false
+def namedApi = configurations.gametestCompileClasspath.incoming.artifactView {
+    componentFilter {
+        it instanceof org.gradle.api.artifacts.component.ModuleComponentIdentifier &&
+                it.module.startsWith('fabric-client-gametest-api-v1')
+    }
+}.files
+def mappedSources = tasks.register('mapClientGametestBackportSources', RemapSourcesJarTask) {
+    inputFile.set(layout.file(providers.provider { upstreamSources.singleFile }))
+    sourceNamespace.set('intermediary')
+    targetNamespace.set('named')
+    classpath.setFrom(upstreamBinary, providers.provider {
+        def namespace = loomClasses.loadClass('net.fabricmc.loom.api.mappings.layered.MappingsNamespace')
+        loom.getMinecraftJars(namespace.valueOf('INTERMEDIARY')).collect { it.toFile() }
+    }, sourceSets.gametest.compileClasspath)
+    archiveFileName.set('fabric-client-gametest-api-v1-sources-named.jar')
+    destinationDirectory.set(layout.buildDirectory.dir('client-gametest-backport'))
+}
+def patchedSources = tasks.register('prepareClientGametestBackportSources', Sync) {
+    from(mappedSources.map { zipTree(it.archiveFile.get().asFile) }) {
+        include 'net/fabricmc/fabric/impl/client/gametest/TestWorldBuilderImpl.java',
+                'net/fabricmc/fabric/impl/client/gametest/TestClientWorldContextImpl.java',
+                'net/fabricmc/fabric/impl/client/gametest/TestSingleplayerContextImpl.java'
+        filter { String line ->
+            line.replace('.method_46747(', '.getHolderOrThrow(')
+                    .replace('public class TestWorldBuilderImpl',
+                            '@org.jspecify.annotations.NullUnmarked\npublic class TestWorldBuilderImpl')
+                    .replace('public class TestClientWorldContextImpl',
+                            '@org.jspecify.annotations.NullUnmarked\npublic class TestClientWorldContextImpl')
+                    .replace('public class TestSingleplayerContextImpl',
+                            '@org.jspecify.annotations.NullUnmarked\npublic class TestSingleplayerContextImpl')
+                    .replace('context.waitFor(client -> !ThreadingImpl.isServerRunning && client.level == null, SharedConstants.TICKS_PER_MINUTE);',
+                            'context.waitFor(client -> !ThreadingImpl.isServerRunning && client.level == null, SharedConstants.TICKS_PER_MINUTE);\n' +
+                                    '\t\tcontext.setScreen(TitleScreen::new);')
+                    .replace('ClientChunkCache.Storage chunks =', 'Object chunks =')
+                    .replace('(ClientChunkMapAccessor) (Object) chunks', '(ClientChunkMapAccessor) chunks')
+                    .replace('int dz = -viewDistance; dz <= viewDistance;',
+                            'int dz = -viewDistance - 1; dz <= viewDistance + 1;')
+                    .replace('int dx = -viewDistance; dx <= viewDistance;',
+                            'int dx = -viewDistance - 1; dx <= viewDistance + 1;')
+                    .replace('if (world.getChunk(centerChunkX + dx, centerChunkZ + dz,',
+                            'if (!net.minecraft.server.level.ChunkTrackingView.isWithinDistance(' +
+                                    'centerChunkX, centerChunkZ, viewDistance, centerChunkX + dx, ' +
+                                    'centerChunkZ + dz, true)) continue;\n' +
+                                    '\t\t\t\tif (world.getChunk(centerChunkX + dx, centerChunkZ + dz,')
+        }
+    }
+    into(layout.buildDirectory.dir('generated/client-gametest-backport'))
+    doLast {
+        File source = new File(destinationDir, 'net/fabricmc/fabric/impl/client/gametest/TestWorldBuilderImpl.java')
+        if (!source.isFile() || !source.text.contains('.getHolderOrThrow(') ||
+                source.text.contains('.method_46747(')) {
+            throw new GradleException('Fabric world-builder sources no longer match the 1.21.1 backport')
+        }
+        File world = new File(destinationDir, 'net/fabricmc/fabric/impl/client/gametest/TestClientWorldContextImpl.java')
+        if (!world.isFile() || !world.text.contains('ChunkTrackingView.isWithinDistance(')) {
+            throw new GradleException('Fabric chunk-download sources no longer match the 1.21.1 backport')
+        }
+        File singleplayer = new File(destinationDir, 'net/fabricmc/fabric/impl/client/gametest/TestSingleplayerContextImpl.java')
+        if (!singleplayer.isFile() || !singleplayer.text.contains('context.setScreen(TitleScreen::new);')) {
+            throw new GradleException('Fabric world-close sources no longer match the 1.21.1 backport')
+        }
+    }
+}
+def backport = sourceSets.create('clientGametestBackport') {
+    java.srcDir(new File(repositoryRoot, 'adapters/minecraft/1.21.1/src/clientGametestBackport/java'))
+    resources.srcDir(new File(repositoryRoot, 'adapters/minecraft/1.21.1/src/clientGametestBackport/resources'))
+    compileClasspath = sourceSets.gametest.compileClasspath
+}
+def patchedClasses = layout.buildDirectory.dir('classes/java/clientGametestPatchedSources')
+def patchedCompile = tasks.register('compileClientGametestPatchedSources', JavaCompile) {
+    source patchedSources
+    classpath = sourceSets.gametest.compileClasspath
+    destinationDirectory.set(patchedClasses)
+    options.release.set(21)
+}
+def metadata = tasks.register('prepareClientGametestBackportMetadata') {
+    inputs.files(namedApi, upstreamSources)
+    def output = layout.buildDirectory.dir('generated/client-gametest-backport-metadata')
+    outputs.dir(output)
+    doLast {
+        File directory = output.get().asFile
+        directory.mkdirs()
+        def read = { String name ->
+            File entry = zipTree(namedApi.singleFile).matching { include name }.singleFile
+            new JsonSlurper().parse(entry)
+        }
+        Map mixins = read('fabric-client-gametest-api-v1.mixins.json')
+        if (!mixins.client.remove('CreateWorldScreenMixin')) {
+            throw new GradleException('Missing upstream world-creation test hook')
+        }
+        Map descriptor = read('fabric.mod.json')
+        descriptor.version = '2.0.0+99ff640a04.cbbg.1.21.1'
+        descriptor.depends.minecraft = '1.21.1'
+        descriptor.depends.fabricloader = '>=0.16.0'
+        descriptor.mixins.add('cbbg.client-gametest-1.21.1-backport.mixins.json')
+        Map provenance = [schema: 1, minecraft: '1.21.1',
+                          upstream: coordinate,
+                          source_commit: '99ff640a5d543bab0316924fb669304c25d8f293',
+                          sources_sha256: MessageDigest.getInstance('SHA-256')
+                                  .digest(upstreamSources.singleFile.bytes).encodeHex().toString(),
+                          changes: ['Fabric Loader 0.16.0 with MixinExtras 0.4.0',
+                                    'Registry.getHolderOrThrow', 'CreateWorldScreen.createNewWorld',
+                                    'ChunkTrackingView.isWithinDistance', 'TestSingleplayerContext.close']]
+        ['fabric.mod.json': descriptor, 'fabric-client-gametest-api-v1.mixins.json': mixins,
+         'cbbg-client-gametest-backport.json': provenance].each { name, value ->
+            ReproducibleText.writeJson(new File(directory, name), value)
+        }
+    }
+}
+def namedJar = tasks.register('clientGametestBackportNamedJar', Jar) {
+    archiveFileName.set('fabric-client-gametest-api-v1-1.21.1-backport-named.jar')
+    destinationDirectory.set(layout.buildDirectory.dir('client-gametest-backport'))
+    from({ zipTree(namedApi.singleFile) }) {
+        exclude 'fabric.mod.json', 'fabric-client-gametest-api-v1.mixins.json',
+                'net/fabricmc/fabric/mixin/client/gametest/CreateWorldScreenMixin.class',
+                'net/fabricmc/fabric/impl/client/gametest/TestWorldBuilderImpl.class',
+                'net/fabricmc/fabric/impl/client/gametest/TestClientWorldContextImpl.class',
+                'net/fabricmc/fabric/impl/client/gametest/TestSingleplayerContextImpl.class'
+    }
+    from(backport.output)
+    from(patchedCompile.flatMap { it.destinationDirectory })
+    from(metadata)
+    preserveFileTimestamps = false
+    reproducibleFileOrder = true
+}
+ext.clientGametestBackport = tasks.register('clientGametestBackportJar', RemapJarTask) {
+    inputFile.set(namedJar.flatMap { it.archiveFile })
+    archiveFileName.set('fabric-client-gametest-api-v1-1.21.1-backport.jar')
+    destinationDirectory.set(layout.buildDirectory.dir('client-gametest-backport'))
+    sourceNamespace.set('named')
+    targetNamespace.set('intermediary')
+    addNestedDependencies.set(false)
+    classpath.from(sourceSets.gametest.compileClasspath)
+}
+sourceSets.gametest.runtimeClasspath = sourceSets.gametest.runtimeClasspath.filter {
+    !it.name.startsWith('fabric-client-gametest-api-v1')
+} + files(namedJar.flatMap { it.archiveFile })

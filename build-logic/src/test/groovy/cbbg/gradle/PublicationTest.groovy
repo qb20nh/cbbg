@@ -95,6 +95,9 @@ class PublicationTest {
     void sharedReleaseGeneratesIndependentRecordsWithApplicableNotes() {
         fixture = SharedPublicationFixture.multiple(new File(directory, 'multiple-notes'))
         String notes = '''### Fixed
+- Shared fix.
+#### Minecraft 26.2, 26.3 — Fabric
+- Grouped fix.
 #### Minecraft 26.3 — Fabric
 - New target fix.
 #### Minecraft 26.2 — Fabric
@@ -110,6 +113,12 @@ class PublicationTest {
         assertFalse(value.records[1].curseforge.changelog.contains('New target fix.'))
         assertTrue(value.records[1].curseforge.changelog.contains('Older target fix.'))
         assertTrue(value.records.every { it.modrinth.changelog.contains('Common loader fix.') })
+        value.records.eachWithIndex { record, index ->
+            List<String> changes = record.modrinth.changelog.readLines().findAll { it.startsWith('- ') }
+            assertEquals(['- Shared fix.', '- Grouped fix.',
+                          index == 0 ? '- New target fix.' : '- Older target fix.', '- Common loader fix.'], changes)
+            assertEquals(record.modrinth.changelog, record.curseforge.changelog)
+        }
         writeMetadata(value)
         assertEquals(['26.2-fabric'], Publication.checkedRecord(fixture.file, publication,
                 '26.2-fabric', fixture.root)[1].targets)
@@ -165,7 +174,16 @@ class PublicationTest {
         fixture.manifest.catalog_sha256 = CandidateFiles.canonicalHash(fixture.catalog)
         fixture.file.text = JsonOutput.toJson(fixture.manifest)
         Map value = Publication.metadata(fixture.file, fixture.root,
-                '### Fixed\n#### Fabric\n- Fabric fix.\n#### Quilt\n- Quilt fix.\n#### Forge\n- Other fix.\n')
+                '''### Fixed
+#### Fabric
+- Fabric fix.
+#### Quilt
+- Quilt fix.
+#### Minecraft 26.3.1, 26.3.2 — Fabric
+- Patch fix.
+#### Forge
+- Other fix.
+''')
         assertEquals(1, value.records.size())
         assertEquals(['26.3-fabric', '26.3-quilt', '26.3.1-fabric'], value.records[0].targets)
         assertEquals(['fabric', 'quilt'], value.records[0].modrinth.loaders)
@@ -174,7 +192,11 @@ class PublicationTest {
                 value.records[0].curseforge.version_labels)
         assertTrue(value.records[0].modrinth.changelog.contains('Fabric fix.'))
         assertTrue(value.records[0].modrinth.changelog.contains('Quilt fix.'))
+        assertTrue(value.records[0].modrinth.changelog.contains('Patch fix.'))
         assertFalse(value.records[0].modrinth.changelog.contains('Other fix.'))
+        assertEquals(['- Fabric fix.', '- Quilt fix.', '- Patch fix.'],
+                value.records[0].modrinth.changelog.readLines().findAll { it.startsWith('- ') })
+        assertEquals(value.records[0].modrinth.changelog, value.records[0].curseforge.changelog)
         writeMetadata(value)
         assertEquals(value.records[0], Publication.checkedRecord(fixture.file, publication,
                 fixture.target.id, fixture.root)[1])
@@ -335,10 +357,12 @@ class PublicationTest {
          status: 'listed', changelog: upload.changelog,
          loaders: ['fabric'], game_versions: ['26.3'],
          dependencies: [[project_id: 'P7dR8mSH', dependency_type: 'required']],
-         files: (['artifact', 'sources'] + (record.containsKey('evidence') ? ['evidence'] : [])).collect { String kind ->
+         files: (['artifact', 'sources'] + (record.containsKey('utilities') ? ['utilities', 'utilities_sources'] : []) +
+                 (record.containsKey('library') ? ['library', 'library_sources'] : []) +
+                 (record.containsKey('evidence') ? ['evidence'] : [])).collect { String kind ->
              File file = new File(fixture.bundle, record[kind].path)
              [filename: file.name, hashes: [sha512: sha512(file)],
-              primary: kind == 'artifact', file_type: kind == 'sources' ? 'sources-jar' : null]
+              primary: kind == 'artifact', file_type: kind in ['sources', 'utilities_sources', 'library_sources'] ? 'sources-jar' : null]
          }]
     }
 
@@ -367,6 +391,100 @@ class PublicationTest {
         result = Publication.plan(fixture.file, publication, '26.3-fabric', fixture.root, fetch([], []))
         assertEquals('upload', result.action)
         assertFalse(result.containsKey('version_id'))
+    }
+
+    @Test void standaloneLibraryTagsCannotProduceOrUploadPlatformMetadata() {
+        Map value = metadata()
+        value.release = 'lib/v1.0.0'
+        fails("requires 'cbbg'") { Publication.requireUploadAllowed(value) }
+        fails("requires 'cbbg'") {
+            Publication.resolve(value, 'modrinth', { url -> throw new AssertionError('No platform requests for Lib') })
+        }
+        fixture.manifest.release = 'lib/v1.0.0'
+        fixture.manifest.product = 'lib'
+        File contract = new File(fixture.bundle, fixture.record.client_tests.contract.path)
+        Map scenario = CandidateFiles.read(contract) as Map
+        scenario.product = 'lib'
+        contract.text = JsonOutput.toJson(scenario)
+        fixture.record.client_tests.contract.sha256 = CandidateFiles.sha256(contract)
+        fixture.file.text = JsonOutput.toJson(fixture.manifest)
+        fails("requires 'cbbg'") { metadata() }
+    }
+
+    @Test void libraryAttachmentsRequireExactRemoteFilesAndSourceTypes() {
+        File artifact = new File(fixture.bundle, fixture.record.artifact.path)
+        Map entries = [:]
+        new ZipFile(artifact).withCloseable { zip ->
+            zip.entries().each { entry -> entries[entry.name] = zip.getInputStream(entry).withCloseable { it.readAllBytes() } }
+        }
+        Map mod = CandidateFiles.parse(new StringReader(new String(entries['fabric.mod.json'], 'UTF-8'))) as Map
+        mod.depends.cbbg_lib = '>=1.0.0 <2.0.0'
+        entries['fabric.mod.json'] = JsonOutput.toJson(mod).bytes
+        CandidateFixture.archive(artifact, entries)
+        fixture.record.artifact = CandidateFiles.reference(fixture.bundle, artifact.name)
+        ['library': 'cbbg-lib-1.0.0+mc26.3-fabric.jar',
+         'library_sources': 'cbbg-lib-1.0.0+mc26.3-fabric-sources.jar'].each { kind, name ->
+            File file = new File(fixture.bundle, name)
+            CandidateFixture.archive(file, [(kind == 'library' ? 'example/Library.class' : 'example/Library.java'):
+                    ('Library attachment ' + kind).bytes])
+            fixture.record[kind] = CandidateFiles.reference(fixture.bundle, name)
+        }
+        String nested = 'META-INF/jars/' + fixture.record.library.path
+        mod.jars = [[file: nested]]
+        entries['fabric.mod.json'] = JsonOutput.toJson(mod).bytes
+        entries[nested] = new File(fixture.bundle, fixture.record.library.path).bytes
+        CandidateFixture.archive(artifact, entries)
+        fixture.record.artifact = CandidateFiles.reference(fixture.bundle, artifact.name)
+        fixture.record.library_release = 'lib/v1.0.0'
+        fixture.file.text = JsonOutput.toJson(fixture.manifest)
+        Map value = metadata()
+        assertEquals(fixture.record.library, value.records[0].library)
+        assertEquals(fixture.record.library_sources, value.records[0].library_sources)
+        writeMetadata(value)
+        Map remote = existing(value.records[0])
+        assertEquals(4, remote.files.size())
+        Map result = Publication.plan(fixture.file, publication, fixture.target.id, fixture.root, fetch([remote], []))
+        assertEquals('reuse', result.action)
+        assertEquals(fixture.record.library, result.library)
+        remote.files[2].file_type = 'other'
+        assertEquals('reuse', Publication.plan(fixture.file, publication, fixture.target.id, fixture.root, fetch([remote], [])).action)
+        remote.files[3].file_type = null
+        fails('Existing Modrinth file') {
+            Publication.plan(fixture.file, publication, fixture.target.id, fixture.root, fetch([remote], []))
+        }
+        value.records[0].library.sha256 = '0' * 64
+        writeMetadata(value)
+        fails('checked candidate') { Publication.checkedRecord(fixture.file, publication, fixture.target.id, fixture.root) }
+    }
+
+    @Test
+    void utilityAttachmentsRequireExactRemoteFilesHashesAndTypes() {
+        CandidateFixture.utilities(fixture)
+        Map value = metadata()
+        assertEquals(fixture.record.utilities, value.records[0].utilities)
+        assertEquals(fixture.record.utilities_sources, value.records[0].utilities_sources)
+        writeMetadata(value)
+        Map remote = existing(value.records[0])
+        assertEquals(4, remote.files.size())
+        Map result = Publication.plan(fixture.file, publication, '26.3-fabric', fixture.root, fetch([remote], []))
+        assertEquals('reuse', result.action)
+        assertEquals(fixture.record.utilities, result.utilities)
+        remote.files[2].file_type = 'other'
+        assertEquals('reuse', Publication.plan(fixture.file, publication, '26.3-fabric', fixture.root, fetch([remote], [])).action)
+        for (Closure change : [{ it.files.remove(3) }, { it.files.add(it.files[3]) },
+                              { it.files[2].primary = true }, { it.files[2].file_type = 'sources-jar' },
+                              { it.files[3].file_type = null }, { it.files[3].hashes.sha512 = '0' * 128 }]) {
+            Map wrong = CandidateFiles.parse(new StringReader(JsonOutput.toJson(remote))) as Map
+            change(wrong)
+            fails('Existing Modrinth') {
+                Publication.plan(fixture.file, publication, '26.3-fabric', fixture.root, fetch([wrong], []))
+            }
+        }
+        value.records[0].remove('utilities_sources')
+        writeMetadata(value)
+        fails('checked candidate') {
+            Publication.checkedRecord(fixture.file, publication, '26.3-fabric', fixture.root)
+        }
     }
 
     @Test

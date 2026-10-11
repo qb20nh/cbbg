@@ -1,33 +1,18 @@
 package com.qb20nh.cbbg.gametest;
 
-import java.util.List;
-import java.util.Objects;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.minecraft.client.gui.components.AbstractSliderButton;
 import net.minecraft.client.gui.components.AbstractWidget;
-import net.minecraft.client.gui.components.Button;
-import net.minecraft.client.gui.components.CycleButton;
-import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.client.input.MouseButtonEvent;
-import net.minecraft.client.input.MouseButtonInfo;
 import net.minecraft.network.chat.Component;
 import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 
 /** Finds the packaged settings UI by its public, localized labels. */
 @NullMarked
-record ReleaseSettingsUi(
-    CycleButton<?> mode,
-    CycleButton<?> format,
-    AbstractSliderButton strength,
-    AbstractSliderButton size,
-    AbstractSliderButton depth,
-    EditBox seed,
-    Button generate,
-    CycleButton<?> chat,
-    CycleButton<?> toast,
-    Button done) {
+final class ReleaseSettingsUi {
+  private ReleaseSettingsUi() {}
+
   static Screen mods(ClientGameTestContext context, @Nullable Screen parent) {
     return Installed.mods(context, parent);
   }
@@ -74,32 +59,8 @@ record ReleaseSettingsUi(
             .equals(Component.translatable("cbbg.config.title").getString());
   }
 
-  static ReleaseSettingsUi from(@Nullable Screen screen) {
-    if (screen == null || !isSettings(screen))
-      throw new AssertionError("Expected packaged CBBG settings screen");
-    return new ReleaseSettingsUi(
-        find(screen, CycleButton.class, "cbbg.config.mode"),
-        find(screen, CycleButton.class, "cbbg.config.format"),
-        find(screen, AbstractSliderButton.class, "cbbg.config.strength.label"),
-        find(screen, AbstractSliderButton.class, "cbbg.config.size.label"),
-        find(screen, AbstractSliderButton.class, "cbbg.config.depth.label"),
-        find(screen, EditBox.class, "cbbg.config.seed.label"),
-        find(screen, Button.class, "cbbg.config.button.generate_stbn"),
-        find(screen, CycleButton.class, "cbbg.config.notify.chat"),
-        find(screen, CycleButton.class, "cbbg.config.notify.toast"),
-        find(screen, Button.class, "cbbg.config.button.done"));
-  }
-
-  private static <T extends AbstractWidget> T find(Screen screen, Class<T> type, String key) {
-    String label = Component.translatable(key).getString();
-    var matches =
-        screen.children().stream()
-            .filter(type::isInstance)
-            .map(child -> Objects.requireNonNull(type.cast(child)))
-            .filter(widget -> widget.getMessage().getString().contains(label))
-            .toList();
-    if (matches.size() != 1) throw new AssertionError("Expected one public widget for " + key);
-    return matches.getFirst();
+  static ReleaseSettingsGuiGameTest.Widgets from(@Nullable Screen screen) {
+    return ReleaseSettingsGuiGameTest.Widgets.from(screen);
   }
 
   static void click(AbstractWidget widget) {
@@ -111,13 +72,6 @@ record ReleaseSettingsUi(
   }
 
   private static void clickAt(AbstractWidget widget, double x) {
-    widget.onClick(
-        new MouseButtonEvent(
-            x, widget.getY() + widget.getHeight() / 2.0, new MouseButtonInfo(0, 0)),
-        false);
-  }
-
-  List<AbstractWidget> lockedControls() {
-    return List.of(format, strength, size, depth, seed, generate, chat, toast);
+    ReleaseGuiInput.click(x, widget.getY() + widget.getHeight() / 2.0);
   }
 }

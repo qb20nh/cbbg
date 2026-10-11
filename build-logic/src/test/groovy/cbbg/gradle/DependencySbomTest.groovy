@@ -4,6 +4,8 @@ import groovy.json.JsonSlurper
 import org.gradle.testkit.runner.GradleRunner
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.ValueSource
 
 import java.util.zip.ZipOutputStream
 
@@ -12,8 +14,10 @@ import static org.junit.jupiter.api.Assertions.*
 class DependencySbomTest {
     @TempDir File directory
 
-    @Test void inventoryCutsGameOriginsAndKeepsOwnedPathsAndResolutionRules() {
-        prepare(true)
+    @ParameterizedTest
+    @ValueSource(strings = ['net.fabricmc.fabric-loom', 'net.fabricmc.fabric-loom-remap'])
+    void inventoryCutsGameOriginsAndKeepsOwnedPathsAndResolutionRules(String loomId) {
+        prepare(loomId)
         def result = inventory().build()
         assertTrue(result.output.contains('BUILD SUCCESSFUL'))
         Set names = components()
@@ -36,8 +40,10 @@ class DependencySbomTest {
         assertTrue(components().contains('game-only'))
     }
 
-    @Test void graphSubmissionCutsGameOrigins() {
-        prepare(true)
+    @ParameterizedTest
+    @ValueSource(strings = ['net.fabricmc.fabric-loom', 'net.fabricmc.fabric-loom-remap'])
+    void graphSubmissionCutsGameOrigins(String loomId) {
+        prepare(loomId)
         def result = runner('--init-script', initScript(),
                 ':ForceDependencyResolutionPlugin_resolveAllDependencies').build()
         assertTrue(result.output.contains('GRAPH_ORIGINS_FILTERED'))
@@ -50,6 +56,10 @@ class DependencySbomTest {
     }
 
     private void prepare(boolean loom) {
+        prepare(loom ? 'net.fabricmc.fabric-loom' : null)
+    }
+
+    private void prepare(String loomId) {
         write('settings.gradle', "rootProject.name = 'inventory-fixture'\n")
         for (String name : ['game-only', 'private-parser', 'analyzer', 'build-tool',
                 'loader', 'development']) {
@@ -63,11 +73,11 @@ class DependencySbomTest {
         module('constrained', '2', '')
         module('own', '1', '''<dependencies><dependency><groupId>fixture</groupId>
 <artifactId>transitive-shared</artifactId><version>1</version></dependency></dependencies>''')
-        if (loom) {
+        if (loomId != null) {
             write('buildSrc/build.gradle', '''
 plugins { id 'java-gradle-plugin' }
-gradlePlugin { plugins { fixture { id = 'net.fabricmc.fabric-loom'; implementationClass = 'FixtureLoom' } } }
-''')
+gradlePlugin { plugins { fixture { id = 'LOOM_ID'; implementationClass = 'FixtureLoom' } } }
+'''.replace('LOOM_ID', loomId))
             write('buildSrc/src/main/java/FixtureLoom.java', '''
 import org.gradle.api.Plugin;
 import org.gradle.api.Project;
@@ -80,7 +90,7 @@ buildscript {
     dependencies { classpath 'fixture:build-tool:1' }
 }
 apply plugin: 'java'
-''' + (loom ? "apply plugin: 'net.fabricmc.fabric-loom'\n" : '') + '''
+''' + (loomId != null ? "apply plugin: '${loomId}'\n" : '') + '''
 repositories { maven { url = uri('repo') } }
 configurations {
     minecraftClientLibraries

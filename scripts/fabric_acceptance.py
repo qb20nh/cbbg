@@ -11,6 +11,7 @@ from fabric_scenario_evidence import STARTUP_DRIVER
 from candidate_manifest import client_candidate
 from parity_evidence import EvidenceError, checked_file, digest, read_json, unique_by
 from runtime_catalog import load_catalog, select_targets
+from fabric_test_cache import reuse_arguments
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -24,9 +25,14 @@ def required_runs(target, contract, root=ROOT, metadata_path=None):
             raise EvidenceError('Ordinary metadata is outside the repository')
     metadata = read_json(metadata_path)
     ordinary = metadata['entrypoints']['fabric-client-gametest']
-    if metadata.get('id') != 'cbbg-renderer-test':
+    library = contract.get('product') == 'lib'
+    if metadata.get('id') != ('cbbg-library-test' if library else 'cbbg-renderer-test'):
         raise EvidenceError('Unexpected ordinary test metadata')
     profiles = target['compatibilityProfiles']
+    if library:
+        if contract.get('ordinaryProfiles') != ['none']:
+            raise EvidenceError('Library acceptance requires the independent consumer profile')
+        profiles = {'none': target['backends']}
     suites = [{'suite': 'ordinary', 'profiles': list(profiles),
                'backends': target['backends'], 'restart': False, 'entrypoints': ordinary}]
     for extra in contract['additionalRuns']:
@@ -70,14 +76,16 @@ def required_runs(target, contract, root=ROOT, metadata_path=None):
                 if backend in profiles[profile]:
                     runs.append({'suite': name, 'profile': profile, 'backend': backend,
                                  'restart': suite['restart'], 'entrypoints': scenarios,
-                                 'startupMode': startup_mode})
+                                 'startupMode': startup_mode,
+                                 **({'externalLibrary': True} if suite.get('externalLibrary') else {})})
                     count += 1
         if not count:
             raise EvidenceError('Suite has no applicable configurations: ' + name)
     return runs
 
 
-def verify_results(index_path, target, contract_path, driver_hashes, *, metadata_path=None, **inputs):
+def verify_results(index_path, target, contract_path, driver_hashes, *, metadata_path=None,
+                   driver_paths=None, test_dependencies=None, acceptance_inputs=None, **inputs):
     index_path = Path(index_path)
     required = required_runs(target, read_json(contract_path), metadata_path=metadata_path)
     def key(run):
@@ -113,11 +121,20 @@ def verify_results(index_path, target, contract_path, driver_hashes, *, metadata
             extra['control_receipt_path'] = control_receipt
         elif 'control_receipt' in row:
             raise EvidenceError('Ordinary result cannot include a control receipt')
-        result = verifier(receipt, target, driver_sha256=driver_hashes[cell[0]], **extra, **inputs)
+        run_inputs = dict(inputs, driver_sha256=driver_hashes[cell[0]])
+        if 'reuse' in row:
+            if driver_paths is None or test_dependencies is None or acceptance_inputs is None:
+                raise EvidenceError('Cached results require current test dependencies and execution inputs')
+            run_inputs.update(reuse_arguments(row, receipt, target,
+                current_driver=driver_paths[cell[0]], dependencies=test_dependencies,
+                current_inputs=acceptance_inputs, base=index_path.parent))
+        result = verifier(receipt, target, **extra, **run_inputs)
         if (result['profile'] != cell[1] or result['backend'] != cell[2]
                 or result['scenarios'] != requirement['entrypoints']
                 or result.get('startupMode') != requirement['startupMode']):
             raise EvidenceError('Saved run differs from required configuration: ' + str(cell))
+        if result.get('externalLibrary', False) != requirement.get('externalLibrary', False):
+            raise EvidenceError('Separate library installation differs from the required configuration')
         results.append(dict(result, suite=cell[0]))
     if metadata_path is None:
         metadata_path = ROOT / read_json(contract_path)['ordinaryMetadata']
@@ -136,9 +153,13 @@ def verify_candidate_results(manifest_path, target_id, index_path):
              ('catalog', 'contract', 'ordinary_metadata', 'runtime_lock', 'dependency_lock')}
     for suite, reference in tests['drivers'].items():
         checked_file(base, reference)
+    dependencies = read_json(checked_file(base, tests['test_dependencies'])) if 'test_dependencies' in tests else None
     result = verify_results(index_path, specification, files['contract'],
                             {suite: reference['sha256'] for suite, reference in tests['drivers'].items()},
-                            metadata_path=files['ordinary_metadata'], source_commit=manifest['commit'],
+                            metadata_path=files['ordinary_metadata'],
+                            driver_paths={suite: checked_file(base, reference) for suite, reference in tests['drivers'].items()},
+                            test_dependencies=dependencies,
+                            acceptance_inputs=Path(index_path).parent.parent / 'inputs.json', source_commit=manifest['commit'],
                             candidate_sha256=target['artifact']['sha256'], catalog_path=files['catalog'],
                             runtime_lock_path=files['runtime_lock'], dependency_lock_path=files['dependency_lock'])
     result.update(manifest_sha256=digest(manifest_path), release=manifest['release'])

@@ -101,6 +101,7 @@ class QualityPlugin implements Plugin<Project> {
             }
         }
         project.tasks.withType(JavaCompile).configureEach { compile ->
+            options.encoding = 'UTF-8'
             javaCompiler.set(project.javaToolchains.compilerFor {
                 languageVersion = JavaLanguageVersion.of(25)
             })

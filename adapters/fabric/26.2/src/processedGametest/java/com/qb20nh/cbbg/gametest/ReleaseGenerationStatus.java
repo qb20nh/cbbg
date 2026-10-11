@@ -10,6 +10,10 @@ import org.jspecify.annotations.NullMarked;
 final class ReleaseGenerationStatus {
   private ReleaseGenerationStatus() {}
 
+  static boolean mathActive() {
+    return ReleaseGeneratingShutdownGameTest.mathActive();
+  }
+
   static CompletableFuture<?> pending() {
     try {
       String owner = "com.qb20nh.cbbg.render.stbn.STBNGenerator";

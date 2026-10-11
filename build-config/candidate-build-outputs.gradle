@@ -1,8 +1,11 @@
+def ReproducibleText = plugins.getPlugin('cbbg.packaging').class.classLoader.loadClass('cbbg.gradle.ReproducibleText')
 tasks.register('candidateBuildOutputs') {
-    dependsOn tasks.named('ciCheck'), tasks.named('sourceInventory')
+    def libraryProduct = project.hasProperty('candidateProduct') && candidateProduct == 'lib'
+    dependsOn tasks.named(libraryProduct ? 'check' : 'ciCheck'), tasks.named('sourceInventory')
+    dependsOn tasks.named(libraryProduct ? 'prepareLibraryOutputs' : 'prepareBundledLibrary')
     dependsOn tasks.withType(Jar).matching { it.name.endsWith('DriverJar') }
     def destination = layout.file(providers.provider {
-        new File(rootProject.file('../..'), "build/targets/${candidateTargetId}/candidate-build-outputs.json")
+        new File(rootProject.file('../..'), "build/${libraryProduct ? 'libraries' : 'targets'}/${candidateTargetId}/candidate-build-outputs.json")
     })
     outputs.file(destination)
     outputs.upToDateWhen { false }
@@ -24,6 +27,8 @@ tasks.register('candidateBuildOutputs') {
             }.standardOutput.asText.get().trim()
         }
         def processed = tasks.names.contains('processedDriverJar')
+        def utilitiesSources = utilitiesSourcesArchive
+        def utilities = utilitiesArchive
         def drivers = new TreeMap<String, Map>()
         tasks.withType(Jar).matching {
             it.name.endsWith('DriverJar') && it.name.startsWith('processed') == processed
@@ -31,9 +36,10 @@ tasks.register('candidateBuildOutputs') {
             def suite = driver.name in ['parityDriverJar', 'processedDriverJar'] ? 'ordinary' :
                     driver.archiveClassifier.get().replaceFirst(/^processed-/, '').replaceFirst(/-driver$/, '')
             if (drivers.containsKey(suite)) throw new GradleException('Duplicate driver suite: ' + suite)
-            drivers[suite] = reference(driver.archiveFile.get().asFile)
+            def archive = driver.hasProperty('runtimeArchiveFile') ? driver.runtimeArchiveFile : driver.archiveFile
+            drivers[suite] = reference(archive.get().asFile)
         }
-        def output = [schema: 2, target: candidateTargetId, version: project.version.toString(),
+        def output = [schema: 2, product: libraryProduct ? 'lib' : 'cbbg', target: candidateTargetId, version: project.version.toString(),
                       source_commit: gitOutput(['rev-parse', 'HEAD']),
                       source_dirty: !gitOutput(['status', '--porcelain', '--untracked-files=all',
                                                '--', '.', ':(top,exclude)docs/**']).isEmpty(),
@@ -42,10 +48,15 @@ tasks.register('candidateBuildOutputs') {
                       sbom: reference(releaseSbomFile.get().asFile),
                       processing: [tool: 'proguard', version: releaseOptimization.toolVersion],
                       sources: reference(tasks.named('releaseSourcesJar', Jar).get().archiveFile.get().asFile),
+                      utilities: reference(utilities), utilities_sources: reference(utilitiesSources),
                       source_inventory: reference(layout.buildDirectory.file('source-inventory.json').get().asFile),
                       drivers: drivers]
+        if (!libraryProduct) {
+            output.library = reference(libraryArchive)
+            output.library_sources = reference(librarySourcesArchive)
+            output.library_release = libraryRelease
+        }
         destination.get().asFile.parentFile.mkdirs()
-        destination.get().asFile.text = groovy.json.JsonOutput.prettyPrint(
-                groovy.json.JsonOutput.toJson(output)) + '\n'
+        ReproducibleText.writeJson(destination.get().asFile, output)
     }
 }

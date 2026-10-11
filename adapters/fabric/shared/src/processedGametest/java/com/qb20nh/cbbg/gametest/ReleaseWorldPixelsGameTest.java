@@ -2,12 +2,8 @@ package com.qb20nh.cbbg.gametest;
 
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import com.mojang.blaze3d.buffers.GpuBuffer;
-import com.mojang.blaze3d.opengl.GlTexture;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.platform.NativeImage;
-import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.textures.GpuTexture;
 import com.mojang.brigadier.CommandDispatcher;
 import com.qb20nh.cbbg.reference.DitherReference;
 import java.nio.ByteBuffer;
@@ -18,16 +14,14 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
-import net.fabricmc.fabric.api.client.command.v2.ClientCommands;
 import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.loader.api.FabricLoader;
-import net.minecraft.client.Screenshot;
 import org.jspecify.annotations.NullMarked;
-import org.lwjgl.opengl.GL11;
 
 /** Compares actual world screenshots to main-target readback and the shared CPU dither oracle. */
 @NullMarked
@@ -40,8 +34,26 @@ public final class ReleaseWorldPixelsGameTest implements FabricClientGameTest {
   @Override
   public void runTest(ClientGameTestContext context) {
     ReleaseGraphics.check(context);
-    JsonObject original = settings();
+    runScene(context, false);
+  }
+
+  static void runScene(ClientGameTestContext context, boolean translucent) {
+    runScene(context, translucent, 1, false);
+  }
+
+  static void runScaledScene(ClientGameTestContext context, float scale) {
+    runScene(context, false, scale, true);
+  }
+
+  private static void runScene(
+      ClientGameTestContext context, boolean translucent, float scale, boolean scaled) {
+    JsonObject original = context.computeOnClient(client -> currentSettings());
     boolean originalHud = context.computeOnClient(ReleaseWorldTarget::hudHidden);
+    Object transparency = context.computeOnClient(ReleaseTransparencySettings::snapshot);
+    String scenario =
+        translucent
+            ? "world-transparency-" + context.computeOnClient(ReleaseTransparencySettings::enabled)
+            : scaled ? "world-renderscale-" + scale : "world-pixels";
     FabricClientCommandSource source = ReleaseGenerationGameTest.silentSource();
     try (var world = context.worldBuilder().create()) {
       var server = world.getServer();
@@ -52,35 +64,38 @@ public final class ReleaseWorldPixelsGameTest implements FabricClientGameTest {
       server.runCommand("fill -8 -64 5 -3 -55 5 minecraft:red_concrete");
       server.runCommand("fill 2 -57 5 8 -50 5 minecraft:blue_concrete");
       server.runCommand("setblock -1 -56 5 minecraft:glowstone");
+      if (translucent) {
+        server.runCommand("fill -8 -64 3 8 -50 3 minecraft:blue_stained_glass");
+      }
       server.runCommand("tp @a 0.5 -58 0.5 0 0");
       ReleaseViewport.waitForChunks(world);
       CommandDispatcher<FabricClientCommandSource> dispatcher =
           Objects.requireNonNull(
-              context.computeOnClient(client -> ClientCommands.getActiveDispatcher()));
-      context.runOnClient(
-          client -> {
-            ReleaseWorldTarget.hideHud(client, true);
-            command(dispatcher, source, "mode set disabled");
-            command(dispatcher, source, "stbn size " + SIZE);
-            command(dispatcher, source, "stbn depth " + DEPTH);
-            command(dispatcher, source, "stbn seed " + SEED);
-            command(dispatcher, source, "format set rgba32f");
-            command(dispatcher, source, "stbn generate");
-          });
+              context.computeOnClient(client -> ReleaseCommands.getActiveDispatcher()));
       try {
+        context.runOnClient(
+            client -> {
+              ReleaseWorldTarget.hideHud(client, true);
+              command(dispatcher, source, "mode set disabled");
+              command(dispatcher, source, "stbn size " + SIZE);
+              command(dispatcher, source, "stbn depth " + DEPTH);
+              command(dispatcher, source, "stbn seed " + SEED);
+              command(dispatcher, source, "format set rgba32f");
+              command(dispatcher, source, "stbn generate");
+            });
         context.waitFor(client -> Files.isRegularFile(noisePath()), WAIT_TICKS);
         context.waitTicks(20);
-        Capture disabled = capture(context, "disabled", false);
+        Capture disabled = capture(context, "disabled", false, scenario, scale, scaled);
         checkDisabled(disabled);
         command(context, dispatcher, source, "mode set enabled");
-        context.waitFor(client -> ReleaseWorldTarget.noise() != null, WAIT_TICKS);
+        context.waitFor(client -> ReleaseWorldCapture.noiseReady(), WAIT_TICKS);
         context.waitTicks(20);
-        Capture enabled = capture(context, "enabled", true);
-        int enabledChanged = checkDither(enabled, false);
+        Capture enabled = capture(context, "enabled", true, scenario, scale, scaled);
+        int enabledChanged = checkDither(enabled, false, translucent);
         command(context, dispatcher, source, "mode set demo");
         context.waitTicks(10);
-        Capture demo = capture(context, "demo", true);
-        int demoChanged = checkDither(demo, true);
+        Capture demo = capture(context, "demo", true, scenario, scale, scaled);
+        int demoChanged = checkDither(demo, true, translucent);
         if (disabled.width() != enabled.width()
             || enabled.width() != demo.width()
             || disabled.height() != enabled.height()
@@ -88,7 +103,7 @@ public final class ReleaseWorldPixelsGameTest implements FabricClientGameTest {
           throw new AssertionError("World screenshot dimensions changed across modes");
         }
         String backend = context.computeOnClient(client -> ReleaseBackend.identity()[0]);
-        writeReceipt(disabled, enabled, demo, enabledChanged, demoChanged, backend);
+        writeReceipt(disabled, enabled, demo, enabledChanged, demoChanged, backend, scenario);
       } finally {
         context.runOnClient(
             client -> {
@@ -106,12 +121,19 @@ public final class ReleaseWorldPixelsGameTest implements FabricClientGameTest {
                   source,
                   "mode set " + original.get("mode").getAsString().toLowerCase(Locale.ROOT));
               ReleaseWorldTarget.hideHud(client, originalHud);
+              ReleaseTransparencySettings.restore(client, transparency);
             });
       }
     }
   }
 
-  private static Capture capture(ClientGameTestContext context, String mode, boolean floating) {
+  private static Capture capture(
+      ClientGameTestContext context,
+      String mode,
+      boolean floating,
+      String scenario,
+      float scale,
+      boolean scaled) {
     Capture capture =
         context.computeOnClient(
             client -> {
@@ -119,19 +141,52 @@ public final class ReleaseWorldPixelsGameTest implements FabricClientGameTest {
               int width = main.width;
               int height = main.height;
               if (width <= 0 || height <= 0) throw new AssertionError("Empty world viewport");
-              GpuTexture color = Objects.requireNonNull(main.getColorTexture());
               String format = floating ? "rgba32f" : "rgba8";
-              if (!format.equals(ReleaseAllocationFormat.actual(color))) {
+              if (!format.equals(ReleaseWorldCapture.format(main))) {
                 throw new AssertionError("World main target is not " + format);
               }
+              int scaledWidth = width;
+              int scaledHeight = height;
+              if (scaled) {
+                RenderTarget target =
+                    (RenderTarget)
+                        Objects.requireNonNull(
+                            RenderScaleTestAccess.field(
+                                Objects.requireNonNull(
+                                    RenderScaleTestAccess.call(null, "getInstance")),
+                                "renderTarget"));
+                scaledWidth = target.width;
+                scaledHeight = target.height;
+                String scaledFormat = ReleaseWorldCapture.format(target);
+                if (scaledWidth != ReleaseWorldCapture.scaledDimension(width, scale)
+                    || scaledHeight != ReleaseWorldCapture.scaledDimension(height, scale)
+                    || (floating && !format.equals(scaledFormat))) {
+                  throw new AssertionError(
+                      "RenderScale dimensions or precision differ at "
+                          + scale
+                          + ": main="
+                          + width
+                          + "x"
+                          + height
+                          + " scaled="
+                          + scaledWidth
+                          + "x"
+                          + scaledHeight
+                          + " mode="
+                          + mode
+                          + " expectedFormat="
+                          + format
+                          + " actualFormat="
+                          + scaledFormat);
+                }
+              }
               Path imagePath =
-                  mode.equals("disabled")
+                  mode.equals("disabled") && scenario.equals("world-pixels")
                       ? evidence().resolve("world-disabled/actual.png")
-                      : evidence().resolve("world-pixels").resolve(mode).resolve("actual.png");
-              CompletableFuture<byte[]> source =
-                  read(color, width * height * (floating ? 16 : 4), floating);
+                      : evidence().resolve(scenario).resolve(mode).resolve("actual.png");
+              CompletableFuture<byte[]> source = ReleaseWorldCapture.source(main, floating);
               CompletableFuture<int[]> screenshot = new CompletableFuture<>();
-              Screenshot.takeScreenshot(
+              ReleaseWorldCapture.screenshot(
                   main,
                   image -> {
                     try (image) {
@@ -140,20 +195,23 @@ public final class ReleaseWorldPixelsGameTest implements FabricClientGameTest {
                       }
                       Files.createDirectories(Objects.requireNonNull(imagePath.getParent()));
                       image.writeToFile(imagePath);
-                      screenshot.complete(image.getPixels());
+                      screenshot.complete(ReleaseImagePixels.pixels(image));
                     } catch (Throwable failure) {
                       screenshot.completeExceptionally(failure);
                     }
                   });
-              GpuTexture noise = floating ? ReleaseWorldTarget.noise() : null;
-              if (floating && noise == null) {
-                throw new AssertionError("World screenshot had no presented noise texture");
-              }
-              CompletableFuture<byte[]> noiseBytes =
-                  noise == null
-                      ? CompletableFuture.completedFuture(new byte[0])
-                      : read(noise, noise.getWidth(0) * noise.getHeight(0) * 4, false);
-              return new Capture(width, height, source, noiseBytes, screenshot, imagePath);
+              CompletableFuture<byte[]> noisePixels = ReleaseWorldCapture.noise(floating);
+              JsonObject transparency = ReleaseTransparencySettings.evidence(client, floating);
+              return new Capture(
+                  width,
+                  height,
+                  scaledWidth,
+                  scaledHeight,
+                  source,
+                  noisePixels,
+                  screenshot,
+                  imagePath,
+                  transparency);
             });
     context.waitFor(
         client ->
@@ -163,66 +221,6 @@ public final class ReleaseWorldPixelsGameTest implements FabricClientGameTest {
     capture.noise().join();
     capture.screenshot().join();
     return capture;
-  }
-
-  static CompletableFuture<byte[]> read(GpuTexture texture, int length, boolean floating) {
-    if (texture instanceof GlTexture gl) {
-      int bound = GL11.glGetInteger(GL11.GL_TEXTURE_BINDING_2D);
-      int rowLength = GL11.glGetInteger(GL11.GL_PACK_ROW_LENGTH);
-      int skipRows = GL11.glGetInteger(GL11.GL_PACK_SKIP_ROWS);
-      int skipPixels = GL11.glGetInteger(GL11.GL_PACK_SKIP_PIXELS);
-      int alignment = GL11.glGetInteger(GL11.GL_PACK_ALIGNMENT);
-      try {
-        GL11.glPixelStorei(GL11.GL_PACK_ROW_LENGTH, 0);
-        GL11.glPixelStorei(GL11.GL_PACK_SKIP_ROWS, 0);
-        GL11.glPixelStorei(GL11.GL_PACK_SKIP_PIXELS, 0);
-        GL11.glPixelStorei(GL11.GL_PACK_ALIGNMENT, 1);
-        GL11.glBindTexture(GL11.GL_TEXTURE_2D, gl.glId());
-        ByteBuffer bytes = ByteBuffer.allocateDirect(length).order(ByteOrder.nativeOrder());
-        GL11.glGetTexImage(
-            GL11.GL_TEXTURE_2D,
-            0,
-            GL11.GL_RGBA,
-            floating ? GL11.GL_FLOAT : GL11.GL_UNSIGNED_BYTE,
-            bytes);
-        byte[] result = new byte[length];
-        bytes.get(0, result);
-        return CompletableFuture.completedFuture(result);
-      } finally {
-        GL11.glBindTexture(GL11.GL_TEXTURE_2D, bound);
-        GL11.glPixelStorei(GL11.GL_PACK_ROW_LENGTH, rowLength);
-        GL11.glPixelStorei(GL11.GL_PACK_SKIP_ROWS, skipRows);
-        GL11.glPixelStorei(GL11.GL_PACK_SKIP_PIXELS, skipPixels);
-        GL11.glPixelStorei(GL11.GL_PACK_ALIGNMENT, alignment);
-      }
-    }
-    GpuBuffer buffer =
-        RenderSystem.getDevice()
-            .createBuffer(
-                () -> "CBBG world readback",
-                GpuBuffer.USAGE_MAP_READ | GpuBuffer.USAGE_COPY_DST,
-                length);
-    CompletableFuture<byte[]> result = new CompletableFuture<>();
-    try {
-      RenderSystem.getDevice()
-          .createCommandEncoder()
-          .copyTextureToBuffer(
-              texture,
-              buffer,
-              0,
-              () -> {
-                try (buffer) {
-                  result.complete(ReleaseWorldTarget.mapped(buffer, length));
-                } catch (Throwable failure) {
-                  result.completeExceptionally(failure);
-                }
-              },
-              0);
-    } catch (RuntimeException | Error failure) {
-      buffer.close();
-      result.completeExceptionally(failure);
-    }
-    return result;
   }
 
   private static void checkDisabled(Capture capture) {
@@ -259,7 +257,7 @@ public final class ReleaseWorldPixelsGameTest implements FabricClientGameTest {
     }
   }
 
-  private static int checkDither(Capture capture, boolean demo) {
+  private static int checkDither(Capture capture, boolean demo, boolean translucent) {
     byte[] raw = capture.source().join();
     byte[] noise = capture.noise().join();
     int[] screenshot = capture.screenshot().join();
@@ -273,6 +271,9 @@ public final class ReleaseWorldPixelsGameTest implements FabricClientGameTest {
     if (!(strength > 0)) throw new AssertionError("World reference requires positive strength");
     int changed = 0;
     int mismatched = 0;
+    int fractionalChannels = 0;
+    float scaleX = Math.min((float) capture.scaledWidth() / width, 1);
+    float scaleY = Math.min((float) capture.scaledHeight() / height, 1);
     String first = "";
     try (NativeImage expectedImage = new NativeImage(width, height, false)) {
       for (int y = 0; y < height; y++) {
@@ -283,13 +284,19 @@ public final class ReleaseWorldPixelsGameTest implements FabricClientGameTest {
             throw new AssertionError("World screenshot alpha is not opaque");
           }
           int expectedPixel = 0xff000000;
-          int noiseBase =
-              (DitherReference.noiseCoordinate(gpuY, 1, SIZE) * SIZE
-                      + DitherReference.noiseCoordinate(x, 1, SIZE))
-                  * 4;
+          // RenderScale truncates each internal dimension independently. Its pixels are
+          // selected by the output pixel center, rather than by a rounded nominal scale.
+          int noiseX = Math.floorMod((int) Math.floor((x + 0.5) * scaleX), SIZE);
+          int noiseY = Math.floorMod((int) Math.floor((gpuY + 0.5) * scaleY), SIZE);
+          int noiseBase = (noiseY * SIZE + noiseX) * 4;
           for (int channel = 0; channel < 3; channel++) {
             float input = floats.getFloat(((gpuY * width + x) * 4 + channel) * 4);
             if (!Float.isFinite(input)) throw new AssertionError("Nonfinite world color source");
+            if (input > 0
+                && input < 1
+                && Math.abs(input * 255 - Math.round(input * 255)) > 0.002f) {
+              fractionalChannels++;
+            }
             int noiseByte = Byte.toUnsignedInt(noise[noiseBase + channel]);
             int expected = DitherReference.channel(input, noiseByte, strength, x, width, demo);
             int plain = DitherReference.channel(input, noiseByte, 0, x, width, demo);
@@ -308,14 +315,32 @@ public final class ReleaseWorldPixelsGameTest implements FabricClientGameTest {
               }
             }
           }
-          expectedImage.setPixel(x, y, expectedPixel);
+          ReleaseImagePixels.setArgb(expectedImage, x, y, expectedPixel);
         }
       }
       Path expectedPath =
           Objects.requireNonNull(capture.image().getParent()).resolve("expected.png");
       expectedImage.writeToFile(expectedPath);
+      Path directory = Objects.requireNonNull(capture.image().getParent());
+      Files.write(directory.resolve("source-rgba32f.bin"), raw);
+      Files.write(directory.resolve("noise-rgba8.bin"), noise);
+      JsonObject receipt = new JsonObject();
+      receipt.addProperty("width", width);
+      receipt.addProperty("height", height);
+      receipt.addProperty("scaledWidth", capture.scaledWidth());
+      receipt.addProperty("scaledHeight", capture.scaledHeight());
+      receipt.addProperty("coordinateScaleX", scaleX);
+      receipt.addProperty("coordinateScaleY", scaleY);
+      receipt.addProperty("sourceByteOrder", ByteOrder.nativeOrder().toString());
+      receipt.addProperty("changedChannels", changed);
+      receipt.addProperty("fractionalChannels", fractionalChannels);
+      receipt.addProperty("mismatchedChannels", mismatched);
+      Files.writeString(directory.resolve("comparison.json"), receipt.toString());
     } catch (java.io.IOException failure) {
       throw new AssertionError("Cannot save CPU world reference", failure);
+    }
+    if (translucent && fractionalChannels == 0) {
+      throw new AssertionError("Transparency quantized the world before dithering");
     }
     if (changed == 0) throw new AssertionError("World scene cannot detect dithering");
     if (mismatched != 0) {
@@ -330,14 +355,19 @@ public final class ReleaseWorldPixelsGameTest implements FabricClientGameTest {
       Capture demo,
       int enabledChanged,
       int demoChanged,
-      String backend) {
+      String backend,
+      String scenario) {
     try {
       byte[] controlImage = Files.readAllBytes(disabled.image());
       byte[] digest = MessageDigest.getInstance("SHA-256").digest(controlImage);
       JsonObject receipt = new JsonObject();
       receipt.addProperty("minecraftVersion", version());
+      receipt.add("disabledTransparency", disabled.transparency());
+      receipt.add("enabledTransparency", enabled.transparency());
+      receipt.add("demoTransparency", demo.transparency());
       receipt.addProperty("backend", backend);
-      receipt.addProperty("scene", "spectator-concrete-glowstone-v1");
+      receipt.addProperty(
+          "scene", scenario.equals("world-pixels") ? "spectator-concrete-glowstone-v1" : scenario);
       receipt.addProperty("width", disabled.width());
       receipt.addProperty("height", disabled.height());
       receipt.addProperty("disabledImageSha256", HexFormat.of().formatHex(digest));
@@ -349,7 +379,11 @@ public final class ReleaseWorldPixelsGameTest implements FabricClientGameTest {
       receipt.addProperty("demoChangedChannels", demoChanged);
       receipt.addProperty("enabledImage", enabled.image().toString());
       receipt.addProperty("demoImage", demo.image().toString());
-      Files.writeString(evidence().resolve("world-comparison.json"), receipt.toString());
+      Path receiptPath =
+          scenario.equals("world-pixels")
+              ? evidence().resolve("world-comparison.json")
+              : evidence().resolve(scenario).resolve("comparison.json");
+      Files.writeString(receiptPath, receipt.toString());
     } catch (java.io.IOException | NoSuchAlgorithmException failure) {
       throw new AssertionError("Cannot save world comparison receipt", failure);
     }
@@ -383,6 +417,35 @@ public final class ReleaseWorldPixelsGameTest implements FabricClientGameTest {
     }
   }
 
+  /** Read effective settings; config files may omit defaults. */
+  static JsonObject currentSettings() {
+    String owner = "com.qb20nh.cbbg.config.CbbgConfig";
+    try {
+      Class<?> type = Class.forName(ReleaseMapping.className(owner));
+      Object current =
+          Objects.requireNonNull(
+              type.getMethod(ReleaseMapping.memberName(owner, owner + " get()")).invoke(null));
+      JsonObject values = new JsonObject();
+      for (var entry :
+          Map.of(
+                  "stbnSize", "int stbnSize",
+                  "stbnDepth", "int stbnDepth",
+                  "stbnSeed", "long stbnSeed",
+                  "mode", owner + "$Mode mode",
+                  "pixelFormat", owner + "$PixelFormat pixelFormat")
+              .entrySet()) {
+        var field = type.getDeclaredField(ReleaseMapping.memberName(owner, entry.getValue()));
+        field.setAccessible(true);
+        Object value = Objects.requireNonNull(field.get(current));
+        if (value instanceof Number number) values.addProperty(entry.getKey(), number);
+        else values.addProperty(entry.getKey(), ((Enum<?>) value).name());
+      }
+      return values;
+    } catch (ReflectiveOperationException failure) {
+      throw new LinkageError("Cannot read packaged CBBG settings", failure);
+    }
+  }
+
   private static void command(
       ClientGameTestContext context,
       CommandDispatcher<FabricClientCommandSource> dispatcher,
@@ -401,8 +464,11 @@ public final class ReleaseWorldPixelsGameTest implements FabricClientGameTest {
   private record Capture(
       int width,
       int height,
+      int scaledWidth,
+      int scaledHeight,
       CompletableFuture<byte[]> source,
       CompletableFuture<byte[]> noise,
       CompletableFuture<int[]> screenshot,
-      Path image) {}
+      Path image,
+      JsonObject transparency) {}
 }

@@ -19,11 +19,11 @@ class CodeqlScanTest {
     @Test
     void coversArtifactOwnersAndPreservesHistoricalCategory() {
         List<Map> rows = CodeqlScan.targets(new TargetCatalog(catalog()), '26.2-fabric')
-        assertEquals(['26.1-fabric', '26.2-fabric', '26.3-fabric'] as Set, rows*.id as Set)
-        assertEquals(3, rows.size())
+        assertEquals(['1.21.1-fabric', '1.21.11-fabric', '26.1-fabric', '26.2-fabric', '26.3-fabric'] as Set, rows*.id as Set)
+        assertEquals(5, rows.size())
         assertEquals('/language:java-kotlin', rows.find { it.id == '26.2-fabric' }.category)
         assertEquals('/language:java-kotlin/target:26.1-fabric', rows.find { it.id == '26.1-fabric' }.category)
-        assertEquals(3, rows*.category.toSet().size())
+        assertEquals(5, rows*.category.toSet().size())
         Map data = catalog()
         data.ciTargets.remove('26.2-fabric')
         data.targets.find { it.id == '26.2-fabric' }.implemented = false
@@ -34,6 +34,9 @@ class CodeqlScanTest {
     @Test
     void includesNewImplementedOwnersEvenOutsideCiSelection() {
         Map data = catalog()
+        data.ciTargets.remove('1.21.11-fabric')
+        data.targets.find { it.id == '1.21.11-fabric' }.implemented = false
+        assertFalse(CodeqlScan.targets(new TargetCatalog(data), '26.2-fabric')*.id.contains('1.21.11-fabric'))
         data.targets.find { it.id == '1.21.11-fabric' }.implemented = true
         assertTrue(CodeqlScan.targets(new TargetCatalog(data), '26.2-fabric')*.id.contains('1.21.11-fabric'))
         assertThrows(IllegalArgumentException) {
@@ -102,7 +105,7 @@ elif args[1] == 'analyze':
         File root = fixture()
         runner(root).build()
         File output = new File(root, '.gradle/codeql-results')
-        assertEquals(['26.1-fabric.sarif', '26.2-fabric.sarif', '26.2-fabric-target.sarif', '26.3-fabric.sarif'] as Set,
+        assertEquals(['1.21.1-fabric.sarif', '1.21.11-fabric.sarif', '26.1-fabric.sarif', '26.2-fabric.sarif', '26.2-fabric-target.sarif', '26.3-fabric.sarif'] as Set,
                 new File(output, 'sarif').list() as Set)
         Map primary = new JsonSlurper().parse(new File(output, 'sarif/26.2-fabric.sarif')) as Map
         Map target = new JsonSlurper().parse(new File(output, 'sarif/26.2-fabric-target.sarif')) as Map
@@ -112,8 +115,8 @@ elif args[1] == 'analyze':
         assertEquals(primary, target)
         List<Map> calls = new File(root, 'calls.jsonl').readLines().collect { new JsonSlurper().parseText(it) as Map }
         List<Map> builds = calls.findAll { it.args[1] == 'trace-command' }
-        assertEquals(3, builds*.args.collect { it[2] }.toSet().size())
-        assertEquals(3, calls.count { it.args[1] == 'analyze' })
+        assertEquals(5, builds*.args.collect { it[2] }.toSet().size())
+        assertEquals(5, calls.count { it.args[1] == 'analyze' })
         builds.each { call ->
             assertTrue(new File(call.java as String).isDirectory())
             List<String> command = call.args.drop(4)
@@ -123,7 +126,7 @@ elif args[1] == 'analyze':
             assertFalse(new File(call.args[2] as String).exists())
         }
         runner(root).build()
-        assertEquals(24, new File(root, 'calls.jsonl').readLines().size())
+        assertEquals(40, new File(root, 'calls.jsonl').readLines().size())
     }
 
     @Test

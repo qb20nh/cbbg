@@ -3,4 +3,5 @@ pluginManagement {
 }
 
 rootProject.name = 'cbbg-core'
+includeBuild('../libraries/utilities') { name = 'cbbg-utilities' }
 include 'rendering', 'legacy'

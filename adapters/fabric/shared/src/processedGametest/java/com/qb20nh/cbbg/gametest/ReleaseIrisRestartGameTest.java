@@ -6,7 +6,6 @@ import com.mojang.blaze3d.platform.NativeImage;
 import java.nio.file.Files;
 import java.util.Objects;
 import java.util.Optional;
-import net.fabricmc.fabric.api.client.command.v2.ClientCommands;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.loader.api.FabricLoader;
@@ -59,7 +58,7 @@ public final class ReleaseIrisRestartGameTest implements FabricClientGameTest {
       if (!phase.equals("verify")) {
         context.runOnClient(
             client -> {
-              var dispatcher = Objects.requireNonNull(ClientCommands.getActiveDispatcher());
+              var dispatcher = Objects.requireNonNull(ReleaseCommands.getActiveDispatcher());
               var source = ReleaseGenerationGameTest.silentSource();
               ReleaseGenerationGameTest.command(
                   dispatcher,

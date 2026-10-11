@@ -2,6 +2,7 @@ package com.qb20nh.cbbg.gametest;
 
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.platform.Window;
+import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.fabric.api.client.gametest.v1.context.TestSingleplayerContext;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.Screen;
@@ -17,11 +18,15 @@ final class ReleaseViewport {
   }
 
   static void waitForChunks(TestSingleplayerContext world) {
-    world.getClientLevel().waitForChunksRender();
+    ReleaseWorldAccess.waitForChunksRender(world);
   }
 
   static RenderTarget mainTarget(Minecraft client) {
     return client.getMainRenderTarget();
+  }
+
+  static void resizeWindow(ClientGameTestContext context, int width, int height) {
+    context.getInput().resizeWindow(width, height);
   }
 
   static int framebufferWidth(Window window) {

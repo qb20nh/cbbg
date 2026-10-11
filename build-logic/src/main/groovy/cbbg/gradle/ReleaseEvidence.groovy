@@ -29,7 +29,7 @@ class ReleaseEvidence {
 
     private static File archive(CandidateManifest candidate, String target) {
         new File(candidate.file.parentFile,
-                'cbbg-' + CandidateFiles.releaseVersion(candidate.data.release as String) + '-' + target + '-evidence.zip')
+                (candidate.identity.product == 'lib' ? 'cbbg-lib-' : 'cbbg-') + candidate.identity.version + '-' + target + '-evidence.zip')
     }
 
     static Map assemble(CandidateManifest candidate, String target) {
@@ -55,6 +55,7 @@ class ReleaseEvidence {
                     zip.close()
                 }
             }
+            ReproducibleJar.normalize(output)
             if (files.any { name, file -> CandidateFiles.sha256(file) != hashes[name] } ||
                     !Arrays.equals(checksumList, checksums(candidate))) {
                 throw new GradleException('Release evidence changed while packaging')

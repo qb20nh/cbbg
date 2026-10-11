@@ -1,0 +1,7 @@
+{
+  "targets": ["satinfixture"],
+  "passes": [
+    {"name": "blit", "intarget": "minecraft:main", "outtarget": "satinfixture"},
+    {"name": "blit", "intarget": "satinfixture", "outtarget": "minecraft:main"}
+  ]
+}

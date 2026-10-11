@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "product": "lib",
+  "target": "26.2-fabric",
+  "ordinaryMetadata": "libraries/fabric/src/processedGametest/resources/fabric.mod.json",
+  "additionalRuns": [],
+  "ordinaryProfiles": [
+    "none"
+  ]
+}

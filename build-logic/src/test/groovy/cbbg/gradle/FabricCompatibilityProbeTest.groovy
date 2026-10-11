@@ -5,11 +5,81 @@ import groovy.json.JsonSlurper
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import org.gradle.testfixtures.ProjectBuilder
+import org.gradle.api.GradleException
 
 import static org.junit.jupiter.api.Assertions.*
 
 class FabricCompatibilityProbeTest {
     @TempDir File directory
+
+    @Test void selectsDisplayForTheMinecraftWindowingApi() {
+        ['1.21.1': 21, '1.21.11': 21, '26.1': 25, '26.1.1': 25, '26.1.2': 25, '26.2': 25].each { version, java ->
+            assertTrue(FabricCompatibilityProbe.usesX11([minecraft: version, java: java]), version)
+        }
+        assertFalse(FabricCompatibilityProbe.usesX11([minecraft: '26.3', java: 25]))
+    }
+
+    @Test void attributesDependencyErrorsToTheReportedMods() {
+        String framework = 'HARD_DEP cbbg-renderer-test 1.0.0 {depends fabric-client-gametest-api-v1 @ [*]}, ' +
+                'HARD_DEP_NO_CANDIDATE fabric-client-gametest-api-v1 2.0.0 {depends fabricloader @ [>=0.16.0]}'
+        Map blocked = FabricCompatibilityProbe.dependencyFailure(framework, false)
+        assertEquals('blocked', blocked.status)
+        assertTrue(blocked.reason.contains('fabric-client-gametest-api-v1'))
+        String production = 'HARD_DEP cbbg 1.5.0 {depends mixinextras @ [>=0.4.0]}, ' + framework
+        Map failed = FabricCompatibilityProbe.dependencyFailure(production, false)
+        assertEquals('failed', failed.status)
+        assertTrue(failed.reason.contains('cbbg 1.5.0 {depends mixinextras'))
+        assertTrue(failed.reason.contains('fabric-client-gametest-api-v1'))
+        assertEquals('failed', FabricCompatibilityProbe.dependencyFailure(production, true).status)
+        String override = 'HARD_DEP cbbg 1.5.0 {depends fabricloader @ [>=0.19.5]}'
+        assertEquals('blocked', FabricCompatibilityProbe.dependencyFailure(override, false).status)
+        assertEquals('failed', FabricCompatibilityProbe.dependencyFailure(override, true).status)
+        assertEquals('blocked', FabricCompatibilityProbe.dependencyFailure(
+                'HARD_DEP cbbg-renderer-test 1.0.0 {depends fabricloader @ [>=0.19.5]}', false).status)
+        assertEquals([:], FabricCompatibilityProbe.dependencyFailure('java.lang.AssertionError: Pixels differ', false))
+    }
+
+    @Test void admitsOnlyMatchingStartupAndSuppliedConfigInputs() {
+        File config = new File(directory, 'settings.json')
+        config.text = '{"mode":"ENABLED","pixelFormat":"RGBA16F","stbnSize":16,' +
+                '"stbnDepth":8,"stbnSeed":74123,"strength":2}'
+        File cache = new File(directory, 'startup-cache')
+        cache.mkdirs()
+        FabricCompatibilityProbe.requireLocalInputs(true, null, config, null, 'none')
+        FabricCompatibilityProbe.requireLocalInputs(true, 'cold', config, null, 'none')
+        ['warm', 'damaged', 'seed-mismatch'].each { mode ->
+            FabricCompatibilityProbe.requireLocalInputs(true, mode, config, cache, 'none')
+            assertThrows(GradleException) {
+                FabricCompatibilityProbe.requireLocalInputs(true, mode, config, null, 'none')
+            }
+        }
+        [null, 'cold'].each { mode ->
+            assertThrows(GradleException) {
+                FabricCompatibilityProbe.requireLocalInputs(true, mode, config, cache, 'none')
+            }
+        }
+        assertThrows(GradleException) {
+            FabricCompatibilityProbe.requireLocalInputs(false, null, config, null, 'none')
+        }
+        assertThrows(GradleException) {
+            FabricCompatibilityProbe.requireLocalInputs(true, null, new File(directory, 'absent'), null, 'none')
+        }
+        assertThrows(GradleException) {
+            FabricCompatibilityProbe.requireLocalInputs(true, 'warm', config, config, 'none')
+        }
+        assertThrows(GradleException) {
+            FabricCompatibilityProbe.requireLocalInputs(true, 'cold', config, null, 'sodium')
+        }
+        assertThrows(GradleException) {
+            FabricCompatibilityProbe.requireLocalInputs(true, 'unknown', config, null, 'none')
+        }
+        assertEquals('ENABLED', (new JsonSlurper().parse(config) as Map).mode)
+        assertEquals(74123, (new JsonSlurper().parse(config) as Map).stbnSeed)
+        config.text = '[]'
+        assertThrows(GradleException) {
+            FabricCompatibilityProbe.requireLocalInputs(true, null, config, null, 'none')
+        }
+    }
 
     @Test void runnerCapturesTheRealCommandExitAndOutput() {
         File log = new File(directory, 'run/runner.log')
@@ -18,6 +88,27 @@ class FabricCompatibilityProbeTest {
                 ProjectBuilder.builder().withProjectDir(directory).build().providers, directory)
         assertEquals(0, exit)
         assertTrue(log.text.contains('version'))
+    }
+
+    @Test void admitsRestartOnlyForTheDedicatedBuildOnlyIrisDriver() {
+        FabricCompatibilityProbe.requireLocalInputs(true, null, null, null, 'iris', true,
+                'processedIrisRestartDriverJar')
+        FabricCompatibilityProbe.requireLocalInputs(true, null, null, null,
+                'modmenu+sodium+iris+renderscale+chatpatches', true, 'processedIrisRestartDriverJar')
+        assertThrows(GradleException) {
+            FabricCompatibilityProbe.requireLocalInputs(true, null, new File(directory, 'settings.json'),
+                    null, 'iris', true, 'processedIrisRestartDriverJar')
+        }
+        [[false, 'iris', true, 'processedIrisRestartDriverJar'],
+         [true, 'none', true, 'processedIrisRestartDriverJar'],
+         [true, 'modmenu+sodium', true, 'processedIrisRestartDriverJar'],
+         [true, 'iris', false, 'processedIrisRestartDriverJar'],
+         [true, 'iris', true, 'processedDriverJar']].each { inputs ->
+            assertThrows(GradleException) {
+                FabricCompatibilityProbe.requireLocalInputs(inputs[0] as boolean, null, null, null,
+                        inputs[1] as String, inputs[2] as boolean, inputs[3] as String)
+            }
+        }
     }
 
     @Test void cacheTracksProbeInputsButNotSearchPolicyOrOpenGlVulkanLoader() {
@@ -71,6 +162,34 @@ class FabricCompatibilityProbeTest {
         assertEquals(16, runs)
     }
 
+    @Test void cacheTracksOnlyGraphicsEnvironmentOverrides() {
+        Map inherited = [MESA_GL_VERSION_OVERRIDE: '4.6', LIBGL_ALWAYS_SOFTWARE: '1',
+                         GALLIUM_DRIVER: 'llvmpipe', __GL_SYNC_TO_VBLANK: '0',
+                         __EGL_VENDOR_LIBRARY_FILENAMES: '/vendor.json', DRI_PRIME: '1',
+                         GBM_BACKEND: 'nvidia-drm', LANG: 'en_US.UTF-8', PATH: '/bin']
+        Map snapshot = FabricCompatibilityProbe.graphicsEnvironment(inherited)
+        assertEquals(inherited.keySet().findAll { !(it in ['LANG', 'PATH']) }.sort(),
+                snapshot.keySet().toList())
+        inherited.MESA_GL_VERSION_OVERRIDE = '3.3'
+        assertEquals('4.6', snapshot.MESA_GL_VERSION_OVERRIDE)
+
+        File evidence = new File(directory, 'receipt.json')
+        evidence.text = 'passed'
+        File cache = new File(directory, 'cache')
+        Map inputs = [candidate: 'same-artifact', backend: 'opengl', graphicsEnvironment: snapshot]
+        int runs = 0
+        Closure run = { runs++; [status: 'passed', files: [evidence]] }
+        assertFalse(FabricCompatibilitySearch.cached(cache, inputs, run).cached)
+        assertTrue(FabricCompatibilitySearch.cached(cache, inputs, run).cached)
+        assertFalse(FabricCompatibilitySearch.cached(cache, inputs + [graphicsEnvironment:
+                FabricCompatibilityProbe.graphicsEnvironment(inherited)], run).cached)
+        inherited.LANG = 'ko_KR.UTF-8'
+        inherited.PATH = '/usr/bin'
+        assertTrue(FabricCompatibilitySearch.cached(cache, inputs + [graphicsEnvironment:
+                FabricCompatibilityProbe.graphicsEnvironment(inherited)], run).cached)
+        assertEquals(2, runs)
+    }
+
     @Test void executesThePinnedRuntimeCommandAndClassifiesReceipts() {
         File api = new File(directory, 'api.jar')
         File gametest = new File(directory, 'gametest.jar')
@@ -105,6 +224,59 @@ class FabricCompatibilityProbeTest {
                                     (search.canonicalPath): 'search-1',
                                     (runner.canonicalPath): 'runner-1']]
         Map cacheInputs = FabricCompatibilityProbe.cacheInputs(reportInputs, spec, coordinator, search)
+        Map restartInputs = FabricCompatibilityProbe.cacheInputs(reportInputs, spec + [restart: true],
+                coordinator, search)
+        assertEquals(false, cacheInputs.restart)
+        assertEquals(true, restartInputs.restart)
+        assertNotEquals(cacheInputs, restartInputs)
+        File restartEvidence = new File(directory, 'restart-cache-evidence.json')
+        restartEvidence.text = 'passed'
+        File restartCache = new File(directory, 'restart-cache')
+        Closure restartRun = { [status: 'passed', files: [restartEvidence]] }
+        assertFalse(FabricCompatibilitySearch.cached(restartCache, cacheInputs, restartRun).cached)
+        assertFalse(FabricCompatibilitySearch.cached(restartCache, restartInputs, restartRun).cached)
+        assertTrue(FabricCompatibilitySearch.cached(restartCache, restartInputs, restartRun).cached)
+        File startupCache = new File(directory, 'startup-cache')
+        startupCache.mkdirs()
+        File cachedNoise = new File(startupCache, 'noise.png')
+        cachedNoise.text = 'noise'
+        Map startupSpec = spec + [startupMode: 'warm', startupCache: startupCache]
+        Map startupInputs = FabricCompatibilityProbe.cacheInputs(reportInputs, startupSpec, coordinator, search)
+        assertEquals('warm', startupInputs.startupMode)
+        assertEquals(startupCache.canonicalPath, startupInputs.startupCache.directory)
+        assertEquals(CandidateFiles.sha256(cachedNoise), startupInputs.startupCache.files[cachedNoise.canonicalPath])
+        File startupEvidence = new File(directory, 'startup-receipt.json')
+        startupEvidence.text = 'passed'
+        File resultCache = new File(directory, 'startup-results')
+        int startupRuns = 0
+        Closure startupRun = { startupRuns++; [status: 'passed', files: [startupEvidence]] }
+        assertFalse(FabricCompatibilitySearch.cached(resultCache, startupInputs, startupRun).cached)
+        assertTrue(FabricCompatibilitySearch.cached(resultCache, startupInputs, startupRun).cached)
+        ['damaged', 'seed-mismatch'].each { mode ->
+            assertFalse(FabricCompatibilitySearch.cached(resultCache,
+                    FabricCompatibilityProbe.cacheInputs(reportInputs, startupSpec + [startupMode: mode],
+                            coordinator, search), startupRun).cached)
+        }
+        cachedNoise.text = 'changed noise'
+        assertFalse(FabricCompatibilitySearch.cached(resultCache,
+                FabricCompatibilityProbe.cacheInputs(reportInputs, startupSpec, coordinator, search), startupRun).cached)
+        File added = new File(startupCache, 'nested/additional.png')
+        added.parentFile.mkdirs()
+        added.text = 'additional'
+        assertFalse(FabricCompatibilitySearch.cached(resultCache,
+                FabricCompatibilityProbe.cacheInputs(reportInputs, startupSpec, coordinator, search), startupRun).cached)
+        cachedNoise.delete()
+        assertFalse(FabricCompatibilitySearch.cached(resultCache,
+                FabricCompatibilityProbe.cacheInputs(reportInputs, startupSpec, coordinator, search), startupRun).cached)
+        File otherCache = new File(directory, 'other-startup-cache')
+        new File(otherCache, 'nested').mkdirs()
+        new File(otherCache, 'nested/additional.png').text = added.text
+        assertFalse(FabricCompatibilitySearch.cached(resultCache,
+                FabricCompatibilityProbe.cacheInputs(reportInputs, startupSpec + [startupCache: otherCache],
+                        coordinator, search), startupRun).cached)
+        assertEquals(7, startupRuns)
+        Map environment = cacheInputs.graphicsEnvironment
+        assertSame(environment, spec.graphicsEnvironment)
         assertFalse(cacheInputs.files.containsKey(coordinator.canonicalPath))
         assertEquals(CandidateFiles.sha256(spec.python as File), cacheInputs.python.sha256)
         assertEquals(CandidateFiles.sha256(spec.java as File), cacheInputs.java.sha256)
@@ -124,17 +296,109 @@ class FabricCompatibilityProbeTest {
         }
         assertEquals('passed', passed.status)
         assertNull(passed.reason)
+        assertSame(environment, passed.graphicsEnvironment)
+        assertEquals(environment, (new JsonSlurper().parse(new File(passed.receipt)) as Map).graphicsEnvironment)
         assertEquals('26.1.1-fabric', command[command.indexOf('--target') + 1])
         assertEquals('0.145.4+26.1.1', command[command.indexOf('--gametest-api-version') + 1])
         assertEquals(gametest, command[command.indexOf('--gametest-api') + 1])
         assertEquals(runtimeLock, command[command.indexOf('--runtime-lock') + 1])
         assertTrue(command.contains('--test-dependency-minimums'))
         assertTrue(command.contains('sodium=' + optional.absolutePath))
+        File external = new File(directory, 'cbbg-lib.jar')
+        external.text = 'External standalone library'
+        Map librarySpec = spec + [externalLibrary: external, config: null]
+        Map externalInputs = FabricCompatibilityProbe.cacheInputs(reportInputs, librarySpec, coordinator, search)
+        assertNull(externalInputs.initialConfig)
+        assertEquals(CandidateFiles.sha256(external), externalInputs.externalLibrary)
+        FabricCompatibilityProbe.execute(librarySpec) { List args, File log ->
+            assertFalse(args.contains('--cbbg-config'))
+            assertEquals(external, args[args.indexOf('--external-library') + 1])
+            File game = args[args.indexOf('--game-dir') + 1] as File
+            game.mkdirs()
+            new File(game, 'probe.json').text = JsonOutput.toJson([exitCode: 0, scenarios: [ok: true]])
+            log.text = 'External library probe completed'
+            0
+        }
+        external.append('changed bytes')
+        assertNotEquals(externalInputs, FabricCompatibilityProbe.cacheInputs(reportInputs, librarySpec, coordinator, search))
+        assertFalse(command.contains('--startup-mode'))
+        assertFalse(command.contains('--startup-cache'))
+        ['cold', 'warm', 'damaged', 'seed-mismatch'].each { mode ->
+            File selectedCache = mode == 'cold' ? null : startupCache
+            FabricCompatibilityProbe.execute(spec + [startupMode: mode, startupCache: selectedCache]) { List args, File log ->
+                assertEquals(mode, args[args.indexOf('--startup-mode') + 1])
+                assertEquals(selectedCache != null, args.contains('--startup-cache'))
+                if (selectedCache != null) assertEquals(selectedCache, args[args.indexOf('--startup-cache') + 1])
+                assertEquals(spec.config, args[args.indexOf('--cbbg-config') + 1])
+                log.text = 'forwarded startup inputs'
+                1
+            }
+        }
         File lock = command[command.indexOf('--dependency-lock') + 1] as File
         Map recorded = new JsonSlurper().parse(lock) as Map
         assertEquals('26.1.1-fabric', recorded.target)
         assertEquals('0.145.4+26.1.1', recorded.gametestApi.fabricApiPin)
         assertEquals('0.143.12+26.1', recorded.dependencies.fabricApi.pin)
+
+        File packagedLock = new File(directory, 'packaged-dependencies.json')
+        packagedLock.text = '{"immutable":"packaged lock"}\n'
+        String packagedHash = CandidateFiles.sha256(packagedLock)
+        FabricCompatibilityProbe.execute(spec + [dependencyLock: packagedLock]) { List args, File log ->
+            assertEquals(packagedLock, args[args.indexOf('--dependency-lock') + 1])
+            log.text = 'packaged lock forwarded'
+            1
+        }
+        assertEquals(packagedHash, CandidateFiles.sha256(packagedLock))
+
+        Map restartSpec = spec + [restart: true, profile: 'iris']
+        List<String> restartPhases = []
+        List<File> restartGames = []
+        Map restarted = FabricCompatibilityProbe.execute(restartSpec) { List args, File log ->
+            assertFalse(args.contains('--cbbg-config'))
+            assertFalse(args.contains('--test-dependency-minimums'))
+            String phase = args[args.indexOf('--restart-phase') + 1]
+            File game = args[args.indexOf('--game-dir') + 1] as File
+            restartPhases.add(phase)
+            restartGames.add(game)
+            game.mkdirs()
+            new File(game, phase + '-probe.json').text = JsonOutput.toJson(
+                    [exitCode: 0, scenarios: [ok: true]])
+            new File(game, phase + '-launch.log').text = phase
+            log.text = phase
+            0
+        }
+        assertEquals(['control', 'prepare', 'verify'], restartPhases)
+        assertNotEquals(restartGames[0], restartGames[1])
+        assertEquals(restartGames[1], restartGames[2])
+        assertEquals('passed', restarted.status)
+        assertEquals(new File(restartGames[2], 'verify-probe.json').absolutePath, restarted.receipt)
+        ['control', 'prepare', 'verify'].each { phase ->
+            assertTrue(restarted.files.any { it.name == phase + '-runner.log' })
+            assertTrue(restarted.files.any { it.name == phase + '-launch.log' })
+            assertTrue(restarted.files.any { it.name == phase + '-probe.json' })
+        }
+        ['control', 'prepare', 'verify'].eachWithIndex { failingPhase, phaseIndex ->
+            [false, true].each { missingReceipt ->
+                List<String> attempted = []
+                Map stopped = FabricCompatibilityProbe.execute(restartSpec) { List args, File log ->
+                    String phase = args[args.indexOf('--restart-phase') + 1]
+                    File game = args[args.indexOf('--game-dir') + 1] as File
+                    attempted.add(phase)
+                    game.mkdirs()
+                    boolean failedPhase = phase == failingPhase
+                    if (!failedPhase || !missingReceipt) {
+                        new File(game, phase + '-probe.json').text = JsonOutput.toJson(failedPhase ?
+                                [exitCode: 1, failure: [type: 'AssertionError', message: 'phase failed']] :
+                                [exitCode: 0, scenarios: [ok: true]])
+                    }
+                    log.text = 'phase completed'
+                    failedPhase && !missingReceipt ? 1 : 0
+                }
+                assertEquals(['control', 'prepare', 'verify'].take(phaseIndex + 1), attempted)
+                assertEquals(missingReceipt ? 'blocked' : 'failed', stopped.status)
+                assertTrue(stopped.receipt.endsWith(failingPhase + '-probe.json'))
+            }
+        }
 
         Map blocked = FabricCompatibilityProbe.execute(spec + [strict: true]) { List args, File log ->
             assertFalse(args.contains('--test-dependency-minimums'))
@@ -153,5 +417,22 @@ class FabricCompatibilityProbeTest {
         }
         assertEquals('failed', failed.status)
         assertEquals('Caused by: broken shader', failed.reason)
+        Map nativeCrash = FabricCompatibilityProbe.execute(spec) { List args, File log ->
+            File game = args[args.indexOf('--game-dir') + 1] as File
+            game.mkdirs()
+            new File(game, 'probe.json').text = JsonOutput.toJson(
+                    [exitCode: 1, failure: [type: 'ValueError', message: 'Client did not exit successfully']])
+            new File(game, 'launch.log').text = '''Caused by: offline authentication
+# A fatal error has been detected by the Java Runtime Environment:
+#  SIGSEGV (0xb) at pc=0x1234
+# Problematic frame:
+# C  [libxkbcommon.so.0+0x3d374] xkb_state_key_get_layout+0x4
+'''
+            log.text = 'runner failed'
+            1
+        }
+        assertEquals('failed', nativeCrash.status)
+        assertTrue(nativeCrash.reason.contains('SIGSEGV'), nativeCrash.reason as String)
+        assertTrue(nativeCrash.reason.contains('libxkbcommon'), nativeCrash.reason as String)
     }
 }

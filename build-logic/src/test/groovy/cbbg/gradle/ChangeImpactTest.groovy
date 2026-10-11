@@ -82,19 +82,20 @@ class ChangeImpactTest {
         TargetCatalog catalog = TargetCatalog.read(new File('../targets.json'))
         Map<String, List<String>> cases = [
                 'renderers/renderpearl/src/gametest/java/com/qb20nh/cbbg/gametest/mixin/ScenarioProgressMixin.java':
-                        ['26.1-fabric', '26.2-fabric', '26.3-fabric'],
+                        ['1.21.11-fabric', '26.1-fabric', '26.2-fabric', '26.3-fabric'],
                 'renderers/modern/src/main/java/com/qb20nh/cbbg/render/Rgba8Capture.java':
                         ['26.2-fabric', '26.3-fabric'],
                 'adapters/fabric/shared/src/main/java/com/qb20nh/cbbg/render/stbn/STBNLoader.java':
-                        ['26.1-fabric', '26.3-fabric'],
+                        ['1.21.1-fabric', '1.21.11-fabric', '26.1-fabric', '26.3-fabric'],
                 'adapters/fabric/shared/src/gametest/java/com/qb20nh/cbbg/gametest/ClientTestAccess.java': [],
-                'src/main/resources/assets/cbbg/icon.png': ['26.1-fabric', '26.2-fabric', '26.3-fabric'],
-                'src/main/resources/assets/cbbg/shaders/core/cbbg_dither.fsh': ['26.1-fabric', '26.2-fabric']
+                'src/main/resources/assets/cbbg/icon.png': ['1.21.1-fabric', '1.21.11-fabric', '26.1-fabric', '26.2-fabric', '26.3-fabric'],
+                'libraries/fabric/src/gpu/resources/assets/cbbg/shaders/core/cbbg_dither.fsh': ['1.21.11-fabric', '26.1-fabric'],
+                'libraries/fabric/src/blaze-gpu-format/resources/assets/cbbg/shaders/core/cbbg_dither.fsh': ['26.2-fabric', '26.3-fabric']
         ]
         cases.each { String path, List<String> ids ->
             assertEquals(ids, ChangeImpact.ci(catalog, ChangeImpact.select(catalog, [path], true)).matrix.include*.id, path)
         }
-        assertEquals(['26.1-fabric', '26.3-fabric'], ChangeImpact.ci(catalog,
+        assertEquals(['1.21.1-fabric', '1.21.11-fabric', '26.1-fabric', '26.3-fabric'], ChangeImpact.ci(catalog,
                 ChangeImpact.select(catalog, ['renderers/renderpearl/src/main/java/com/qb20nh/cbbg/render/FloatAttachments.java']))
                 .matrix.include*.id)
     }
@@ -112,7 +113,7 @@ class ChangeImpactTest {
         for (String path : ['.github/workflows/gradle.yml', 'gradle.properties', 'build-config/shared-code.gradle',
                 'build-logic/src/main/groovy/cbbg/gradle/QualityPlugin.groovy', 'unknown/file',
                 '.github/new-build-config.gradle', 'scripts/generated-shader.py']) {
-            assertEquals(['26.1-fabric', '26.2-fabric', '26.3-fabric'],
+            assertEquals(['1.21.1-fabric', '1.21.11-fabric', '26.1-fabric', '26.2-fabric', '26.3-fabric'],
                     ChangeImpact.ci(catalog, ChangeImpact.select(catalog, [path], true)).matrix.include*.id, path)
         }
     }

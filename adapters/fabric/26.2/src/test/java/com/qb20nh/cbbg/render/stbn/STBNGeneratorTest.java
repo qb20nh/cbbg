@@ -1,5 +1,7 @@
 package com.qb20nh.cbbg.render.stbn;
 
+import com.qb20nh.cbbg.api.NoiseVolume;
+import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 import org.jspecify.annotations.NullMarked;
 import org.junit.jupiter.api.Assertions;
@@ -7,76 +9,38 @@ import org.junit.jupiter.api.Test;
 
 @NullMarked
 public class STBNGeneratorTest {
-
   @Test
-  void fieldsPreserveArrayOwnershipAndValueContract() {
-    double[] u = {0.25, 0.5};
-    double[] v = {0.75, 1.0};
-    var fields = new STBNGenerator.STBNFields(u, v);
-    var equal = new STBNGenerator.STBNFields(u.clone(), v.clone());
-
-    Assertions.assertSame(u, fields.uField());
-    Assertions.assertSame(v, fields.vField());
-    Assertions.assertEquals(fields, equal);
-    Assertions.assertEquals(fields.hashCode(), equal.hashCode());
-    Assertions.assertNotEquals(fields, new STBNGenerator.STBNFields(new double[] {0.5}, v));
-    Assertions.assertEquals(
-        "STBNFields{uField=[0.25, 0.5], vField=[0.75, 1.0]}", fields.toString());
+  void fieldsPreserveImmutableVolume() {
+    NoiseVolume volume = NoiseVolume.generate(2, 2, 1, 101L);
+    var fields = new STBNGenerator.STBNFields(volume);
+    Assertions.assertSame(volume, fields.volume());
+    byte[] expected = volume.frameRGBA(0);
+    byte[] copy = fields.volume().frameRGBA(0);
+    copy[0] ^= 0xff;
+    Assertions.assertArrayEquals(expected, fields.volume().frameRGBA(0));
   }
 
   @Test
-  void calculatePixelColor_alwaysReturnsOpaqueAndClampedChannels() {
-    double[][] cases = {
-      {0.0, 0.0},
-      {1.0, 1.0},
-      {-100.0, 100.0},
-      {0.5, -123.456},
-      {Double.NaN, Double.NaN},
-      {Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY}
-    };
-
-    for (double[] c : cases) {
-      int argb = STBNGenerator.calculatePixelColor(c[0], c[1]);
-
-      int a = (argb >>> 24) & 0xFF;
-      int b = (argb >>> 16) & 0xFF;
-      int g = (argb >>> 8) & 0xFF;
-      int r = argb & 0xFF;
-
-      Assertions.assertEquals(0xFF, a, "alpha must be opaque");
-      Assertions.assertTrue(r >= 0 && r <= 255, "r out of range");
-      Assertions.assertTrue(g >= 0 && g <= 255, "g out of range");
-      Assertions.assertTrue(b >= 0 && b <= 255, "b out of range");
-    }
-  }
-
-  @Test
-  void generateAsync_smallDims_producesNormalizedFields() throws Exception {
+  void forcedGenerationProducesRequestedDimensionsAndSeed() throws Exception {
     int w = 16;
     int h = 16;
     int d = 8;
-
-    STBNGenerator.STBNFields fields =
-        STBNGenerator.generateAsync(w, h, d, 123456789L).get(10, TimeUnit.SECONDS);
-    if (fields == null) {
-      // Cache hit path: generateAsync intentionally returns null when a valid cache exists.
-      Assertions.assertTrue(
-          STBNCache.isCacheValid(w, h, d),
-          "Expected cache to be valid when generation returned null");
-      return;
-    }
-
-    int expectedSize = w * h * d;
-    Assertions.assertEquals(expectedSize, fields.uField().length);
-    Assertions.assertEquals(expectedSize, fields.vField().length);
-
-    assertAllInRangeZeroToOne(fields.uField());
-    assertAllInRangeZeroToOne(fields.vField());
-  }
-
-  private static void assertAllInRangeZeroToOne(double[] values) {
-    for (double v : values) {
-      Assertions.assertTrue(v >= 0.0 && v <= 1.0, "value out of range: " + v);
+    long seed = 123456789L;
+    NoiseVolume volume =
+        Objects.requireNonNull(
+                STBNGenerator.generateAsync(w, h, d, seed, true).get(10, TimeUnit.SECONDS))
+            .volume();
+    Assertions.assertEquals(w, volume.width());
+    Assertions.assertEquals(h, volume.height());
+    Assertions.assertEquals(d, volume.depth());
+    NoiseVolume expected = NoiseVolume.generate(w, h, d, seed);
+    for (int frame = 0; frame < d; frame++) {
+      Assertions.assertArrayEquals(expected.frameRGBA(frame), volume.frameRGBA(frame));
+      for (int y = 0; y < h; y++) {
+        for (int x = 0; x < w; x++) {
+          Assertions.assertEquals(255, volume.pixelABGR(x, y, frame) >>> 24);
+        }
+      }
     }
   }
 }

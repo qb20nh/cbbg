@@ -40,6 +40,48 @@ class PackageChecksTest {
         assertTrue(error.message.contains(message), error.message)
     }
 
+    @Test void nestedLibraryMatchesStandaloneAndRejectsDuplicateClasses() {
+        File library = new File(root, 'cbbg-lib-1.0.0+mc26.3-fabric.jar')
+        String api = 'com/qb20nh/cbbg/api/NoiseVolume.class'
+        archive(library, [(api): header(52)])
+        File main = new File(root, 'cbbg.jar')
+        String path = 'META-INF/jars/' + library.name
+        Map entries = ['fabric.mod.json': json([jars: [[file: path]]]),
+                       (path): library.bytes, 'com/qb20nh/cbbg/Cbbg.class': header(69)]
+        archive(main, entries)
+        PackageChecks.verifyNestedLibrary(main, library)
+        archive(main, entries + [(api): header(52)])
+        fails('duplicate classes') { PackageChecks.verifyNestedLibrary(main, library) }
+        archive(library, [(api): header(53)])
+        archive(main, entries)
+        fails('differs from the standalone') { PackageChecks.verifyNestedLibrary(main, library) }
+    }
+
+    @Test void libraryMetadataRequiresPublicApisAndRejectsMainEntrypoints() {
+        Map target = [loader: 'fabric', minecraft: '26.3', java: 25, dependencies: [loader: '0.19.5']]
+        Map metadata = [schemaVersion: 1, id: 'cbbg_lib', version: '1.0.0+mc26.3-fabric', environment: 'client',
+                        depends: [fabricloader: '>=0.19.5', minecraft: '26.3', java: '>=25']]
+        Map entries = ['fabric.mod.json': json(metadata)]
+        ['com/qb20nh/cbbg/api/Dithering.class', 'com/qb20nh/cbbg/api/DitherOptions.class',
+         'com/qb20nh/cbbg/api/NoiseVolume.class', 'com/qb20nh/cbbg/render/DitherPass.class'].each {
+            entries[it] = header(69)
+        }
+        ['assets/cbbg/shaders/core/cbbg_dither.fsh', 'assets/cbbg/shaders/core/cbbg_demo.fsh',
+         'assets/cbbg/shaders/include/dither.glsl'].each { entries[it] = 'shader'.bytes }
+        File artifact = new File(root, 'library.jar')
+        archive(artifact, entries)
+        PackageChecks.verifyFabricMetadata(artifact, target, metadata.version, 'lib')
+        metadata.entrypoints = [client: ['example.Client']]
+        entries['fabric.mod.json'] = json(metadata)
+        archive(artifact, entries)
+        fails('client entrypoints') { PackageChecks.verifyFabricMetadata(artifact, target, metadata.version, 'lib') }
+        metadata.remove('entrypoints')
+        entries['fabric.mod.json'] = json(metadata)
+        entries.remove('com/qb20nh/cbbg/render/DitherPass.class')
+        archive(artifact, entries)
+        fails('public API') { PackageChecks.verifyFabricMetadata(artifact, target, metadata.version, 'lib') }
+    }
+
     private Map specimen() {
         File core = new File(root, 'core/src/main/java/example/Core.java')
         core.parentFile.mkdirs()
@@ -80,6 +122,30 @@ class PackageChecksTest {
         assertEquals([classes: 3, core_classes: 1, core_sources: 1], result.packaging)
         assertEquals([declared_classes: 2, mixin_configs: 1], result.metadata)
         assertEquals([java_sources: 1], result.sources)
+    }
+
+    @Test void minecraft1211RequiresMixinExtrasForWrapMethod() {
+        Map s = specimen()
+        s.target.minecraft = '1.21.1'
+        s.target.java = 21
+        s.metadata.depends.minecraft = '1.21.1'
+        s.metadata.depends.java = '>=21'
+        s.metadata.depends.mixinextras = '>=0.4.0'
+        s.mixin.compatibilityLevel = 'JAVA_21'
+        s.binary['cbbg.mixins.json'] = json(s.mixin)
+        s.binary['fabric.mod.json'] = json(s.metadata)
+        archive(s.artifact, s.binary)
+        assertEquals([declared_classes: 2, mixin_configs: 1],
+                PackageChecks.verifyFabricMetadata(s.artifact, s.target, '1.4.0'))
+        for (String requirement : [null, '>=0.3.6']) {
+            if (requirement == null) s.metadata.depends.remove('mixinextras')
+            else s.metadata.depends.mixinextras = requirement
+            s.binary['fabric.mod.json'] = json(s.metadata)
+            archive(s.artifact, s.binary)
+            fails('Dependencies differ from target') {
+                PackageChecks.verifyFabricMetadata(s.artifact, s.target, '1.4.0')
+            }
+        }
     }
 
     @Test void selectedSharedModulesKeepTheJava8Requirement() {

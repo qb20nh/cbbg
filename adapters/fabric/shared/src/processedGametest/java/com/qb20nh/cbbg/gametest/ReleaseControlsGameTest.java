@@ -7,7 +7,6 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Locale;
-import net.fabricmc.fabric.api.client.command.v2.ClientCommands;
 import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
@@ -89,7 +88,7 @@ public final class ReleaseControlsGameTest implements FabricClientGameTest {
     int resizedHeight = originalSize[0] == 854 && originalSize[1] == 480 ? 540 : 480;
     try {
       if (originalFullscreen) toggleFullscreen(context, false);
-      context.getInput().resizeWindow(resizedWidth, resizedHeight);
+      ReleaseViewport.resizeWindow(context, resizedWidth, resizedHeight);
       context.waitFor(
           client ->
               ReleaseViewport.windowWidth(client.getWindow()) == resizedWidth
@@ -107,7 +106,7 @@ public final class ReleaseControlsGameTest implements FabricClientGameTest {
       if (context.computeOnClient(client -> client.getWindow().isFullscreen())) {
         toggleFullscreen(context, false);
       }
-      context.getInput().resizeWindow(originalSize[0], originalSize[1]);
+      ReleaseViewport.resizeWindow(context, originalSize[0], originalSize[1]);
       context.waitFor(
           client ->
               ReleaseViewport.windowWidth(client.getWindow()) == originalSize[0]
@@ -158,7 +157,7 @@ public final class ReleaseControlsGameTest implements FabricClientGameTest {
   }
 
   private static void execute(FabricClientCommandSource source, String command, int expected) {
-    var dispatcher = ClientCommands.getActiveDispatcher();
+    var dispatcher = ReleaseCommands.getActiveDispatcher();
     if (dispatcher == null) throw new AssertionError("No active client command dispatcher");
     try {
       int result = dispatcher.execute("cbbg " + command, source);

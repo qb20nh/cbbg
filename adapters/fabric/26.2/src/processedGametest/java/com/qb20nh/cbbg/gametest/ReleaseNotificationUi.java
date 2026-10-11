@@ -65,6 +65,14 @@ final class ReleaseNotificationUi {
   }
 
   static CompletableFuture<?> prepareFailure() {
-    return ReleaseGenerationGameTest.pending();
+    try {
+      String owner = "com.qb20nh.cbbg.render.CbbgDither";
+      Class<?> type = Class.forName(ReleaseMapping.className(owner));
+      type.getMethod(ReleaseMapping.memberName(owner, "void reloadStbn(boolean)"), boolean.class)
+          .invoke(null, false);
+      return ReleaseGenerationGameTest.pending();
+    } catch (ReflectiveOperationException failure) {
+      throw new LinkageError("Packaged 26.2 failure request changed", failure);
+    }
   }
 }

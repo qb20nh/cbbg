@@ -10,7 +10,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
-import net.fabricmc.fabric.api.client.gametest.v1.TestInput;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.minecraft.client.gui.components.AbstractSliderButton;
 import net.minecraft.client.gui.components.AbstractWidget;
@@ -21,8 +20,6 @@ import net.minecraft.client.gui.components.events.GuiEventListener;
 import net.minecraft.client.gui.screens.ConfirmScreen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.TitleScreen;
-import net.minecraft.client.input.MouseButtonEvent;
-import net.minecraft.client.input.MouseButtonInfo;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.NullMarked;
 
@@ -38,14 +35,12 @@ public class CbbgConfigScreenGameTest implements FabricClientGameTest {
 
   private static final int WINDOW_WIDTH = 854;
   private static final int WINDOW_HEIGHT = 480;
-  private static final int LEFT_MOUSE_BUTTON = 0;
 
   @Override
   // Screen navigation must retain the exact parent and confirmation instances.
   @SuppressWarnings("ReferenceEquality")
   public void runTest(@NonNull ClientGameTestContext context) {
-    TestInput input = context.getInput();
-    input.resizeWindow(WINDOW_WIDTH, WINDOW_HEIGHT);
+    ClientTestAccess.resizeWindow(context, WINDOW_WIDTH, WINDOW_HEIGHT);
     context.waitTick();
 
     CbbgConfig original = CbbgConfig.get();
@@ -64,15 +59,12 @@ public class CbbgConfigScreenGameTest implements FabricClientGameTest {
           client -> {
             ScreenWidgets w =
                 ScreenWidgets.from(Objects.requireNonNull(ClientTestAccess.screen(client)));
-            MouseButtonInfo click = new MouseButtonInfo(LEFT_MOUSE_BUTTON, 0);
 
             // Pixel format: RGBA16F -> RGBA32F
-            w.format.onClick(
-                new MouseButtonEvent(centerX(w.format), centerY(w.format), click), false);
+            ClientTestAccess.click(w.format, centerX(w.format), centerY(w.format));
 
             // Strength slider: click near max
-            w.strength.onClick(
-                new MouseButtonEvent(maxClickX(w.strength), centerY(w.strength), click), false);
+            ClientTestAccess.click(w.strength, maxClickX(w.strength), centerY(w.strength));
           });
       // A precision change may reset the renderer; isolate noise edits from that transition.
       context.waitTicks(3);
@@ -81,13 +73,10 @@ public class CbbgConfigScreenGameTest implements FabricClientGameTest {
           client -> {
             ScreenWidgets w =
                 ScreenWidgets.from(Objects.requireNonNull(ClientTestAccess.screen(client)));
-            MouseButtonInfo click = new MouseButtonInfo(LEFT_MOUSE_BUTTON, 0);
 
             // STBN size/depth: click near min (keeps any background generation small/fast)
-            w.stbnSize.onClick(
-                new MouseButtonEvent(minClickX(w.stbnSize), centerY(w.stbnSize), click), false);
-            w.stbnDepth.onClick(
-                new MouseButtonEvent(minClickX(w.stbnDepth), centerY(w.stbnDepth), click), false);
+            ClientTestAccess.click(w.stbnSize, minClickX(w.stbnSize), centerY(w.stbnSize));
+            ClientTestAccess.click(w.stbnDepth, minClickX(w.stbnDepth), centerY(w.stbnDepth));
 
             // Seed edit box: set value (triggers responder)
             w.seed.setValue("123");
@@ -124,8 +113,7 @@ public class CbbgConfigScreenGameTest implements FabricClientGameTest {
               assertEquals(invalid, w.seed.getValue(), "intermediate seed text");
               assertTrue(!w.generate.active, "Invalid seed disables generation");
               var generation = STBNGenerator.get();
-              w.generate.onClick(
-                  new MouseButtonEvent(centerX(w.generate), centerY(w.generate), click), false);
+              ClientTestAccess.click(w.generate, centerX(w.generate), centerY(w.generate));
               assertTrue(
                   ClientTestAccess.screen(client) instanceof CbbgConfigScreen,
                   "Invalid seed must not open confirmation");
@@ -139,8 +127,7 @@ public class CbbgConfigScreenGameTest implements FabricClientGameTest {
             w.seed.setValue("123");
 
             // Generate button opens confirmation screen; cancel out.
-            w.generate.onClick(
-                new MouseButtonEvent(centerX(w.generate), centerY(w.generate), click), false);
+            ClientTestAccess.click(w.generate, centerX(w.generate), centerY(w.generate));
           });
       context.waitForScreen(ConfirmScreen.class);
       takeScreenshot(context, "cbbg-config-screen-confirm");
@@ -162,19 +149,16 @@ public class CbbgConfigScreenGameTest implements FabricClientGameTest {
           client -> {
             ScreenWidgets w =
                 ScreenWidgets.from(Objects.requireNonNull(ClientTestAccess.screen(client)));
-            MouseButtonInfo click = new MouseButtonInfo(LEFT_MOUSE_BUTTON, 0);
 
             // Notifications: true -> false
             assertTrue(
                 w.notifyChat.active && w.notifyToast.active,
                 "Notification controls must be editable before clicking");
-            w.notifyChat.onClick(
-                new MouseButtonEvent(centerX(w.notifyChat), centerY(w.notifyChat), click), false);
-            w.notifyToast.onClick(
-                new MouseButtonEvent(centerX(w.notifyToast), centerY(w.notifyToast), click), false);
+            ClientTestAccess.click(w.notifyChat, centerX(w.notifyChat), centerY(w.notifyChat));
+            ClientTestAccess.click(w.notifyToast, centerX(w.notifyToast), centerY(w.notifyToast));
 
             // Disable last: reopening the screen while disabled locks other settings.
-            w.mode.onClick(new MouseButtonEvent(centerX(w.mode), centerY(w.mode), click), false);
+            ClientTestAccess.click(w.mode, centerX(w.mode), centerY(w.mode));
           });
       takeScreenshot(context, "cbbg-config-screen-after");
 
@@ -208,8 +192,7 @@ public class CbbgConfigScreenGameTest implements FabricClientGameTest {
           client -> {
             ScreenWidgets w =
                 ScreenWidgets.from(Objects.requireNonNull(ClientTestAccess.screen(client)));
-            MouseButtonInfo click = new MouseButtonInfo(LEFT_MOUSE_BUTTON, 0);
-            w.done.onClick(new MouseButtonEvent(centerX(w.done), centerY(w.done), click), false);
+            ClientTestAccess.click(w.done, centerX(w.done), centerY(w.done));
           });
       context.waitFor(
           client ->

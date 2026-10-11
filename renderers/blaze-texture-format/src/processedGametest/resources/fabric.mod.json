@@ -6,12 +6,12 @@
   "environment": "client",
   "mixins": ["cbbg.texture-format-test.mixins.json"],
   "entrypoints": {
-    "fabric-client-gametest": ["com.qb20nh.cbbg.gametest.ReleaseLifecycleGameTest", "com.qb20nh.cbbg.gametest.ReleaseCacheGameTest", "com.qb20nh.cbbg.gametest.ReleaseIrisGameTest", "com.qb20nh.cbbg.gametest.ReleaseModMenuGameTest", "com.qb20nh.cbbg.gametest.ReleaseControlsGameTest", "com.qb20nh.cbbg.gametest.ReleaseSettingsGuiGameTest"]
+    "fabric-client-gametest": ["com.qb20nh.cbbg.gametest.ReleaseLifecycleGameTest", "com.qb20nh.cbbg.gametest.ReleaseCacheGameTest", "com.qb20nh.cbbg.gametest.ReleaseIrisGameTest", "com.qb20nh.cbbg.gametest.ReleaseModMenuGameTest", "com.qb20nh.cbbg.gametest.ReleaseControlsGameTest", "com.qb20nh.cbbg.gametest.ReleaseSettingsGuiGameTest", "com.qb20nh.cbbg.gametest.ReleaseSodiumConfigGameTest", "com.qb20nh.cbbg.gametest.ReleaseUtilitiesGameTest"]
   },
   "depends": {
     "cbbg": "*",
     "fabricloader": ">=${loader_minimum}",
-    "minecraft": ">=26.1 <26.2",
+    "minecraft": "${minecraft_version}",
     "fabric-client-gametest-api-v1": "*"
   }
 }

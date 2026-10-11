@@ -1,5 +1,6 @@
 plugins {
-    id 'net.fabricmc.fabric-loom' version '1.17.21'
+    id 'net.fabricmc.fabric-loom' version '1.17.21' apply false
+    id 'net.fabricmc.fabric-loom-remap' version '1.17.21' apply false
     id 'cbbg.packaging'
     id 'cbbg.quality'
 }
@@ -19,9 +20,12 @@ def launchesClient = gradle.startParameter.taskNames.any {
     it.tokenize(':').last() in ['runClient', 'runClientGameTest']
 }
 def gameTarget = launchesClient ? target : artifactOwner
+def remappedGame = gameTarget.java < 25
+apply plugin: remappedGame ? 'net.fabricmc.fabric-loom-remap' : 'net.fabricmc.fabric-loom'
 def modProperties = new Properties()
 new File(repositoryRoot, 'gradle.properties').withInputStream { modProperties.load(it) }
-version = cbbg.gradle.CandidateManifest.packageVersion('v' + modProperties.mod_version, artifactOwner)
+version = cbbg.gradle.CandidateManifest.packageVersion(
+        'v' + providers.gradleProperty('mod_version').getOrElse(modProperties.mod_version), artifactOwner)
 group = modProperties.maven_group
 base.archivesName = modProperties.archives_base_name
 layout.buildDirectory = new File(repositoryRoot, "build/targets/${targetId}")
@@ -43,34 +47,53 @@ def effectiveDependencies = cbbg.gradle.TargetCatalog.effectiveDependencies(targ
 
 dependencies {
     minecraft "com.mojang:minecraft:${gameTarget.minecraft}"
-    implementation "net.fabricmc:fabric-loader:${gameTarget.dependencies.loader}"
-    implementation "net.fabricmc.fabric-api:fabric-api:${gameTarget.dependencies.fabricApi}"
+    if (remappedGame) {
+        mappings loom.officialMojangMappings()
+    }
+    add(remappedGame ? 'modImplementation' : 'implementation',
+            "net.fabricmc:fabric-loader:${gameTarget.dependencies.loader}")
+    add(remappedGame ? 'modImplementation' : 'implementation',
+            "net.fabricmc.fabric-api:fabric-api:${gameTarget.dependencies.fabricApi}")
     testImplementation platform('org.junit:junit-bom:6.1.3')
     testImplementation 'org.junit.jupiter:junit-jupiter'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
-    compileOnly("com.terraformersmc:modmenu:${target.dependencies.modMenu}") { transitive = false }
+    add(remappedGame ? 'modCompileOnly' : 'compileOnly',
+            "com.terraformersmc:modmenu:${target.dependencies.modMenu}") { transitive = false }
+    add(remappedGame ? 'modCompileOnly' : 'compileOnly',
+            "maven.modrinth:sodium:${gameTarget.dependencies.sodium}") { transitive = false }
     if (testCompat.tokenize('+').contains('modmenu')) {
-        runtimeOnly("com.terraformersmc:modmenu:${effectiveDependencies.modMenu}") { transitive = false }
+        add(remappedGame ? 'modRuntimeOnly' : 'runtimeOnly', "com.terraformersmc:modmenu:${effectiveDependencies.modMenu}") { transitive = false }
     }
     if (testCompat.tokenize('+').contains('iris')) {
-        runtimeOnly("maven.modrinth:iris:${effectiveDependencies.iris}") { transitive = false }
+        add(remappedGame ? 'modRuntimeOnly' : 'runtimeOnly', "maven.modrinth:iris:${effectiveDependencies.iris}") { transitive = false }
     }
     if (testCompat.tokenize('+').contains('immediatelyfast')) {
-        runtimeOnly("maven.modrinth:immediatelyfast:${effectiveDependencies.immediatelyFast}") { transitive = false }
+        add(remappedGame ? 'modRuntimeOnly' : 'runtimeOnly', "maven.modrinth:immediatelyfast:${effectiveDependencies.immediatelyFast}") { transitive = false }
+    }
+    if (testCompat.tokenize('+').contains('satin')) {
+        add(remappedGame ? 'modRuntimeOnly' : 'runtimeOnly', "maven.modrinth:satin-api:${effectiveDependencies.satin}") { transitive = false }
     }
     if (testCompat.tokenize('+').contains('sulkan')) {
-        runtimeOnly("maven.modrinth:sulkan:${effectiveDependencies.sulkan}") { transitive = false }
+        add(remappedGame ? 'modRuntimeOnly' : 'runtimeOnly', "maven.modrinth:sulkan:${effectiveDependencies.sulkan}") { transitive = false }
     }
     if (testCompat.tokenize('+').any { it == 'iris' || it == 'sodium' || it == 'sulkan' }) {
-        runtimeOnly("maven.modrinth:sodium:${effectiveDependencies.sodium}") { transitive = false }
+        add(remappedGame ? 'modRuntimeOnly' : 'runtimeOnly', "maven.modrinth:sodium:${effectiveDependencies.sodium}") { transitive = false }
     }
     if (testCompat.tokenize('+').contains('chatpatches')) {
-        runtimeOnly("maven.modrinth:chatpatches:${effectiveDependencies.chatPatches}") { transitive = false }
-        runtimeOnly("maven.modrinth:yacl:${effectiveDependencies.yacl}") { transitive = false }
+        add(remappedGame ? 'modRuntimeOnly' : 'runtimeOnly', "maven.modrinth:chatpatches:${effectiveDependencies.chatPatches}") { transitive = false }
+    }
+    if (testCompat.tokenize('+').any { it in ['chatpatches', 'yacl'] }) {
+        add(remappedGame ? 'modRuntimeOnly' : 'runtimeOnly', "maven.modrinth:yacl:${effectiveDependencies.yacl}") { transitive = false }
+    }
+    [forcegl2: 'forceGl2', threatengl: 'threatenGl'].each { token, dependency ->
+        if (testCompat.tokenize('+').contains(token)) {
+            add(remappedGame ? 'modRuntimeOnly' : 'runtimeOnly',
+                    "maven.modrinth:${token == 'forcegl2' ? 'forcegl2.0-remapped' : token}:${effectiveDependencies[dependency]}") { transitive = false }
+        }
     }
     if (testCompat.tokenize('+').contains('renderscale')) {
-        runtimeOnly("maven.modrinth:renderscale:${effectiveDependencies.renderScale}") { transitive = false }
-        runtimeOnly("maven.modrinth:cloth-config:${effectiveDependencies.clothConfig}") { transitive = false }
+        add(remappedGame ? 'modRuntimeOnly' : 'runtimeOnly', "maven.modrinth:renderscale:${effectiveDependencies.renderScale}") { transitive = false }
+        add(remappedGame ? 'modRuntimeOnly' : 'runtimeOnly', "maven.modrinth:cloth-config:${effectiveDependencies.clothConfig}") { transitive = false }
     }
 }
 
@@ -91,7 +114,16 @@ tasks.withType(JavaCompile).configureEach {
     options.release = target.java as int
 }
 
+tasks.withType(ProcessResources).configureEach {
+    inputs.property('javaVersion', target.java)
+    filesMatching('**/*.mixins.json') {
+        filter { line -> line.replace('"JAVA_25"', '"JAVA_' + target.java + '"') }
+    }
+}
+
 def usesTextureFormat = target.renderer == 'blaze-texture-format'
+def usesGl3 = target.renderer == 'gl3'
+def usesSharedLifecycle = usesTextureFormat || usesGl3
 def sourceLayout = cbbg.gradle.FabricSources.layout(target, artifactOwner)
 ['main', 'test'].each { name ->
     cbbg.gradle.FabricSources.configure(project, repositoryRoot, sourceLayout, name)
@@ -107,6 +139,17 @@ fabricApi {
     }
 }
 
+if (gameTarget.dependencies.clientGametest) {
+    dependencies.add(remappedGame ? 'modGametestImplementation' : 'gametestImplementation',
+            "net.fabricmc.fabric-api:fabric-client-gametest-api-v1:${gameTarget.dependencies.clientGametest}")
+}
+
+if (gameTarget.minecraft == '1.21.1') {
+    ext.gameTarget = gameTarget
+    ext.repositoryRoot = repositoryRoot
+    apply from: new File(repositoryRoot, 'build-config/fabric-gametest-backport.gradle')
+}
+
 def testBackend = providers.gradleProperty('backend').getOrElse('opengl')
 if (!target.backends.contains(testBackend)) {
     throw new GradleException("Backend ${testBackend} is not supported by ${targetId}")
@@ -115,10 +158,11 @@ if (!target.compatibilityProfiles[testCompat].contains(testBackend)) {
     throw new GradleException("Compatibility fixture ${testCompat} does not support ${testBackend} for ${targetId}")
 }
 loom.runs.named('clientGameTest') {
-    if (!usesTextureFormat) {
+    if (!remappedGame && !usesTextureFormat) {
         programArgs '--graphicsBackend', testBackend
     }
     vmArg "-Dcbbg.test.backend=${testBackend}"
+    vmArg "-Dcbbg.test.artifact-target=${artifactOwner.id}"
     vmArg "-Dcbbg.test.compat=${testCompat}"
     vmArg "-Dcbbg.test.modmenu.version=${target.dependencies.modMenu}"
     def evidenceProfile = testCompat == 'none' ? 'readback' : testCompat
@@ -127,12 +171,26 @@ loom.runs.named('clientGameTest') {
 
 cbbg.gradle.FabricSources.configure(project, repositoryRoot, sourceLayout, 'gametest')
 
-if (usesTextureFormat) {
+if (usesSharedLifecycle) {
+    if (remappedGame) {
+        def testMappings = tasks.register('gameTestMappings', cbbg.gradle.GameTestMappings) {
+            mappings.set(layout.file(providers.provider { loom.mappingConfiguration.tinyMappings.toFile() }))
+            output.set(layout.buildDirectory.file('generated/game-test-mappings/cbbg-game-names.properties'))
+        }
+        tasks.withType(ProcessResources).configureEach {
+            if (name == 'processProcessedGametestResources') from(testMappings)
+        }
+    }
     def externalCompileClasspath = configurations.compileClasspath.incoming.artifactView {
         componentFilter { it instanceof org.gradle.api.artifacts.component.ModuleComponentIdentifier }
     }.files
+    if (gameTarget.dependencies.clientGametest) {
+        externalCompileClasspath += configurations.gametestCompileClasspath.incoming.artifactView {
+            componentFilter { it instanceof org.gradle.api.artifacts.component.ModuleComponentIdentifier }
+        }.files
+    }
     sourceSets.create('processedGametest') {
-        compileClasspath = files(releaseOptimization.outputJar, externalCompileClasspath)
+        compileClasspath = files(releaseOptimization.optimizedJar, externalCompileClasspath)
         runtimeClasspath = output + compileClasspath
     }
     cbbg.gradle.FabricSources.configure(project, repositoryRoot, sourceLayout, 'processedGametest')
@@ -145,7 +203,11 @@ if (usesTextureFormat) {
         cbbg.gradle.FabricSources.copyResources(project, repositoryRoot, sourceLayout, 'processedGametest', delegate)
         def loaderMinimum = artifactOwner.dependencies.minimumLoader ?: artifactOwner.dependencies.loader
         inputs.property('loaderMinimum', loaderMinimum)
-        filesMatching('fabric.mod.json') { expand(loader_minimum: loaderMinimum) }
+        def minecraftRequirement = artifactOwner.minecraftDependency ?: artifactOwner.minecraft
+        inputs.property('minecraftRequirement', minecraftRequirement)
+        filesMatching('fabric.mod.json') {
+            expand(loader_minimum: loaderMinimum, minecraft_version: minecraftRequirement)
+        }
     }
     tasks.register('processedDriverJar', Jar) {
         archiveClassifier = 'processed-driver'
@@ -173,6 +235,8 @@ if (targetId == '26.3-fabric') {
         dependsOn tasks.named('optimizeReleaseJar')
     }
     tasks.named('processProcessedGametestResources') {
+        dependsOn tasks.named('optimizeReleaseJar')
+        from(releaseOptimization.mappingFile) { rename { 'cbbg-test.map' } }
         def loaderMinimum = target.dependencies.minimumLoader ?: target.dependencies.loader
         inputs.property('loaderMinimum', loaderMinimum)
         filesMatching('fabric.mod.json') { expand(loader_minimum: loaderMinimum) }
@@ -182,7 +246,8 @@ if (targetId == '26.3-fabric') {
         archiveClassifier = 'processed-driver'
         from sourceSets.processedGametest.output
     }
-    [MaximumNoiseCache: 'maximum-noise-cache', WorldControl: 'world-control', IrisRestart: 'iris-restart',
+    [MaximumNoiseCache: 'maximum-noise-cache', Transparency: 'transparency', RenderScale: 'renderscale',
+     WorldControl: 'world-control', IrisRestart: 'iris-restart',
      Shutdown: 'shutdown', GeneratingShutdown: 'generating-shutdown',
      EarlyStartup: 'early-startup',
      EarlyStartupCold: 'startup-cold', EarlyStartupWarm: 'startup-warm',
@@ -204,8 +269,7 @@ if (targetId == '26.3-fabric') {
                     metadata.mixins.add('cbbg.early-startup-test.mixins.json')
                 }
                 destination.get().asFile.parentFile.mkdirs()
-                destination.get().asFile.text = groovy.json.JsonOutput.prettyPrint(
-                        groovy.json.JsonOutput.toJson(metadata))
+                cbbg.gradle.ReproducibleText.writeJson(destination.get().asFile, metadata)
             }
         }
         tasks.register("processed${suite}DriverJar", Jar) {
@@ -247,6 +311,19 @@ releaseOptimization {
     })
 }
 tasks.named('optimizeReleaseJar') { dependsOn tasks.named('jar', Jar) }
+if (remappedGame) {
+    releaseOptimization.optimizedJar.set(layout.buildDirectory.file(
+            "intermediates/proguard/${base.archivesName.get()}-${project.version}-named.jar"))
+    def remappedRelease = tasks.register('remapReleaseJar', net.fabricmc.loom.task.RemapJarTask) {
+        dependsOn tasks.named('minifyReleaseJar')
+        inputFile.set(releaseOptimization.optimizedJar)
+        archiveClassifier = ''
+        archiveVersion = project.version.toString()
+        destinationDirectory = layout.buildDirectory.dir('libs')
+        addNestedDependencies = false
+    }
+    releaseOptimization.outputJar.set(remappedRelease.flatMap { it.archiveFile })
+}
 if (launchesClient && target.id != artifactOwner.id) {
     gradle.taskGraph.whenReady { graph ->
         if (graph.hasTask(tasks.named('jar').get()) ||
@@ -267,7 +344,7 @@ tasks.named('processResources') {
                       fabric_api_upper_bound: artifactOwner.dependencies.fabricApiUpperExclusive ? ' <' + artifactOwner.dependencies.fabricApiUpperExclusive : '',
                       java_version: target.java,
                       renderer_family: target.renderer,
-                      shader_import: target.renderer == 'blaze-gpu-format' ? '#moj_import' : '#include']
+                      shader_import: cbbg.gradle.TargetCatalog.shaderImport(target)]
     inputs.properties(properties)
     filesMatching('fabric.mod.json') {
         if (properties.fabric_api_minimum == '*') {
@@ -276,7 +353,13 @@ tasks.named('processResources') {
         expand(properties)
     }
     doLast {
-        cbbg.gradle.FabricBranding.apply(sharedDescriptor, new File(destinationDir, 'fabric.mod.json'))
+        File descriptorFile = new File(destinationDir, 'fabric.mod.json')
+        cbbg.gradle.FabricBranding.apply(sharedDescriptor, descriptorFile)
+        if (artifactOwner.minecraft == '1.21.1') {
+            Map descriptor = new groovy.json.JsonSlurper().parse(descriptorFile)
+            descriptor.depends.mixinextras = '>=' + cbbg.gradle.PackageChecks.MINECRAFT_1211_MIXIN_EXTRAS_MINIMUM
+            cbbg.gradle.ReproducibleText.writeJson(descriptorFile, descriptor)
+        }
     }
     if (target.renderer == 'blaze-gpu-format') {
         filesMatching('assets/cbbg/shaders/core/cbbg_dither.fsh') {
@@ -286,7 +369,7 @@ tasks.named('processResources') {
 }
 
 apply from: new File(repositoryRoot, 'build-config/source-inventory.gradle')
-if (target.renderer == 'renderpearl' || usesTextureFormat) {
+if (target.renderer == 'renderpearl' || usesSharedLifecycle) {
     apply from: new File(repositoryRoot, 'build-config/fabric-compatibility.gradle')
 }
 
@@ -345,8 +428,7 @@ if (target.renderer == 'renderpearl') {
                     metadata.entrypoints.client = ['com.qb20nh.cbbg.gametest.DsaBenchmarkSettings']
                 }
                 destination.get().asFile.parentFile.mkdirs()
-                destination.get().asFile.text = groovy.json.JsonOutput.prettyPrint(
-                        groovy.json.JsonOutput.toJson(metadata))
+                cbbg.gradle.ReproducibleText.writeJson(destination.get().asFile, metadata)
             }
         }
         tasks.register("${fixture}DriverJar", Jar) {
@@ -396,6 +478,11 @@ tasks.register('ciCheck') {
 }
 
 ext.candidateTargetId = targetId
+apply from: new File(repositoryRoot, 'build-config/library-dependency.gradle')
+if (remappedGame) {
+    ext.fabricRemapTaskType = net.fabricmc.loom.task.RemapJarTask
+    apply from: new File(repositoryRoot, 'build-config/fabric-remapping.gradle')
+}
 apply from: new File(repositoryRoot, 'build-config/candidate-build-outputs.gradle')
 
 tasks.register('dev', Sync) {
@@ -403,7 +490,7 @@ tasks.register('dev', Sync) {
     description = 'Check and package local development jars without release readiness claims.'
     dependsOn tasks.named('check'), tasks.named('verifyCandidatePackaging')
     into layout.buildDirectory.dir('dev')
-    from(tasks.named('jar', Jar).flatMap { it.archiveFile }) {
+    from(tasks.named(remappedGame ? 'remapJar' : 'jar', Jar).flatMap { it.archiveFile }) {
         rename { "${base.archivesName.get()}-${project.version}-dev.jar" }
     }
     from(tasks.named('sourcesJar').flatMap { it.archiveFile }) {
@@ -411,8 +498,11 @@ tasks.register('dev', Sync) {
     }
 }
 
-if (usesTextureFormat) {
+if (usesSharedLifecycle) {
     tasks.named('processGametestResources') {
         cbbg.gradle.FabricSources.copyResources(project, repositoryRoot, sourceLayout, 'gametest', delegate)
+        def minecraftRequirement = artifactOwner.minecraftDependency ?: artifactOwner.minecraft
+        inputs.property('minecraftRequirement', minecraftRequirement)
+        filesMatching('fabric.mod.json') { expand(minecraft_version: minecraftRequirement) }
     }
 }

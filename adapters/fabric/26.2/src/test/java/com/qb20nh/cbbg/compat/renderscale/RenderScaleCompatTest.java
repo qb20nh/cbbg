@@ -9,6 +9,7 @@ class RenderScaleCompatTest {
 
   @Test
   void whenRenderScaleNotLoaded_helpersAreNoOps() {
+    RenderScaleCompat.refreshTargets();
     Assertions.assertFalse(RenderScaleCompat.isLoaded());
     Assertions.assertFalse(
         RenderScaleCompat.isRenderScaleColorTextureLabel(() -> "RenderScale / Color"));

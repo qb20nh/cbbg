@@ -275,7 +275,7 @@ final class ReleaseClient {
     }
   }
 
-  private static boolean cacheValid(int size, int depth, long seed) {
+  static boolean cacheValid(int size, int depth, long seed) {
     try {
       List<String> lines = Files.readAllLines(manifest(size, depth));
       if (lines.size() != depth + 1 || !lines.getFirst().equals("# seed " + seed)) {

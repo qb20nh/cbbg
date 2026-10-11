@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "id": "cbbg_lib",
+  "version": "${version}",
+  "name": "CBBG Lib",
+  "description": "Noise generation and CPU/GPU dithering utilities.",
+  "authors": ["qb20nh"],
+  "license": "MIT",
+  "environment": "client",
+  "depends": {
+    "fabricloader": ">=${loader}${loader_upper_bound}",
+    "minecraft": "${minecraft}",
+    "java": ">=${java}"
+  },
+  "mixins": []
+}

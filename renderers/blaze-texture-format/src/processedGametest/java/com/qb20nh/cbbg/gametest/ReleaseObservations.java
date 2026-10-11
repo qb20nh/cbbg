@@ -11,11 +11,15 @@ public final class ReleaseObservations {
   private static @Nullable GpuTextureView noise;
   private static long blurAllocations;
   private static int blurFormat;
+  private static boolean observingBlur;
 
   private ReleaseObservations() {}
 
+  // Presentation must use CBBG's texture; GPU debug labels are optional.
+  @SuppressWarnings("ReferenceEquality")
   public static void present(GpuTextureView texture) {
-    if (texture.texture().getLabel().startsWith("CBBG dither")) {
+    var live = ReleaseShutdownResources.live();
+    if (live != null && texture.texture() == live.output().texture()) {
       output = texture;
       presentations++;
     }
@@ -39,10 +43,14 @@ public final class ReleaseObservations {
 
   public static void allocation(com.mojang.blaze3d.pipeline.RenderTarget target) {
     var texture = target.getColorTexture();
-    if (texture != null && texture.getLabel().startsWith("FBO ")) {
+    if (observingBlur && texture != null) {
       blurAllocations++;
       blurFormat = ReleaseLifecycleGameTest.format(texture);
     }
+  }
+
+  static void observingBlur(boolean active) {
+    observingBlur = active;
   }
 
   static long blurAllocations() {
