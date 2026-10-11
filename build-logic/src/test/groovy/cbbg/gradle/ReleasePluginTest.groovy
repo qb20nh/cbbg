@@ -158,23 +158,16 @@ cbbg.gradle.FabricCandidateAcceptance.metaClass.static.execute = { Map options, 
         }
     }
 
-    @Test void workflowUploadsUtilityPairAsOptionalCurseForgeChildFilesAndSavesReceipts() {
+    @Test void workflowUploadsOneFamilyAndSavesItsResumeReceipt() {
         String workflow = new File('../.github/workflows/publish.yml').text
-        ['utilities', 'utilities_sources', 'library', 'library_sources'].each { kind ->
-            String step = workflow.split(/\n      - name: /).find { it.contains('id: curseforge_' + kind + '_upload\n') }
-            assertNotNull(step)
-            assertTrue(step.contains("!inputs.dry_run && inputs.services != 'modrinth' && steps.publication.outputs.${kind} != ''"))
-            assertTrue(step.contains('parent_file_id: ${{ steps.curseforge_upload.outputs.id }}'))
-            assertTrue(step.contains('file_path: ${{ steps.publication.outputs.' + kind + ' }}'))
-        }
-        assertTrue(workflow.contains('"-PutilitiesFileId=$CF_UTILITIES_FILE_ID"'))
-        assertTrue(workflow.contains('"-PutilitiesSourcesFileId=$CF_UTILITIES_SOURCES_FILE_ID"'))
-        assertTrue(workflow.contains('"-PlibraryFileId=$CF_LIBRARY_FILE_ID"'))
-        assertTrue(workflow.contains('"-PlibrarySourcesFileId=$CF_LIBRARY_SOURCES_FILE_ID"'))
-        assertTrue(workflow.contains('            build/curseforge-library-result.json\n'))
-        assertTrue(workflow.contains('            build/curseforge-library-sources-result.json\n'))
-        assertTrue(workflow.contains('            build/curseforge-utilities-result.json\n'))
-        assertTrue(workflow.contains('            build/curseforge-utilities-sources-result.json\n'))
+        assertEquals(1, workflow.count('uses: qb20nh/curseforge-upload@'))
+        assertTrue(workflow.contains('additional_files: ${{ steps.curseforge_plan.outputs.additional_files }}'))
+        assertTrue(workflow.contains('parent_file_id: ${{ steps.curseforge_plan.outputs.parent_file_id }}'))
+        assertTrue(workflow.contains('manual_release: auto'))
+        assertTrue(workflow.contains('receipt: ${{ steps.curseforge_plan.outputs.receipt }}'))
+        assertTrue(workflow.contains('always() && steps.curseforge_upload.outputs.receipt'))
+        assertTrue(workflow.contains('            build/curseforge-action-receipt.json\n'))
+        assertTrue(workflow.contains('            build/curseforge-plan.json\n'))
     }
 
     @Test void curseForgeReceiptBindsFileIdToSubmittedMetadata() {

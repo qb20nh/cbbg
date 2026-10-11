@@ -201,6 +201,27 @@ class ReleasePlugin implements Plugin<Project> {
                     input('publicationMetadata'), required('target'), input('githubOutput'), run,
                     null, project.providers.gradleProperty('services').getOrElse('both'))
         }
+        task('planCurseForgeUploads', 'Check saved receipts and select one complete CurseForge upload family.') {
+            File metadataFile = input('publicationMetadata')
+            Map metadata = CandidateFiles.read(metadataFile)
+            String selected = project.providers.gradleProperty('target').orNull
+            List<String> targets = selected ? [selected] : metadata.records.collect { it.targets[0] as String }
+            targets.each { target ->
+                Map plan = CurseForgeUploads.plan(metadataFile, input('curseforgeReceipts'), input('assets'), target)
+                if (selected) {
+                    CandidateFiles.writeNew(input('output'), plan)
+                    File githubOutput = input('githubOutput')
+                    githubOutput.withWriterAppend('UTF-8') { writer ->
+                        ['file_path', 'additional_files', 'parent_file_id', 'display_name', 'receipt'].each { key ->
+                            String delimiter = 'CF_' + UUID.randomUUID().toString()
+                            writer.write(key + '<<' + delimiter + '\n' + plan[key] + '\n' + delimiter + '\n')
+                        }
+                    }
+                }
+                project.logger.lifecycle('CurseForge {}: {}', target, plan.receipt ? 'resume saved upload' :
+                        plan.parent_file_id ? 'attach files to ' + plan.parent_file_id : 'upload new family')
+            }
+        }
         task('recordCurseForgeUpload', 'Save the CurseForge file ID with the submitted metadata.') {
             String identifier = required('fileId')
             if (!(identifier ==~ /[0-9]+/) || new BigInteger(identifier) <= 0) {

@@ -180,10 +180,13 @@ loaders' notes.
 CBBG Lib is released through GitHub; its tags cannot trigger Modrinth or
 CurseForge uploads. The publisher uses tools from its workflow revision and
 source from the release tag. It verifies an immutable release and uploads its existing JARs. Modrinth
-retries compare remote metadata and file hashes. CurseForge uses the upload
-token; inspect its project files before starting a new dispatch to retry an
-upload. If publication returns an uncertain result, check the service before
-retrying.
+retries compare remote metadata and file hashes. CurseForge uploads each mod
+and its attachments together, holding new main files for manual release.
+After every file is accepted and approved, release the main file in its dashboard.
+To resume, dispatch Publish with `curseforge_resume_run` set to the previous
+run ID. Saved receipts retain accepted file IDs and validate the submitted files
+and metadata. An uncertain response requires dashboard reconciliation before
+resuming; do not start a fresh upload of that family.
 
 See [the build command reference](build-config/README.md) for task inputs.
 Hotfix checks take explicit prior release manifests and expand testing to
