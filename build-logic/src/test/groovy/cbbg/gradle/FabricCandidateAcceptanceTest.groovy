@@ -18,7 +18,7 @@ class FabricCandidateAcceptanceTest {
     @TempDir File directory
 
     @ParameterizedTest
-    @ValueSource(strings = ['generation', 'maximum-noise-cache'])
+    @ValueSource(strings = ['generation', 'maximum-noise-cache', 'generating-shutdown'])
     void memoryIntensiveScenarioFinishesBeforeTheNextWorkerStarts(String suite) {
         boolean heavySaved = false
         List<Map> jobs = [suite, 'ordinary'].collect { name ->
@@ -34,7 +34,7 @@ class FabricCandidateAcceptanceTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = ['generation', 'maximum-noise-cache'])
+    @ValueSource(strings = ['generation', 'maximum-noise-cache', 'generating-shutdown'])
     void ordinaryScenariosKeepBothWorkersBusyWhileMemoryIntensiveWorkWaits(String suite) {
         def slowStarted = new CountDownLatch(1)
         def releaseSlow = new CountDownLatch(1)

@@ -269,7 +269,7 @@ print(json.dumps({'pythonVersion':sys.version,'launcherVersion':version('minecra
     }
 
     private static boolean memoryIntensive(Map job) {
-        job.requirement.suite in ['generation', 'maximum-noise-cache']
+        job.requirement.suite in ['generation', 'maximum-noise-cache', 'generating-shutdown']
     }
 
     static void requireSource(File root, CandidateManifest candidate, Closure<String> command) {
