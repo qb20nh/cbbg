@@ -57,7 +57,7 @@ abstract class CodeqlScan extends DefaultTask {
                 throw new GradleException('Invalid CodeQL build profile: ' + target.buildProfile)
             }
             List<String> build = TargetBuild.wrapperCommand(root, profile, windows) +
-                    ['-p', profile.absolutePath, 'clean', 'compileJava', '--rerun-tasks', '--no-build-cache',
+                    ['-p', profile.absolutePath, 'compileJava', '--rerun-tasks', '--no-build-cache',
                      '--no-daemon', '--no-watch-fs', '--project-cache-dir',
                      new File(root, '.gradle/codeql/' + target.id).absolutePath]
             if (target.buildProfile != 'fabric-upstream') build.add('-Ptarget=' + target.id)

@@ -59,7 +59,7 @@ class CodeqlScanTest {
         File wrapper = new File(root, 'gradlew')
         wrapper.text = '''#!/bin/sh
 set -eu
-case " $* " in *" clean "*) rm -rf build;; *) exit 9;; esac
+case " $* " in *" clean "*) exit 9;; esac
 printf '%s\\n' "$@" > last-build-args
 '''
         assertTrue(wrapper.setExecutable(true))
@@ -120,7 +120,8 @@ elif args[1] == 'analyze':
         builds.each { call ->
             assertTrue(new File(call.java as String).isDirectory())
             List<String> command = call.args.drop(4)
-            assertTrue(command.containsAll(['clean', 'compileJava', '--rerun-tasks', '--no-build-cache']))
+            assertFalse(command.contains('clean'))
+            assertTrue(command.containsAll(['compileJava', '--rerun-tasks', '--no-build-cache']))
             if (call.args[2].endsWith('26.2-fabric')) assertFalse(command.any { it.startsWith('-Ptarget=') })
             else assertTrue(command.any { it.startsWith('-Ptarget=') })
             assertFalse(new File(call.args[2] as String).exists())
