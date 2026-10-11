@@ -2,6 +2,7 @@ package cbbg.gradle
 
 import groovy.json.JsonOutput
 import org.gradle.api.GradleException
+import org.gradle.api.logging.Logging
 
 import java.net.URI
 import java.net.URLEncoder
@@ -343,12 +344,23 @@ class Publication {
         }
         HttpRequest.Builder builder = HttpRequest.newBuilder(URI.create(url)).timeout(Duration.ofSeconds(30)).GET()
         headers.each { key, value -> builder.header(key, value) }
-        HttpResponse<String> response = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(30)).build()
-                .send(builder.build(), HttpResponse.BodyHandlers.ofString())
-        if (response.statusCode() < 200 || response.statusCode() >= 300) {
-            throw new GradleException('Publishing lookup failed: HTTP ' + response.statusCode() + ' ' + url)
+        HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(30)).build()
+        HttpRequest request = builder.build()
+        for (int attempt = 1; ; attempt++) {
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString())
+            int status = response.statusCode()
+            if (status >= 200 && status < 300) {
+                return CandidateFiles.parse(new StringReader(response.body()))
+            }
+            if (!(status in [500, 502, 503, 504]) || attempt == 3) {
+                throw new GradleException('Publishing lookup failed: HTTP ' + status + ' ' + url +
+                        ' after ' + attempt + ' attempts')
+            }
+            long delay = attempt * 1000L
+            Logging.getLogger(Publication).warn('Publishing lookup returned HTTP {}; retrying in {}s (attempt {}/3): {}',
+                    status, attempt, attempt + 1, url)
+            Thread.sleep(delay)
         }
-        CandidateFiles.parse(new StringReader(response.body()))
     }
 
     private static String segment(String value) {
