@@ -217,9 +217,12 @@ class ReleasePlugin implements Plugin<Project> {
                 throw new GradleException('Confirm unattempted artifact owners from this release only, once each, with a CurseForge resume run')
             }
             List<String> targets = selected ? [selected] : owners
+            String jobsFile = project.providers.gradleProperty('curseforgeResumeJobs').orNull
+            Map resumeEvidence = resumeRun && jobsFile
+                    ? [run_id: resumeRun, pages: CandidateFiles.read(project.file(jobsFile))] : [:]
             targets.each { target ->
                 Map plan = CurseForgeUploads.plan(metadataFile, input('curseforgeReceipts'), input('assets'), target,
-                        !resumeRun.isEmpty(), unattempted.contains(target))
+                        !resumeRun.isEmpty(), unattempted.contains(target), resumeEvidence)
                 if (selected) {
                     CandidateFiles.writeNew(input('output'), plan)
                     File githubOutput = input('githubOutput')

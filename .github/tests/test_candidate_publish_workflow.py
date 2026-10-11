@@ -283,6 +283,32 @@ class CandidatePublishWorkflowTests(unittest.TestCase):
                 arguments = json.loads((self.root / 'gradle-arguments.json').read_text())
                 self.assertIn('-PcurseforgeResumeRun=' + resume, arguments)
                 self.assertIn('-PcurseforgeUnattemptedTargets=' + unattempted, arguments)
+                self.assertIn('-PcurseforgeResumeJobs=build/curseforge-resume-jobs.json', arguments)
+
+    def test_resume_fetches_job_records_from_every_attempt_and_page(self):
+        launcher = self.root / 'gh'
+        launcher.write_text(
+            '#!/usr/bin/env python3\n'
+            'import json,sys\n'
+            'args=sys.argv[1:]\n'
+            'with open("github-arguments.jsonl", "a") as f: f.write(json.dumps(args)+"\\n")\n'
+            'if args[0] == "api":\n'
+            '    if "/jobs?" in args[-1]:\n'
+            '        print(json.dumps([{"jobs": [{"run_id": 123}]}]))\n'
+            '    else:\n'
+            '        print(json.dumps({"event": "workflow_dispatch", "status": "completed", '
+            '"path": ".github/workflows/publish.yml"}))\n')
+        launcher.chmod(0o755)
+        self.env.update(RESUME_RUN='123', PATH=str(self.root) + os.pathsep + os.environ['PATH'])
+        result = self.run_step('Restore CurseForge upload receipts')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        calls = [json.loads(line) for line in (self.root / 'github-arguments.jsonl').read_text().splitlines()]
+        self.assertIn(['api', '--paginate', '--slurp',
+                       'repos/example/mod/actions/runs/123/jobs?filter=all&per_page=100'], calls)
+        self.assertEqual([{'jobs': [{'run_id': 123}]}],
+                         json.loads((self.root / 'build/curseforge-resume-jobs.json').read_text()))
+        workflow = (ROOT / '.github/workflows/publish.yml').read_text()
+        self.assertEqual(2, workflow.count('gh api --paginate --slurp'))
 
     def test_confirmation_input_is_passed_as_data(self):
         self.env.update(RESUME_RUN='123', UNATTEMPTED_TARGETS='26.1-fabric;touch bad')

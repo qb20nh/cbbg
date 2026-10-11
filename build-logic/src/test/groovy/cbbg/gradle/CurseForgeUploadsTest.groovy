@@ -31,8 +31,13 @@ class CurseForgeUploadsTest {
 
     private static void write(File file, Map value) { file.text = JsonOutput.toJson(value) }
 
-    private Map plan(boolean resuming = false, boolean confirmedUnattempted = false) {
-        CurseForgeUploads.plan(metadataFile, receipts, directory, '26.3-fabric', resuming, confirmedUnattempted)
+    private Map plan(boolean resuming = false, boolean confirmedUnattempted = false, Map evidence = [:]) {
+        CurseForgeUploads.plan(metadataFile, receipts, directory, '26.3-fabric', resuming, confirmedUnattempted, evidence)
+    }
+
+    private static Map skippedUpload() {
+        [run_id: '123', pages: [[jobs: [[run_id: 123, name: 'publish (26.3-fabric)', status: 'completed',
+                steps: [[name: 'Upload to CurseForge', status: 'completed', conclusion: 'skipped']]]]]]]
     }
 
     private void legacy() {
@@ -136,6 +141,52 @@ class CurseForgeUploadsTest {
             assertTrue(error.message.contains('missing its action receipt'), error.message)
         }
         assertThrows(GradleException) { plan() }
+    }
+
+    @Test
+    void confirmedPlanCanResumeWhenTheUploaderWasSkipped() {
+        Map original = plan()
+        write(new File(receipts, 'curseforge-plan.json'), original)
+        Map result = plan(true, true, skippedUpload())
+        assertEquals(original.file_path, result.file_path)
+        assertEquals(original.additional_files, result.additional_files)
+        assertEquals('', result.parent_file_id)
+        assertEquals('', result.receipt)
+        assertTrue(result.confirmed_unattempted)
+        assertThrows(GradleException) { plan(true, false, skippedUpload()) }
+    }
+
+    @Test
+    void incompletePlansRequireSkippedUploadEvidenceForEveryAttempt() {
+        write(new File(receipts, 'curseforge-plan.json'), plan())
+        List<Closure> changes = [
+                { it.pages[0].jobs[0].steps[0].conclusion = 'failure' },
+                { it.pages[0].jobs[0].steps[0].conclusion = 'success' },
+                { it.pages[0].jobs[0].steps[0].status = 'in_progress' },
+                { it.pages[0].jobs[0].steps.clear() },
+                { it.pages[0].jobs[0].status = 'in_progress' },
+                { it.pages[0].jobs[0].run_id = 456 },
+                { it.pages[0].jobs[0].name = 'publish (26.2-fabric)' },
+                { it.pages.clear() },
+                { it.pages.add([jobs: [[run_id: 123, name: 'publish (26.3-fabric)', status: 'completed',
+                        steps: [[name: 'Upload to CurseForge', status: 'completed', conclusion: 'failure']]]]]) }
+        ]
+        changes.each { change ->
+            Map evidence = skippedUpload()
+            change(evidence)
+            assertThrows(GradleException) { plan(true, true, evidence) }
+        }
+    }
+
+    @Test
+    void skippedUploadDoesNotPermitChangedPlansOrExistingParents() {
+        Map original = plan()
+        File file = new File(receipts, 'curseforge-plan.json')
+        [source_commit: 'changed', release: 'v1.5.1', parent_file_id: '123', receipt: '/old/receipt.json',
+         record: [:], additional_files: 'changed'].each { key, value ->
+            write(file, original + [(key): value])
+            assertThrows(GradleException) { plan(true, true, skippedUpload()) }
+        }
     }
 
     @Test

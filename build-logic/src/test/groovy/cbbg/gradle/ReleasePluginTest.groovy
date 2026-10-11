@@ -184,6 +184,17 @@ cbbg.gradle.FabricCandidateAcceptance.metaClass.static.execute = { Map options, 
         runner(*((arguments + ['-PcurseforgeResumeRun=123',
                 '-PcurseforgeUnattemptedTargets=26.3-fabric']) as String[])).build()
         assertTrue(CandidateFiles.read(new File(directory, 'plan.json')).confirmed_unattempted)
+        File planFile = new File(directory, 'plan.json')
+        new File(directory, 'receipts/curseforge-plan.json').text = planFile.text
+        assertTrue(planFile.delete())
+        List<String> resume = arguments + ['-PcurseforgeResumeRun=123',
+                                          '-PcurseforgeUnattemptedTargets=26.3-fabric']
+        assertTrue(runner(*(resume as String[])).buildAndFail().output.contains('missing its action receipt'))
+        new File(directory, 'jobs.json').text = JsonOutput.toJson([[jobs: [[run_id: 123,
+                name: 'publish (26.3-fabric)', status: 'completed',
+                steps: [[name: 'Upload to CurseForge', status: 'completed', conclusion: 'skipped']]]]]])
+        runner(*((resume + ['-PcurseforgeResumeJobs=jobs.json']) as String[])).build()
+        assertTrue(CandidateFiles.read(planFile).confirmed_unattempted)
     }
 
     @Test void workflowUploadsOneFamilyAndSavesItsResumeReceipt() {

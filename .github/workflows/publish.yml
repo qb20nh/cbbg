@@ -155,6 +155,7 @@ jobs:
             fi
             gh api "repos/$GH_REPO/actions/runs/$RESUME_RUN" > build/curseforge-resume-run.json
             jq -e '.event == "workflow_dispatch" and .status == "completed" and (.path | split("@")[0]) == ".github/workflows/publish.yml"' build/curseforge-resume-run.json >/dev/null
+            gh api --paginate --slurp "repos/$GH_REPO/actions/runs/$RESUME_RUN/jobs?filter=all&per_page=100" > build/curseforge-resume-jobs.json
             gh run download "$RESUME_RUN" --repo "$GH_REPO" \
               --pattern "publication-${RELEASE_TAG}-*" --dir build/curseforge-receipts
           fi
@@ -167,6 +168,7 @@ jobs:
         run: |
           ./gradlew --no-daemon -PpublicationMetadata=build/publication.json \
             -PcurseforgeReceipts=build/curseforge-receipts -Passets=release-assets \
+            -PcurseforgeResumeJobs=build/curseforge-resume-jobs.json \
             "-PcurseforgeResumeRun=$RESUME_RUN" "-PcurseforgeUnattemptedTargets=$UNATTEMPTED_TARGETS" \
             planCurseForgeUploads
 
@@ -268,6 +270,7 @@ jobs:
             fi
             gh api "repos/$GH_REPO/actions/runs/$RESUME_RUN" > build/curseforge-resume-run.json
             jq -e '.event == "workflow_dispatch" and .status == "completed" and (.path | split("@")[0]) == ".github/workflows/publish.yml"' build/curseforge-resume-run.json >/dev/null
+            gh api --paginate --slurp "repos/$GH_REPO/actions/runs/$RESUME_RUN/jobs?filter=all&per_page=100" > build/curseforge-resume-jobs.json
             gh run download "$RESUME_RUN" --repo "$GH_REPO" \
               --pattern "publication-${RELEASE_TAG}-*" --dir build/curseforge-receipts
           fi
@@ -282,6 +285,7 @@ jobs:
         run: |
           ./gradlew --no-daemon -PpublicationMetadata=build/publication.json \
             -PcurseforgeReceipts=build/curseforge-receipts -Passets=release-assets \
+            -PcurseforgeResumeJobs=build/curseforge-resume-jobs.json \
             "-PcurseforgeResumeRun=$RESUME_RUN" "-PcurseforgeUnattemptedTargets=$UNATTEMPTED_TARGETS" \
             "-Ptarget=$TARGET_ID" "-PgithubOutput=$GITHUB_OUTPUT" \
             -Poutput=build/curseforge-plan.json planCurseForgeUploads
