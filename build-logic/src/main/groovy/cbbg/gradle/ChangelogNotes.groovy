@@ -49,10 +49,7 @@ class ChangelogNotes {
             if (levels[i] in [1, 2, 3]) include = true
             if (levels[i] == 4) {
                 Map scope = scope(lines[i].substring(5).replaceFirst(/\s+#+\s*$/, '').trim())
-                include = targets.any { target ->
-                    (!scope.minecraft || scope.minecraft.contains(target.minecraft)) &&
-                            (!scope.loader || scope.loader == target.loader)
-                }
+                include = targets.any { applies(scope, it) }
             }
             if (include) filtered.add(lines[i])
         }
@@ -75,6 +72,40 @@ class ChangelogNotes {
         result.join('\n').trim() + '\n'
     }
 
+    static String forPublication(String notes, List<Map> targets) {
+        if (!targets) throw new GradleException('Release notes require selected targets')
+        Map<String, List<Map>> versions = targets.groupBy { it.minecraft }
+        String publicNotes = notes.replaceFirst(/\s*<!-- cbbg-candidate-run: [1-9][0-9]* -->\s*$/, '')
+        List<String> sections = versions.collect { minecraft, runtimes ->
+            List<String> lines = forTargets(publicNotes, runtimes).readLines()
+            List<Integer> levels = headingLevels(lines)
+            List<String> result = []
+            boolean removedHeading = false
+            for (int i = 0; i < lines.size(); i++) {
+                String line = lines[i]
+                if (levels[i] == 4) {
+                    Map scope = scope(line.substring(5).replaceFirst(/\s+#+\s*$/, '').trim())
+                    if (runtimes.every { applies(scope, it) }) {
+                        removedHeading = true
+                        continue
+                    }
+                    line = '#### ' + scope.loaderLabel
+                }
+                if (removedHeading && !line.trim()) continue
+                removedHeading = false
+                result.add(line)
+            }
+            String body = result.join('\n').trim()
+            versions.size() == 1 ? body : '## Minecraft ' + minecraft + '\n\n' + body
+        }
+        sections.join('\n\n') + '\n'
+    }
+
+    private static boolean applies(Map scope, Map target) {
+        (!scope.minecraft || scope.minecraft.contains(target.minecraft)) &&
+                (!scope.loader || scope.loader == target.loader)
+    }
+
     private static boolean hasContent(List<String> lines, List<Integer> levels, int start, int end) {
         (start..<end).any { levels[it] == 0 && lines[it].trim() && !(lines[it].trim() ==~ /<!--.*-->/) }
     }
@@ -87,11 +118,11 @@ class ChangelogNotes {
             String label = version[0][2]
             String loader = label == null ? null : loaders[label.toLowerCase(Locale.ROOT)]
             if (label != null && loader == null) throw new GradleException('Unknown changelog loader: ' + label)
-            return [minecraft: version[0][1].split(/,\s*/).toList(), loader: loader]
+            return [minecraft: version[0][1].split(/,\s*/).toList(), loader: loader, loaderLabel: label]
         }
         String loader = loaders[title.toLowerCase(Locale.ROOT)]
         if (loader == null) throw new GradleException('Expected a Minecraft version or loader scope: ' + title)
-        [loader: loader]
+        [loader: loader, loaderLabel: title]
     }
 
     private static List<String> identifiers(String heading) {

@@ -128,8 +128,8 @@ published release. Write each change once per category and group changes with th
 same target set under one H4. Groups may overlap; each description must apply to
 every target in its group. Combine related items and write briefly without dropping
 information. Give readers enough context to understand the change without following
-development. Each platform upload must include all shared changes and every group
-matching any version and loader supported by its artifact.
+development. Each platform upload must give every supported Minecraft version
+complete notes, including shared changes and all matching groups.
 
 Extract the selected entry with Gradle:
 
@@ -144,9 +144,11 @@ matching any selected target. It rejects missing, duplicate or empty entries and
 unknown scope headings. Historical `## [X.Y.Z] - YYYY-MM-DD` headings remain
 supported. Candidate CI uses the same selection for the draft body. Pass the
 generated file as `-Pnotes=build/release-notes.md` to `checkRelease` and
-`publishRelease`. Modrinth and CurseForge receive shared changes plus the scopes
-applicable to each uploaded artifact. A shared Fabric/Quilt JAR includes both
-loaders' notes.
+`publishRelease`. GitHub keeps the grouped notes. Modrinth and CurseForge receive
+the same complete notes per Minecraft version. For a multi-version JAR, each
+`## Minecraft X` section repeats the shared changes. Exports omit scope headings
+that apply to the whole section; shared Fabric/Quilt JARs retain loader headings
+for loader-specific changes.
 
 1. Finish the selected targets and update their version and changelog. Obtain
    approval before release preparation commits, pushes and tags.

@@ -118,6 +118,7 @@ class PublicationTest {
             assertEquals(['- Shared fix.', '- Grouped fix.',
                           index == 0 ? '- New target fix.' : '- Older target fix.', '- Common loader fix.'], changes)
             assertEquals(record.modrinth.changelog, record.curseforge.changelog)
+            assertFalse(record.modrinth.changelog.contains('####'))
         }
         writeMetadata(value)
         assertEquals(['26.2-fabric'], Publication.checkedRecord(fixture.file, publication,
@@ -147,7 +148,7 @@ class PublicationTest {
     }
 
     @Test
-    void sharedArtifactRuntimeAliasesPublishOnceWithUnionNotesAndLoaderLabels() {
+    void sharedArtifactRuntimeAliasesPublishOnceWithStandaloneVersionNotes() {
         fixture = CandidateFixture.create(new File(directory, 'shared-patch'), true, false,
                 '26.3', '>=26.3 <26.4')
         fixture.target.compatibleMinecraft = ['26.3.1']
@@ -194,8 +195,20 @@ class PublicationTest {
         assertTrue(value.records[0].modrinth.changelog.contains('Quilt fix.'))
         assertTrue(value.records[0].modrinth.changelog.contains('Patch fix.'))
         assertFalse(value.records[0].modrinth.changelog.contains('Other fix.'))
-        assertEquals(['- Fabric fix.', '- Quilt fix.', '- Patch fix.'],
-                value.records[0].modrinth.changelog.readLines().findAll { it.startsWith('- ') })
+        assertEquals('''## Minecraft 26.3
+
+### Fixed
+#### Fabric
+- Fabric fix.
+#### Quilt
+- Quilt fix.
+
+## Minecraft 26.3.1
+
+### Fixed
+- Fabric fix.
+- Patch fix.
+''', value.records[0].modrinth.changelog)
         assertEquals(value.records[0].modrinth.changelog, value.records[0].curseforge.changelog)
         writeMetadata(value)
         assertEquals(value.records[0], Publication.checkedRecord(fixture.file, publication,

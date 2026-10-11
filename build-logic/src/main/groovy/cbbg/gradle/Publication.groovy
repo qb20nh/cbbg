@@ -51,7 +51,7 @@ class Publication {
             if (specifications.any { !loaderLabels.containsKey(it.loader) }) {
                 throw new GradleException('Publishing metadata is not configured for ' + id)
             }
-            String artifactNotes = ChangelogNotes.forTargets(notes, specifications)
+            String artifactNotes = ChangelogNotes.forPublication(notes, specifications)
             List<String> loaders = specifications.collect { it.loader }.unique()
             boolean fabricApi = specification.loader == 'fabric'
             List<String> minecraft = specifications.collect { it.minecraft }.unique()
