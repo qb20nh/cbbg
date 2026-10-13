@@ -9,6 +9,21 @@ class ChangelogNotesTest {
     @TempDir File directory
     Map target = [minecraft: '26.3', loader: 'fabric']
 
+    @Test void platformNotesPreserveExamplesAndRemoveReleaseMetadata() {
+        String body = '''### Added
+
+- Example:
+
+```markdown
+#### Minecraft 1.21.1
+<!-- cbbg-candidate-run: 123 -->
+```
+'''
+        assertEquals(body, ChangelogNotes.forPublication(
+                body + '\n<!-- cbbg-candidate-run: 456 -->\n', [target]))
+        assertThrows(GradleException) { ChangelogNotes.forPublication(body, []) }
+    }
+
     private File changelog(String content) {
         File file = new File(directory, 'CHANGELOG.md')
         file.setText(content, 'UTF-8')
@@ -170,6 +185,84 @@ Previous release.
                              'Minecraft 26.2, Fabric', 'Minecraft 26.2, 26.3 — Fabrci']) {
             assertThrows(GradleException) { ChangelogNotes.forTargets('#### ' + scope + '\n- Fix.\n', [target]) }
         }
+    }
+
+    @Test void platformNotesAreCompleteForEachMinecraftVersion() {
+        String body = '''### Added
+- Shared addition.
+### Fixed
+- Shared fix.
+#### Minecraft 1.21.1, 1.21.11
+- Older fix.
+#### Minecraft 1.21.1, 1.21.11, 26.1, 26.1.1, 26.1.2, 26.2
+- Transparency fix.
+#### Minecraft 1.21.1, 26.2
+- Precision fix.
+<!-- cbbg-candidate-run: 123 -->
+'''
+        Map expected = [
+                '1.21.1': ['Older fix.', 'Transparency fix.', 'Precision fix.'],
+                '1.21.11': ['Older fix.', 'Transparency fix.'],
+                '26.1': ['Transparency fix.'], '26.1.1': ['Transparency fix.'],
+                '26.1.2': ['Transparency fix.'], '26.2': ['Transparency fix.', 'Precision fix.'],
+                '26.3': []]
+        expected.each { version, fixes ->
+            String notes = ChangelogNotes.forPublication(body, [[minecraft: version, loader: 'fabric']])
+            assertEquals(['- Shared addition.', '- Shared fix.'] + fixes.collect { '- ' + it },
+                    notes.readLines().findAll { it.startsWith('- ') }, version)
+            assertFalse(notes.contains('####'), version)
+            assertFalse(notes.contains('cbbg-candidate-run'), version)
+        }
+        assertEquals(body.trim() + '\n', ChangelogNotes.forTargets(body,
+                expected.keySet().collect { [minecraft: it, loader: 'fabric'] }))
+    }
+
+    @Test void sharedArtifactsGiveEveryMinecraftVersionStandaloneNotes() {
+        String notes = ChangelogNotes.forPublication('''### Added
+- Common addition.
+### Fixed
+#### Minecraft 26.1, 26.1.1, 26.1.2
+- Common fix.
+#### Minecraft 26.1.2
+- Patch fix.
+''', ['26.1', '26.1.1', '26.1.2'].collect { [minecraft: it, loader: 'fabric'] })
+        assertEquals('''## Minecraft 26.1
+
+### Added
+- Common addition.
+### Fixed
+- Common fix.
+
+## Minecraft 26.1.1
+
+### Added
+- Common addition.
+### Fixed
+- Common fix.
+
+## Minecraft 26.1.2
+
+### Added
+- Common addition.
+### Fixed
+- Common fix.
+- Patch fix.
+''', notes)
+    }
+
+    @Test void platformNotesKeepOnlyRelevantLoaderRestrictions() {
+        String notes = ChangelogNotes.forPublication('''### Fixed
+- Shared fix.
+#### Minecraft 26.2, 26.3 — Fabric
+- Fabric fix.
+#### NeoForge
+- Unrelated fix.
+''', [[minecraft: '26.3', loader: 'fabric'], [minecraft: '26.3', loader: 'quilt']])
+        assertEquals('''### Fixed
+- Shared fix.
+#### Fabric
+- Fabric fix.
+''', notes)
     }
 
     @Test void requiresMultiTargetSelectionToReferToOneRelease() {

@@ -2,6 +2,7 @@ package cbbg.gradle
 
 import groovy.json.JsonOutput
 import org.gradle.api.GradleException
+import org.gradle.api.logging.Logging
 
 import java.net.URI
 import java.net.URLEncoder
@@ -14,6 +15,10 @@ import java.time.Duration
 class Publication {
     private static final String MODRINTH_API = 'https://api.modrinth.com/v2'
     private static final String CURSEFORGE_API = 'https://minecraft.curseforge.com/api/game'
+
+    static List<String> uploadKinds(Map record) {
+        ['artifact', 'sources'] + (record.containsKey('evidence') ? ['evidence'] : [])
+    }
 
     static void requireUploadAllowed(Map metadata) {
         if (metadata.legacy != true) ReleaseIdentity.parse(metadata.release as String).requireProduct('cbbg')
@@ -50,7 +55,7 @@ class Publication {
             if (specifications.any { !loaderLabels.containsKey(it.loader) }) {
                 throw new GradleException('Publishing metadata is not configured for ' + id)
             }
-            String artifactNotes = ChangelogNotes.forTargets(notes, specifications)
+            String artifactNotes = ChangelogNotes.forPublication(notes, specifications)
             List<String> loaders = specifications.collect { it.loader }.unique()
             boolean fabricApi = specification.loader == 'fabric'
             List<String> minecraft = specifications.collect { it.minecraft }.unique()
@@ -215,10 +220,7 @@ class Publication {
         if (record.targets[0] != target) throw new GradleException('Publishing target differs from selected target')
         File assets = candidate != null ? candidate.parentFile : legacyAssets
         Map upload = record.modrinth
-        List<String> kinds = ['artifact', 'sources'] +
-                (record.containsKey('utilities') ? ['utilities', 'utilities_sources'] : []) +
-                (record.containsKey('library') ? ['library', 'library_sources'] : []) +
-                (record.containsKey('evidence') ? ['evidence'] : [])
+        List<String> kinds = uploadKinds(record)
         Map project = request(fetch, MODRINTH_API + '/project/' + segment(upload.project_id), [:]) as Map
         if (project.id != upload.project_id || !(project.slug instanceof String) ||
                 !(project.slug ==~ /[\w-]+/)) {
@@ -246,22 +248,19 @@ class Publication {
                       project_id: project.id, version_number: upload.version_number,
                       artifact: record.artifact, sources: record.sources, action: 'upload']
         if (record.containsKey('evidence')) result.evidence = record.evidence
-        if (record.containsKey('library')) {
-            result.library = record.library
-            result.library_sources = record.library_sources
-            result.library_release = record.library_release
-        }
-        if (record.containsKey('utilities')) {
-            result.utilities = record.utilities
-            result.utilities_sources = record.utilities_sources
-        }
         if (candidate != null) result.manifest_sha256 = expected.manifest_sha256
         if (!matches.isEmpty()) {
             Map existing = matches[0]
             Map fields = [project_id: project.id, name: upload.version_name,
                     version_number: upload.version_number, version_type: upload.version_type,
-                    changelog: upload.changelog, status: 'listed']
-            if (fields.any { key, value -> existing[key] != value }) {
+                    status: 'listed']
+            List<String> changelogs = [upload.changelog]
+            if (uploadedVersionId == null && candidate != null) {
+                CandidateManifest manifest = new CandidateManifest(candidate)
+                changelogs.add(ChangelogNotes.forTargets(expected.release_notes as String,
+                        record.targets.collect { manifest.specifications[it] }))
+            }
+            if (fields.any { key, value -> existing[key] != value } || !changelogs.contains(existing.changelog)) {
                 throw new GradleException('Existing Modrinth version has different metadata')
             }
             for (String key : ['loaders', 'game_versions']) {
@@ -286,10 +285,17 @@ class Publication {
             if (actual.size() != dependencies.size() || actual.toSet() != dependencies.toSet()) {
                 throw new GradleException('Existing Modrinth version has different dependencies')
             }
-            if (!(existing.files instanceof List) || existing.files.size() != kinds.size()) {
+            List<String> checkedKinds = kinds
+            if (uploadedVersionId == null && existing.files instanceof List && existing.files.size() != kinds.size()) {
+                checkedKinds = ['artifact', 'sources'] +
+                        (record.containsKey('utilities') ? ['utilities', 'utilities_sources'] : []) +
+                        (record.containsKey('library') ? ['library', 'library_sources'] : []) +
+                        (record.containsKey('evidence') ? ['evidence'] : [])
+            }
+            if (!(existing.files instanceof List) || existing.files.size() != checkedKinds.size()) {
                 throw new GradleException('Existing Modrinth version has different files')
             }
-            for (String kind : kinds) {
+            for (String kind : checkedKinds) {
                 File file = CandidateFiles.checked(assets, (Map) record[kind])
                 List fileMatches = existing.files.findAll { it instanceof Map && it.filename == file.name }
                 if (fileMatches.size() != 1) {
@@ -297,11 +303,11 @@ class Publication {
                 }
                 Map item = fileMatches[0]
                 String sha512 = digest(file, 'SHA-512')
-                List fileTypes = kind in ['sources', 'utilities_sources', 'library_sources'] ? ['sources-jar'] :
-                        (kind in ['utilities', 'library'] ? [null, 'other'] :
-                        (kind == 'evidence'
-                                ? (uploadedVersionId != null ? [null] : [null, 'signature'])
-                                : [null]))
+                List fileTypes = [null]
+                if (kind == 'sources') fileTypes = ['sources-jar']
+                else if (kind in ['utilities_sources', 'library_sources']) fileTypes = [null, 'sources-jar']
+                else if (kind in ['utilities', 'library']) fileTypes = [null, 'other']
+                else if (kind == 'evidence' && uploadedVersionId == null) fileTypes = [null, 'signature']
                 if (item.hashes?.sha512 != sha512 || item.primary != (kind == 'artifact') ||
                         !fileTypes.contains(item.file_type)) {
                     throw new GradleException('Existing Modrinth file differs from candidate: ' + kind)
@@ -343,12 +349,23 @@ class Publication {
         }
         HttpRequest.Builder builder = HttpRequest.newBuilder(URI.create(url)).timeout(Duration.ofSeconds(30)).GET()
         headers.each { key, value -> builder.header(key, value) }
-        HttpResponse<String> response = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(30)).build()
-                .send(builder.build(), HttpResponse.BodyHandlers.ofString())
-        if (response.statusCode() < 200 || response.statusCode() >= 300) {
-            throw new GradleException('Publishing lookup failed: HTTP ' + response.statusCode() + ' ' + url)
+        HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(30)).build()
+        HttpRequest request = builder.build()
+        for (int attempt = 1; ; attempt++) {
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString())
+            int status = response.statusCode()
+            if (status >= 200 && status < 300) {
+                return CandidateFiles.parse(new StringReader(response.body()))
+            }
+            if (!(status in [500, 502, 503, 504]) || attempt == 3) {
+                throw new GradleException('Publishing lookup failed: HTTP ' + status + ' ' + url +
+                        ' after ' + attempt + ' attempts')
+            }
+            long delay = attempt * 1000L
+            Logging.getLogger(Publication).warn('Publishing lookup returned HTTP {}; retrying in {}s (attempt {}/3): {}',
+                    status, attempt, attempt + 1, url)
+            Thread.sleep(delay)
         }
-        CandidateFiles.parse(new StringReader(response.body()))
     }
 
     private static String segment(String value) {

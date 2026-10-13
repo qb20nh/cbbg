@@ -21,6 +21,16 @@ on:
           - both
           - modrinth
           - curseforge
+      curseforge_resume_run:
+        description: "Previous Publish run containing CurseForge receipts; required when resuming accepted files"
+        required: false
+        default: ""
+        type: string
+      curseforge_unattempted_targets:
+        description: "Resume only: comma-separated artifact owner IDs confirmed never attempted, after checking the previous run and CurseForge dashboard"
+        required: false
+        default: ""
+        type: string
 
 permissions:
   contents: read
@@ -129,6 +139,39 @@ jobs:
             -Poutput=build/publication.json "-PgithubOutput=$GITHUB_OUTPUT" \
             "-Pservices=$SERVICES" "-PdryRun=$DRY_RUN" preparePublication
 
+      - name: Restore CurseForge upload receipts
+        if: inputs.services != 'modrinth'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ inputs.tag }}
+          RESUME_RUN: ${{ inputs.curseforge_resume_run }}
+        run: |
+          mkdir -p build/curseforge-receipts
+          if [[ -n "$RESUME_RUN" ]]; then
+            if [[ ! "$RESUME_RUN" =~ ^[1-9][0-9]*$ ]]; then
+              echo "::error::curseforge_resume_run must be a numeric Publish workflow run ID."
+              exit 1
+            fi
+            gh api "repos/$GH_REPO/actions/runs/$RESUME_RUN" > build/curseforge-resume-run.json
+            jq -e '.event == "workflow_dispatch" and .status == "completed" and (.path | split("@")[0]) == ".github/workflows/publish.yml"' build/curseforge-resume-run.json >/dev/null
+            gh api --paginate --slurp "repos/$GH_REPO/actions/runs/$RESUME_RUN/jobs?filter=all&per_page=100" > build/curseforge-resume-jobs.json
+            gh run download "$RESUME_RUN" --repo "$GH_REPO" \
+              --pattern "publication-${RELEASE_TAG}-*" --dir build/curseforge-receipts
+          fi
+
+      - name: Check all CurseForge retry plans
+        if: inputs.services != 'modrinth'
+        env:
+          RESUME_RUN: ${{ inputs.curseforge_resume_run }}
+          UNATTEMPTED_TARGETS: ${{ inputs.curseforge_unattempted_targets }}
+        run: |
+          ./gradlew --no-daemon -PpublicationMetadata=build/publication.json \
+            -PcurseforgeReceipts=build/curseforge-receipts -Passets=release-assets \
+            -PcurseforgeResumeJobs=build/curseforge-resume-jobs.json \
+            "-PcurseforgeResumeRun=$RESUME_RUN" "-PcurseforgeUnattemptedTargets=$UNATTEMPTED_TARGETS" \
+            planCurseForgeUploads
+
       - name: Check all Modrinth retry plans
         if: inputs.services != 'curseforge'
         run: |
@@ -211,6 +254,42 @@ jobs:
             -PpublicationMetadata=build/publication.json "-Ptarget=$TARGET_ID" \
             "-PgithubOutput=$GITHUB_OUTPUT" "-Pservices=$SERVICES" selectPublication
 
+      - name: Restore CurseForge upload receipts
+        if: inputs.services != 'modrinth'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ inputs.tag }}
+          RESUME_RUN: ${{ inputs.curseforge_resume_run }}
+        run: |
+          mkdir -p build/curseforge-receipts
+          if [[ -n "$RESUME_RUN" ]]; then
+            if [[ ! "$RESUME_RUN" =~ ^[1-9][0-9]*$ ]]; then
+              echo "::error::curseforge_resume_run must be a numeric Publish workflow run ID."
+              exit 1
+            fi
+            gh api "repos/$GH_REPO/actions/runs/$RESUME_RUN" > build/curseforge-resume-run.json
+            jq -e '.event == "workflow_dispatch" and .status == "completed" and (.path | split("@")[0]) == ".github/workflows/publish.yml"' build/curseforge-resume-run.json >/dev/null
+            gh api --paginate --slurp "repos/$GH_REPO/actions/runs/$RESUME_RUN/jobs?filter=all&per_page=100" > build/curseforge-resume-jobs.json
+            gh run download "$RESUME_RUN" --repo "$GH_REPO" \
+              --pattern "publication-${RELEASE_TAG}-*" --dir build/curseforge-receipts
+          fi
+
+      - name: Plan CurseForge upload family
+        if: inputs.services != 'modrinth'
+        id: curseforge_main_plan
+        env:
+          TARGET_ID: ${{ matrix.target }}
+          RESUME_RUN: ${{ inputs.curseforge_resume_run }}
+          UNATTEMPTED_TARGETS: ${{ inputs.curseforge_unattempted_targets }}
+        run: |
+          ./gradlew --no-daemon -PpublicationMetadata=build/publication.json \
+            -PcurseforgeReceipts=build/curseforge-receipts -Passets=release-assets \
+            -PcurseforgeResumeJobs=build/curseforge-resume-jobs.json \
+            "-PcurseforgeResumeRun=$RESUME_RUN" "-PcurseforgeUnattemptedTargets=$UNATTEMPTED_TARGETS" \
+            "-Ptarget=$TARGET_ID" "-PgithubOutput=$GITHUB_OUTPUT" \
+            -Poutput=build/curseforge-main-plan.json planCurseForgeUploads
+
       - name: Validate or publish to Modrinth
         if: inputs.services != 'curseforge'
         env:
@@ -237,190 +316,90 @@ jobs:
           fi
           ./gradlew "${args[@]}" "$task"
 
-      - name: Upload to CurseForge
-        if: ${{ !inputs.dry_run && inputs.services != 'modrinth' }}
-        id: curseforge_upload
-        uses: qb20nh/curseforge-upload@ca94ed0392ea2a4d975f0eef5e02f7805aa30469
+      - name: Upload main file to CurseForge
+        if: ${{ !inputs.dry_run && inputs.services != 'modrinth' && steps.curseforge_main_plan.outputs.parent_file_id == '' && steps.curseforge_main_plan.outputs.receipt == '' }}
+        id: curseforge_main_upload
+        uses: qb20nh/curseforge-upload@0df376b40e06d7ae5a48c20c7b45105e2c864438
         with:
           token: ${{ secrets.CF_API_TOKEN }}
           project_id: ${{ steps.publication.outputs.cf_project_id }}
           game_endpoint: minecraft
           relations: ${{ steps.publication.outputs.cf_relations }}
-          file_path: ${{ steps.publication.outputs.artifact }}
+          file_path: ${{ steps.curseforge_main_plan.outputs.file_path }}
+          manual_release: 'false'
           game_versions: ${{ steps.publication.outputs.cf_game_versions }}
           release_type: ${{ steps.publication.outputs.cf_release_type }}
-          display_name: ${{ steps.publication.outputs.cf_display_name }}
+          display_name: ${{ steps.curseforge_main_plan.outputs.display_name }}
           changelog: ${{ steps.publication.outputs.cf_changelog }}
           changelog_type: markdown
 
       - name: Save CurseForge upload record
-        if: ${{ !inputs.dry_run && inputs.services != 'modrinth' }}
+        if: ${{ !inputs.dry_run && inputs.services != 'modrinth' && steps.curseforge_main_upload.outputs.id != '' }}
         env:
-          CF_FILE_ID: ${{ steps.curseforge_upload.outputs.id }}
           TARGET_ID: ${{ matrix.target }}
+          CF_FILE_ID: ${{ steps.curseforge_main_upload.outputs.id }}
         run: |
           ./gradlew --no-daemon "-PpublicationMetadata=build/publication.json" \
             "-Ptarget=$TARGET_ID" "-PfileId=$CF_FILE_ID" -Poutput=build/curseforge-result.json recordCurseForgeUpload
+          mkdir -p build/curseforge-receipts/current
+          cp build/publication.json build/curseforge-result.json build/curseforge-receipts/current/
 
-      - name: Upload sources and mappings to CurseForge
+      - name: Plan CurseForge attachments
         if: ${{ !inputs.dry_run && inputs.services != 'modrinth' }}
-        id: curseforge_sources_upload
-        uses: qb20nh/curseforge-upload@ca94ed0392ea2a4d975f0eef5e02f7805aa30469
+        id: curseforge_plan
+        env:
+          TARGET_ID: ${{ matrix.target }}
+          RESUME_RUN: ${{ inputs.curseforge_resume_run }}
+          UNATTEMPTED_TARGETS: ${{ inputs.curseforge_unattempted_targets }}
+          MAIN_FILE_ID: ${{ steps.curseforge_main_upload.outputs.id }}
+        run: |
+          if [[ -n "$MAIN_FILE_ID" ]]; then
+            RESUME_RUN=''
+            UNATTEMPTED_TARGETS=''
+          fi
+          ./gradlew --no-daemon -PpublicationMetadata=build/publication.json \
+            -PcurseforgeReceipts=build/curseforge-receipts -Passets=release-assets \
+            -PcurseforgeResumeJobs=build/curseforge-resume-jobs.json \
+            "-PcurseforgeResumeRun=$RESUME_RUN" "-PcurseforgeUnattemptedTargets=$UNATTEMPTED_TARGETS" \
+            "-Ptarget=$TARGET_ID" "-PgithubOutput=$GITHUB_OUTPUT" \
+            -Poutput=build/curseforge-plan.json planCurseForgeUploads
+
+      - name: Upload to CurseForge
+        if: ${{ !inputs.dry_run && inputs.services != 'modrinth' }}
+        id: curseforge_upload
+        uses: qb20nh/curseforge-upload@0df376b40e06d7ae5a48c20c7b45105e2c864438
         with:
           token: ${{ secrets.CF_API_TOKEN }}
           project_id: ${{ steps.publication.outputs.cf_project_id }}
           game_endpoint: minecraft
-          parent_file_id: ${{ steps.curseforge_upload.outputs.id }}
-          file_path: ${{ steps.publication.outputs.sources }}
+          relations: ${{ steps.publication.outputs.cf_relations }}
+          file_path: ${{ steps.curseforge_plan.outputs.file_path }}
+          additional_files: ${{ steps.curseforge_plan.outputs.additional_files }}
+          parent_file_id: ${{ steps.curseforge_plan.outputs.parent_file_id }}
+          receipt: ${{ steps.curseforge_plan.outputs.receipt }}
+          manual_release: ${{ steps.curseforge_plan.outputs.manual_release }}
+          game_versions: ${{ steps.curseforge_plan.outputs.parent_file_id == '' && steps.publication.outputs.cf_game_versions || '' }}
           release_type: ${{ steps.publication.outputs.cf_release_type }}
-          display_name: ${{ steps.publication.outputs.cf_display_name }} sources
+          display_name: ${{ steps.curseforge_plan.outputs.display_name }}
           changelog: ${{ steps.publication.outputs.cf_changelog }}
           changelog_type: markdown
 
-      - name: Save CurseForge sources upload record
+      - name: Save CurseForge action receipt
+        if: ${{ always() && steps.curseforge_upload.outputs.receipt != '' }}
+        env:
+          RECEIPT_PATH: ${{ steps.curseforge_upload.outputs.receipt }}
+        run: cp -- "$RECEIPT_PATH" build/curseforge-action-receipt.json
+
+      - name: Summarize CurseForge upload
         if: ${{ !inputs.dry_run && inputs.services != 'modrinth' }}
         env:
-          CF_FILE_ID: ${{ steps.curseforge_upload.outputs.id }}
-          CF_SOURCES_FILE_ID: ${{ steps.curseforge_sources_upload.outputs.id }}
-          TARGET_ID: ${{ matrix.target }}
+          RELEASE_MODE: ${{ steps.curseforge_plan.outputs.manual_release }}
         run: |
-          ./gradlew --no-daemon "-PpublicationMetadata=build/publication.json" \
-            "-Ptarget=$TARGET_ID" "-PfileId=$CF_FILE_ID" "-PsourcesFileId=$CF_SOURCES_FILE_ID" \
-            -Poutput=build/curseforge-sources-result.json recordCurseForgeUpload
-
-      - name: Upload standalone utilities to CurseForge
-        if: ${{ !inputs.dry_run && inputs.services != 'modrinth' && steps.publication.outputs.utilities != '' }}
-        id: curseforge_utilities_upload
-        uses: qb20nh/curseforge-upload@ca94ed0392ea2a4d975f0eef5e02f7805aa30469
-        with:
-          token: ${{ secrets.CF_API_TOKEN }}
-          project_id: ${{ steps.publication.outputs.cf_project_id }}
-          game_endpoint: minecraft
-          parent_file_id: ${{ steps.curseforge_upload.outputs.id }}
-          file_path: ${{ steps.publication.outputs.utilities }}
-          release_type: ${{ steps.publication.outputs.cf_release_type }}
-          display_name: ${{ steps.publication.outputs.cf_display_name }} standalone utilities
-          changelog: ${{ steps.publication.outputs.cf_changelog }}
-          changelog_type: markdown
-
-      - name: Save CurseForge utilities upload record
-        if: ${{ !inputs.dry_run && inputs.services != 'modrinth' && steps.publication.outputs.utilities != '' }}
-        env:
-          CF_FILE_ID: ${{ steps.curseforge_upload.outputs.id }}
-          CF_UTILITIES_FILE_ID: ${{ steps.curseforge_utilities_upload.outputs.id }}
-          TARGET_ID: ${{ matrix.target }}
-        run: |
-          ./gradlew --no-daemon "-PpublicationMetadata=build/publication.json" \
-            "-Ptarget=$TARGET_ID" "-PfileId=$CF_FILE_ID" "-PutilitiesFileId=$CF_UTILITIES_FILE_ID" \
-            -Poutput=build/curseforge-utilities-result.json recordCurseForgeUpload
-
-      - name: Upload utilities sources and mapping to CurseForge
-        if: ${{ !inputs.dry_run && inputs.services != 'modrinth' && steps.publication.outputs.utilities_sources != '' }}
-        id: curseforge_utilities_sources_upload
-        uses: qb20nh/curseforge-upload@ca94ed0392ea2a4d975f0eef5e02f7805aa30469
-        with:
-          token: ${{ secrets.CF_API_TOKEN }}
-          project_id: ${{ steps.publication.outputs.cf_project_id }}
-          game_endpoint: minecraft
-          parent_file_id: ${{ steps.curseforge_upload.outputs.id }}
-          file_path: ${{ steps.publication.outputs.utilities_sources }}
-          release_type: ${{ steps.publication.outputs.cf_release_type }}
-          display_name: ${{ steps.publication.outputs.cf_display_name }} standalone utilities sources
-          changelog: ${{ steps.publication.outputs.cf_changelog }}
-          changelog_type: markdown
-
-      - name: Save CurseForge utilities sources upload record
-        if: ${{ !inputs.dry_run && inputs.services != 'modrinth' && steps.publication.outputs.utilities_sources != '' }}
-        env:
-          CF_FILE_ID: ${{ steps.curseforge_upload.outputs.id }}
-          CF_UTILITIES_FILE_ID: ${{ steps.curseforge_utilities_upload.outputs.id }}
-          CF_UTILITIES_SOURCES_FILE_ID: ${{ steps.curseforge_utilities_sources_upload.outputs.id }}
-          TARGET_ID: ${{ matrix.target }}
-        run: |
-          ./gradlew --no-daemon "-PpublicationMetadata=build/publication.json" \
-            "-Ptarget=$TARGET_ID" "-PfileId=$CF_FILE_ID" "-PutilitiesFileId=$CF_UTILITIES_FILE_ID" \
-            "-PutilitiesSourcesFileId=$CF_UTILITIES_SOURCES_FILE_ID" \
-            -Poutput=build/curseforge-utilities-sources-result.json recordCurseForgeUpload
-
-      - name: Upload CBBG Lib to CurseForge
-        if: ${{ !inputs.dry_run && inputs.services != 'modrinth' && steps.publication.outputs.library != '' }}
-        id: curseforge_library_upload
-        uses: qb20nh/curseforge-upload@ca94ed0392ea2a4d975f0eef5e02f7805aa30469
-        with:
-          token: ${{ secrets.CF_API_TOKEN }}
-          project_id: ${{ steps.publication.outputs.cf_project_id }}
-          game_endpoint: minecraft
-          parent_file_id: ${{ steps.curseforge_upload.outputs.id }}
-          file_path: ${{ steps.publication.outputs.library }}
-          release_type: ${{ steps.publication.outputs.cf_release_type }}
-          display_name: ${{ steps.publication.outputs.cf_display_name }} CBBG Lib
-          changelog: ${{ steps.publication.outputs.cf_changelog }}
-          changelog_type: markdown
-
-      - name: Save CurseForge CBBG Lib upload record
-        if: ${{ !inputs.dry_run && inputs.services != 'modrinth' && steps.publication.outputs.library != '' }}
-        env:
-          CF_FILE_ID: ${{ steps.curseforge_upload.outputs.id }}
-          CF_LIBRARY_FILE_ID: ${{ steps.curseforge_library_upload.outputs.id }}
-          TARGET_ID: ${{ matrix.target }}
-        run: |
-          ./gradlew --no-daemon "-PpublicationMetadata=build/publication.json" \
-            "-Ptarget=$TARGET_ID" "-PfileId=$CF_FILE_ID" "-PlibraryFileId=$CF_LIBRARY_FILE_ID" \
-            -Poutput=build/curseforge-library-result.json recordCurseForgeUpload
-
-      - name: Upload CBBG Lib sources and mappings to CurseForge
-        if: ${{ !inputs.dry_run && inputs.services != 'modrinth' && steps.publication.outputs.library_sources != '' }}
-        id: curseforge_library_sources_upload
-        uses: qb20nh/curseforge-upload@ca94ed0392ea2a4d975f0eef5e02f7805aa30469
-        with:
-          token: ${{ secrets.CF_API_TOKEN }}
-          project_id: ${{ steps.publication.outputs.cf_project_id }}
-          game_endpoint: minecraft
-          parent_file_id: ${{ steps.curseforge_upload.outputs.id }}
-          file_path: ${{ steps.publication.outputs.library_sources }}
-          release_type: ${{ steps.publication.outputs.cf_release_type }}
-          display_name: ${{ steps.publication.outputs.cf_display_name }} CBBG Lib sources and mappings
-          changelog: ${{ steps.publication.outputs.cf_changelog }}
-          changelog_type: markdown
-
-      - name: Save CurseForge CBBG Lib sources and mappings upload record
-        if: ${{ !inputs.dry_run && inputs.services != 'modrinth' && steps.publication.outputs.library_sources != '' }}
-        env:
-          CF_FILE_ID: ${{ steps.curseforge_upload.outputs.id }}
-          CF_LIBRARY_SOURCES_FILE_ID: ${{ steps.curseforge_library_sources_upload.outputs.id }}
-          TARGET_ID: ${{ matrix.target }}
-        run: |
-          ./gradlew --no-daemon "-PpublicationMetadata=build/publication.json" \
-            "-Ptarget=$TARGET_ID" "-PfileId=$CF_FILE_ID" "-PlibrarySourcesFileId=$CF_LIBRARY_SOURCES_FILE_ID" \
-            -Poutput=build/curseforge-library-sources-result.json recordCurseForgeUpload
-
-      - name: Upload SBOM and provenance to CurseForge
-        if: ${{ !inputs.dry_run && inputs.services != 'modrinth' && steps.publication.outputs.evidence != '' }}
-        id: curseforge_evidence_upload
-        uses: qb20nh/curseforge-upload@ca94ed0392ea2a4d975f0eef5e02f7805aa30469
-        with:
-          token: ${{ secrets.CF_API_TOKEN }}
-          project_id: ${{ steps.publication.outputs.cf_project_id }}
-          game_endpoint: minecraft
-          parent_file_id: ${{ steps.curseforge_upload.outputs.id }}
-          file_path: ${{ steps.publication.outputs.evidence }}
-          release_type: ${{ steps.publication.outputs.cf_release_type }}
-          display_name: ${{ steps.publication.outputs.cf_display_name }} build evidence
-          changelog: ${{ steps.publication.outputs.cf_changelog }}
-          changelog_type: markdown
-
-      - name: Save CurseForge evidence upload record
-        if: ${{ !inputs.dry_run && inputs.services != 'modrinth' && steps.publication.outputs.evidence != '' }}
-        env:
-          CF_FILE_ID: ${{ steps.curseforge_upload.outputs.id }}
-          CF_SOURCES_FILE_ID: ${{ steps.curseforge_sources_upload.outputs.id }}
-          CF_EVIDENCE_FILE_ID: ${{ steps.curseforge_evidence_upload.outputs.id }}
-          TARGET_ID: ${{ matrix.target }}
-        run: |
-          ./gradlew --no-daemon "-PpublicationMetadata=build/publication.json" \
-            "-Ptarget=$TARGET_ID" "-PfileId=$CF_FILE_ID" "-PsourcesFileId=$CF_SOURCES_FILE_ID" \
-            "-PevidenceFileId=$CF_EVIDENCE_FILE_ID" \
-            -Poutput=build/curseforge-evidence-result.json recordCurseForgeUpload
+          if [[ "$RELEASE_MODE" == 'false' ]]; then
+            echo "CurseForge accepted the main file and its attachments for automatic publication after approval." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Resumed the previous upload with its original release settings. Previously held files still need dashboard release." >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: Save publication records
         if: always()
@@ -430,11 +409,8 @@ jobs:
           path: |
             build/publication.json
             build/curseforge-result.json
-            build/curseforge-sources-result.json
-            build/curseforge-utilities-result.json
-            build/curseforge-utilities-sources-result.json
-            build/curseforge-library-result.json
-            build/curseforge-library-sources-result.json
-            build/curseforge-evidence-result.json
+            build/curseforge-main-plan.json
+            build/curseforge-plan.json
+            build/curseforge-action-receipt.json
             build/publishing/**/modrinth-plan.json
             build/publishing/**/modrinth-result.json

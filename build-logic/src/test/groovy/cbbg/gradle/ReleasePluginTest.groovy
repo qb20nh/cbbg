@@ -158,23 +158,84 @@ cbbg.gradle.FabricCandidateAcceptance.metaClass.static.execute = { Map options, 
         }
     }
 
-    @Test void workflowUploadsUtilityPairAsOptionalCurseForgeChildFilesAndSavesReceipts() {
-        String workflow = new File('../.github/workflows/publish.yml').text
-        ['utilities', 'utilities_sources', 'library', 'library_sources'].each { kind ->
-            String step = workflow.split(/\n      - name: /).find { it.contains('id: curseforge_' + kind + '_upload\n') }
-            assertNotNull(step)
-            assertTrue(step.contains("!inputs.dry_run && inputs.services != 'modrinth' && steps.publication.outputs.${kind} != ''"))
-            assertTrue(step.contains('parent_file_id: ${{ steps.curseforge_upload.outputs.id }}'))
-            assertTrue(step.contains('file_path: ${{ steps.publication.outputs.' + kind + ' }}'))
+    @Test void resumePlanningRequiresReceiptsOrExplicitOwnerConfirmation() {
+        File artifact = new File(directory, 'mod.jar')
+        artifact.text = 'fixture'
+        new File(directory, 'receipts').mkdirs()
+        new File(directory, 'publication.json').text = JsonOutput.toJson([
+                release: 'v1.5.0', source_commit: 'a' * 40, records: [[
+                targets: ['26.3-fabric', '26.3-quilt'],
+                artifact: [path: artifact.name, sha256: CandidateFiles.sha256(artifact)],
+                curseforge: [display_name: 'cbbg 1.5.0+mc26.3-fabric']]]])
+        List<String> arguments = ['planCurseForgeUploads', '-PpublicationMetadata=publication.json',
+                '-PcurseforgeReceipts=receipts', '-Passets=.', '-Ptarget=26.3-fabric',
+                '-Poutput=plan.json', '-PgithubOutput=output']
+        assertTrue(runner(*((arguments + ['-PcurseforgeResumeRun=123']) as String[]))
+                .buildAndFail().output.contains('No usable CurseForge receipt'))
+        for (List<String> extra : [
+                ['-PcurseforgeUnattemptedTargets=26.3-fabric'],
+                ['-PcurseforgeResumeRun=123', '-PcurseforgeUnattemptedTargets=26.3-quilt'],
+                ['-PcurseforgeResumeRun=123', '-PcurseforgeUnattemptedTargets=26.3-fabric,26.3-fabric']]) {
+            assertTrue(runner(*((arguments + extra) as String[])).buildAndFail().output
+                    .contains('Confirm unattempted artifact owners'))
         }
-        assertTrue(workflow.contains('"-PutilitiesFileId=$CF_UTILITIES_FILE_ID"'))
-        assertTrue(workflow.contains('"-PutilitiesSourcesFileId=$CF_UTILITIES_SOURCES_FILE_ID"'))
-        assertTrue(workflow.contains('"-PlibraryFileId=$CF_LIBRARY_FILE_ID"'))
-        assertTrue(workflow.contains('"-PlibrarySourcesFileId=$CF_LIBRARY_SOURCES_FILE_ID"'))
-        assertTrue(workflow.contains('            build/curseforge-library-result.json\n'))
-        assertTrue(workflow.contains('            build/curseforge-library-sources-result.json\n'))
-        assertTrue(workflow.contains('            build/curseforge-utilities-result.json\n'))
-        assertTrue(workflow.contains('            build/curseforge-utilities-sources-result.json\n'))
+        assertTrue(runner(*((arguments + ['-PcurseforgeResumeRun=invalid']) as String[]))
+                .buildAndFail().output.contains('Expected a numeric -PcurseforgeResumeRun'))
+        runner(*((arguments + ['-PcurseforgeResumeRun=123',
+                '-PcurseforgeUnattemptedTargets=26.3-fabric']) as String[])).build()
+        assertTrue(CandidateFiles.read(new File(directory, 'plan.json')).confirmed_unattempted)
+        File planFile = new File(directory, 'plan.json')
+        new File(directory, 'receipts/curseforge-plan.json').text = planFile.text
+        assertTrue(planFile.delete())
+        List<String> resume = arguments + ['-PcurseforgeResumeRun=123',
+                                          '-PcurseforgeUnattemptedTargets=26.3-fabric']
+        assertTrue(runner(*(resume as String[])).buildAndFail().output.contains('missing its action receipt'))
+        new File(directory, 'jobs.json').text = JsonOutput.toJson([[jobs: [[run_id: 123,
+                name: 'publish (26.3-fabric)', status: 'completed',
+                steps: [[name: 'Upload to CurseForge', status: 'completed', conclusion: 'skipped']]]]]])
+        runner(*((resume + ['-PcurseforgeResumeJobs=jobs.json']) as String[])).build()
+        assertTrue(CandidateFiles.read(planFile).confirmed_unattempted)
+    }
+
+    @Test void curseForgeTaskReusesLegacyParentWithPreviousNotes() {
+        Map fixture = CandidateFixture.create(new File(directory, 'candidate'))
+        String notes = '### Fixed\n\n#### Minecraft 26.3\n\n- Example fix.\n\n<!-- cbbg-candidate-run: 123 -->\n'
+        Map current = Publication.metadata(fixture.file, fixture.root, notes)
+        File metadataFile = new File(directory, 'publication.json')
+        metadataFile.text = JsonOutput.toJson(current)
+        Map previous = CandidateFiles.read(metadataFile)
+        previous.records[0].modrinth.changelog = ChangelogNotes.forTargets(notes, [fixture.target])
+        previous.records[0].curseforge.changelog = previous.records[0].modrinth.changelog
+        File receipts = new File(directory, 'receipts')
+        receipts.mkdirs()
+        File submitted = new File(receipts, 'publication.json')
+        submitted.text = JsonOutput.toJson(previous)
+        new File(receipts, 'curseforge-result.json').text = JsonOutput.toJson([
+                release: current.release, source_commit: current.source_commit,
+                targets: current.records[0].targets, artifact: current.records[0].artifact,
+                file_id: '9126989', metadata_sha256: CandidateFiles.sha256(submitted)])
+        runner('planCurseForgeUploads', '-PpublicationMetadata=publication.json',
+                '-PcurseforgeReceipts=receipts', '-Passets=' + fixture.bundle.absolutePath,
+                '-PsourceRoot=' + fixture.root.absolutePath, '-Ptarget=26.3-fabric',
+                '-PcurseforgeResumeRun=123', '-Poutput=plan.json', '-PgithubOutput=outputs.txt').build()
+        Map result = CandidateFiles.read(new File(directory, 'plan.json'))
+        assertEquals('9126989', result.parent_file_id)
+        assertEquals(current.records[0], result.record)
+        assertFalse(result.additional_files.contains(current.records[0].artifact.path))
+    }
+
+    @Test void workflowUploadsOneFamilyAndSavesItsResumeReceipt() {
+        String workflow = new File('../.github/workflows/publish.yml').text
+        assertEquals(2, workflow.count('uses: qb20nh/curseforge-upload@0df376b40e06d7ae5a48c20c7b45105e2c864438'))
+        assertTrue(workflow.contains('additional_files: ${{ steps.curseforge_plan.outputs.additional_files }}'))
+        assertTrue(workflow.contains('parent_file_id: ${{ steps.curseforge_plan.outputs.parent_file_id }}'))
+        assertTrue(workflow.contains("manual_release: 'false'"))
+        assertTrue(workflow.contains('manual_release: ${' + '{ steps.curseforge_plan.outputs.manual_release }}'))
+        assertTrue(workflow.contains('receipt: ${{ steps.curseforge_plan.outputs.receipt }}'))
+        assertTrue(workflow.contains('always() && steps.curseforge_upload.outputs.receipt'))
+        assertTrue(workflow.contains('            build/curseforge-action-receipt.json\n'))
+        assertTrue(workflow.contains('            build/curseforge-plan.json\n'))
+        assertTrue(workflow.contains('            build/curseforge-main-plan.json\n'))
     }
 
     @Test void curseForgeReceiptBindsFileIdToSubmittedMetadata() {

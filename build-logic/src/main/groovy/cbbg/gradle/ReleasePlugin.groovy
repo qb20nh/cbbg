@@ -201,6 +201,42 @@ class ReleasePlugin implements Plugin<Project> {
                     input('publicationMetadata'), required('target'), input('githubOutput'), run,
                     null, project.providers.gradleProperty('services').getOrElse('both'))
         }
+        task('planCurseForgeUploads', 'Check saved receipts and select one complete CurseForge upload family.') {
+            File metadataFile = input('publicationMetadata')
+            Map metadata = CandidateFiles.read(metadataFile)
+            String selected = project.providers.gradleProperty('target').orNull
+            List<String> owners = metadata.records.collect { it.targets[0] as String }
+            String resumeRun = project.providers.gradleProperty('curseforgeResumeRun').getOrElse('')
+            if (resumeRun && !(resumeRun ==~ /[1-9][0-9]*/)) {
+                throw new GradleException('Expected a numeric -PcurseforgeResumeRun')
+            }
+            String confirmations = project.providers.gradleProperty('curseforgeUnattemptedTargets').getOrElse('')
+            List<String> unattempted = confirmations ? confirmations.split(',', -1).collect { it.trim() } : []
+            if (unattempted && (!resumeRun || unattempted.size() != unattempted.unique(false).size() ||
+                    unattempted.any { !owners.contains(it) })) {
+                throw new GradleException('Confirm unattempted artifact owners from this release only, once each, with a CurseForge resume run')
+            }
+            List<String> targets = selected ? [selected] : owners
+            String jobsFile = project.providers.gradleProperty('curseforgeResumeJobs').orNull
+            Map resumeEvidence = resumeRun && jobsFile
+                    ? [run_id: resumeRun, pages: CandidateFiles.read(project.file(jobsFile))] : [:]
+            targets.each { target ->
+                Map plan = CurseForgeUploads.plan(metadataFile, input('curseforgeReceipts'), input('assets'), target,
+                        !resumeRun.isEmpty(), unattempted.contains(target), resumeEvidence, source())
+                if (selected) {
+                    CandidateFiles.writeNew(input('output'), plan)
+                    File githubOutput = input('githubOutput')
+                    githubOutput.withWriterAppend('UTF-8') { writer ->
+                        ['file_path', 'additional_files', 'parent_file_id', 'display_name', 'receipt', 'manual_release'].each { key ->
+                            String delimiter = 'CF_' + UUID.randomUUID().toString()
+                            writer.write(key + '<<' + delimiter + '\n' + plan[key] + '\n' + delimiter + '\n')
+                        }
+                    }
+                }
+                project.logger.lifecycle('CurseForge {}: {}', target, plan.receipt ? 'resume saved upload' :
+                        plan.parent_file_id ? 'attach files to ' + plan.parent_file_id : 'upload new family')
+            }
+        }
         task('recordCurseForgeUpload', 'Save the CurseForge file ID with the submitted metadata.') {
             String identifier = required('fileId')
             if (!(identifier ==~ /[0-9]+/) || new BigInteger(identifier) <= 0) {

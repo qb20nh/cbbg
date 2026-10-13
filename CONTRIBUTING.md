@@ -72,8 +72,9 @@ dependency provenance, `provenance.jsonl`, and `SHA256SUMS`. CBBG Lib GitHub
 releases contain library mod and sources JARs plus
 `cbbg-utilities-<library_version>.jar` and its sources JAR once per release,
 with their release provenance and checksums. CBBG packages the matching library
-JAR inside its mod; standalone library and utility files are attached to CBBG
-Modrinth and CurseForge uploads from the verified candidate references.
+JAR inside its mod. Modrinth and CurseForge receive the main mod, its sources and
+release evidence. Standalone library and utility downloads are for developers
+and belong in the separate CBBG Lib GitHub release.
 The sources JAR includes the ProGuard mapping and CycloneDX SBOM under
 `META-INF/cbbg/`; they need no separate release assets.
 
@@ -128,8 +129,8 @@ published release. Write each change once per category and group changes with th
 same target set under one H4. Groups may overlap; each description must apply to
 every target in its group. Combine related items and write briefly without dropping
 information. Give readers enough context to understand the change without following
-development. Each platform upload must include all shared changes and every group
-matching any version and loader supported by its artifact.
+development. Each platform upload must give every supported Minecraft version
+complete notes, including shared changes and all matching groups.
 
 Extract the selected entry with Gradle:
 
@@ -144,9 +145,11 @@ matching any selected target. It rejects missing, duplicate or empty entries and
 unknown scope headings. Historical `## [X.Y.Z] - YYYY-MM-DD` headings remain
 supported. Candidate CI uses the same selection for the draft body. Pass the
 generated file as `-Pnotes=build/release-notes.md` to `checkRelease` and
-`publishRelease`. Modrinth and CurseForge receive shared changes plus the scopes
-applicable to each uploaded artifact. A shared Fabric/Quilt JAR includes both
-loaders' notes.
+`publishRelease`. GitHub keeps the grouped notes. Modrinth and CurseForge receive
+the same complete notes per Minecraft version. For a multi-version JAR, each
+`## Minecraft X` section repeats the shared changes. Exports omit scope headings
+that apply to the whole section; shared Fabric/Quilt JARs retain loader headings
+for loader-specific changes.
 
 1. Finish the selected targets and update their version and changelog. Obtain
    approval before release preparation commits, pushes and tags.
@@ -180,10 +183,22 @@ loaders' notes.
 CBBG Lib is released through GitHub; its tags cannot trigger Modrinth or
 CurseForge uploads. The publisher uses tools from its workflow revision and
 source from the release tag. It verifies an immutable release and uploads its existing JARs. Modrinth
-retries compare remote metadata and file hashes. CurseForge uses the upload
-token; inspect its project files before starting a new dispatch to retry an
-upload. If publication returns an uncertain result, check the service before
-retrying.
+retries compare remote metadata and file hashes. For each Minecraft artifact,
+CurseForge uploads the mod, saves its ID, then uploads its sources and evidence
+as attachments. Each file publishes automatically after approval; the mod may
+appear before its attachments. Standalone library and utilities files stay on GitHub.
+Retries of previously held uploads retain their original release settings.
+To resume, dispatch Publish with `curseforge_resume_run` set to the previous
+run ID. Saved receipts retain accepted file IDs and validate the submitted files
+and metadata. An uncertain response requires dashboard reconciliation before
+resuming; do not start a fresh upload of that family.
+Resume requires a usable receipt for every artifact owner. Missing records
+require reconciliation. If a target never reached uploading, check the
+previous run and dashboard, then list its owner ID in
+`curseforge_unattempted_targets` (comma-separated). This confirmation permits
+targets with no upload receipts. A saved plan without an action receipt also
+requires GitHub's records to show the CurseForge upload step was skipped in every
+attempt for that target. Uploads that started or have unknown status remain blocked.
 
 See [the build command reference](build-config/README.md) for task inputs.
 Hotfix checks take explicit prior release manifests and expand testing to

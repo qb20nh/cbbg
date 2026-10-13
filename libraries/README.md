@@ -29,8 +29,8 @@ noise generation, CPU dithering and reusable GLSL on Java 8 and newer, with no
 Minecraft dependency or mod entrypoint. The GPU pass requires a Minecraft
 library variant.
 
-CBBG's Modrinth and CurseForge releases also offer the matching library and
-utilities as additional files.
+Download the standalone library, utilities and their sources from the
+[CBBG Lib GitHub releases](https://github.com/qb20nh/cbbg/releases?q=lib%2F).
 
 ## Develop a mod
 

@@ -118,6 +118,7 @@ class PublicationTest {
             assertEquals(['- Shared fix.', '- Grouped fix.',
                           index == 0 ? '- New target fix.' : '- Older target fix.', '- Common loader fix.'], changes)
             assertEquals(record.modrinth.changelog, record.curseforge.changelog)
+            assertFalse(record.modrinth.changelog.contains('####'))
         }
         writeMetadata(value)
         assertEquals(['26.2-fabric'], Publication.checkedRecord(fixture.file, publication,
@@ -147,7 +148,7 @@ class PublicationTest {
     }
 
     @Test
-    void sharedArtifactRuntimeAliasesPublishOnceWithUnionNotesAndLoaderLabels() {
+    void sharedArtifactRuntimeAliasesPublishOnceWithStandaloneVersionNotes() {
         fixture = CandidateFixture.create(new File(directory, 'shared-patch'), true, false,
                 '26.3', '>=26.3 <26.4')
         fixture.target.compatibleMinecraft = ['26.3.1']
@@ -194,8 +195,20 @@ class PublicationTest {
         assertTrue(value.records[0].modrinth.changelog.contains('Quilt fix.'))
         assertTrue(value.records[0].modrinth.changelog.contains('Patch fix.'))
         assertFalse(value.records[0].modrinth.changelog.contains('Other fix.'))
-        assertEquals(['- Fabric fix.', '- Quilt fix.', '- Patch fix.'],
-                value.records[0].modrinth.changelog.readLines().findAll { it.startsWith('- ') })
+        assertEquals('''## Minecraft 26.3
+
+### Fixed
+#### Fabric
+- Fabric fix.
+#### Quilt
+- Quilt fix.
+
+## Minecraft 26.3.1
+
+### Fixed
+- Fabric fix.
+- Patch fix.
+''', value.records[0].modrinth.changelog)
         assertEquals(value.records[0].modrinth.changelog, value.records[0].curseforge.changelog)
         writeMetadata(value)
         assertEquals(value.records[0], Publication.checkedRecord(fixture.file, publication,
@@ -357,12 +370,11 @@ class PublicationTest {
          status: 'listed', changelog: upload.changelog,
          loaders: ['fabric'], game_versions: ['26.3'],
          dependencies: [[project_id: 'P7dR8mSH', dependency_type: 'required']],
-         files: (['artifact', 'sources'] + (record.containsKey('utilities') ? ['utilities', 'utilities_sources'] : []) +
-                 (record.containsKey('library') ? ['library', 'library_sources'] : []) +
+         files: (['artifact', 'sources'] +
                  (record.containsKey('evidence') ? ['evidence'] : [])).collect { String kind ->
              File file = new File(fixture.bundle, record[kind].path)
              [filename: file.name, hashes: [sha512: sha512(file)],
-              primary: kind == 'artifact', file_type: kind in ['sources', 'utilities_sources', 'library_sources'] ? 'sources-jar' : null]
+              primary: kind == 'artifact', file_type: kind == 'sources' ? 'sources-jar' : null]
          }]
     }
 
@@ -393,6 +405,100 @@ class PublicationTest {
         assertFalse(result.containsKey('version_id'))
     }
 
+    @Test
+    void retryReusesPreviousChangelogWithoutAcceptingChangedNotes() {
+        String notes = '### Fixed\n\n#### Minecraft 26.3\n\n- Example fix.\n\n<!-- cbbg-candidate-run: 123 -->\n'
+        Map value = Publication.metadata(fixture.file, fixture.root, notes)
+        writeMetadata(value)
+        Map remote = existing(value.records[0])
+        remote.changelog = ChangelogNotes.forTargets(notes, [fixture.target])
+        assertNotEquals(value.records[0].modrinth.changelog, remote.changelog)
+        assertEquals('reuse', Publication.plan(fixture.file, publication, fixture.target.id, fixture.root,
+                fetch([remote], [])).action)
+        fails('different metadata') {
+            Publication.plan(fixture.file, publication, fixture.target.id, fixture.root,
+                    { url -> url.endsWith('/version/Version1') ? remote :
+                            (url.endsWith('/fabric-api') ? [id: 'P7dR8mSH'] : [id: 'UBlXUQbC', slug: 'cbbg']) },
+                    null, 'Version1')
+        }
+        remote.changelog = remote.changelog.replace('Example fix.', 'Changed fix.')
+        fails('different metadata') {
+            Publication.plan(fixture.file, publication, fixture.target.id, fixture.root, fetch([remote], []))
+        }
+    }
+
+    private void checkPreviousAttachments(Map record, List<String> kinds) {
+        Map remote = existing(record)
+        kinds.each { String kind ->
+            File file = new File(fixture.bundle, record[kind].path)
+            remote.files.add([filename: file.name, hashes: [sha512: sha512(file)], primary: false,
+                              file_type: kind.endsWith('_sources') ? 'sources-jar' : 'other'])
+        }
+        Map result = Publication.plan(fixture.file, publication, fixture.target.id, fixture.root, fetch([remote], []))
+        assertEquals('reuse', result.action)
+        assertTrue(kinds.every { !result.containsKey(it) })
+        List attachments = remote.files.findAll { item -> kinds.any { item.filename == record[it].path } }
+        attachments.each { it.file_type = null }
+        assertEquals('reuse', Publication.plan(fixture.file, publication, fixture.target.id,
+                fixture.root, fetch([remote], [])).action)
+        kinds.each { kind ->
+            remote.files.find { it.filename == record[kind].path }.file_type =
+                    kind.endsWith('_sources') ? 'sources-jar' : 'other'
+        }
+        fails('different files') {
+            Publication.plan(fixture.file, publication, fixture.target.id, fixture.root,
+                    { url -> url.endsWith('/version/Version1') ? remote :
+                            (url.endsWith('/fabric-api') ? [id: 'P7dR8mSH'] : [id: 'UBlXUQbC', slug: 'cbbg']) },
+                    null, 'Version1')
+        }
+        Map attachment = remote.files.last()
+        String type = attachment.file_type
+        attachment.file_type = 'signature'
+        fails('differs from candidate') {
+            Publication.plan(fixture.file, publication, fixture.target.id, fixture.root, fetch([remote], []))
+        }
+        attachment.file_type = type
+        String hash = attachment.hashes.sha512
+        attachment.hashes.sha512 = '0' * 128
+        fails('differs from candidate') {
+            Publication.plan(fixture.file, publication, fixture.target.id, fixture.root, fetch([remote], []))
+        }
+        attachment.hashes.sha512 = hash
+        String filename = attachment.filename
+        attachment.filename = 'unexpected.jar'
+        fails('different filenames') {
+            Publication.plan(fixture.file, publication, fixture.target.id, fixture.root, fetch([remote], []))
+        }
+        attachment.filename = filename
+        remote.files.remove(attachment)
+        fails('different files') {
+            Publication.plan(fixture.file, publication, fixture.target.id, fixture.root, fetch([remote], []))
+        }
+    }
+
+    @Test
+    void retryReusesPreviousChangelogAndAttachmentsTogether() {
+        CandidateFixture.utilities(fixture)
+        String notes = '### Fixed\n\n#### Minecraft 26.3\n\n- Example fix.\n\n<!-- cbbg-candidate-run: 123 -->\n'
+        Map value = Publication.metadata(fixture.file, fixture.root, notes)
+        writeMetadata(value)
+        Map record = value.records[0]
+        Map remote = existing(record)
+        remote.changelog = ChangelogNotes.forTargets(notes, [fixture.target])
+        ['utilities', 'utilities_sources'].each { String kind ->
+            File file = new File(fixture.bundle, record[kind].path)
+            remote.files.add([filename: file.name, hashes: [sha512: sha512(file)], primary: false,
+                              file_type: kind.endsWith('_sources') ? 'sources-jar' : 'other'])
+        }
+        assertEquals('reuse', Publication.plan(fixture.file, publication, fixture.target.id, fixture.root,
+                fetch([remote], [])).action)
+        assertEquals('upload', Publication.plan(fixture.file, publication, fixture.target.id, fixture.root,
+                fetch([], [])).action)
+        assertEquals(['artifact', 'sources'], Publication.uploadKinds(record))
+        assertFalse(record.modrinth.changelog.contains('####'))
+        assertFalse(record.modrinth.changelog.contains('cbbg-candidate-run'))
+    }
+
     @Test void standaloneLibraryTagsCannotProduceOrUploadPlatformMetadata() {
         Map value = metadata()
         value.release = 'lib/v1.0.0'
@@ -411,7 +517,7 @@ class PublicationTest {
         fails("requires 'cbbg'") { metadata() }
     }
 
-    @Test void libraryAttachmentsRequireExactRemoteFilesAndSourceTypes() {
+    @Test void nestedLibraryIsVerifiedWithoutUploadingStandaloneDeveloperFiles() {
         File artifact = new File(fixture.bundle, fixture.record.artifact.path)
         Map entries = [:]
         new ZipFile(artifact).withCloseable { zip ->
@@ -442,44 +548,33 @@ class PublicationTest {
         assertEquals(fixture.record.library_sources, value.records[0].library_sources)
         writeMetadata(value)
         Map remote = existing(value.records[0])
-        assertEquals(4, remote.files.size())
+        assertEquals(2, remote.files.size())
         Map result = Publication.plan(fixture.file, publication, fixture.target.id, fixture.root, fetch([remote], []))
         assertEquals('reuse', result.action)
-        assertEquals(fixture.record.library, result.library)
-        remote.files[2].file_type = 'other'
-        assertEquals('reuse', Publication.plan(fixture.file, publication, fixture.target.id, fixture.root, fetch([remote], [])).action)
-        remote.files[3].file_type = null
-        fails('Existing Modrinth file') {
-            Publication.plan(fixture.file, publication, fixture.target.id, fixture.root, fetch([remote], []))
-        }
+        assertFalse(result.containsKey('library'))
+        assertFalse(result.containsKey('library_sources'))
+        assertEquals(['artifact', 'sources'], Publication.uploadKinds(value.records[0]))
+        checkPreviousAttachments(value.records[0], ['library', 'library_sources'])
         value.records[0].library.sha256 = '0' * 64
         writeMetadata(value)
         fails('checked candidate') { Publication.checkedRecord(fixture.file, publication, fixture.target.id, fixture.root) }
     }
 
     @Test
-    void utilityAttachmentsRequireExactRemoteFilesHashesAndTypes() {
+    void utilityReferencesAreVerifiedWithoutUploadingDeveloperFiles() {
         CandidateFixture.utilities(fixture)
         Map value = metadata()
         assertEquals(fixture.record.utilities, value.records[0].utilities)
         assertEquals(fixture.record.utilities_sources, value.records[0].utilities_sources)
         writeMetadata(value)
         Map remote = existing(value.records[0])
-        assertEquals(4, remote.files.size())
+        assertEquals(2, remote.files.size())
         Map result = Publication.plan(fixture.file, publication, '26.3-fabric', fixture.root, fetch([remote], []))
         assertEquals('reuse', result.action)
-        assertEquals(fixture.record.utilities, result.utilities)
-        remote.files[2].file_type = 'other'
-        assertEquals('reuse', Publication.plan(fixture.file, publication, '26.3-fabric', fixture.root, fetch([remote], [])).action)
-        for (Closure change : [{ it.files.remove(3) }, { it.files.add(it.files[3]) },
-                              { it.files[2].primary = true }, { it.files[2].file_type = 'sources-jar' },
-                              { it.files[3].file_type = null }, { it.files[3].hashes.sha512 = '0' * 128 }]) {
-            Map wrong = CandidateFiles.parse(new StringReader(JsonOutput.toJson(remote))) as Map
-            change(wrong)
-            fails('Existing Modrinth') {
-                Publication.plan(fixture.file, publication, '26.3-fabric', fixture.root, fetch([wrong], []))
-            }
-        }
+        assertFalse(result.containsKey('utilities'))
+        assertFalse(result.containsKey('utilities_sources'))
+        assertEquals(['artifact', 'sources'], Publication.uploadKinds(value.records[0]))
+        checkPreviousAttachments(value.records[0], ['utilities', 'utilities_sources'])
         value.records[0].remove('utilities_sources')
         writeMetadata(value)
         fails('checked candidate') {
