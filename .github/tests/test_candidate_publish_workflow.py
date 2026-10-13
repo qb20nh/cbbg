@@ -137,15 +137,20 @@ class CandidatePublishWorkflowTests(unittest.TestCase):
                    if 'uses: qb20nh/curseforge-upload@' in step]
         identifiers = [next(line.strip()[4:] for line in step.splitlines()
                             if line.strip().startswith('id: ')) for step in uploads]
-        self.assertEqual(identifiers, ['curseforge_upload'])
-        step = uploads[0]
+        self.assertEqual(identifiers, ['curseforge_main_upload', 'curseforge_upload'])
+        main, step = uploads
+        self.assertIn("manual_release: 'false'", main)
+        self.assertNotIn('additional_files:', main)
+        self.assertIn("steps.curseforge_main_plan.outputs.parent_file_id == ''", main)
+        self.assertIn("steps.curseforge_main_plan.outputs.receipt == ''", main)
         self.assertIn('!inputs.dry_run', step)
         self.assertIn('additional_files: ${{ steps.curseforge_plan.outputs.additional_files }}', step)
         self.assertIn('parent_file_id: ${{ steps.curseforge_plan.outputs.parent_file_id }}', step)
         self.assertIn('receipt: ${{ steps.curseforge_plan.outputs.receipt }}', step)
-        self.assertIn('manual_release: auto', step)
+        self.assertIn('manual_release: ${{ steps.curseforge_plan.outputs.manual_release }}', step)
         self.assertIn("game_versions: ${{ steps.curseforge_plan.outputs.parent_file_id == '' && steps.publication.outputs.cf_game_versions || '' }}", step)
-        self.assertIn('qb20nh/curseforge-upload@bbaa5053cfd75b1dece0ee4bdb3df1b740ef47d8', step)
+        for upload in uploads:
+            self.assertIn('qb20nh/curseforge-upload@0df376b40e06d7ae5a48c20c7b45105e2c864438', upload)
         publisher = (ROOT / 'build-config/publishing/build.gradle').read_text()
         self.assertIn('Publication.requireUploadAllowed(CandidateFiles.read(metadataFile))', publisher)
 
@@ -194,7 +199,9 @@ class CandidatePublishWorkflowTests(unittest.TestCase):
         self.assertNotIn('fixture-token', args)
 
     def test_curseforge_record_identifies_submitted_artifact_and_metadata(self):
-        (self.root / 'build/curseforge-action-receipt.json').write_text('{"parentID":123}')
+        self.env['CF_FILE_ID'] = '123'
+        launcher = self.root / 'gradlew'
+        launcher.write_text(launcher.read_text() + 'Path("build/curseforge-result.json").write_text("{}")\n')
         result = self.run_step('Save CurseForge upload record')
         self.assertEqual(result.returncode, 0, result.stderr)
         args = json.loads((self.root / 'gradle-arguments.json').read_text())
@@ -203,6 +210,11 @@ class CandidatePublishWorkflowTests(unittest.TestCase):
         self.assertIn('-PpublicationMetadata=build/publication.json', args)
         self.assertIn('-Poutput=build/curseforge-result.json', args)
         self.assertIn('-Ptarget=26.3-fabric', args)
+        self.assertTrue((self.root / 'build/curseforge-receipts/current/publication.json').is_file())
+        self.assertTrue((self.root / 'build/curseforge-receipts/current/curseforge-result.json').is_file())
+        workflow = (ROOT / '.github/workflows/publish.yml').read_text()
+        self.assertLess(workflow.index('name: Save CurseForge upload record'),
+                        workflow.index('name: Plan CurseForge attachments'))
 
     def test_matrix_waits_for_all_preflight_checks_and_selects_owner(self):
         workflow = (ROOT / '.github/workflows/publish.yml').read_text()
@@ -249,8 +261,33 @@ class CandidatePublishWorkflowTests(unittest.TestCase):
         args = json.loads((self.root / 'gradle-arguments.json').read_text())
         self.assertIn('-Ptarget=26.3-fabric', args)
         self.assertIn('-PcurseforgeReceipts=build/curseforge-receipts', args)
-        self.assertIn('-Poutput=build/curseforge-plan.json', args)
+        self.assertIn('-Poutput=build/curseforge-main-plan.json', args)
         self.assertEqual(args[-1], 'planCurseForgeUploads')
+
+    def test_attachments_use_the_saved_main_id_and_clear_unattempted_confirmation(self):
+        self.env.update(MAIN_FILE_ID='123', RESUME_RUN='456', UNATTEMPTED_TARGETS='26.3-fabric')
+        result = self.run_step('Plan CurseForge attachments')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        args = json.loads((self.root / 'gradle-arguments.json').read_text())
+        self.assertIn('-PcurseforgeResumeRun=', args)
+        self.assertIn('-PcurseforgeUnattemptedTargets=', args)
+        self.assertIn('-Poutput=build/curseforge-plan.json', args)
+        self.env['MAIN_FILE_ID'] = ''
+        result = self.run_step('Plan CurseForge attachments')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        args = json.loads((self.root / 'gradle-arguments.json').read_text())
+        self.assertIn('-PcurseforgeResumeRun=456', args)
+        self.assertIn('-PcurseforgeUnattemptedTargets=26.3-fabric', args)
+
+    def test_summary_distinguishes_automatic_publication_from_prior_held_uploads(self):
+        self.env['RELEASE_MODE'] = 'false'
+        result = self.run_step('Summarize CurseForge upload')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('automatic publication after approval', (self.root / 'summary').read_text())
+        self.env['RELEASE_MODE'] = 'auto'
+        result = self.run_step('Summarize CurseForge upload')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('Previously held files still need dashboard release', (self.root / 'summary').read_text())
 
     def test_receipt_is_saved_even_after_upload_failure(self):
         receipt = self.root / 'receipt.json'

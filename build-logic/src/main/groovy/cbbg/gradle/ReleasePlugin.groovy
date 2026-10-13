@@ -227,7 +227,7 @@ class ReleasePlugin implements Plugin<Project> {
                     CandidateFiles.writeNew(input('output'), plan)
                     File githubOutput = input('githubOutput')
                     githubOutput.withWriterAppend('UTF-8') { writer ->
-                        ['file_path', 'additional_files', 'parent_file_id', 'display_name', 'receipt'].each { key ->
+                        ['file_path', 'additional_files', 'parent_file_id', 'display_name', 'receipt', 'manual_release'].each { key ->
                             String delimiter = 'CF_' + UUID.randomUUID().toString()
                             writer.write(key + '<<' + delimiter + '\n' + plan[key] + '\n' + delimiter + '\n')
                         }

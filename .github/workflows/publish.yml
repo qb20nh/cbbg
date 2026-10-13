@@ -277,7 +277,7 @@ jobs:
 
       - name: Plan CurseForge upload family
         if: inputs.services != 'modrinth'
-        id: curseforge_plan
+        id: curseforge_main_plan
         env:
           TARGET_ID: ${{ matrix.target }}
           RESUME_RUN: ${{ inputs.curseforge_resume_run }}
@@ -288,7 +288,7 @@ jobs:
             -PcurseforgeResumeJobs=build/curseforge-resume-jobs.json \
             "-PcurseforgeResumeRun=$RESUME_RUN" "-PcurseforgeUnattemptedTargets=$UNATTEMPTED_TARGETS" \
             "-Ptarget=$TARGET_ID" "-PgithubOutput=$GITHUB_OUTPUT" \
-            -Poutput=build/curseforge-plan.json planCurseForgeUploads
+            -Poutput=build/curseforge-main-plan.json planCurseForgeUploads
 
       - name: Validate or publish to Modrinth
         if: inputs.services != 'curseforge'
@@ -316,10 +316,58 @@ jobs:
           fi
           ./gradlew "${args[@]}" "$task"
 
+      - name: Upload main file to CurseForge
+        if: ${{ !inputs.dry_run && inputs.services != 'modrinth' && steps.curseforge_main_plan.outputs.parent_file_id == '' && steps.curseforge_main_plan.outputs.receipt == '' }}
+        id: curseforge_main_upload
+        uses: qb20nh/curseforge-upload@0df376b40e06d7ae5a48c20c7b45105e2c864438
+        with:
+          token: ${{ secrets.CF_API_TOKEN }}
+          project_id: ${{ steps.publication.outputs.cf_project_id }}
+          game_endpoint: minecraft
+          relations: ${{ steps.publication.outputs.cf_relations }}
+          file_path: ${{ steps.curseforge_main_plan.outputs.file_path }}
+          manual_release: 'false'
+          game_versions: ${{ steps.publication.outputs.cf_game_versions }}
+          release_type: ${{ steps.publication.outputs.cf_release_type }}
+          display_name: ${{ steps.curseforge_main_plan.outputs.display_name }}
+          changelog: ${{ steps.publication.outputs.cf_changelog }}
+          changelog_type: markdown
+
+      - name: Save CurseForge upload record
+        if: ${{ !inputs.dry_run && inputs.services != 'modrinth' && steps.curseforge_main_upload.outputs.id != '' }}
+        env:
+          TARGET_ID: ${{ matrix.target }}
+          CF_FILE_ID: ${{ steps.curseforge_main_upload.outputs.id }}
+        run: |
+          ./gradlew --no-daemon "-PpublicationMetadata=build/publication.json" \
+            "-Ptarget=$TARGET_ID" "-PfileId=$CF_FILE_ID" -Poutput=build/curseforge-result.json recordCurseForgeUpload
+          mkdir -p build/curseforge-receipts/current
+          cp build/publication.json build/curseforge-result.json build/curseforge-receipts/current/
+
+      - name: Plan CurseForge attachments
+        if: ${{ !inputs.dry_run && inputs.services != 'modrinth' }}
+        id: curseforge_plan
+        env:
+          TARGET_ID: ${{ matrix.target }}
+          RESUME_RUN: ${{ inputs.curseforge_resume_run }}
+          UNATTEMPTED_TARGETS: ${{ inputs.curseforge_unattempted_targets }}
+          MAIN_FILE_ID: ${{ steps.curseforge_main_upload.outputs.id }}
+        run: |
+          if [[ -n "$MAIN_FILE_ID" ]]; then
+            RESUME_RUN=''
+            UNATTEMPTED_TARGETS=''
+          fi
+          ./gradlew --no-daemon -PpublicationMetadata=build/publication.json \
+            -PcurseforgeReceipts=build/curseforge-receipts -Passets=release-assets \
+            -PcurseforgeResumeJobs=build/curseforge-resume-jobs.json \
+            "-PcurseforgeResumeRun=$RESUME_RUN" "-PcurseforgeUnattemptedTargets=$UNATTEMPTED_TARGETS" \
+            "-Ptarget=$TARGET_ID" "-PgithubOutput=$GITHUB_OUTPUT" \
+            -Poutput=build/curseforge-plan.json planCurseForgeUploads
+
       - name: Upload to CurseForge
         if: ${{ !inputs.dry_run && inputs.services != 'modrinth' }}
         id: curseforge_upload
-        uses: qb20nh/curseforge-upload@bbaa5053cfd75b1dece0ee4bdb3df1b740ef47d8
+        uses: qb20nh/curseforge-upload@0df376b40e06d7ae5a48c20c7b45105e2c864438
         with:
           token: ${{ secrets.CF_API_TOKEN }}
           project_id: ${{ steps.publication.outputs.cf_project_id }}
@@ -329,7 +377,7 @@ jobs:
           additional_files: ${{ steps.curseforge_plan.outputs.additional_files }}
           parent_file_id: ${{ steps.curseforge_plan.outputs.parent_file_id }}
           receipt: ${{ steps.curseforge_plan.outputs.receipt }}
-          manual_release: auto
+          manual_release: ${{ steps.curseforge_plan.outputs.manual_release }}
           game_versions: ${{ steps.curseforge_plan.outputs.parent_file_id == '' && steps.publication.outputs.cf_game_versions || '' }}
           release_type: ${{ steps.publication.outputs.cf_release_type }}
           display_name: ${{ steps.curseforge_plan.outputs.display_name }}
@@ -342,15 +390,16 @@ jobs:
           RECEIPT_PATH: ${{ steps.curseforge_upload.outputs.receipt }}
         run: cp -- "$RECEIPT_PATH" build/curseforge-action-receipt.json
 
-      - name: Save CurseForge upload record
+      - name: Summarize CurseForge upload
         if: ${{ !inputs.dry_run && inputs.services != 'modrinth' }}
         env:
-          TARGET_ID: ${{ matrix.target }}
+          RELEASE_MODE: ${{ steps.curseforge_plan.outputs.manual_release }}
         run: |
-          CF_FILE_ID="$(jq -er '.parentID | select(type == "number" and . > 0)' build/curseforge-action-receipt.json)"
-          ./gradlew --no-daemon "-PpublicationMetadata=build/publication.json" \
-            "-Ptarget=$TARGET_ID" "-PfileId=$CF_FILE_ID" -Poutput=build/curseforge-result.json recordCurseForgeUpload
-          echo "CurseForge accepted every file in this family. New main files remain held for manual release until all files are approved." >> "$GITHUB_STEP_SUMMARY"
+          if [[ "$RELEASE_MODE" == 'false' ]]; then
+            echo "CurseForge accepted the main file and its attachments for automatic publication after approval." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Resumed the previous upload with its original release settings. Previously held files still need dashboard release." >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: Save publication records
         if: always()
@@ -360,6 +409,7 @@ jobs:
           path: |
             build/publication.json
             build/curseforge-result.json
+            build/curseforge-main-plan.json
             build/curseforge-plan.json
             build/curseforge-action-receipt.json
             build/publishing/**/modrinth-plan.json

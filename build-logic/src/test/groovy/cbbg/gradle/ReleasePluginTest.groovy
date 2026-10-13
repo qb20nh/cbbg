@@ -226,14 +226,16 @@ cbbg.gradle.FabricCandidateAcceptance.metaClass.static.execute = { Map options, 
 
     @Test void workflowUploadsOneFamilyAndSavesItsResumeReceipt() {
         String workflow = new File('../.github/workflows/publish.yml').text
-        assertEquals(1, workflow.count('uses: qb20nh/curseforge-upload@'))
+        assertEquals(2, workflow.count('uses: qb20nh/curseforge-upload@0df376b40e06d7ae5a48c20c7b45105e2c864438'))
         assertTrue(workflow.contains('additional_files: ${{ steps.curseforge_plan.outputs.additional_files }}'))
         assertTrue(workflow.contains('parent_file_id: ${{ steps.curseforge_plan.outputs.parent_file_id }}'))
-        assertTrue(workflow.contains('manual_release: auto'))
+        assertTrue(workflow.contains("manual_release: 'false'"))
+        assertTrue(workflow.contains('manual_release: ${' + '{ steps.curseforge_plan.outputs.manual_release }}'))
         assertTrue(workflow.contains('receipt: ${{ steps.curseforge_plan.outputs.receipt }}'))
         assertTrue(workflow.contains('always() && steps.curseforge_upload.outputs.receipt'))
         assertTrue(workflow.contains('            build/curseforge-action-receipt.json\n'))
         assertTrue(workflow.contains('            build/curseforge-plan.json\n'))
+        assertTrue(workflow.contains('            build/curseforge-main-plan.json\n'))
     }
 
     @Test void curseForgeReceiptBindsFileIdToSubmittedMetadata() {

@@ -18,10 +18,12 @@ class CurseForgeUploads {
         }
         Map record = records[0]
         List<File> plans = []
+        List<File> mainPlans = []
         List<File> unattemptedPlans = []
         List<File> legacy = []
         List<File> legacyAttachments = []
         receiptsDirectory.eachFileRecurse { file ->
+            if (file.name == 'curseforge-main-plan.json' && CandidateFiles.read(file).target == target) mainPlans.add(file)
             if (file.name == 'curseforge-plan.json' && CandidateFiles.read(file).target == target) {
                 if (!new File(file.parentFile, 'curseforge-action-receipt.json').isFile()) {
                     if (!confirmedUnattempted || !uploaderWasSkipped(resumeEvidence, target)) {
@@ -45,8 +47,19 @@ class CurseForgeUploads {
             throw new GradleException('Legacy attachment receipts for ' + target + '; reconcile them before retrying: ' +
                     legacyAttachments.collect { it.name }.sort().join(', '))
         }
-        if (plans.size() + unattemptedPlans.size() > 1 || legacy.size() > 1 || (unattemptedPlans && legacy)) {
+        if (plans.size() + unattemptedPlans.size() > 1 || mainPlans.size() > 1 || legacy.size() > 1 || (unattemptedPlans && legacy)) {
             throw new GradleException('Conflicting CurseForge receipts for ' + target)
+        }
+        for (File file : mainPlans) {
+            Map saved = CandidateFiles.read(file)
+            if (saved.release != metadata.release || saved.source_commit != metadata.source_commit ||
+                    !sameRecord(saved.record, record, metadata, sourceRoot)) {
+                throw new GradleException('CurseForge main upload inputs changed')
+            }
+            if (!plans && !legacy && (!confirmedUnattempted ||
+                    !uploaderWasSkipped(resumeEvidence, target, 'Upload main file to CurseForge'))) {
+                throw new GradleException('CurseForge main upload is missing its acceptance record; reconcile it before retrying')
+            }
         }
         if (resuming && !plans && !legacy && !confirmedUnattempted) {
             throw new GradleException('No usable CurseForge receipt for ' + target +
@@ -101,6 +114,7 @@ class CurseForgeUploads {
          file_path: files.first(), additional_files: files.drop(1).join('\n'), parent_file_id: parent,
          display_name: parent ? new File(files.first()).name : record.curseforge.display_name,
          receipt: receipt]
+        result.manual_release = previousPlan?.manual_release ?: (receipt ? 'auto' : 'false')
         if (confirmedUnattempted) result.confirmed_unattempted = true
         if (previousPlan && ['file_path', 'additional_files', 'display_name'].any { previousPlan[it] != result[it] }) {
             throw new GradleException('CurseForge upload file selection changed')
@@ -124,7 +138,7 @@ class CurseForgeUploads {
         adjusted == record
     }
 
-    private static boolean uploaderWasSkipped(Map evidence, String target) {
+    private static boolean uploaderWasSkipped(Map evidence, String target, String stepName = 'Upload to CurseForge') {
         if (!(evidence.run_id instanceof String) || !(evidence.run_id ==~ /[1-9][0-9]*/) ||
                 !(evidence.pages instanceof List) || !evidence.pages || evidence.pages.any {
                     !(it instanceof Map) || !(it.jobs instanceof List) || it.jobs.any { !(it instanceof Map) }
@@ -132,7 +146,7 @@ class CurseForgeUploads {
         List jobs = evidence.pages.collectMany { it.jobs }.findAll { it.name == 'publish (' + target + ')' }
         jobs && jobs.every { job ->
             List steps = job.steps instanceof List ? job.steps.findAll {
-                it instanceof Map && it.name == 'Upload to CurseForge'
+                it instanceof Map && it.name == stepName
             } : []
             job.run_id?.toString() == evidence.run_id && job.status == 'completed' && steps.size() == 1 &&
                     steps[0].status == 'completed' && steps[0].conclusion == 'skipped'

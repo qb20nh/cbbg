@@ -56,6 +56,7 @@ class CurseForgeUploadsTest {
         assertEquals(['sources.jar', 'evidence.jar'],
                 result.additional_files.readLines().collect { new File(it).name })
         assertEquals('', result.receipt)
+        assertEquals('false', result.manual_release)
     }
 
     @Test
@@ -66,6 +67,74 @@ class CurseForgeUploadsTest {
         assertEquals(new File(directory, 'sources.jar').absolutePath, result.file_path)
         assertEquals([new File(directory, 'evidence.jar').absolutePath], result.additional_files.readLines())
         assertFalse(result.additional_files.contains('artifact.jar'))
+        assertEquals('false', result.manual_release)
+    }
+
+    @Test
+    void mainPlanAndAcceptedMainSelectOnlyAutomaticAttachments() {
+        write(new File(receipts, 'curseforge-main-plan.json'), plan())
+        legacy()
+        Map attachments = plan(true)
+        assertEquals('9126989', attachments.parent_file_id)
+        assertEquals('false', attachments.manual_release)
+        assertEquals('sources.jar', new File(attachments.file_path).name)
+        write(new File(receipts, 'curseforge-plan.json'), attachments)
+        write(new File(receipts, 'curseforge-action-receipt.json'), [parentID: 9126989])
+        Map resumed = plan(true)
+        assertEquals(attachments.file_path, resumed.file_path)
+        assertEquals(attachments.additional_files, resumed.additional_files)
+        assertEquals('false', resumed.manual_release)
+        assertFalse(resumed.additional_files.contains('artifact.jar'))
+    }
+
+    @Test
+    void missingMainAcceptanceCannotBeOverriddenAfterUploadingStarted() {
+        write(new File(receipts, 'curseforge-main-plan.json'), plan())
+        assertThrows(GradleException) { plan(true) }
+        assertThrows(GradleException) { plan(true, true, skippedUpload()) }
+        Map skipped = skippedUpload()
+        skipped.pages[0].jobs[0].steps[0].name = 'Upload main file to CurseForge'
+        assertEquals('', plan(true, true, skipped).parent_file_id)
+        skipped.pages[0].jobs[0].steps[0].conclusion = 'failure'
+        assertThrows(GradleException) { plan(true, true, skipped) }
+    }
+
+    @Test
+    void changedMainPlanIsRejectedEvenWithAnAcceptedMain() {
+        Map original = plan()
+        original.record.curseforge.display_name = 'different'
+        write(new File(receipts, 'curseforge-main-plan.json'), original)
+        legacy()
+        assertThrows(GradleException) { plan(true) }
+    }
+
+    @Test
+    void minecraftVersionsKeepSeparateParentsAndAttachments() {
+        Map second = CandidateFiles.read(metadataFile).records[0]
+        second.targets = ['26.2-fabric']
+        second.curseforge.display_name = 'cbbg 1.5.0+mc26.2-fabric'
+        Publication.uploadKinds(second).each { kind ->
+            File file = new File(directory, '26.2-' + kind + '.jar')
+            file.text = kind
+            second[kind] = [path: file.name, sha256: CandidateFiles.sha256(file)]
+        }
+        metadata.records.add(second)
+        write(metadataFile, metadata)
+        metadata.records.eachWithIndex { record, index ->
+            File saved = new File(receipts, record.targets[0])
+            saved.mkdirs()
+            write(new File(saved, 'publication.json'), metadata)
+            write(new File(saved, 'curseforge-result.json'), [release: metadata.release,
+                    source_commit: metadata.source_commit, targets: record.targets, artifact: record.artifact,
+                    file_id: (123 + index).toString(),
+                    metadata_sha256: CandidateFiles.sha256(new File(saved, 'publication.json'))])
+            Map selected = CurseForgeUploads.plan(metadataFile, receipts, directory, record.targets[0], true)
+            assertEquals((123 + index).toString(), selected.parent_file_id)
+            assertEquals(record.sources.path, new File(selected.file_path).name)
+            assertEquals('false', selected.manual_release)
+            assertFalse(selected.additional_files.contains('utilities'))
+            assertFalse(selected.additional_files.contains('library'))
+        }
     }
 
     @Test
@@ -244,12 +313,14 @@ class CurseForgeUploadsTest {
     @Test
     void resumePreservesOriginalFamilyAndDelegatesAcceptedStatesToUploader() {
         Map original = plan()
+        original.remove('manual_release')
         write(new File(receipts, 'curseforge-plan.json'), original)
         write(new File(receipts, 'curseforge-action-receipt.json'), [parentID: 123, selectedParentID: null])
         Map resumed = plan(true)
         assertEquals(original.file_path, resumed.file_path)
         assertEquals(original.additional_files, resumed.additional_files)
         assertEquals('', resumed.parent_file_id)
+        assertEquals('auto', resumed.manual_release)
         assertEquals(new File(receipts, 'curseforge-action-receipt.json').absolutePath, resumed.receipt)
         original.file_path = '/tmp/unrelated.jar'
         write(new File(receipts, 'curseforge-plan.json'), original)
