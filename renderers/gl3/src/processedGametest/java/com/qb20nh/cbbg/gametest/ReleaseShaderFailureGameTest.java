@@ -65,8 +65,8 @@ public final class ReleaseShaderFailureGameTest implements FabricClientGameTest 
             if (shader(false) == null || shader(true) == null || render(client) == null)
               throw new AssertionError("Valid shader reload did not recover dithering");
           });
-      long before = context.computeOnClient(client -> draws());
-      context.waitFor(client -> draws() > before, 600);
+      long before = context.computeOnClient(client -> ReleaseObservations.presentations());
+      context.waitFor(client -> ReleaseObservations.presentations() > before, 600);
       ReleasePixels.check(context, false);
       ReleaseScreenshots.capture(
           context,
