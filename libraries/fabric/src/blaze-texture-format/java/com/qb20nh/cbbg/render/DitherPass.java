@@ -4,6 +4,7 @@ import com.mojang.blaze3d.buffers.GpuBuffer;
 import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.pipeline.TextureTarget;
 import com.mojang.blaze3d.shaders.UniformType;
+import com.mojang.blaze3d.systems.CommandEncoder;
 import com.mojang.blaze3d.systems.RenderPass;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.textures.FilterMode;
@@ -15,7 +16,7 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.Objects;
 import java.util.OptionalInt;
-import net.minecraft.client.renderer.MappableRingBuffer;
+import java.util.function.Supplier;
 import net.minecraft.resources.Identifier;
 import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
@@ -25,8 +26,11 @@ public final class DitherPass implements AutoCloseable {
   private static final RenderPipeline ENABLED = pipeline(false);
   private static final RenderPipeline DEMO = pipeline(true);
   private @Nullable TextureTarget output;
-  private @Nullable MappableRingBuffer uniform;
+  private @Nullable GpuBuffer uniform;
   private final ByteBuffer data = ByteBuffer.allocateDirect(16).order(ByteOrder.nativeOrder());
+  private float previousStrength;
+  private float previousScaleX;
+  private float previousScaleY;
 
   /** Render and close on Minecraft's render thread. The output is valid until resize or close. */
   public TextureTarget render(GpuTextureView input, GpuTextureView noise, DitherOptions options) {
@@ -67,32 +71,90 @@ public final class DitherPass implements AutoCloseable {
       close();
       output = new TextureTarget("CBBG dither", width, height, false);
     }
-    if (uniform == null) {
-      uniform =
-          new MappableRingBuffer(
-              () -> "CBBG dither uniforms",
-              GpuBuffer.USAGE_UNIFORM | GpuBuffer.USAGE_COPY_DST | GpuBuffer.USAGE_MAP_WRITE,
-              16);
-    }
+    TextureTarget target = Objects.requireNonNull(output);
     var encoder = RenderSystem.getDevice().createCommandEncoder();
-    data.clear();
-    data.putFloat(strength).putFloat(0).putFloat(scaleX).putFloat(scaleY).flip();
-    encoder.writeToBuffer(uniform.currentBuffer().slice(), data);
-    try (RenderPass pass =
-        encoder.createRenderPass(
-            () -> "CBBG dither",
-            Objects.requireNonNull(output.getColorTextureView()),
-            OptionalInt.empty())) {
+    draw(
+        input,
+        noise,
+        strength,
+        scaleX,
+        scaleY,
+        selected,
+        encoder,
+        () ->
+            encoder.createRenderPass(
+                () -> "CBBG dither",
+                Objects.requireNonNull(target.getColorTextureView()),
+                OptionalInt.empty()));
+    return target;
+  }
+
+  void renderInto(
+      GpuTextureView input,
+      GpuTextureView noise,
+      float strength,
+      float scaleX,
+      float scaleY,
+      boolean demo,
+      Supplier<RenderPass> destination) {
+    RenderSystem.assertOnRenderThread();
+    RenderPipeline selected = demo ? DEMO : ENABLED;
+    if (!RenderSystem.getDevice().precompilePipeline(selected).isValid()) {
+      throw new IllegalStateException("CBBG dither shader could not be compiled");
+    }
+    if (output != null
+        && (output.width != input.getWidth(0) || output.height != input.getHeight(0))) {
+      close();
+    }
+    draw(
+        input,
+        noise,
+        strength,
+        scaleX,
+        scaleY,
+        selected,
+        RenderSystem.getDevice().createCommandEncoder(),
+        destination);
+  }
+
+  private void draw(
+      GpuTextureView input,
+      GpuTextureView noise,
+      float strength,
+      float scaleX,
+      float scaleY,
+      RenderPipeline selected,
+      CommandEncoder encoder,
+      Supplier<RenderPass> destination) {
+    if (uniform == null
+        || Float.floatToRawIntBits(strength) != Float.floatToRawIntBits(previousStrength)
+        || Float.floatToRawIntBits(scaleX) != Float.floatToRawIntBits(previousScaleX)
+        || Float.floatToRawIntBits(scaleY) != Float.floatToRawIntBits(previousScaleY)) {
+      data.clear();
+      data.putFloat(strength).putFloat(0).putFloat(scaleX).putFloat(scaleY).flip();
+      if (uniform == null) {
+        uniform =
+            RenderSystem.getDevice()
+                .createBuffer(
+                    () -> "CBBG dither uniforms",
+                    GpuBuffer.USAGE_UNIFORM | GpuBuffer.USAGE_COPY_DST,
+                    data);
+      } else {
+        encoder.writeToBuffer(uniform.slice(), data);
+      }
+      previousStrength = strength;
+      previousScaleX = scaleX;
+      previousScaleY = scaleY;
+    }
+    try (RenderPass pass = destination.get()) {
       pass.setPipeline(selected);
       pass.bindTexture(
           "InSampler", input, RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST));
       pass.bindTexture(
           "NoiseSampler", noise, RenderSystem.getSamplerCache().getRepeat(FilterMode.NEAREST));
-      pass.setUniform("CbbgDitherInfo", uniform.currentBuffer());
+      pass.setUniform("CbbgDitherInfo", Objects.requireNonNull(uniform));
       pass.draw(0, 3);
     }
-    uniform.rotate();
-    return output;
   }
 
   @Override

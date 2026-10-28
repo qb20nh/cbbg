@@ -20,12 +20,16 @@ import net.minecraft.resources.Identifier;
 import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 
-/** Owns the RGBA8 output; Minecraft owns pipelines and transient uniform memory. */
+/** Owns the RGBA8 output and uniform buffer; Minecraft owns pipelines. */
 @NullMarked
 public final class DitherPass implements AutoCloseable {
   private static final RenderPipeline ENABLED = pipeline(false);
   private static final RenderPipeline DEMO = pipeline(true);
   private @Nullable TextureTarget output;
+  private @Nullable GpuBuffer uniform;
+  private float previousStrength;
+  private float previousScaleX;
+  private float previousScaleY;
 
   /** Render and close on Minecraft's render thread. The output is valid until resize or close. */
   public TextureTarget render(GpuTextureView input, GpuTextureView noise, DitherOptions options) {
@@ -71,18 +75,28 @@ public final class DitherPass implements AutoCloseable {
     }
     var device = RenderSystem.getDevice();
     var encoder = device.createCommandEncoder();
-    var data = encoder.transientMemory().allocateCpu(16, 4).order(ByteOrder.nativeOrder());
-    data.putFloat(0, strength);
-    data.putFloat(4, 0);
-    data.putFloat(8, scaleX);
-    data.putFloat(12, scaleY);
-    var uniform =
-        encoder
-            .transientMemory()
-            .uploadGpu(
-                data,
-                device.getDeviceInfo().limits().minUniformOffsetAlignment(),
-                GpuBuffer.USAGE_UNIFORM);
+    if (uniform == null
+        || Float.floatToRawIntBits(strength) != Float.floatToRawIntBits(previousStrength)
+        || Float.floatToRawIntBits(scaleX) != Float.floatToRawIntBits(previousScaleX)
+        || Float.floatToRawIntBits(scaleY) != Float.floatToRawIntBits(previousScaleY)) {
+      var data = encoder.transientMemory().allocateCpu(16, 4).order(ByteOrder.nativeOrder());
+      data.putFloat(0, strength);
+      data.putFloat(4, 0);
+      data.putFloat(8, scaleX);
+      data.putFloat(12, scaleY);
+      if (uniform == null) {
+        uniform =
+            device.createBuffer(
+                () -> "CBBG dither parameters",
+                GpuBuffer.USAGE_UNIFORM | GpuBuffer.USAGE_COPY_DST,
+                data);
+      } else {
+        encoder.writeToBuffer(uniform.slice(), data);
+      }
+      previousStrength = strength;
+      previousScaleX = scaleX;
+      previousScaleY = scaleY;
+    }
     try (RenderPass pass =
         encoder.createRenderPass(
             () -> "CBBG dither",
@@ -93,7 +107,7 @@ public final class DitherPass implements AutoCloseable {
           "InSampler", input, RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST));
       pass.setUniform(
           "NoiseSampler", noise, RenderSystem.getSamplerCache().getRepeat(FilterMode.NEAREST));
-      pass.setUniform("CbbgDitherInfo", uniform);
+      pass.setUniform("CbbgDitherInfo", Objects.requireNonNull(uniform).slice());
       pass.draw(3, 1, 0, 0);
     }
     return output;
@@ -102,9 +116,14 @@ public final class DitherPass implements AutoCloseable {
   @Override
   public void close() {
     RenderSystem.assertOnRenderThread();
-    if (output != null) {
-      output.destroyBuffers();
-      output = null;
+    TextureTarget previousOutput = output;
+    GpuBuffer previousUniform = uniform;
+    output = null;
+    uniform = null;
+    try {
+      if (previousOutput != null) previousOutput.destroyBuffers();
+    } finally {
+      if (previousUniform != null) previousUniform.close();
     }
   }
 }
