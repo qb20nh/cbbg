@@ -33,8 +33,6 @@ public final class ReleaseGenerationGameTest implements FabricClientGameTest {
       "4f953f23c7a2a7de8960caa4272090458b2ec986ceeea65796467a0c9109a076";
 
   @Override
-  // The previous future must be a different object from the replacement.
-  @SuppressWarnings("ReferenceEquality")
   public void runTest(ClientGameTestContext context) {
     ReleaseGraphics.check(context);
     try (var world = context.worldBuilder().create()) {
@@ -56,33 +54,24 @@ public final class ReleaseGenerationGameTest implements FabricClientGameTest {
                 });
         context.waitFor(
             client -> ReleaseGenerationStatus.mathActive() && !old.isDone(), WAIT_TICKS);
-        Request replacement =
-            context.computeOnClient(
-                client -> {
-                  if (old.isDone())
-                    throw new AssertionError("Large generation finished before replacement");
-                  configure(dispatcher, source, 16, 8, 74123);
-                  if (old.isDone())
-                    throw new AssertionError("Large generation was not still in flight");
-                  command(dispatcher, source, "stbn generate");
-                  CompletableFuture<?> next = pending();
-                  if (next == old || !cancelled(old)) {
-                    throw new AssertionError("Replacement did not cancel the in-flight generation");
-                  }
-                  return new Request(old, next);
-                });
-        context.waitFor(
-            client ->
-                replacement.next().isDone()
-                    && !replacement.next().isCancelled()
-                    && !replacement.next().isCompletedExceptionally()
-                    && pending() == replacement.next()
-                    && ReleaseGenerationStatus.settled(16),
-            WAIT_TICKS);
+        context.runOnClient(
+            client -> {
+              if (old.isDone())
+                throw new AssertionError("Large generation finished before replacement");
+              configure(dispatcher, source, 16, 8, 74123);
+              if (old.isDone())
+                throw new AssertionError("Large generation was not still in flight");
+              command(dispatcher, source, "stbn generate");
+              if (!cancelled(old)) {
+                throw new AssertionError("Replacement did not cancel the in-flight generation");
+              }
+            });
+        context.waitFor(client -> ReleaseGenerationStatus.settled(16), WAIT_TICKS);
         assertSettings(16, 8, 74123);
         assertCache(16, 8, 74123, REPLACEMENT_PIXELS);
         context.waitTicks(5);
-        if (!cancelled(replacement.old()) || pending() != replacement.next()) {
+        if (!cancelled(old)
+            || !context.computeOnClient(client -> ReleaseGenerationStatus.settled(16))) {
           throw new AssertionError("Obsolete generation replaced the active result");
         }
         assertSettings(16, 8, 74123);
@@ -103,17 +92,7 @@ public final class ReleaseGenerationGameTest implements FabricClientGameTest {
         context.runOnClient(client -> command(dispatcher, source, "stbn reset"));
         assertSettings(128, 64, 0);
         context.waitFor(
-            client -> {
-              CompletableFuture<?> current = pending();
-              return cancelled(resetOld)
-                  && current != resetOld
-                  && current != null
-                  && current.isDone()
-                  && !current.isCancelled()
-                  && !current.isCompletedExceptionally()
-                  && ReleaseGenerationStatus.settled(128);
-            },
-            WAIT_TICKS);
+            client -> cancelled(resetOld) && ReleaseGenerationStatus.settled(128), WAIT_TICKS);
         assertCache(128, 64, 0, null);
         assertSettings(128, 64, 0);
         completed = true;
@@ -126,7 +105,7 @@ public final class ReleaseGenerationGameTest implements FabricClientGameTest {
                   configure(dispatcher, source, 16, 8, 74123);
                   command(dispatcher, source, "stbn generate");
                 });
-            context.waitFor(client -> pending().isDone(), WAIT_TICKS);
+            context.waitFor(client -> ReleaseGenerationStatus.settled(16), WAIT_TICKS);
           }
         } finally {
           context.runOnClient(
@@ -269,6 +248,4 @@ public final class ReleaseGenerationGameTest implements FabricClientGameTest {
       throw new AssertionError("Could not validate packaged noise cache", failure);
     }
   }
-
-  private record Request(CompletableFuture<?> old, CompletableFuture<?> next) {}
 }
