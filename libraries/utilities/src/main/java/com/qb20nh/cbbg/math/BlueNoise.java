@@ -8,8 +8,6 @@ import org.jspecify.annotations.NullMarked;
 /** Loader-independent STBN math. Pixel values use the existing ABGR byte layout. */
 @NullMarked
 public final class BlueNoise {
-  private static final int RADIX_BITS = 11;
-
   private BlueNoise() {}
 
   public static double[] generateScalarField(int w, int h, int d, long seed) {
@@ -153,9 +151,9 @@ public final class BlueNoise {
     }
     int[] from = indices;
     int[] to = scratch;
-    int[] offsets = new int[1 << RADIX_BITS];
-    // Six stable passes write the result back into indices.
-    for (int shift = 0; shift < Long.SIZE; shift += RADIX_BITS) {
+    int[] offsets = new int[256];
+    // Eight stable passes write the result back into indices.
+    for (int shift = 0; shift < Long.SIZE; shift += Byte.SIZE) {
       checkCancellation();
       Arrays.fill(offsets, 0);
       for (int index : from) offsets[bucket(values[index], shift)]++;
@@ -176,7 +174,7 @@ public final class BlueNoise {
     // Canonical NaNs and reversed negative encodings preserve Double.compare ordering.
     long bits = Double.doubleToLongBits(value);
     long key = bits ^ ((bits >> 63) | Long.MIN_VALUE);
-    return (int) (key >>> shift) & ((1 << RADIX_BITS) - 1);
+    return (int) (key >>> shift) & 0xff;
   }
 
   public static long stbnUSeed(long seed) {

@@ -17,7 +17,6 @@ import org.lwjgl.opengl.GL13;
 import org.lwjgl.opengl.GL15;
 import org.lwjgl.opengl.GL20;
 import org.lwjgl.opengl.GL30;
-import org.lwjgl.system.MemoryStack;
 
 /** Independent GPU pass. Input and noise textures remain owned by the caller. */
 @NullMarked
@@ -123,11 +122,9 @@ public final class DitherPass implements AutoCloseable {
 
     GlState() {
       GL11.glGetIntegerv(GL11.GL_VIEWPORT, viewport);
-      try (var stack = MemoryStack.stackPush()) {
-        var mask = stack.malloc(4);
-        GL11.glGetBooleanv(GL11.GL_COLOR_WRITEMASK, mask);
-        mask.get(colorMask);
-      }
+      var mask = org.lwjgl.BufferUtils.createByteBuffer(4);
+      GL11.glGetBooleanv(GL11.GL_COLOR_WRITEMASK, mask);
+      mask.get(colorMask);
       for (int i = 0; i < textures.length; i++) {
         GlStateManager._activeTexture(GL13.GL_TEXTURE0 + i);
         textures[i] = GL11.glGetInteger(GL11.GL_TEXTURE_BINDING_2D);
