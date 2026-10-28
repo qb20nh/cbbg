@@ -353,6 +353,9 @@ class PackageChecks {
             Set<String> outer = zip.entries().collect { it.name } as Set
             Map metadata = jsonResource(zip, outer, 'fabric.mod.json')
             String path = 'META-INF/jars/' + library.name
+            if (outer.any { it.startsWith('META-INF/jars/cbbg-lib-') && it.endsWith('.jar') && it != path }) {
+                throw new GradleException('Unexpected nested CBBG Lib; rebuild after changing its version')
+            }
             if (metadata.jars != [[file: path]]) {
                 throw new GradleException('CBBG must declare its single nested library')
             }

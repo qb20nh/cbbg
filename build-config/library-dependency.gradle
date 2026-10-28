@@ -45,7 +45,7 @@ def releaseInput = tasks.register('releaseInputJar', Jar) {
     archiveFileName = "${base.archivesName.get()}-${project.version}-release-input.jar"
     destinationDirectory = layout.buildDirectory.dir('intermediates/release-input')
     from({ zipTree(tasks.named('jar', Jar).get().archiveFile.get().asFile) }) {
-        exclude "META-INF/jars/${libraryArchive.name}"
+        exclude 'META-INF/jars/cbbg-lib-*.jar'
     }
     from(libraryArchive) { into 'META-INF/jars' }
     preserveFileTimestamps = false
@@ -59,7 +59,7 @@ if ((libraryOwner.java as int) < 25) {
         archiveFileName = "${base.archivesName.get()}-${project.version}-development-input.jar"
         destinationDirectory = layout.buildDirectory.dir('intermediates/dev-input')
         from({ zipTree(tasks.named('jar', Jar).get().archiveFile.get().asFile) }) {
-            exclude "META-INF/jars/${libraryArchive.name}"
+            exclude 'META-INF/jars/cbbg-lib-*.jar'
         }
         from(libraryRuntimeDevelopmentArchive) { into 'META-INF/jars'; rename { libraryArchive.name } }
         preserveFileTimestamps = false
@@ -73,6 +73,9 @@ if ((libraryOwner.java as int) < 25) {
 tasks.named('releaseSbom') { dependsOn tasks.named('prepareBundledLibrary') }
 tasks.named('processResources') {
     dependsOn libraryBuild.task(':jar')
+    doFirst {
+        delete fileTree(destinationDir) { include 'META-INF/jars/cbbg-lib-*.jar' }
+    }
     from(libraryDevelopmentArchive) {
         into 'META-INF/jars'
         rename { libraryArchive.name }
