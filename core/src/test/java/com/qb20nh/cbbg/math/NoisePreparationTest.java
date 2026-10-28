@@ -21,6 +21,82 @@ import org.junit.jupiter.api.Test;
 @NullMarked
 class NoisePreparationTest {
   @Test
+  void releasingCompletedWorkPreservesItsResultAndRechecksTheCache() throws Exception {
+    try (NoisePreparation preparation = new NoisePreparation()) {
+      CompletableFuture<NoisePreparation.@Nullable Fields> first =
+          preparation.prepare(4, 4, 2, 7, false, () -> false);
+      NoisePreparation.Fields fields = Objects.requireNonNull(first.get(5, TimeUnit.SECONDS));
+      preparation.release(first);
+      AtomicInteger checks = new AtomicInteger();
+      CompletableFuture<NoisePreparation.@Nullable Fields> cached =
+          preparation.prepare(
+              4,
+              4,
+              2,
+              7,
+              false,
+              () -> {
+                checks.incrementAndGet();
+                return true;
+              });
+      assertNotSame(first, cached);
+      assertNull(cached.get(5, TimeUnit.SECONDS));
+      assertEquals(1, checks.get());
+      assertSame(fields, first.join());
+      preparation.release(first);
+      assertSame(cached, preparation.prepare(4, 4, 2, 7, false, () -> false));
+    }
+  }
+
+  @Test
+  void releasedFieldsAreRegeneratedWhenTheirCacheIsMissing() throws Exception {
+    try (NoisePreparation preparation = new NoisePreparation()) {
+      CompletableFuture<NoisePreparation.@Nullable Fields> first =
+          preparation.prepare(4, 4, 2, 7, false, () -> false);
+      NoiseVolume expected = Objects.requireNonNull(first.get(5, TimeUnit.SECONDS)).volume();
+      preparation.release(first);
+      CompletableFuture<NoisePreparation.@Nullable Fields> retry =
+          preparation.prepare(4, 4, 2, 7, false, () -> false);
+      NoiseVolume actual = Objects.requireNonNull(retry.get(5, TimeUnit.SECONDS)).volume();
+      assertNotSame(first, retry);
+      for (int frame = 0; frame < expected.depth(); frame++) {
+        assertArrayEquals(expected.frameRGBA(frame), actual.frameRGBA(frame));
+      }
+    }
+  }
+
+  @Test
+  void releasingAnIncompleteRequestKeepsItAvailable() throws Exception {
+    CountDownLatch started = new CountDownLatch(1);
+    CountDownLatch finish = new CountDownLatch(1);
+    try (NoisePreparation preparation = new NoisePreparation()) {
+      CompletableFuture<NoisePreparation.@Nullable Fields> request =
+          preparation.prepare(
+              4,
+              4,
+              2,
+              7,
+              false,
+              () -> {
+                started.countDown();
+                try {
+                  finish.await();
+                } catch (InterruptedException failure) {
+                  Thread.currentThread().interrupt();
+                }
+                return true;
+              });
+      assertTrue(started.await(5, TimeUnit.SECONDS));
+      preparation.release(request);
+      assertSame(request, preparation.prepare(4, 4, 2, 7, false, () -> false));
+      finish.countDown();
+      assertNull(request.get(5, TimeUnit.SECONDS));
+    } finally {
+      finish.countDown();
+    }
+  }
+
+  @Test
   void startupAndRendererReuseTheSameJob() throws Exception {
     AtomicInteger checks = new AtomicInteger();
     try (NoisePreparation preparation = new NoisePreparation()) {

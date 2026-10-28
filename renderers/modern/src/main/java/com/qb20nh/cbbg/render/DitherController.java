@@ -57,13 +57,19 @@ public final class DitherController {
 
   private static void startLoading(NoiseKey requested, boolean force) {
     key = requested;
-    CompletableFuture<NativeImage @Nullable []> generation =
+    CompletableFuture<STBNGenerator.@Nullable STBNFields> request =
         STBNGenerator.generateAsync(
-                requested.size, requested.size, requested.depth, requested.seed, force)
-            .<NativeImage @Nullable []>thenApplyAsync(
-                fields ->
-                    STBNLoader.loadOrGenerate(
-                        requested.size, requested.size, requested.depth, requested.seed, fields));
+            requested.size, requested.size, requested.depth, requested.seed, force);
+    CompletableFuture<NativeImage @Nullable []> generation =
+        request.<NativeImage @Nullable []>thenApplyAsync(
+            fields -> {
+              try {
+                return STBNLoader.loadOrGenerate(
+                    requested.size, requested.size, requested.depth, requested.seed, fields);
+              } finally {
+                STBNGenerator.release(request);
+              }
+            });
     loading = generation;
     GenerationNotifications.follow(generation);
   }

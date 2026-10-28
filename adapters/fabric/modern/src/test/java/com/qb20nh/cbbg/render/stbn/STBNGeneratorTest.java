@@ -16,6 +16,21 @@ import org.junit.jupiter.api.Test;
 @NullMarked
 class STBNGeneratorTest {
   @Test
+  void releasingClaimedWorkDropsInternalOwnershipAndPreservesReturnedFields() throws Exception {
+    var early = STBNGenerator.prepareEarly(4, 4, 2, 117L, () -> false);
+    var request = STBNGenerator.generateAsync(4, 4, 2, 117L, () -> false);
+    var fields = Objects.requireNonNull(request.get(10, TimeUnit.SECONDS));
+    STBNGenerator.release(request);
+    assertNull(STBNGenerator.get());
+    assertSame(fields, request.join());
+    assertSame(fields, early.join());
+    var replacement = STBNGenerator.generateAsync(4, 4, 2, 117L, () -> true);
+    STBNGenerator.release(request);
+    assertSame(replacement, STBNGenerator.get());
+    assertNull(replacement.get(10, TimeUnit.SECONDS));
+  }
+
+  @Test
   void forcedGenerationBypassesValidCacheAndMatchingEarlyWork() throws Exception {
     AtomicInteger checks = new AtomicInteger();
     BooleanSupplier cacheValid =

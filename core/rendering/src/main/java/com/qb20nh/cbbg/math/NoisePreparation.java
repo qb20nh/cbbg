@@ -74,6 +74,15 @@ public final class NoisePreparation implements AutoCloseable {
     return result != null && width == w && height == h && depth == d && seed == value;
   }
 
+  /** Releases internal ownership after a consumer has finished with this request. */
+  @SuppressWarnings("ReferenceEquality") // An older consumer must not release a newer request.
+  public synchronized void release(CompletableFuture<@Nullable Fields> request) {
+    if (result == request && request.isDone()) {
+      result = null;
+      work = null;
+    }
+  }
+
   @Override
   public synchronized void close() {
     if (work != null) work.cancel(true);

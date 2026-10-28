@@ -235,6 +235,11 @@ public class STBNGenerator {
     return pendingFuture.get();
   }
 
+  /** Releases internal ownership after image conversion has finished. */
+  public static void release(CompletableFuture<@Nullable STBNFields> request) {
+    if (request.isDone()) pendingFuture.compareAndSet(request, null);
+  }
+
   public static synchronized void shutdown() {
     earlyKey = null;
     earlyFuture = null;
