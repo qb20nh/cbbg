@@ -228,10 +228,7 @@ public final class ReleaseNoiseCancellationGameTest implements FabricClientGameT
     private boolean largeMathActive() {
       Thread thread = worker;
       if (thread == null || completions.get() != 0 || replacementStarted) return false;
-      for (StackTraceElement frame : thread.getStackTrace()) {
-        if (frame.getClassName().equals("java.util.TimSort")) return true;
-      }
-      return false;
+      return ReleaseNoiseWork.mathActive(thread);
     }
 
     private boolean workerIdle() {

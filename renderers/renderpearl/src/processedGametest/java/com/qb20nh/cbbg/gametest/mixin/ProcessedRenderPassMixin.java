@@ -34,7 +34,8 @@ public class ProcessedRenderPassMixin {
     ProcessedRenderObservations.select(pipeline);
     cbbgTestPass = ProcessedRenderObservations.isDither(pipeline);
     if (cbbgTestPass) {
-      ProcessedRenderObservations.ditherOutput(colorAttachments.getFirst().textureView());
+      var attachment = colorAttachments.getFirst();
+      if (attachment != null) ProcessedRenderObservations.ditherOutput(attachment.textureView());
     }
   }
 

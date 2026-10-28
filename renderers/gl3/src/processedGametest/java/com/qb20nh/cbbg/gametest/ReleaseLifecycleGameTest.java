@@ -33,6 +33,7 @@ public final class ReleaseLifecycleGameTest implements FabricClientGameTest {
       awaitFormat(context, GL30.GL_RGBA16F);
       awaitPresentation(context);
       ReleasePixels.check(context, false);
+      ReleaseNoiseTextures.check(context);
       ReleaseFallbackScreenshots.check(context);
       screenshot(context, "enabled-rgba16f");
 
@@ -42,6 +43,7 @@ public final class ReleaseLifecycleGameTest implements FabricClientGameTest {
       awaitPresentation(context);
       ReleasePixels.check(context, true);
       screenshot(context, "demo-rgba32f");
+      ReleaseScreenPassResources.check(context);
 
       int[] original =
           context.computeOnClient(
@@ -71,6 +73,7 @@ public final class ReleaseLifecycleGameTest implements FabricClientGameTest {
       context.waitFor(client -> reload.isDone() && client.getOverlay() == null, 600);
       reload.join();
       awaitPresentation(context);
+      screenshot(context, "reloaded");
       var output =
           context.computeOnClient(client -> Objects.requireNonNull(ReleaseObservations.output()));
       command(context, "mode set disabled");

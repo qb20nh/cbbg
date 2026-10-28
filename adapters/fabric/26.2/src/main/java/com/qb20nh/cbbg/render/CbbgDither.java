@@ -4,19 +4,27 @@ import com.mojang.blaze3d.GpuFormat;
 import com.mojang.blaze3d.buffers.GpuBuffer;
 import com.mojang.blaze3d.buffers.GpuBufferSlice;
 import com.mojang.blaze3d.buffers.Std140Builder;
+import com.mojang.blaze3d.opengl.GlCommandEncoder;
+import com.mojang.blaze3d.opengl.GlDevice;
+import com.mojang.blaze3d.opengl.GlRenderPass;
+import com.mojang.blaze3d.opengl.GlStateManager;
 import com.mojang.blaze3d.pipeline.*;
 import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.blaze3d.shaders.ShaderType;
 import com.mojang.blaze3d.systems.CommandEncoder;
+import com.mojang.blaze3d.systems.GpuSurface;
 import com.mojang.blaze3d.systems.RenderPass;
 import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.blaze3d.systems.ScissorState;
 import com.mojang.blaze3d.textures.FilterMode;
 import com.mojang.blaze3d.textures.GpuTextureView;
 import com.qb20nh.cbbg.Cbbg;
 import com.qb20nh.cbbg.CbbgClient;
 import com.qb20nh.cbbg.compat.renderscale.RenderScaleCompat;
 import com.qb20nh.cbbg.config.CbbgConfig;
+import com.qb20nh.cbbg.mixin.GpuSurfaceAccessor;
 import com.qb20nh.cbbg.render.stbn.StbnTextureManager;
+import java.util.Collections;
 import java.util.Objects;
 import java.util.Optional;
 import net.minecraft.client.Minecraft;
@@ -27,6 +35,8 @@ import net.minecraft.resources.Identifier;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
+import org.lwjgl.opengl.GL11;
+import org.lwjgl.opengl.GL30;
 
 @NullMarked
 public final class CbbgDither {
@@ -50,6 +60,7 @@ public final class CbbgDither {
   private static final StbnTextureManager stbnManager = new StbnTextureManager();
   private static @Nullable MappableRingBuffer ditherInfoUbo;
   private static boolean presentationFailed;
+  private static @Nullable GpuSurface vulkanSurface;
 
   private static @Nullable TextureTarget ditherTarget;
 
@@ -65,6 +76,7 @@ public final class CbbgDither {
   }
 
   static void closeGpu() {
+    VulkanWindowPresentation.closeUniform();
     if (ditherInfoUbo != null) {
       ditherInfoUbo.close();
       ditherInfoUbo = null;
@@ -74,6 +86,40 @@ public final class CbbgDither {
       ditherTarget = null;
     }
     stbnManager.close();
+  }
+
+  public static boolean canPresentToVulkanWindow(GpuSurface surface, GpuTextureView input) {
+    return surface.isAcquired()
+        && surface instanceof GpuSurfaceAccessor access
+        && access.cbbg$backend() instanceof VulkanWindowPresentation.Surface window
+        && window.cbbg$canDraw(input);
+  }
+
+  public static void setVulkanSurface(@Nullable GpuSurface surface) {
+    vulkanSurface = surface;
+  }
+
+  @SuppressWarnings("ReferenceEquality") // Only the main surface selected by MinecraftMixin.
+  public static boolean presentToVulkanWindow(
+      GpuSurface surface, CommandEncoder encoder, GpuTextureView input) {
+    if (surface != vulkanSurface || presentationFailed || !canPresentToVulkanWindow(surface, input))
+      return false;
+    var window = (VulkanWindowPresentation.Surface) ((GpuSurfaceAccessor) surface).cbbg$backend();
+    return Boolean.TRUE.equals(
+        DitherController.renderFrame(
+            true,
+            () -> {
+              double scale = RenderScaleCompat.getDitherScale();
+              window.cbbg$draw(
+                  encoder,
+                  input,
+                  Objects.requireNonNull(stbnManager.getView()),
+                  getEffectiveStrength(),
+                  DitherScale.forDimension(scale, input.getWidth(0)),
+                  DitherScale.forDimension(scale, input.getHeight(0)),
+                  CbbgClient.isDemoMode());
+              return true;
+            }));
   }
 
   public static boolean isDisabled() {
@@ -143,17 +189,7 @@ public final class CbbgDither {
     try (RenderPass pass =
         encoder.createRenderPass(
             () -> passLabel, ditherView, Objects.requireNonNull(Optional.empty()))) {
-      pass.setPipeline(pipeline);
-      RenderSystem.bindDefaultUniforms(pass);
-      pass.setUniform(U_DITHER_INFO, ditherInfo);
-
-      pass.bindTexture(
-          S_IN, input, RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST));
-      pass.bindTexture(
-          S_NOISE,
-          stbnManager.getView(),
-          RenderSystem.getSamplerCache().getRepeat(FilterMode.NEAREST));
-      pass.draw(3, 1, 0, 0);
+      drawPass(pass, input, pipeline, ditherInfo);
     }
     if (ditherInfoUbo != null) {
       ditherInfoUbo.rotate();
@@ -162,12 +198,105 @@ public final class CbbgDither {
     return target;
   }
 
+  private static void drawPass(
+      RenderPass pass, GpuTextureView input, RenderPipeline pipeline, GpuBuffer info) {
+    pass.setPipeline(pipeline);
+    RenderSystem.bindDefaultUniforms(pass);
+    pass.setUniform(U_DITHER_INFO, info);
+    pass.bindTexture(
+        S_IN, input, RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST));
+    pass.bindTexture(
+        S_NOISE,
+        stbnManager.getView(),
+        RenderSystem.getSamplerCache().getRepeat(FilterMode.NEAREST));
+    pass.draw(3, 1, 0, 0);
+  }
+
   /**
    * Presents the dithered main target when the effect is ready.
    *
    * @return true if cbbg performed the blit/present itself (caller should cancel vanilla),
    *     otherwise false to fall back to vanilla.
    */
+  public static boolean blitToWindow(
+      GpuTextureView input,
+      CbbgConfig.Mode mode,
+      GlCommandEncoder encoder,
+      GlDevice device,
+      int width,
+      int height) {
+    if (!mode.isActive()
+        || CbbgClient.getEffectiveMode() != mode
+        || presentationFailed
+        || width <= 0
+        || height <= 0
+        || input.getWidth(0) != width
+        || input.getHeight(0) != height
+        || !WindowFramebuffer.supportsDirectDrawing()) {
+      return false;
+    }
+    RenderPipeline pipeline = mode == CbbgConfig.Mode.DEMO ? DEMO_PIPELINE : DITHER_PIPELINE;
+    Identifier shader = mode == CbbgConfig.Mode.DEMO ? DEMO_SHADER : DITHER_SHADER;
+    try {
+      if (!areShadersReady(shader)) {
+        return false;
+      }
+      if (!RenderSystem.getDevice().precompilePipeline(pipeline).isValid()) {
+        throw new IllegalStateException("CBBG dither shader could not be compiled");
+      }
+      return Boolean.TRUE.equals(
+          DitherController.renderFrame(
+              true,
+              () -> {
+                drawToWindow(input, pipeline, encoder, device, width, height);
+                return true;
+              }));
+    } catch (RuntimeException failure) {
+      disableWithLog(failure);
+      return false;
+    }
+  }
+
+  private static void drawToWindow(
+      GpuTextureView input,
+      RenderPipeline pipeline,
+      GlCommandEncoder encoder,
+      GlDevice device,
+      int width,
+      int height) {
+    GpuBuffer info = ensureDitherInfoUbo(input);
+    int previous = GL11.glGetInteger(GL30.GL_DRAW_FRAMEBUFFER_BINDING);
+    try {
+      ((WindowPassEncoder) encoder).cbbg$windowPass(true);
+      GlStateManager._glBindFramebuffer(GL30.GL_DRAW_FRAMEBUFFER, 0);
+      GlStateManager._viewport(0, 0, width, height);
+      // The validated window attachment has no managed texture view.
+      try (RenderPass pass =
+          new RenderPass(
+              new GlRenderPass(encoder, device, false, 1, new ScissorState()),
+              device,
+              Collections.singletonList(null),
+              () -> {},
+              new RenderPass.RenderArea(0, 0, width, height))) {
+        pass.pushDebugGroup(() -> "cbbg window dither");
+        try {
+          drawPass(pass, input, pipeline, info);
+        } finally {
+          pass.popDebugGroup();
+        }
+      }
+    } finally {
+      ((WindowPassEncoder) encoder).cbbg$windowPass(false);
+      GlStateManager._depthMask(true);
+      GlStateManager._colorMask(15);
+      GlStateManager._disableScissorTest();
+      GlStateManager._glBindFramebuffer(GL30.GL_DRAW_FRAMEBUFFER, previous);
+    }
+    if (ditherInfoUbo != null) {
+      ditherInfoUbo.rotate();
+    }
+  }
+
   public static boolean blitToScreenWithDither(GpuTextureView input) {
     CbbgConfig.Mode mode = CbbgClient.getEffectiveMode();
     // Strict: do not delegate to other blit methods based on a fresh mode read.
@@ -251,9 +380,7 @@ public final class CbbgDither {
   }
 
   static void uploadNoise(NativeImage frame) {
-    RenderSystem.getDevice()
-        .createCommandEncoder()
-        .writeToTexture(Objects.requireNonNull(stbnManager.getTexture()), frame);
+    stbnManager.upload(frame);
   }
 
   private static boolean areShadersReady(@NonNull Identifier fragmentShader) {

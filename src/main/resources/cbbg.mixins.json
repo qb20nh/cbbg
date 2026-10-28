@@ -1,22 +1,28 @@
 {
-	"required": true,
-	"package": "com.qb20nh.cbbg.mixin",
-	"compatibilityLevel": "JAVA_25",
-	"client": [
-		"DebugScreenEntriesMixin",
-		"GameRendererMixin",
-		"GlConstMixin",
-		"GlCommandEncoderMixin",
-		"MainTargetMixin",
-		"MinecraftMixin",
-		"RenderPassMixin",
-		"RenderTargetCreateBuffersMixin",
-		"ScreenshotMixin"
-	],
-	"injectors": {
-		"defaultRequire": 1
-	},
-	"overwrites": {
-		"requireAnnotations": true
-	}
+  "required": true,
+  "package": "com.qb20nh.cbbg.mixin",
+  "compatibilityLevel": "JAVA_25",
+  "client": [
+    "DebugScreenEntriesMixin",
+    "GameRendererMixin",
+    "GlConstMixin",
+    "GlCommandEncoderMixin",
+    "MainTargetMixin",
+    "MinecraftMixin",
+    "RenderPassMixin",
+    "RenderTargetCreateBuffersMixin",
+    "ScreenshotMixin",
+    "GpuSurfaceAccessor",
+    "GpuSurfaceMixin",
+    "CommandEncoderAccessor",
+    "VulkanCommandEncoderAccessor",
+    "VulkanGpuSurfaceMixin",
+    "VulkanRenderPipelineMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  },
+  "overwrites": {
+    "requireAnnotations": true
+  }
 }

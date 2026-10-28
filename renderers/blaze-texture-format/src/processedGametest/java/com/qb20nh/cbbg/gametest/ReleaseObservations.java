@@ -6,7 +6,6 @@ import org.jspecify.annotations.Nullable;
 
 @NullMarked
 public final class ReleaseObservations {
-  private static long presentations;
   private static @Nullable GpuTextureView output;
   private static @Nullable GpuTextureView noise;
   private static long blurAllocations;
@@ -19,14 +18,16 @@ public final class ReleaseObservations {
   @SuppressWarnings("ReferenceEquality")
   public static void present(GpuTextureView texture) {
     var live = ReleaseShutdownResources.live();
-    if (live != null && texture.texture() == live.output().texture()) {
+    if (live != null && live.output() != null && texture.texture() == live.output().texture()) {
       output = texture;
-      presentations++;
     }
   }
 
   static long presentations() {
-    return presentations;
+    return (Long)
+        java.util.Objects.requireNonNull(
+            ReleaseShutdownGameTest.field(
+                "com.qb20nh.cbbg.render.DitherController", null, "long presentations"));
   }
 
   static @Nullable GpuTextureView output() {

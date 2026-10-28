@@ -13,5 +13,5 @@
   "entrypoints": {
     "fabric-client-gametest": ["com.qb20nh.cbbg.gametest.ReleaseLifecycleGameTest", "com.qb20nh.cbbg.gametest.ReleaseCacheGameTest", "com.qb20nh.cbbg.gametest.ReleasePixelGameTest", "com.qb20nh.cbbg.gametest.ReleaseControlsGameTest", "com.qb20nh.cbbg.gametest.ReleaseSettingsGuiGameTest", "com.qb20nh.cbbg.gametest.ReleaseSulkanGameTest", "com.qb20nh.cbbg.gametest.ReleaseSodiumConfigGameTest", "com.qb20nh.cbbg.gametest.ReleaseUtilitiesGameTest"]
   },
-  "mixins": ["cbbg.gpu-format-test.mixins.json"]
+  "mixins": ["cbbg.gpu-format-test.mixins.json", "cbbg.release-noise-cache.mixins.json"]
 }

@@ -38,13 +38,7 @@ public final class ReleaseGeneratingShutdownGameTest implements FabricClientGame
   }
 
   static boolean mathActive() {
-    for (var entry : Thread.getAllStackTraces().entrySet()) {
-      if (!entry.getKey().getName().equals("cbbg-stbn") || !entry.getKey().isAlive()) continue;
-      for (var frame : entry.getValue()) {
-        if (frame.getClassName().equals("java.util.TimSort")) return true;
-      }
-    }
-    return false;
+    return ReleaseNoiseWork.mathActive();
   }
 
   static void assertNoOutput() {

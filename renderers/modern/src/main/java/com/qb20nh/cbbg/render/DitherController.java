@@ -101,6 +101,10 @@ public final class DitherController {
   }
 
   static @Nullable TextureTarget render(boolean advance, Supplier<TextureTarget> draw) {
+    return renderFrame(advance, draw);
+  }
+
+  static <T> @Nullable T renderFrame(boolean advance, Supplier<T> draw) {
     if (failed || !CbbgClient.isEnabled() || DitherPresentation.hasOverlay()) {
       return null;
     }
@@ -125,7 +129,7 @@ public final class DitherController {
         DitherPresentation.upload(frames[index]);
         uploadedFrame = index;
       }
-      TextureTarget output = draw.get();
+      T output = draw.get();
       if (advance) {
         shownFrame = index;
         nextFrame = (index + 1) % frames.length;

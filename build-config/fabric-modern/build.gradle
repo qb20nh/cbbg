@@ -122,6 +122,17 @@ tasks.withType(ProcessResources).configureEach {
 }
 
 def usesTextureFormat = target.renderer == 'blaze-texture-format'
+if (artifactOwner.minecraft == '26.1') {
+    loom.accessWidenerPath = new File(repositoryRoot,
+            'adapters/minecraft/26.1/src/main/resources/cbbg.window.accesswidener')
+}
+if (target.renderer == 'renderpearl') {
+    loom.accessWidenerPath = new File(repositoryRoot,
+            'renderers/renderpearl/src/main/resources/cbbg.window.accesswidener')
+}
+if (usesTextureFormat || target.renderer == 'renderpearl') {
+    tasks.named('minifyReleaseJar') { dontskipnonpubliclibraryclassmembers() }
+}
 def usesGl3 = target.renderer == 'gl3'
 def usesSharedLifecycle = usesTextureFormat || usesGl3
 def sourceLayout = cbbg.gradle.FabricSources.layout(target, artifactOwner)
@@ -355,6 +366,11 @@ tasks.named('processResources') {
     doLast {
         File descriptorFile = new File(destinationDir, 'fabric.mod.json')
         cbbg.gradle.FabricBranding.apply(sharedDescriptor, descriptorFile)
+        if (artifactOwner.minecraft == '26.1' || target.renderer == 'renderpearl') {
+            Map descriptor = new groovy.json.JsonSlurper().parse(descriptorFile)
+            descriptor.accessWidener = 'cbbg.window.accesswidener'
+            cbbg.gradle.ReproducibleText.writeJson(descriptorFile, descriptor)
+        }
         if (artifactOwner.minecraft == '1.21.1') {
             Map descriptor = new groovy.json.JsonSlurper().parse(descriptorFile)
             descriptor.depends.mixinextras = '>=' + cbbg.gradle.PackageChecks.MINECRAFT_1211_MIXIN_EXTRAS_MINIMUM

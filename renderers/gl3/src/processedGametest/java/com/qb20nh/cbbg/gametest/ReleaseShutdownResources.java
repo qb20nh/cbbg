@@ -3,6 +3,7 @@ package com.qb20nh.cbbg.gametest;
 import com.mojang.blaze3d.pipeline.TextureTarget;
 import com.mojang.blaze3d.platform.NativeImage;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import org.jspecify.annotations.NullMarked;
@@ -33,23 +34,31 @@ final class ReleaseShutdownResources {
                 pass,
                 "com.mojang.blaze3d.pipeline.TextureTarget output");
     if (noise <= 0
-        || output == null
         || !GL11.glIsTexture(noise)
-        || !GL11.glIsTexture(output.getColorTextureId())
-        || !GL30.glIsFramebuffer(output.frameBufferId)) return null;
-    return new Live(noise, output.getColorTextureId(), output.frameBufferId, output);
+        || (output != null
+            && (!GL11.glIsTexture(output.getColorTextureId())
+                || !GL30.glIsFramebuffer(output.frameBufferId)))) return null;
+    var textures = new HashSet<Integer>();
+    textures.add(noise);
+    for (Object value : ReleaseNoiseTextures.textures().values()) textures.add((Integer) value);
+    return new Live(
+        List.copyOf(textures),
+        output == null ? -1 : output.getColorTextureId(),
+        output == null ? -1 : output.frameBufferId,
+        output);
   }
 
   static int liveCount(Live live) {
-    return 3;
+    return live.noise().size() + (live.output() == null ? 0 : 2);
   }
 
   static boolean liveClosed(Live live) {
-    return !GL11.glIsTexture(live.noise())
-        && !GL11.glIsTexture(live.color())
-        && !GL30.glIsFramebuffer(live.framebuffer())
-        && live.output().getColorTextureId() <= 0
-        && live.output().frameBufferId < 0;
+    return live.noise().stream().noneMatch(GL11::glIsTexture)
+        && (live.output() == null
+            || (!GL11.glIsTexture(live.color())
+                && !GL30.glIsFramebuffer(live.framebuffer())
+                && live.output().getColorTextureId() <= 0
+                && live.output().frameBufferId < 0));
   }
 
   static Owned captureOwned() {
@@ -81,7 +90,7 @@ final class ReleaseShutdownResources {
     return true;
   }
 
-  record Live(int noise, int color, int framebuffer, TextureTarget output) {}
+  record Live(List<Integer> noise, int color, int framebuffer, @Nullable TextureTarget output) {}
 
   record Owned(List<NativeImage> frames) {}
 }

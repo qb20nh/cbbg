@@ -95,10 +95,7 @@ public final class ReleaseGeneratingShutdownGameTest implements FabricClientGame
     boolean mathActive() {
       Thread thread = worker;
       if (thread == null || completions.get() != 0) return false;
-      for (StackTraceElement frame : thread.getStackTrace()) {
-        if (frame.getClassName().equals("java.util.TimSort")) return true;
-      }
-      return false;
+      return ReleaseNoiseWork.mathActive(thread);
     }
 
     @Override

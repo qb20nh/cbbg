@@ -42,6 +42,7 @@ class FabricSources {
             result.libraryInputs += [tree("libraries/fabric/src/${owner.minecraft}/java"),
                                      tree('libraries/fabric/src/gpu/resources')]
         } else if (owner.renderer == 'renderpearl') {
+            result.test.java << tree('renderers/renderpearl/src/test/java')
             result.libraryInputs << tree('libraries/fabric/src/blaze-gpu-format/resources')
         }
         List<Map> processed = result.processedGametest.java
@@ -53,6 +54,7 @@ class FabricSources {
             String adapter = 'adapters/fabric/' + owner.minecraft + '/src/'
             result.main.java << tree(adapter + 'main/java')
             result.main.resources << tree('src/main/resources')
+            result.main.resources << tree(adapter + 'main/resources')
             result.test.java << tree(adapter + 'test/java')
             result.test.resources << tree('src/test/resources')
             result.gametest.java << tree(adapter + 'gametest/java')
@@ -122,7 +124,8 @@ class FabricSources {
                 processed << tree("renderers/${owner.renderer}/src/processedGametest/java", [],
                         ((owner.java as int) < 25 ? classes('gametest/mixin/ReleaseNoiseMixin') : []) +
                                 (owner.minecraft == MC_1_21_11 ? classes('gametest/mixin/ReleaseStartupRenderPassMixin',
-                                        'gametest/mixin/ReleaseAllocationFailureMixin') : []))
+                                        'gametest/mixin/ReleaseAllocationFailureMixin',
+                                        'gametest/mixin/ReleaseNoiseDeviceMixin') : []))
                 processed << tree("adapters/fabric/${owner.minecraft}/src/processedGametest/java")
                 processed << tree("adapters/minecraft/${owner.minecraft}/src/processedGametest/java")
                 result.processedGametest.resources << tree("renderers/${owner.renderer}/src/processedGametest/resources")
@@ -169,7 +172,8 @@ class FabricSources {
                             'gametest/ReleaseWorldPixelsGameTest', 'gametest/ReleaseTransparencyGameTest',
                             'gametest/ReleaseRenderScaleGameTest', 'gametest/ReleaseCommands',
                             'gametest/ReleaseGraphics', 'gametest/ReleaseGameNames',
-                            'gametest/ReleaseMapping', 'gametest/ReleaseMaximumNoiseCacheGameTest') : [],
+                            'gametest/ReleaseMapping', 'gametest/ReleaseNoiseWork',
+                            'gametest/ReleaseMaximumNoiseCacheGameTest') : [],
                     (owner.renderer in ['gl3', TEXTURE_FORMAT_RENDERER] ? [] :
                             classes('gametest/ReleaseModMenuGameTest', 'gametest/ReleaseIrisGameTest')) +
                             (owner.minecraft == MC_1_21_11 ? classes('gametest/ReleaseGuiCharacters') : []))
@@ -177,6 +181,17 @@ class FabricSources {
                     owner.renderer == 'gl3' ? ['cbbg.release-allocation.mixins.json',
                                                'cbbg.release-startup.mixins.json',
                                                'cbbg.release-shutdown.mixins.json'] : [])
+        }
+        if (owner.buildProfile == 'fabric-upstream' || owner.renderer == 'blaze-texture-format') {
+            result.main.java << tree('renderers/blaze-shared/src/main/java')
+            processed << tree('renderers/blaze-shared/src/processedGametest/java', [],
+                    owner.minecraft == '1.21.11' ? classes('gametest/mixin/ReleaseNoiseWriteMixin') : [])
+        }
+        if (owner.buildProfile == 'fabric-upstream' || owner.renderer == 'renderpearl') {
+            result.main.java << tree('renderers/vulkan/src/main/java')
+            result.libraryInputs << tree('libraries/fabric/src/vulkan/resources')
+            result.main.java << tree('renderers/blaze-texture-format/src/main/java',
+                    classes('render/WindowFramebuffer'))
         }
         result.copies.processedGametest << irisResources
         if (owner.renderer == 'renderpearl') {
@@ -188,7 +203,7 @@ class FabricSources {
                             'gametest/ReleaseUtilityCalls', 'gametest/ReleaseImagePixels',
                             'gametest/ReleaseSettingsGuiGameTest', 'gametest/ReleaseGuiInput',
                             'gametest/ReleaseMapping', 'gametest/ReleaseGuiCharacters',
-                            'gametest/ReleaseGraphics'))
+                            'gametest/ReleaseGraphics', 'gametest/ReleaseNoiseWork'))
         }
         result
     }

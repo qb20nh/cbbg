@@ -27,6 +27,7 @@ public final class ReleaseLifecycleGameTest implements FabricClientGameTest {
   @Override
   public void runTest(ClientGameTestContext context) {
     checkBackend(context);
+    new ReleaseNoiseTexturesGameTest().run(context);
     try (var world = context.worldBuilder().create()) {
       ReleaseWorldAccess.waitForChunksRender(world);
       command(context, "mode set disabled");
@@ -175,7 +176,7 @@ public final class ReleaseLifecycleGameTest implements FabricClientGameTest {
         });
   }
 
-  private static void checkBackend(ClientGameTestContext context) {
+  static void checkBackend(ClientGameTestContext context) {
     String version =
         FabricLoader.getInstance()
             .getModContainer("cbbg")

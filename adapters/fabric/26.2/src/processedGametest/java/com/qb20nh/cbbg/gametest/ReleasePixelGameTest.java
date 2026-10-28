@@ -25,9 +25,11 @@ public final class ReleasePixelGameTest implements FabricClientGameTest {
   private static final int WIDTH = 8;
   private static final int HEIGHT = 4;
   private static final float STRENGTH = 4f;
+  private static final int NOISE_DEPTH = 8;
 
   @Override
   public void runTest(ClientGameTestContext context) {
+    ReleaseVulkanWindowPixels.check(context);
     context.runOnClient(
         client -> {
           String actual = RenderSystem.getDevice().getDeviceInfo().backendName();
@@ -36,11 +38,12 @@ public final class ReleasePixelGameTest implements FabricClientGameTest {
             throw new AssertionError("Pixel test requested " + expected + ", got " + actual);
           }
         });
+    new ReleaseNoiseTexturesGameTest().run(context);
     try (var world = context.worldBuilder().create()) {
       world.getConnection().waitForChunksRender();
       context.runOnClient(client -> client.gui.setScreen(null));
       command(context, "stbn size 16");
-      command(context, "stbn depth 8");
+      command(context, "stbn depth " + NOISE_DEPTH);
       command(context, "stbn seed 42");
       command(context, "stbn generate");
       command(context, "format set rgba32f");
@@ -59,9 +62,11 @@ public final class ReleasePixelGameTest implements FabricClientGameTest {
         command(context, "mode set enabled");
         context.waitFor(client -> render(source, false) != null, 600);
         check(context, source, false);
+        ReleaseWindowPixels.check(context, source, NOISE_DEPTH, false);
         command(context, "mode set demo");
         context.waitFor(client -> render(source, true) != null, 600);
         check(context, source, true);
+        ReleaseWindowPixels.check(context, source, NOISE_DEPTH, true);
       } finally {
         context.runOnClient(
             client -> {
@@ -73,7 +78,7 @@ public final class ReleasePixelGameTest implements FabricClientGameTest {
     }
   }
 
-  private static void command(ClientGameTestContext context, String command) {
+  static void command(ClientGameTestContext context, String command) {
     context.runOnClient(
         client -> Objects.requireNonNull(client.getConnection()).sendCommand("cbbg " + command));
   }
@@ -114,7 +119,9 @@ public final class ReleasePixelGameTest implements FabricClientGameTest {
         0);
   }
 
-  private static @Nullable TextureTarget render(TextureTarget source, boolean demo) {
+  static @Nullable TextureTarget render(TextureTarget source, boolean demo) {
+    var encoder = RenderSystem.getDevice().createCommandEncoder();
+    encoder.submit();
     try {
       String owner = "com.qb20nh.cbbg.render.CbbgDither";
       Class<?> renderer = Class.forName(ReleaseMapping.className(owner));
@@ -132,6 +139,8 @@ public final class ReleasePixelGameTest implements FabricClientGameTest {
               .invoke(null, Objects.requireNonNull(source.getColorTextureView()));
     } catch (ReflectiveOperationException failure) {
       throw new LinkageError("Packaged CBBG render API changed", failure);
+    } finally {
+      encoder.submit();
     }
   }
 

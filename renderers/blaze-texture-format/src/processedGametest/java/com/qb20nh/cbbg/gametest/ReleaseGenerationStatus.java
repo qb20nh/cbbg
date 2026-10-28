@@ -28,14 +28,7 @@ final class ReleaseGenerationStatus {
 
   static boolean settled(int size) {
     try {
-      String owner = "com.qb20nh.cbbg.render.DitherPresentation";
-      Class<?> presentation = Class.forName(ReleaseMapping.className(owner));
-      var viewField =
-          presentation.getDeclaredField(
-              ReleaseMapping.memberName(
-                  owner, "com.mojang.blaze3d.textures.GpuTextureView noiseView"));
-      viewField.setAccessible(true);
-      GpuTextureView view = (GpuTextureView) viewField.get(null);
+      GpuTextureView view = ReleaseShutdownResources.noiseView();
       String notifications = "com.qb20nh.cbbg.render.GenerationNotifications";
       Class<?> type = Class.forName(ReleaseMapping.className(notifications));
       var pending =
