@@ -2,6 +2,7 @@ package com.qb20nh.cbbg.render.stbn;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import com.qb20nh.cbbg.api.NoiseVolume;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -37,6 +38,25 @@ class NoiseCacheTest {
   }
 
   @Test
+  void cacheWithoutAlgorithmIdentityRegenerates() throws Exception {
+    createCache("# seed 0\n");
+    assertFalse(cache().isCacheValid(16, 16, 8, 0L));
+  }
+
+  @Test
+  void unknownAndDuplicateAlgorithmMetadataCannotReuseFrames() throws Exception {
+    for (String header :
+        new String[] {
+          "# seed 0\n# algorithm invalid\n",
+          "# seed 0\n# algorithm 1\n",
+          NoiseCache.seedHeader(0) + "# algorithm " + NoiseVolume.algorithmVersion() + "\n"
+        }) {
+      createCache(header);
+      assertFalse(cache().isCacheValid(16, 16, 8, 0L));
+    }
+  }
+
+  @Test
   void changedAndMissingSlicesInvalidateCache() throws Exception {
     createCache();
     Files.write(directory.resolve("stbn_16x16x8_3.png"), new byte[] {99});
@@ -67,8 +87,8 @@ class NoiseCacheTest {
 
   @Test
   void seedIsPartOfCacheIdentityAndUnknownLegacySeedIsRegenerated() throws Exception {
-    byte[] entries = createCache();
-    assertTrue(cache().isCacheValid(16, 16, 8));
+    byte[] entries = createCache("");
+    assertFalse(cache().isCacheValid(16, 16, 8));
     assertFalse(cache().isCacheValid(16, 16, 8, 0L));
     assertFalse(cache().isCacheValid(16, 16, 8, 42L));
     String manifest = NoiseCache.seedHeader(42L) + new String(entries, StandardCharsets.UTF_8);
@@ -81,15 +101,21 @@ class NoiseCacheTest {
 
   @Test
   void malformedSeedMetadataCannotReuseFrames() throws Exception {
-    byte[] entries = createCache();
-    String manifest = "# seed invalid\n" + new String(entries, StandardCharsets.UTF_8);
+    byte[] entries = createCache("");
+    String manifest =
+        NoiseCache.seedHeader(0).replace("# seed 0", "# seed invalid")
+            + new String(entries, StandardCharsets.UTF_8);
     Files.write(
         directory.resolve("stbn_16x16x8.sha256"), manifest.getBytes(StandardCharsets.UTF_8));
     assertFalse(cache().isCacheValid(16, 16, 8, 0L));
   }
 
   private byte[] createCache() throws Exception {
-    StringBuilder manifest = new StringBuilder();
+    return createCache(NoiseCache.seedHeader(0));
+  }
+
+  private byte[] createCache(String header) throws Exception {
+    StringBuilder manifest = new StringBuilder(header);
     for (int z = 0; z < 8; z++) {
       String name = "stbn_16x16x8_" + z + ".png";
       byte[] bytes = {(byte) z, 42};

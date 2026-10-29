@@ -15,18 +15,10 @@ public final class BlueNoise {
     return new Workspace(w, h, d).generate(seed);
   }
 
-  /** Generates packed ABGR noise, sharing temporary storage between the two scalar fields. */
+  /** Generates correlated RGB blue noise in packed ABGR. */
   public static int[] generatePixels(int w, int h, int d, long seed) {
     checkCancellation();
-    Workspace workspace = new Workspace(w, h, d);
-    double[] u = workspace.generate(stbnUSeed(seed));
-    checkCancellation();
-    double[] v = workspace.generate(stbnVSeed(seed));
-    checkCancellation();
-    int[] pixels = new int[u.length];
-    for (int i = 0; i < pixels.length; i++) {
-      pixels[i] = calculatePixelColor(u[i], v[i]);
-    }
+    int[] pixels = ColorNoise.generate(w, h, d, seed);
     checkCancellation();
     return pixels;
   }

@@ -57,12 +57,12 @@ public final class ReleaseCacheGameTest implements FabricClientGameTest {
 
       command(context, "stbn seed 0");
       command(context, "stbn generate");
-      awaitPixels(context, "dcf55d060ed318039593d89bb7402af589bc818f6b64b6e90cf99ee33ccc0bcd");
+      awaitPixels(context, "5bfcd093f55184e1ea3db1e9aecf576f02910e82eccb854d837d015a680af3db");
       saveSeedZeroCache();
       command(context, "mode set disabled");
       command(context, "stbn seed 74123");
       command(context, "mode set enabled");
-      awaitPixels(context, "4f953f23c7a2a7de8960caa4272090458b2ec986ceeea65796467a0c9109a076");
+      awaitPixels(context, "d7b7d360cb117268267201f739afd263c963def7fd4f6d5cbf2bd13cae86a533");
     }
   }
 

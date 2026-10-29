@@ -7,6 +7,7 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.renderpearl.api.GpuFormat;
 import com.mojang.renderpearl.api.pipeline.CompiledRenderPipeline;
 import com.mojang.renderpearl.api.pipeline.RenderPipeline;
+import com.qb20nh.cbbg.api.NoiseVolume;
 import java.lang.management.ManagementFactory;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -154,9 +155,11 @@ public final class EarlyStartupGameTest implements FabricClientGameTest {
     try {
       if (!Files.isRegularFile(manifest)) return false;
       var lines = Files.readAllLines(manifest);
-      if (lines.size() != depth + 1 || !lines.getFirst().equals("# seed " + seed)) return false;
+      if (lines.size() != depth + 2
+          || !lines.getFirst().equals("# seed " + seed)
+          || !lines.get(1).equals("# algorithm " + NoiseVolume.algorithmVersion())) return false;
       MessageDigest digest = MessageDigest.getInstance("SHA-256");
-      for (String line : lines.subList(1, lines.size())) {
+      for (String line : lines.subList(2, lines.size())) {
         String[] parts = line.trim().split("\\s+", 0);
         if (parts.length != 2) return false;
         Path image = cache.resolve(parts[1]);

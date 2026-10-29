@@ -5,6 +5,7 @@ import com.google.gson.JsonParser;
 import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
+import com.qb20nh.cbbg.api.NoiseVolume;
 import java.io.ByteArrayInputStream;
 import java.lang.reflect.Proxy;
 import java.nio.ByteBuffer;
@@ -30,7 +31,7 @@ import org.jspecify.annotations.Nullable;
 public final class ReleaseGenerationGameTest implements FabricClientGameTest {
   private static final int WAIT_TICKS = 1200;
   private static final String REPLACEMENT_PIXELS =
-      "4f953f23c7a2a7de8960caa4272090458b2ec986ceeea65796467a0c9109a076";
+      "d7b7d360cb117268267201f739afd263c963def7fd4f6d5cbf2bd13cae86a533";
 
   @Override
   public void runTest(ClientGameTestContext context) {
@@ -209,8 +210,10 @@ public final class ReleaseGenerationGameTest implements FabricClientGameTest {
     Path manifest = cache.resolve("stbn_" + size + "x" + size + "x" + depth + ".sha256");
     try {
       List<String> lines = Files.readAllLines(manifest);
-      int offset = lines.size() == depth + 1 && lines.getFirst().equals("# seed " + seed) ? 1 : 0;
-      if (lines.size() != depth + offset) {
+      int offset = 2;
+      if (lines.size() != depth + offset
+          || !lines.getFirst().equals("# seed " + seed)
+          || !lines.get(1).equals("# algorithm " + NoiseVolume.algorithmVersion())) {
         throw new AssertionError("Incorrect noise manifest size or seed: " + manifest);
       }
       MessageDigest digest = MessageDigest.getInstance("SHA-256");

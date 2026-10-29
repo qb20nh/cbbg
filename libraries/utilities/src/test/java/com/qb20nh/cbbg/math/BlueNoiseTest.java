@@ -36,21 +36,90 @@ class BlueNoiseTest {
   }
 
   @Test
-  void sharedStorageMatchesSeparateFieldGeneration() {
+  void packedNoiseIsSeededAndUsesOpaqueAbgr() {
     int[][] dimensions = {{2, 1, 1}, {8, 8, 1}, {8, 4, 2}, {16, 8, 4}};
     for (int[] size : dimensions) {
       for (long seed : new long[] {0, 1, -1, Long.MIN_VALUE, Long.MAX_VALUE}) {
-        double[] u =
-            BlueNoise.generateScalarField(size[0], size[1], size[2], BlueNoise.stbnUSeed(seed));
-        double[] v =
-            BlueNoise.generateScalarField(size[0], size[1], size[2], BlueNoise.stbnVSeed(seed));
-        int[] expected = new int[u.length];
-        for (int i = 0; i < expected.length; i++) {
-          expected[i] = BlueNoise.calculatePixelColor(u[i], v[i]);
-        }
-        assertArrayEquals(expected, BlueNoise.generatePixels(size[0], size[1], size[2], seed));
+        int[] pixels = BlueNoise.generatePixels(size[0], size[1], size[2], seed);
+        assertEquals(size[0] * size[1] * size[2], pixels.length);
+        assertArrayEquals(pixels, BlueNoise.generatePixels(size[0], size[1], size[2], seed));
+        for (int pixel : pixels) assertEquals(255, pixel >>> 24);
       }
     }
+    assertFalse(
+        Arrays.equals(BlueNoise.generatePixels(8, 4, 2, 1), BlueNoise.generatePixels(8, 4, 2, 2)));
+  }
+
+  @Test
+  void colorNoiseKeepsUniformChannelsWithoutExtraBrightnessGrain() {
+    for (long seed : new long[] {0, 1, 42}) {
+      int[] pixels = BlueNoise.generatePixels(32, 32, 16, seed);
+      for (int channel = 0; channel < 3; channel++) {
+        int[] histogram = new int[256];
+        for (int pixel : pixels) histogram[pixel >>> (8 * channel) & 255]++;
+        int cumulative = 0;
+        for (int value = 0; value < 256; value++) {
+          cumulative += histogram[value];
+          double expected = Math.min(1, (value + 0.5) / 255);
+          assertEquals(expected, (double) cumulative / pixels.length, 2.0 / pixels.length);
+        }
+      }
+      // Luminance at half-step input detects independent RGB noise that has good
+      // marginal spectra but adds brightness grain. Both ABGR and PNG order apply.
+      for (double[] weights : new double[][] {{0.2126, 0.7152, 0.0722}, {0.0722, 0.7152, 0.2126}}) {
+        double squared = 0;
+        for (int pixel : pixels) {
+          double error = 0;
+          for (int channel = 0; channel < 3; channel++) {
+            double noise = (pixel >>> (8 * channel) & 255) / 255.0;
+            error += weights[channel] * (Math.floor(0.5 + noise) - 0.5);
+          }
+          squared += error * error;
+        }
+        assertTrue(Math.sqrt(squared / pixels.length) < 0.33, "Brightness RMS for seed " + seed);
+      }
+    }
+  }
+
+  @Test
+  void channelsSuppressNeighborPatternsWithoutAlternatingFrames() {
+    for (long seed : new long[] {0, 1, 42}) {
+      int[] pixels = BlueNoise.generatePixels(32, 32, 16, seed);
+      for (int channel = 0; channel < 3; channel++) {
+        assertTrue(
+            noiseCorrelation(pixels, channel, 1, 0, 0) < -0.15,
+            "Spatial X correlation for channel " + channel + ", seed " + seed);
+        assertTrue(
+            noiseCorrelation(pixels, channel, 0, 1, 0) < -0.15,
+            "Spatial Y correlation for channel " + channel + ", seed " + seed);
+        assertTrue(
+            noiseCorrelation(pixels, channel, 0, 0, 1) < -0.15,
+            "Temporal correlation for channel " + channel + ", seed " + seed);
+        assertTrue(
+            Math.abs(noiseCorrelation(pixels, channel, 0, 0, 2)) < 0.3,
+            "Alternating-frame correlation for channel " + channel + ", seed " + seed);
+      }
+    }
+  }
+
+  private static double noiseCorrelation(int[] pixels, int channel, int dx, int dy, int dt) {
+    double mean = 0;
+    for (int pixel : pixels) mean += (pixel >>> (8 * channel) & 255) / (double) pixels.length;
+    double variance = 0;
+    double covariance = 0;
+    for (int z = 0; z < 16; z++) {
+      for (int y = 0; y < 32; y++) {
+        for (int x = 0; x < 32; x++) {
+          int index = (z * 32 + y) * 32 + x;
+          int next = (((z + dt) % 16 * 32 + (y + dy) % 32) * 32 + (x + dx) % 32);
+          double a = (pixels[index] >>> (8 * channel) & 255) - mean;
+          double b = (pixels[next] >>> (8 * channel) & 255) - mean;
+          variance += a * a;
+          covariance += a * b;
+        }
+      }
+    }
+    return covariance / variance;
   }
 
   @Test

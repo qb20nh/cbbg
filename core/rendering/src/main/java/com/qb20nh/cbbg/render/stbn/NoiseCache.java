@@ -1,5 +1,6 @@
 package com.qb20nh.cbbg.render.stbn;
 
+import com.qb20nh.cbbg.api.NoiseVolume;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
@@ -43,6 +44,7 @@ public final class NoiseCache {
 
       Map<String, String> hashes = new HashMap<>();
       List<String> lines = Files.readAllLines(hashFile);
+      if (!matchesAlgorithm(lines)) return false;
       if (seed != null && !matchesSeed(lines, seed)) return false;
       for (String line : lines) {
         String[] parts = line.trim().split("\\s+", 0);
@@ -71,7 +73,19 @@ public final class NoiseCache {
   }
 
   public static String seedHeader(long seed) {
-    return "# seed " + seed + "\n";
+    return "# seed " + seed + "\n# algorithm " + NoiseVolume.algorithmVersion() + "\n";
+  }
+
+  private static boolean matchesAlgorithm(List<String> lines) {
+    String expected = "# algorithm " + NoiseVolume.algorithmVersion();
+    int found = 0;
+    for (String line : lines) {
+      if (line.startsWith("# algorithm ")) {
+        if (!line.equals(expected)) return false;
+        found++;
+      }
+    }
+    return found == 1;
   }
 
   public static boolean matchesSeed(List<String> lines, long seed) {

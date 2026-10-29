@@ -5,6 +5,7 @@ import com.google.gson.JsonParser;
 import com.mojang.blaze3d.opengl.GlTexture;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.textures.GpuTexture;
+import com.qb20nh.cbbg.api.NoiseVolume;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -123,7 +124,9 @@ public final class ReleaseLifecycleGameTest implements FabricClientGameTest {
     try {
       var lines =
           Files.readAllLines(cache.resolve("stbn_" + size + "x" + size + "x" + depth + ".sha256"));
-      return lines.size() == depth + 1 && lines.getFirst().equals("# seed " + seed);
+      return lines.size() == depth + 2
+          && lines.getFirst().equals("# seed " + seed)
+          && lines.get(1).equals("# algorithm " + NoiseVolume.algorithmVersion());
     } catch (IOException incomplete) {
       return false;
     }

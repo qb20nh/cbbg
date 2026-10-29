@@ -17,7 +17,7 @@ class StartupEvidenceTests(unittest.TestCase):
         prepare_startup_cache(self.game, self.evidence, 'cold', None)
         self.result = dict(backend='opengl', size=16, depth=8, seed=74123, preLaunchWorkers=1,
                            preLaunchMillis=10, firstDrawMillis=30, titleMillis=40, cacheReadyMillis=50,
-                           pixelsSha256='4f953f23c7a2a7de8960caa4272090458b2ec986ceeea65796467a0c9109a076')
+                           pixelsSha256='d7b7d360cb117268267201f739afd263c963def7fd4f6d5cbf2bd13cae86a533')
         self.early = dict(preLaunchMillis=10, preLaunchWorkers=1)
         self.log = 'Starting Async STBN Math Generation (16x16x8)...\nSTBN Math Complete in 2 ms\n'
 

@@ -8,14 +8,15 @@ import org.junit.jupiter.api.Test;
 
 class UtilitiesTest {
   @Test
-  void generatesExistingNoiseAndWrapsCoordinates() {
+  void generatesVersionedNoiseAndWrapsCoordinates() {
     NoiseVolume noise = NoiseVolume.generate(4, 2, 2, 42);
-    // ABGR fixture captured from the original raw scalar-field calculation, in frame/y/x order.
+    // Frozen Gaussian-phase reference in frame/y/x order.
+    assertEquals(2, NoiseVolume.algorithmVersion());
     int[] expected = {
-      0xff99ec41, 0xff1150aa, 0xff8807a7, 0xff447ff0,
-      0xffdd6d2b, 0xffaab0ed, 0xff774cf4, 0xff008080,
-      0xff223454, 0xffee8d41, 0xff55391e, 0xffff8080,
-      0xff331a75, 0xff66c91a, 0xffbb80f0, 0xffcce575
+      0xffe43a70, 0xff2585cf, 0xff7ada30, 0xff3ae470,
+      0xff9aba10, 0xffc51b8f, 0xff5afa50, 0xff6545ef,
+      0xff4565ef, 0xffba9a10, 0xff05a5af, 0xffda7a30,
+      0xff1bc58f, 0xff8525cf, 0xffa505af, 0xfffa5a50
     };
     for (int i = 0; i < expected.length; i++) {
       assertEquals(expected[i], noise.pixelABGR(i % 4, i / 4 % 2, i / 8));

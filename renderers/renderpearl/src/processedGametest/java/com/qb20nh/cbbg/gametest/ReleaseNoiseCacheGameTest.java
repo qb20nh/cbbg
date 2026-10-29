@@ -3,6 +3,7 @@ package com.qb20nh.cbbg.gametest;
 import com.google.gson.JsonObject;
 import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.renderpearl.api.textures.GpuTextureView;
+import com.qb20nh.cbbg.api.NoiseVolume;
 import java.io.ByteArrayInputStream;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -25,13 +26,13 @@ public final class ReleaseNoiseCacheGameTest implements FabricClientGameTest {
   private static final int SIZE = 16;
   private static final int DEPTH = 8;
   private static final int WAIT_TICKS = 600;
-  // CPU reference: BlueNoise.generateScalarField U/V fields and calculatePixelColor, compiled
-  // offline.
+  // CPU reference: filtered Gaussian phase mapped to correlated RGB, compiled
+  // independently offline.
   // SHA-256 of every decoded ARGB int in z/y/x order, encoded big-endian.
   private static final String SEED_ZERO_PIXELS =
-      "dcf55d060ed318039593d89bb7402af589bc818f6b64b6e90cf99ee33ccc0bcd";
+      "5bfcd093f55184e1ea3db1e9aecf576f02910e82eccb854d837d015a680af3db";
   private static final String SEED_OTHER_PIXELS =
-      "4f953f23c7a2a7de8960caa4272090458b2ec986ceeea65796467a0c9109a076";
+      "d7b7d360cb117268267201f739afd263c963def7fd4f6d5cbf2bd13cae86a533";
 
   @Override
   public void runTest(ClientGameTestContext context) {
@@ -136,13 +137,15 @@ public final class ReleaseNoiseCacheGameTest implements FabricClientGameTest {
 
   private static int[] readCache(long seed) throws Exception {
     List<String> manifest = Files.readAllLines(path(-1));
-    if (manifest.size() != DEPTH + 1 || !manifest.getFirst().equals("# seed " + seed)) {
+    if (manifest.size() != DEPTH + 2
+        || !manifest.getFirst().equals("# seed " + seed)
+        || !manifest.get(1).equals("# algorithm " + NoiseVolume.algorithmVersion())) {
       throw new AssertionError("Incomplete cache manifest or incorrect seed " + seed);
     }
     int[] pixels = new int[SIZE * SIZE * DEPTH];
     for (int z = 0; z < DEPTH; z++) {
       byte[] bytes = Files.readAllBytes(path(z));
-      String[] entry = manifest.get(z + 1).trim().split("\\s+", 0);
+      String[] entry = manifest.get(z + 2).trim().split("\\s+", 0);
       if (entry.length != 2
           || !entry[0].equals(hash(bytes))
           || !entry[1].equals(Objects.requireNonNull(path(z).getFileName()).toString())) {
