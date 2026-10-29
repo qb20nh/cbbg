@@ -28,7 +28,7 @@ public final class ReleaseEarlyStartupGameTest implements FabricClientGameTest {
   private static final long SEED = 74123;
   // SHA-256 of CPU-reference decoded ARGB pixels in z/y/x order, encoded big-endian.
   private static final String PIXELS_SHA256 =
-      "d7b7d360cb117268267201f739afd263c963def7fd4f6d5cbf2bd13cae86a533";
+      "4570ea457d31d0372e7be403cf7f358b130b7122b7275a5274fb841ad70c193d";
 
   @Override
   public void runTest(ClientGameTestContext context) {

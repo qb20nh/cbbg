@@ -36,7 +36,7 @@ public final class ReleaseNoiseCancellationGameTest implements FabricClientGameT
   private static final long REPLACEMENT_SEED = 74123;
   // Independent CPU reference: decoded ARGB ints in z/y/x order, big-endian.
   private static final String REPLACEMENT_PIXELS =
-      "d7b7d360cb117268267201f739afd263c963def7fd4f6d5cbf2bd13cae86a533";
+      "4570ea457d31d0372e7be403cf7f358b130b7122b7275a5274fb841ad70c193d";
 
   @Override
   // The exact replacement noise resource must survive stale completion.

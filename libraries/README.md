@@ -98,8 +98,9 @@ sequence in your code. `pixelABGR(x, y, frame)` wraps all three coordinates;
 frame indices at the volume's depth.
 
 Include `NoiseVolume.algorithmVersion()`, dimensions and seed in any cache key.
-This method requires 1.0.0-beta.2 or newer. Algorithm 2 uses correlated, filtered
-color noise. Regenerate data cached with an older algorithm.
+This method requires 1.0.0-beta.2 or newer. Algorithm 3 filters RGB vectors on a
+sphere and gives each channel a uniform distribution. Regenerate data cached
+with an older algorithm.
 
 ## Dither CPU images
 

@@ -32,7 +32,7 @@ public final class ReleaseMaximumNoiseCacheGameTest implements FabricClientGameT
   private static final int WARM_WAIT_TICKS = 600;
   private static final int COLD_WAIT_TICKS = 6000;
   private static final String CPU_RGBA_HASH =
-      "be00ed389b71dfc05d20b63e54eabed060c9df6619b609286f53a08ed5af8f1b";
+      "8af87b0265c4c74ad21292eb9899e52ce7cedc76b1ebef9d1d941c79e69f7ef5";
   private static final String GENERATING = "Starting Async STBN Math Generation (256x256x128)";
   private static final String GENERATED = "STBN Images generated from math fields.";
   private static final String CACHE_HIT =

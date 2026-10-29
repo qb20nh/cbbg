@@ -51,7 +51,7 @@ class BlueNoiseTest {
   }
 
   @Test
-  void colorNoiseKeepsUniformChannelsWithoutExtraBrightnessGrain() {
+  void colorNoiseKeepsUniformSphericalDistribution() {
     for (long seed : new long[] {0, 1, 42}) {
       int[] pixels = BlueNoise.generatePixels(32, 32, 16, seed);
       for (int channel = 0; channel < 3; channel++) {
@@ -64,8 +64,21 @@ class BlueNoiseTest {
           assertEquals(expected, (double) cumulative / pixels.length, 2.0 / pixels.length);
         }
       }
-      // Luminance at half-step input detects independent RGB noise that has good
-      // marginal spectra but adds brightness grain. Both ABGR and PNG order apply.
+      // A uniform unit sphere has E[xy] = 0 and E[x*x*y*y] = 1/15.
+      for (int[] pair : new int[][] {{0, 1}, {0, 2}, {1, 2}}) {
+        double product = 0;
+        double squaredProduct = 0;
+        for (int pixel : pixels) {
+          double x = 2 * (pixel >>> (8 * pair[0]) & 255) / 255.0 - 1;
+          double y = 2 * (pixel >>> (8 * pair[1]) & 255) / 255.0 - 1;
+          product += x * y;
+          squaredProduct += x * x * y * y;
+        }
+        assertEquals(0, product / pixels.length, 0.012);
+        assertEquals(1.0 / 15, squaredProduct / pixels.length, 0.008);
+      }
+      // Half-step quantization retains the sphere's brightness variance in
+      // both logical ABGR and cached PNG channel order.
       for (double[] weights : new double[][] {{0.2126, 0.7152, 0.0722}, {0.0722, 0.7152, 0.2126}}) {
         double squared = 0;
         for (int pixel : pixels) {
@@ -76,7 +89,13 @@ class BlueNoiseTest {
           }
           squared += error * error;
         }
-        assertTrue(Math.sqrt(squared / pixels.length) < 0.33, "Brightness RMS for seed " + seed);
+        double expected =
+            Math.sqrt(
+                0.25
+                    * (weights[0] * weights[0]
+                        + weights[1] * weights[1]
+                        + weights[2] * weights[2]));
+        assertEquals(expected, Math.sqrt(squared / pixels.length), 0.006);
       }
     }
   }

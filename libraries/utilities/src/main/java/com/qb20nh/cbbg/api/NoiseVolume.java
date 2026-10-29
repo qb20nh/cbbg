@@ -39,7 +39,7 @@ public final class NoiseVolume {
 
   /** Identifies deterministic generation output so consumers can invalidate older caches. */
   public static int algorithmVersion() {
-    return 2;
+    return 3;
   }
 
   public int width() {

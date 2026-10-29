@@ -34,7 +34,7 @@ public final class ReleaseMaximumNoiseCacheGameTest implements FabricClientGameT
   // Allow six minutes for the original fixture's 300-second generation plus PNG/upload work.
   private static final int GENERATION_WAIT_TICKS = 7200;
   private static final String PIXEL_HASH =
-      "be00ed389b71dfc05d20b63e54eabed060c9df6619b609286f53a08ed5af8f1b";
+      "8af87b0265c4c74ad21292eb9899e52ce7cedc76b1ebef9d1d941c79e69f7ef5";
   private static final Pattern FRAME = Pattern.compile("\\bstbn=(\\d+)/(\\d+)\\b");
   private static final String GENERATING = "Starting Async STBN Math Generation (256x256x128)";
   private static final String CACHE_HIT =

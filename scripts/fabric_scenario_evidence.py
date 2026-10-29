@@ -23,7 +23,7 @@ def validate_startup(expected, mode, evidence, cache, log, backend, target='26.3
             or inputs.get('mode') != mode or result.get('backend') != backend
             or result.get('size') != 16 or result.get('depth') != 8
             or result.get('seed') != 74123
-            or result.get('pixelsSha256') != 'd7b7d360cb117268267201f739afd263c963def7fd4f6d5cbf2bd13cae86a533'
+            or result.get('pixelsSha256') != '4570ea457d31d0372e7be403cf7f358b130b7122b7275a5274fb841ad70c193d'
             or result.get('preLaunchWorkers') != 1
             or early.get('preLaunchWorkers') != 1
             or early.get('preLaunchMillis') != result.get('preLaunchMillis')):

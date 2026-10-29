@@ -10,13 +10,13 @@ class UtilitiesTest {
   @Test
   void generatesVersionedNoiseAndWrapsCoordinates() {
     NoiseVolume noise = NoiseVolume.generate(4, 2, 2, 42);
-    // Frozen Gaussian-phase reference in frame/y/x order.
-    assertEquals(2, NoiseVolume.algorithmVersion());
+    // Frozen spherical-vector reference in frame/y/x order.
+    assertEquals(3, NoiseVolume.algorithmVersion());
     int[] expected = {
-      0xffe43a70, 0xff2585cf, 0xff7ada30, 0xff3ae470,
-      0xff9aba10, 0xffc51b8f, 0xff5afa50, 0xff6545ef,
-      0xff4565ef, 0xffba9a10, 0xff05a5af, 0xffda7a30,
-      0xff1bc58f, 0xff8525cf, 0xffa505af, 0xfffa5a50
+      0xfff77887, 0xffa7b718, 0xff1897b7, 0xffd78728,
+      0xff78a7f7, 0xff6848e7, 0xff58f778, 0xff381858,
+      0xff085868, 0xffc728c7, 0xff970838, 0xff48e7a7,
+      0xff87c708, 0xff28d748, 0xffe76897, 0xffb738d7
     };
     for (int i = 0; i < expected.length; i++) {
       assertEquals(expected[i], noise.pixelABGR(i % 4, i / 4 % 2, i / 8));

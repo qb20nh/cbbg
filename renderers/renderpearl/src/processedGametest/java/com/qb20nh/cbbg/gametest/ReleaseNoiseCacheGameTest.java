@@ -30,9 +30,9 @@ public final class ReleaseNoiseCacheGameTest implements FabricClientGameTest {
   // independently offline.
   // SHA-256 of every decoded ARGB int in z/y/x order, encoded big-endian.
   private static final String SEED_ZERO_PIXELS =
-      "5bfcd093f55184e1ea3db1e9aecf576f02910e82eccb854d837d015a680af3db";
+      "852ad7ce2b0b945a4edc8ef1d32910ba1fa8f5c48738634345ce3f76e7d46f66";
   private static final String SEED_OTHER_PIXELS =
-      "d7b7d360cb117268267201f739afd263c963def7fd4f6d5cbf2bd13cae86a533";
+      "4570ea457d31d0372e7be403cf7f358b130b7122b7275a5274fb841ad70c193d";
 
   @Override
   public void runTest(ClientGameTestContext context) {

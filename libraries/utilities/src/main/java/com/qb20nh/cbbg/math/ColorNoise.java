@@ -5,96 +5,86 @@ import java.util.Random;
 import java.util.concurrent.CancellationException;
 import org.jspecify.annotations.NullMarked;
 
-/** Correlated color noise from two filtered Gaussian fields. */
+/** RGB blue noise with uniform channels and a spherical color distribution. */
 @NullMarked
 final class ColorNoise {
   private ColorNoise() {}
 
   static int[] generate(int w, int h, int d, long seed) {
-    int n = Math.multiplyExact(Math.multiplyExact(w, h), d);
+    double[][] channels = filtered(w, h, d, seed);
+    int n = channels[0].length;
     int[] indices = new int[n], scratch = new int[n];
-    double[] phases = phases(w, h, d, seed, indices, scratch);
-    for (int i = 0; i < n; i++) indices[i] = i;
-    BlueNoise.sortIndices(phases, indices, scratch);
+    for (double[] channel : channels) rank(channel, indices, scratch);
     int[] pixels = new int[n];
-    // Uniform circular ranks keep every triangular channel uniform. Their
-    // one-third-cycle offsets reduce shared bright/dark quantization errors.
-    for (int k = 0; k < n; k++) {
-      double phase = (k + .5) / n;
-      pixels[indices[k]] =
+    for (int i = 0; i < n; i++) {
+      pixels[i] =
           0xff000000
-              | value(triangle(phase))
-              | value(triangle(phase + 1.0 / 3)) << 8
-              | value(triangle(phase + 2.0 / 3)) << 16;
+              | (int) Math.round(channels[0][i] * 255)
+              | (int) Math.round(channels[1][i] * 255) << 8
+              | (int) Math.round(channels[2][i] * 255) << 16;
     }
     return pixels;
   }
 
-  private static double triangle(double phase) {
-    phase -= Math.floor(phase);
-    return 2 * Math.abs(phase - .5);
-  }
-
-  private static int value(double x) {
-    return (int) Math.round(x * 255);
-  }
-
-  private static double[] phases(int w, int h, int d, long seed, int[] indices, int[] scratch) {
-    int n = w * h * d;
-    double[] real = random(n, BlueNoise.stbnUSeed(seed)),
-        imag = random(n, BlueNoise.stbnVSeed(seed));
-    double[] gaussian = new double[n];
-    Random quantileRandom = new Random(seed == 0 ? 9012 : seed * 31 + 13);
-    for (int i = 0; i < n / 2; i++) {
-      double radius = StrictMath.sqrt(-2 * StrictMath.log(1 - quantileRandom.nextDouble()));
-      double sample = Math.abs(radius * StrictMath.cos(2 * Math.PI * quantileRandom.nextDouble()));
-      gaussian[i] = -sample;
-      gaussian[n - 1 - i] = sample;
-    }
-    Arrays.sort(gaussian);
-    double[] xy = new double[w * h], time = new double[d];
-    double sigma = .2, twoSigmaSq = 2 * sigma * sigma;
-    for (int y = 0; y < h; y++)
-      for (int x = 0; x < w; x++) {
-        double kx = (x <= w / 2 ? (double) x : x - w) / w,
-            ky = (y <= h / 2 ? (double) y : y - h) / h;
-        xy[y * w + x] = Math.exp(-(kx * kx + ky * ky) / twoSigmaSq);
+  private static double[][] filtered(int w, int h, int d, long seed) {
+    int n = Math.multiplyExact(Math.multiplyExact(w, h), d);
+    double[] x = gaussian(n, BlueNoise.stbnUSeed(seed));
+    double[] y = gaussian(n, BlueNoise.stbnVSeed(seed));
+    double[] z = gaussian(n, seed == 0 ? 9012 : seed * 31 + 13);
+    double[] temp = new double[n], xy = new double[w * h], time = new double[d];
+    for (int j = 0; j < h; j++)
+      for (int i = 0; i < w; i++) {
+        double kx = (i <= w / 2 ? (double) i : i - w) / w;
+        double ky = (j <= h / 2 ? (double) j : j - h) / h;
+        xy[j * w + i] = Math.exp(-(kx * kx + ky * ky) / .08);
       }
-    for (int z = 0; z < d; z++) {
-      double kz = (z <= d / 2 ? (double) z : z - d) / d;
-      time[z] = Math.exp(-kz * kz / twoSigmaSq);
+    for (int k = 0; k < d; k++) {
+      double kz = (k <= d / 2 ? (double) k : k - d) / d;
+      time[k] = Math.exp(-kz * kz / .08);
     }
-    // A real, even filter processes both real signals in one complex FFT.
-    for (int iteration = 0; iteration < 10; iteration++) {
-      cancelled();
-      MiniFFT.fft3d(real, imag, w, h, d, false);
-      for (int z = 0; z < d; z++)
-        for (int pixel = 0; pixel < w * h; pixel++) {
-          int i = z * w * h + pixel;
-          double weight = 1 - xy[pixel] * time[z];
-          real[i] *= weight;
-          imag[i] *= weight;
-        }
-      cancelled();
-      MiniFFT.fft3d(real, imag, w, h, d, true);
-      rank(real, gaussian, indices, scratch);
-      rank(imag, gaussian, indices, scratch);
+    // The same filter on all components preserves rotational symmetry.
+    // Projection restores the sphere after filtering, without favoring a color.
+    for (int iteration = 0; iteration < 16 && n > 1; iteration++) {
+      filter(x, y, xy, time, w, h, d);
+      Arrays.fill(temp, 0);
+      filter(z, temp, xy, time, w, h, d);
+      for (int i = 0; i < n; i++) {
+        double radius = StrictMath.sqrt(x[i] * x[i] + y[i] * y[i] + z[i] * z[i]);
+        x[i] /= radius;
+        y[i] /= radius;
+        z[i] /= radius;
+      }
     }
-    for (int i = 0; i < n; i++) real[i] = StrictMath.atan2(imag[i], real[i]);
-    return real;
+    return new double[][] {x, y, z};
   }
 
-  private static void rank(double[] values, double[] gaussian, int[] indices, int[] scratch) {
+  private static void rank(double[] field, int[] indices, int[] scratch) {
     for (int i = 0; i < indices.length; i++) indices[i] = i;
-    BlueNoise.sortIndices(values, indices, scratch);
-    for (int k = 0; k < indices.length; k++) values[indices[k]] = gaussian[k];
+    BlueNoise.sortIndices(field, indices, scratch);
+    for (int i = 0; i < indices.length; i++) field[indices[i]] = (i + .5) / indices.length;
   }
 
-  private static double[] random(int n, long seed) {
-    double[] values = new double[n];
+  private static double[] gaussian(int n, long seed) {
+    double[] result = new double[n];
     Random rng = new Random(seed);
-    for (int i = 0; i < n; i++) values[i] = rng.nextDouble();
-    return values;
+    for (int i = 0; i < n; i++) result[i] = rng.nextGaussian();
+    return result;
+  }
+
+  private static void filter(
+      double[] real, double[] imag, double[] xy, double[] time, int w, int h, int d) {
+    cancelled();
+    MiniFFT.fft3d(real, imag, w, h, d, false);
+    cancelled();
+    for (int k = 0; k < d; k++)
+      for (int p = 0; p < w * h; p++) {
+        int i = k * w * h + p;
+        double weight = 1 - xy[p] * time[k];
+        real[i] *= weight;
+        imag[i] *= weight;
+      }
+    MiniFFT.fft3d(real, imag, w, h, d, true);
+    cancelled();
   }
 
   private static void cancelled() {
