@@ -13,8 +13,16 @@ Capture runs: `history-world-pixels-stable{1,2}-{opengl,vulkan}`, described in
 - `enabled.png` SHA256: `3046a0eba4bbdc3c43030150e46ae3f1954cb23ce0a924ea413fb0f7cf7f0be9`
 - `demo.png` SHA256: `ca4fbf8c555b658f39ff8bb155efc4a4bc08c311db7c7f23d65bade94b226beb`
 
-Tests compare the CPU output exactly against these files. GPU screenshot checks
-allow a one-LSB difference only at identified shader rounding boundaries.
+The scene check recomputes the captured float input with `reference-noise.png`,
+the original generator's 16×16 tile from depth 8, seed 0, frame 0. It compares
+that output exactly against these files, independently of the active noise
+generator. GPU screenshots are checked separately against a CPU calculation
+using the current noise, with a one-LSB allowance only at identified shader
+rounding boundaries. Tests save both calculations as `scene-reference.png` and
+`expected.png`.
+
+- `reference-noise.png` SHA256: `1c161e20750ada795262618a2cc0d446de525a7c1ce8acd0dbf0a6efe9f9582c`
+
 To update the images, inspect the scene, repeat the capture, check CPU/GPU results
 and record the new capture details in a change for review. Tests must leave these
 files unchanged. Investigate a failure before replacing a reference image.

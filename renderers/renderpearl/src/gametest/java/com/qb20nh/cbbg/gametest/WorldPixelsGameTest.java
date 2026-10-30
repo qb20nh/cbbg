@@ -22,6 +22,9 @@ import org.jspecify.annotations.Nullable;
 /** Real world pixels versus a CPU oracle and a checked-in, version-specific scene baseline. */
 @NullMarked
 public final class WorldPixelsGameTest implements FabricClientGameTest {
+  private static final String REFERENCE_NOISE_RESOURCE =
+      "/cbbg-world-goldens/26.3/reference-noise.png";
+
   @Override
   public void runTest(ClientGameTestContext context) {
     runScene(context, false);
@@ -218,19 +221,29 @@ public final class WorldPixelsGameTest implements FabricClientGameTest {
     var goldenStream = WorldPixelsGameTest.class.getResourceAsStream(goldenPath);
     if (goldenStream == null) throw new AssertionError("Missing world golden: " + goldenPath);
     try (goldenStream;
+        var referenceNoiseStream =
+            Objects.requireNonNull(
+                WorldPixelsGameTest.class.getResourceAsStream(REFERENCE_NOISE_RESOURCE),
+                "Missing world reference noise");
+        NativeImage referenceNoise = NativeImage.read(referenceNoiseStream);
         NativeImage golden = NativeImage.read(goldenStream);
-        NativeImage expectedImage = new NativeImage(width, height, false)) {
+        NativeImage expectedImage = new NativeImage(width, height, false);
+        NativeImage sceneReference = new NativeImage(width, height, false)) {
+      if (referenceNoise.getWidth() != tileSize || referenceNoise.getHeight() != tileSize) {
+        throw new AssertionError("World reference noise dimensions changed");
+      }
       if (golden.getWidth() != width || golden.getHeight() != height) {
         throw new AssertionError("World viewport differs from the golden");
       }
       for (int y = 0; y < height; y++) {
         int gpuY = height - 1 - y;
         for (int x = 0; x < width; x++) {
-          int noisePixel =
-              noise[
-                  DitherReference.noiseCoordinate(gpuY, 1, tileSize) * tileSize
-                      + DitherReference.noiseCoordinate(x, 1, tileSize)];
+          int noiseX = DitherReference.noiseCoordinate(x, 1, tileSize);
+          int noiseY = DitherReference.noiseCoordinate(gpuY, 1, tileSize);
+          int noisePixel = noise[noiseY * tileSize + noiseX];
+          int referenceNoisePixel = referenceNoise.getPixel(noiseX, noiseY);
           int expected = 0xff000000;
+          int reference = 0xff000000;
           for (int channel = 0; channel < 3; channel++) {
             int shift = 16 - channel * 8;
             int noiseByte = noisePixel >>> shift & 255;
@@ -238,6 +251,10 @@ public final class WorldPixelsGameTest implements FabricClientGameTest {
             if (!Float.isFinite(input)) throw new AssertionError("Nonfinite world source");
             int value = DitherReference.channel(input, noiseByte, 2, x, width, demo);
             expected |= value << shift;
+            reference |=
+                DitherReference.channel(
+                        input, referenceNoisePixel >>> shift & 255, 2, x, width, demo)
+                    << shift;
             int plain = DitherReference.channel(input, noiseByte, 0, x, width, demo);
             if (value != plain) changed++;
             // Only shader float arithmetic within 0.0001 of an integer rounding
@@ -259,10 +276,12 @@ public final class WorldPixelsGameTest implements FabricClientGameTest {
             throw new AssertionError("World screenshot alpha was not opaque");
           }
           expectedImage.setPixel(x, y, expected);
-          if (golden.getPixel(x, y) != expected) goldenMismatches++;
+          sceneReference.setPixel(x, y, reference);
+          if (golden.getPixel(x, y) != reference) goldenMismatches++;
         }
       }
       expectedImage.writeToFile(directory.resolve("expected.png"));
+      sceneReference.writeToFile(directory.resolve("scene-reference.png"));
       Files.writeString(
           directory.resolve("comparison.json"),
           "{\"width\":"
@@ -283,6 +302,8 @@ public final class WorldPixelsGameTest implements FabricClientGameTest {
               + goldenMismatches
               + ",\"goldenResource\":\""
               + goldenPath
+              + "\",\"goldenNoiseResource\":\""
+              + REFERENCE_NOISE_RESOURCE
               + "\",\"approvedGolden\":true}\n");
       if (changed == 0) throw new AssertionError("World fixture cannot detect a missing effect");
       if (mismatches != 0)
