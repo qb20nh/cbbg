@@ -52,7 +52,10 @@ final class ReleasePixels {
     FloatBuffer source = BufferUtils.createFloatBuffer(width * height * 4);
     for (int y = 0; y < height; y++) {
       for (int x = 0; x < width; x++) {
-        source.put(0.23f + 0.45f * x / width).put(0.13f + 0.67f * y / height).put(0.4f);
+        // Exact binary inputs keep quantization stable when the GPU combines multiply and add.
+        int red = x * 256 / width;
+        int green = y * 256 / height;
+        source.put(red / 256f).put(green / 256f).put(102 / 256f);
         // Keep fractional alpha away from halfway UNORM conversion ties.
         source.put(
             switch (y % 4) {
