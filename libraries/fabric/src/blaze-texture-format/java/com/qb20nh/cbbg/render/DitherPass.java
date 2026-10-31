@@ -28,9 +28,6 @@ public final class DitherPass implements AutoCloseable {
   private @Nullable TextureTarget output;
   private @Nullable GpuBuffer uniform;
   private final ByteBuffer data = ByteBuffer.allocateDirect(16).order(ByteOrder.nativeOrder());
-  private float previousStrength;
-  private float previousScaleX;
-  private float previousScaleY;
 
   /** Render and close on Minecraft's render thread. The output is valid until resize or close. */
   public TextureTarget render(GpuTextureView input, GpuTextureView noise, DitherOptions options) {
@@ -126,25 +123,17 @@ public final class DitherPass implements AutoCloseable {
       RenderPipeline selected,
       CommandEncoder encoder,
       Supplier<RenderPass> destination) {
-    if (uniform == null
-        || Float.floatToRawIntBits(strength) != Float.floatToRawIntBits(previousStrength)
-        || Float.floatToRawIntBits(scaleX) != Float.floatToRawIntBits(previousScaleX)
-        || Float.floatToRawIntBits(scaleY) != Float.floatToRawIntBits(previousScaleY)) {
-      data.clear();
-      data.putFloat(strength).putFloat(0).putFloat(scaleX).putFloat(scaleY).flip();
-      if (uniform == null) {
-        uniform =
-            RenderSystem.getDevice()
-                .createBuffer(
-                    () -> "CBBG dither uniforms",
-                    GpuBuffer.USAGE_UNIFORM | GpuBuffer.USAGE_COPY_DST,
-                    data);
-      } else {
-        encoder.writeToBuffer(uniform.slice(), data);
-      }
-      previousStrength = strength;
-      previousScaleX = scaleX;
-      previousScaleY = scaleY;
+    data.clear();
+    data.putFloat(strength).putFloat(0).putFloat(scaleX).putFloat(scaleY).flip();
+    if (uniform == null) {
+      uniform =
+          RenderSystem.getDevice()
+              .createBuffer(
+                  () -> "CBBG dither uniforms",
+                  GpuBuffer.USAGE_UNIFORM | GpuBuffer.USAGE_COPY_DST,
+                  data);
+    } else {
+      encoder.writeToBuffer(uniform.slice(), data);
     }
     try (RenderPass pass = destination.get()) {
       pass.setPipeline(selected);
