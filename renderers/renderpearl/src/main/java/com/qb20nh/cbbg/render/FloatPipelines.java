@@ -12,6 +12,7 @@ import java.util.Map;
 import java.util.Optional;
 import org.joml.Vector4fc;
 import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
 /** Resolves float variants through Minecraft's cache, which owns their GPU lifetime. */
 @NullMarked
@@ -23,11 +24,22 @@ public final class FloatPipelines {
   private static final Map<CompiledRenderPipeline, Source> SOURCES =
       new MapMaker().weakKeys().makeMap();
 
+  /** Metadata follows the frontend pipeline; Minecraft still owns compiled variants. */
+  public interface SourceHolder {
+    @Nullable Source cbbg$pipelineSource();
+
+    void cbbg$pipelineSource(Source source);
+  }
+
   private FloatPipelines() {}
 
   public static synchronized void remember(
       RenderPipeline pipeline, CompiledRenderPipeline compiled) {
-    if (compiled != null && SOURCES.get(compiled) == null) {
+    if (compiled instanceof SourceHolder holder) {
+      if (holder.cbbg$pipelineSource() == null) {
+        holder.cbbg$pipelineSource(new Source(pipeline, new HashMap<>()));
+      }
+    } else if (compiled != null && SOURCES.get(compiled) == null) {
       SOURCES.put(compiled, new Source(pipeline, new HashMap<>()));
     }
   }
@@ -36,7 +48,10 @@ public final class FloatPipelines {
       CompiledRenderPipeline compiled,
       List<RenderPassDescriptor.Attachment<Optional<Vector4fc>>> attachments) {
     if (attachments.isEmpty()) return compiled;
-    Source source = SOURCES.get(compiled);
+    Source source =
+        compiled instanceof SourceHolder holder
+            ? holder.cbbg$pipelineSource()
+            : SOURCES.get(compiled);
     if (source == null || source.pipeline.getColorTargetStates().size() != attachments.size()) {
       return compiled;
     }
@@ -77,6 +92,6 @@ public final class FloatPipelines {
     return RenderSystem.getCompiledPipeline(variant);
   }
 
-  private record Source(
+  public record Source(
       RenderPipeline pipeline, Map<Map<Integer, GpuFormat>, RenderPipeline> variants) {}
 }
