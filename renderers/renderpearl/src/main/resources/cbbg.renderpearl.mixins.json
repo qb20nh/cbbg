@@ -4,6 +4,9 @@
   "compatibilityLevel": "JAVA_25",
   "client": [
     "PipelineCacheMixin",
+    "RenderSystemPipelineCacheAccessor",
+    "FrontendGpuDeviceAccessor",
+    "HudVignetteMixin",
     "FrontendPipelineSourceMixin",
     "FrontendRenderPassMixin",
     "MainTargetMixin",
