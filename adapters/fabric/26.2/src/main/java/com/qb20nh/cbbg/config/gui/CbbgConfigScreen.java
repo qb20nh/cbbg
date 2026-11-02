@@ -109,7 +109,7 @@ public final class CbbgConfigScreen extends Screen {
         this.addRenderableWidget(
             CycleButton.builder(
                     CbbgConfigScreen::getPixelFormatName, CbbgConfig.get().pixelFormat())
-                .withValues(CbbgConfig.PixelFormat.RGBA16F, CbbgConfig.PixelFormat.RGBA32F)
+                .withValues(CbbgConfig.PixelFormat.RGBA16F)
                 .create(
                     cx - 100,
                     yStart + 24,

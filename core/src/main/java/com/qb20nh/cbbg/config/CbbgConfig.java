@@ -48,6 +48,10 @@ public final class CbbgConfig {
   public enum PixelFormat {
     RGBA8("rgba8"),
     RGBA16F("rgba16f"),
+    /**
+     * @deprecated Use {@link #RGBA16F}; retained for existing configurations and integrations.
+     */
+    @Deprecated
     RGBA32F("rgba32f");
 
     private final String name;

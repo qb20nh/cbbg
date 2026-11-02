@@ -110,8 +110,7 @@ final class CbbgConfigWidgets {
             WidgetPlatform.cycle(
                     CbbgConfigWidgets::getPixelFormatName,
                     CbbgConfig.get().pixelFormat(),
-                    CbbgConfig.PixelFormat.RGBA16F,
-                    CbbgConfig.PixelFormat.RGBA32F)
+                    CbbgConfig.PixelFormat.RGBA16F)
                 .create(
                     cx - 100,
                     yStart + 24,
