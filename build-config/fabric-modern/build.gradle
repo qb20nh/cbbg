@@ -369,6 +369,9 @@ tasks.named('processResources') {
         if (artifactOwner.minecraft == '26.1' || target.renderer == 'renderpearl') {
             Map descriptor = new groovy.json.JsonSlurper().parse(descriptorFile)
             descriptor.accessWidener = 'cbbg.window.accesswidener'
+            if (artifactOwner.minecraft == '26.1') {
+                descriptor.mixins.add('cbbg.world-clear.mixins.json')
+            }
             cbbg.gradle.ReproducibleText.writeJson(descriptorFile, descriptor)
         }
         if (artifactOwner.minecraft == '1.21.1') {
