@@ -33,8 +33,8 @@ public final class ReleaseWindowPassGameTest implements FabricClientGameTest {
         context.computeOnClient(
             client ->
                 java.util.Objects.requireNonNull(
-                        java.util.Objects.requireNonNull(ReleaseShutdownResources.live()).output())
-                    .texture());
+                    java.util.Objects.requireNonNull(ReleaseShaderFailureTarget.render(client))
+                        .getColorTexture()));
     int[] original =
         context.computeOnClient(
             client -> new int[] {client.getWindow().getWidth(), client.getWindow().getHeight()});

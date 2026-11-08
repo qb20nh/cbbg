@@ -2,12 +2,15 @@ package com.qb20nh.cbbg.gametest;
 
 import com.mojang.blaze3d.opengl.GlStateManager;
 import com.mojang.blaze3d.opengl.GlTexture;
+import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.blaze3d.textures.GpuTexture;
 import com.qb20nh.cbbg.reference.DitherReference;
 import java.nio.ByteBuffer;
 import java.nio.FloatBuffer;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Screenshot;
@@ -165,9 +168,8 @@ final class ReleasePixels {
         }
       }
       CompletableFuture<@Nullable Void> capture = new CompletableFuture<>();
-      Screenshot.takeScreenshot(
-          main,
-          1,
+      AtomicInteger completed = new AtomicInteger();
+      Consumer<NativeImage> check =
           image -> {
             try (image) {
               if (image.getWidth() != width || image.getHeight() != height) {
@@ -191,13 +193,31 @@ final class ReleasePixels {
                   java.nio.file.Path.of(
                       Objects.requireNonNull(System.getProperty("cbbg.test.evidence")));
               String name = demo ? "pixels-demo" : "pixels-enabled";
-              image.writeToFile(
-                  evidence.resolve(name + (coordScale == 1f ? "" : "-scaled") + ".png"));
-              capture.complete(null);
+              if (completed.incrementAndGet() == 2) {
+                image.writeToFile(
+                    evidence.resolve(name + (coordScale == 1f ? "" : "-scaled") + ".png"));
+                capture.complete(null);
+              }
             } catch (Throwable failure) {
               capture.completeExceptionally(failure);
             }
-          });
+          };
+      Screenshot.takeScreenshot(main, 1, check);
+      Screenshot.takeScreenshot(main, 1, check);
+      if (completed.get() != 0) throw new AssertionError("Screenshot readbacks did not overlap");
+      var temporary = Objects.requireNonNull(ReleaseShutdownResources.live()).output();
+      if (temporary == null) throw new AssertionError("No screenshot output to check");
+      long direct = ReleaseObservations.windowPasses();
+      main.blitToScreen();
+      if (completed.get() != 0) throw new AssertionError("Readbacks completed before presentation");
+      var current = Objects.requireNonNull(ReleaseShutdownResources.live()).output();
+      if (ReleaseObservations.windowPasses() > direct) {
+        if (!temporary.isClosed() || !temporary.texture().isClosed() || current != null) {
+          throw new AssertionError("Direct presentation retained the screenshot output");
+        }
+      } else if (temporary.isClosed() || current == null) {
+        throw new AssertionError("Fallback presentation lost its reusable output");
+      }
       return capture;
     } finally {
       GlStateManager._activeTexture(active);

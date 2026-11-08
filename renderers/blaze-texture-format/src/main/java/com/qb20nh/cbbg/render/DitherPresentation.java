@@ -20,6 +20,7 @@ import org.jspecify.annotations.Nullable;
 public final class DitherPresentation {
   private static final DitherPass PASS = new DitherPass();
   private static final StbnTextureManager NOISE = new StbnTextureManager();
+  private static boolean offscreenOutput;
 
   private DitherPresentation() {}
 
@@ -84,6 +85,10 @@ public final class DitherPresentation {
             client.options.getMenuBackgroundBlurriness());
     double coordScale = RenderScaleCompat.getDitherScale();
     if (destination != null) {
+      if (offscreenOutput) {
+        PASS.close();
+        offscreenOutput = false;
+      }
       PASS.renderInto(
           input,
           Objects.requireNonNull(NOISE.getView()),
@@ -94,13 +99,16 @@ public final class DitherPresentation {
           destination);
       return null;
     }
-    return PASS.render(
-        input,
-        Objects.requireNonNull(NOISE.getView()),
-        strength,
-        DitherScale.forDimension(coordScale, input.getWidth(0)),
-        DitherScale.forDimension(coordScale, input.getHeight(0)),
-        settings.mode() == CbbgConfig.Mode.DEMO);
+    TextureTarget output =
+        PASS.render(
+            input,
+            Objects.requireNonNull(NOISE.getView()),
+            strength,
+            DitherScale.forDimension(coordScale, input.getWidth(0)),
+            DitherScale.forDimension(coordScale, input.getHeight(0)),
+            settings.mode() == CbbgConfig.Mode.DEMO);
+    offscreenOutput = true;
+    return output;
   }
 
   static boolean hasDetectedNoFloatFormats() {
@@ -113,6 +121,7 @@ public final class DitherPresentation {
   static void close() {
     try (NOISE) {
       PASS.close();
+      offscreenOutput = false;
     }
   }
 }

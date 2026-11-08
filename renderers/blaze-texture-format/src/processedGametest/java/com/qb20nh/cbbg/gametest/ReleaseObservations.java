@@ -11,6 +11,7 @@ public final class ReleaseObservations {
   private static long blurAllocations;
   private static int blurFormat;
   private static boolean observingBlur;
+  private static long windowPasses;
 
   private ReleaseObservations() {}
 
@@ -35,7 +36,17 @@ public final class ReleaseObservations {
   }
 
   public static void bind(String name, GpuTextureView texture) {
-    if ("NoiseSampler".equals(name)) noise = texture;
+    if ("NoiseSampler".equals(name)) {
+      noise = texture;
+      if (org.lwjgl.opengl.GL11.glGetInteger(org.lwjgl.opengl.GL30.GL_DRAW_FRAMEBUFFER_BINDING)
+          == 0) {
+        windowPasses++;
+      }
+    }
+  }
+
+  static long windowPasses() {
+    return windowPasses;
   }
 
   static GpuTextureView noise() {
