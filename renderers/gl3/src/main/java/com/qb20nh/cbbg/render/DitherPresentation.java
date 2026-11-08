@@ -7,6 +7,8 @@ import com.mojang.blaze3d.platform.TextureUtil;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.BufferUploader;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
+import com.mojang.blaze3d.vertex.MeshData;
+import com.mojang.blaze3d.vertex.VertexBuffer;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import com.qb20nh.cbbg.api.DitherOptions;
 import java.util.IdentityHashMap;
@@ -29,6 +31,9 @@ final class DitherPresentation {
   private static int texture;
   private static final IdentityHashMap<NativeImage, Integer> textures = new IdentityHashMap<>();
   private static boolean streaming;
+  private static final boolean CACHE_SCREEN_QUAD =
+      !FabricLoader.getInstance().isModLoaded("immediatelyfast");
+  private static @Nullable VertexBuffer screenQuad;
   private static @Nullable ShaderInstance checkedShader;
   private static @Nullable ShaderInstance checkedBlit;
   private static boolean screenPassSupported;
@@ -112,14 +117,7 @@ final class DitherPresentation {
       shader.safeGetUniform("CoordScale").set(options.scaleX(), options.scaleY());
       shader.apply();
       BufferUploader.invalidate();
-      var vertices =
-          RenderSystem.renderThreadTesselator()
-              .begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.BLIT_SCREEN);
-      vertices.addVertex(0, 0, 0);
-      vertices.addVertex(1, 0, 0);
-      vertices.addVertex(1, 1, 0);
-      vertices.addVertex(0, 1, 0);
-      BufferUploader.draw(vertices.buildOrThrow());
+      drawScreenQuad();
     } finally {
       try {
         shader.clear();
@@ -131,6 +129,40 @@ final class DitherPresentation {
         GlStateManager._activeTexture(active);
       }
     }
+  }
+
+  private static void drawScreenQuad() {
+    if (!CACHE_SCREEN_QUAD) {
+      BufferUploader.draw(screenQuadVertices());
+      return;
+    }
+    VertexBuffer buffer = screenQuad;
+    if (buffer == null) {
+      buffer = new VertexBuffer(VertexBuffer.Usage.STATIC);
+      boolean uploaded = false;
+      try {
+        buffer.bind();
+        buffer.upload(screenQuadVertices());
+        screenQuad = buffer;
+        uploaded = true;
+      } finally {
+        if (!uploaded) buffer.close();
+      }
+    } else {
+      buffer.bind();
+    }
+    buffer.draw();
+  }
+
+  private static MeshData screenQuadVertices() {
+    var vertices =
+        RenderSystem.renderThreadTesselator()
+            .begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.BLIT_SCREEN);
+    vertices.addVertex(0, 0, 0);
+    vertices.addVertex(1, 0, 0);
+    vertices.addVertex(1, 1, 0);
+    vertices.addVertex(0, 1, 0);
+    return vertices.buildOrThrow();
   }
 
   static boolean hasOverlay() {
@@ -214,6 +246,10 @@ final class DitherPresentation {
 
   static void close() {
     CbbgDither.closeGpu();
+    if (screenQuad != null) {
+      screenQuad.close();
+      screenQuad = null;
+    }
     if (textures.isEmpty()) {
       if (texture > 0) TextureUtil.releaseTextureId(texture);
     } else {
