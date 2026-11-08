@@ -4,6 +4,10 @@ This project uses [Keep a Changelog](https://keepachangelog.com/) and [Semantic 
 
 ## [Unreleased]
 
+### Deprecated
+
+- RGBA32F rendering. Use RGBA16F instead; existing configurations and API calls remain supported, but RGBA32F is no longer selectable in settings.
+
 ## [1.5.0] - 2026-10-07 <!-- [1.5.0-mc1.21.1-fabric] [1.5.0-mc1.21.11-fabric] [1.5.0-mc26.1-fabric] [1.5.0-mc26.1.1-fabric] [1.5.0-mc26.1.2-fabric] [1.5.0-mc26.2-fabric] [1.5.0-mc26.3-fabric] -->
 
 ### Added
