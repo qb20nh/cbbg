@@ -27,11 +27,11 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - name: Set up build Java 25
-        uses: actions/setup-java@v6.1.0
+        uses: actions/setup-java@v6.2.0
         with:
           java-version: '25'
           distribution: temurin
-      - uses: gradle/actions/setup-gradle@v6.4.0
+      - uses: gradle/actions/setup-gradle@v6.4.1
         with:
           cache-read-only: false
           cache-cleanup: on-success
@@ -103,7 +103,7 @@ jobs:
           fi
 
       - name: Set up catalog Java versions
-        uses: actions/setup-java@v6.1.0
+        uses: actions/setup-java@v6.2.0
         with:
           java-version: ${{ steps.selection.outputs.java }}
           distribution: temurin

@@ -19,11 +19,11 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Set up build Java 25
-        uses: actions/setup-java@v6.1.0
+        uses: actions/setup-java@v6.2.0
         with:
           java-version: '25'
           distribution: temurin
-      - uses: gradle/actions/setup-gradle@v6.4.0
+      - uses: gradle/actions/setup-gradle@v6.4.1
       - name: Select catalog targets
         id: targets
         env:
@@ -43,16 +43,16 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Set up target Java ${{ matrix.java }}
-        uses: actions/setup-java@v6.1.0
+        uses: actions/setup-java@v6.2.0
         with:
           java-version: ${{ matrix.java }}
           distribution: temurin
       - name: Set up build Java 25
-        uses: actions/setup-java@v6.1.0
+        uses: actions/setup-java@v6.2.0
         with:
           java-version: '25'
           distribution: temurin
-      - uses: gradle/actions/setup-gradle@v6.4.0
+      - uses: gradle/actions/setup-gradle@v6.4.1
         with:
           cache-cleanup: on-success
       - name: Check and build development jars
