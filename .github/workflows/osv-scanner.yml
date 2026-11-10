@@ -33,11 +33,11 @@ jobs:
           path: baseline
           persist-credentials: false
       - name: Set up dependency resolution Java 25
-        uses: actions/setup-java@v6.1.0
+        uses: actions/setup-java@v6.2.0
         with:
           java-version: '25'
           distribution: temurin
-      - uses: gradle/actions/setup-gradle@v6.4.0
+      - uses: gradle/actions/setup-gradle@v6.4.1
       - name: Resolve Gradle dependencies
         id: dependencies
         shell: bash
@@ -154,6 +154,6 @@ jobs:
           retention-days: 7
       - name: Upload to code scanning
         if: always() && hashFiles('results.sarif') != ''
-        uses: github/codeql-action/upload-sarif@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
         with:
           sarif_file: results.sarif
