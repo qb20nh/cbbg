@@ -26,11 +26,16 @@ jobs:
         uses: actions/setup-java@v6.1.0
         with:
           distribution: temurin
+          # The newer 8u514 download failed checksum verification.
           java-version: |
-            8
+            8.0.512+9
             17
             21
             25
+      - name: Register Java 8 for Gradle toolchain discovery
+        run: |
+          mkdir -p "$HOME/.jdks"
+          ln -sfnT "$JAVA_HOME_8_X64" "$HOME/.jdks/cbbg-java-8"
       - name: Cache Gradle dependencies
         uses: gradle/actions/setup-gradle@v6.4.0
       - name: Install CodeQL CLI
