@@ -73,7 +73,7 @@ tasks.register('verifyGuavaScopes') {
                 it.moduleVersion?.group == 'com.google.guava' && it.moduleVersion?.name == 'guava'
             }.moduleVersion.version
         }
-        assert guavaVersion(configurations.errorprone) == '33.8.0-jre'
+        assert guavaVersion(configurations.annotationProcessor) == '33.8.0-jre'
         assert guavaVersion(configurations.runtimeClasspath) == '33.5.0-jre'
         println 'GUAVA_SCOPES_VERIFIED'
     }
