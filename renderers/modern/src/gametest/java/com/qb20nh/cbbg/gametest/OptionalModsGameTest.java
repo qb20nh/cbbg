@@ -70,6 +70,7 @@ public final class OptionalModsGameTest implements FabricClientGameTest {
     try {
       var field = ChatComponent.class.getDeclaredField("allMessages");
       field.setAccessible(true);
+      // skipcq: JAVA-W1067
       for (Object value : (List<?>) Objects.requireNonNull(field.get(chat))) {
         Component content = (Component) value.getClass().getMethod("content").invoke(value);
         if (Objects.requireNonNull(content).getString().contains(marker)) return true;

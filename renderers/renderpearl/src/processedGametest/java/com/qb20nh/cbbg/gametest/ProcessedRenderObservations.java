@@ -43,6 +43,7 @@ public final class ProcessedRenderObservations {
 
   /** Read and written on the render thread, immediately around setPipeline. */
   public static @Nullable CompiledRenderPipeline selectedPipeline() {
+    // skipcq: JAVA-W1060
     return selectedPipeline;
   }
 

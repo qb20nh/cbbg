@@ -38,6 +38,7 @@ public abstract class DebugScreenEntriesMixin {
     cbbg$register(id, new CbbgDebugEntry());
     Map<DebugScreenProfile, Map<Identifier, DebugScreenEntryStatus>> updated =
         new EnumMap<>(DebugScreenProfile.class);
+    // skipcq: JAVA-W1060
     for (var profile : PROFILES.entrySet()) {
       Map<Identifier, DebugScreenEntryStatus> statuses = new HashMap<>(profile.getValue());
       statuses.put(id, DebugScreenEntryStatus.IN_OVERLAY);

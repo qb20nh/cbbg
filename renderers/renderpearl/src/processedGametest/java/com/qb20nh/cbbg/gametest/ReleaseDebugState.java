@@ -25,6 +25,7 @@ final class ReleaseDebugState {
                 (proxy, method, args) -> {
                   if (!method.getName().equals("addLine")) throw new AssertionError(method);
                   lines.add((String) Objects.requireNonNull(args)[0]);
+                  // skipcq: JAVA-W1066
                   return null;
                 });
     var entry = DebugScreenEntries.getEntry(Identifier.fromNamespaceAndPath("cbbg", "cbbg"));

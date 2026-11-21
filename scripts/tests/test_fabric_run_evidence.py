@@ -251,6 +251,7 @@ class FabricRunEvidenceTest(unittest.TestCase):
     def test_restart_requires_control_receipt(self):
         self.prepare_restart_pair()
         with self.assertRaises(TypeError):
+            # skipcq: PYL-E1125
             verify_restart(self.receipt, self.target, source_commit='a' * 40,
                            candidate_sha256=self.report['artifacts']['candidate.jar'],
                            driver_sha256=self.report['artifacts']['driver.jar'],

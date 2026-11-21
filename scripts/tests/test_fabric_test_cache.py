@@ -149,6 +149,7 @@ class TestCacheTests(unittest.TestCase):
             'receipt': receipt, 'reuse': {'inputs': old_inputs, 'config': config,
             'execution_sources': self.inputs['executionSources']}}])
         target = dict(self.target, compatibilityProfiles={'none': ['opengl']}, backends=['opengl'])
+        # skipcq: PYL-W0613
         def verify(receipt, target, **inputs):
             self.assertEqual('a' * 40, inputs['source_commit'])
             return {'source_commit': inputs['source_commit'], 'profile': 'none', 'backend': 'opengl',

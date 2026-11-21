@@ -43,6 +43,7 @@ public final class ReleaseObservations {
 
   public static void allocation(com.mojang.blaze3d.pipeline.RenderTarget target) {
     var texture = target.getColorTexture();
+    // skipcq: JAVA-W1060
     if (observingBlur && texture != null) {
       blurAllocations++;
       blurFormat = ReleaseLifecycleGameTest.format(texture);

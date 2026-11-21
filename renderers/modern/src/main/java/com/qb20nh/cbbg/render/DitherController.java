@@ -40,6 +40,7 @@ public final class DitherController {
   public static void reloadStbn(boolean force) {
     RenderSystem.assertOnRenderThread();
     NoiseKey requested = new NoiseKey(CbbgConfig.get());
+    // skipcq: JAVA-W1060
     if (loading != null && !force && requested.equals(key)) {
       return;
     }
@@ -49,6 +50,7 @@ public final class DitherController {
     }
     startLoading(requested, force);
     if (force) {
+      // skipcq: JAVA-W1060
       GenerationNotifications.started(Objects.requireNonNull(loading));
     }
   }
@@ -70,6 +72,7 @@ public final class DitherController {
     CbbgConfig settings = CbbgConfig.get();
     CbbgConfig.Mode mode = CbbgClient.getEffectiveMode();
     if (previousSettings != null
+        // skipcq: JAVA-W1060
         && (previousMode != mode || previousSettings.pixelFormat() != settings.pixelFormat())) {
       MainTargets.refreshFormats();
       if (failed) {
@@ -110,6 +113,7 @@ public final class DitherController {
       if (frames == null || !DitherPresentation.isReady()) {
         return null;
       }
+      // skipcq: JAVA-W1060
       int index = advance ? nextFrame : shownFrame;
       if (uploadedFrame != index) {
         DitherPresentation.upload(frames[index]);

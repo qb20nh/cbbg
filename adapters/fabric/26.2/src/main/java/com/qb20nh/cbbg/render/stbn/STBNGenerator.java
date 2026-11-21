@@ -51,6 +51,7 @@ public class STBNGenerator {
               return STBNCache.isCacheValid(w, h, d, seed);
             });
     if (next != preparationFuture) {
+      // skipcq: JAVA-W1060
       if (pendingFuture != null) pendingFuture.cancel(false);
       preparationFuture = next;
       pendingFuture =

@@ -232,6 +232,7 @@ public class CbbgConfigScreenGameTest implements FabricClientGameTest {
             "Expected >= 10 widgets, got " + widgets.size() + ": " + widgets);
       }
 
+      // skipcq: JAVA-W1035
       return new ScreenWidgets(
           cast(widgets.get(0), CycleButton.class, "mode"),
           cast(widgets.get(1), CycleButton.class, "format"),

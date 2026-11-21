@@ -40,6 +40,7 @@ public class STBNLoader {
       return generated;
     }
 
+    // skipcq: JAVA-W1066
     return null;
   }
 

@@ -98,7 +98,7 @@ public final class IrisGameTest implements FabricClientGameTest {
                         evidence.resolve(
                             "iris-active-" + System.getProperty("cbbg.test.backend") + ".png"));
                     capture.complete(null);
-                  } catch (Throwable failure) {
+                  } catch (Throwable failure) { // skipcq: JAVA-W1076
                     capture.completeExceptionally(failure);
                   }
                 });

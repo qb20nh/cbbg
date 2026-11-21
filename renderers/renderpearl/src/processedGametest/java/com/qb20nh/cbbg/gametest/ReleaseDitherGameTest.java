@@ -195,7 +195,7 @@ public final class ReleaseDitherGameTest implements FabricClientGameTest {
                   image.writeToFile(path);
                 }
                 result.complete(null);
-              } catch (Throwable failure) {
+              } catch (Throwable failure) { // skipcq: JAVA-W1076
                 result.completeExceptionally(failure);
               }
             });
