@@ -52,6 +52,10 @@ dependencies {
     modImplementation "net.fabricmc:fabric-loader:${target.dependencies.loader}"
     modImplementation "net.fabricmc.fabric-api:fabric-api:${target.dependencies.fabricApi}"
     modCompileOnly("maven.modrinth:modmenu:${target.dependencies.modMenu}") { transitive = false }
+    if (target.dependencies.vulkanMod) {
+        modCompileOnly("maven.modrinth:vulkanmod:${target.dependencies.vulkanMod}") { transitive = false }
+        compileOnly 'org.lwjgl:lwjgl-vulkan:3.3.2'
+    }
     if (compatibility != 'none') {
         modLocalRuntime(compatibilityDependencies[compatibility]) { transitive = false }
     }

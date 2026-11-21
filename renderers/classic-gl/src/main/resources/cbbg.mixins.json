@@ -2,6 +2,7 @@
   "required": true,
   "minVersion": "0.8.5",
   "package": "com.qb20nh.cbbg.mixin",
+  "plugin": "com.qb20nh.cbbg.mixin.ClassicBackendPlugin",
   "compatibilityLevel": "JAVA_17",
   "client": ["MainTargetMixin", "RenderTargetMixin", "ScreenshotMixin", "PostChainMixin", "RenderScaleMixin"],
   "injectors": {"defaultRequire": 1}

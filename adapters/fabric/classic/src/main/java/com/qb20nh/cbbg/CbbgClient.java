@@ -4,6 +4,7 @@ import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.qb20nh.cbbg.command.CbbgClientCommands;
 import com.qb20nh.cbbg.compat.iris.IrisCompat;
 import com.qb20nh.cbbg.config.CbbgConfig;
+import com.qb20nh.cbbg.mixin.ClassicBackendPlugin;
 import com.qb20nh.cbbg.render.ClassicDither;
 import com.qb20nh.cbbg.render.ClassicFramebuffers;
 import com.qb20nh.cbbg.render.GenerationNotifications;
@@ -25,6 +26,7 @@ public final class CbbgClient implements ClientModInitializer {
 
   @Override
   public void onInitializeClient() {
+    if (ClassicBackendPlugin.usesVulkanMod()) return;
     CbbgClientCommands.register(ClassicFramebuffers::tick, ClassicDither::reload);
     CoreShaderRegistrationCallback.EVENT.register(
         context ->

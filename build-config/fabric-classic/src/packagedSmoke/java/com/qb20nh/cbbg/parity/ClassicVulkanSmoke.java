@@ -31,11 +31,15 @@ public final class ClassicVulkanSmoke {
       } else if (opened && client.player != null && client.screen == null) {
         if (joinedAt < 0) joinedAt = presentations;
         if (presentations < joinedAt + 12) return;
+        boolean reference = Boolean.getBoolean("cbbg.test.reference");
+        boolean disabled = Boolean.getBoolean("cbbg.test.disabled");
+        if (!reference) checkSceneFormat(disabled);
         try (var image = Screenshot.takeScreenshot(client.getMainRenderTarget())) {
           if (image.getWidth() != client.getWindow().getWidth()
               || image.getHeight() != client.getWindow().getHeight()) {
             throw new AssertionError("Vulkan screenshot dimensions differ from the window");
           }
+          checkDivider(image, !reference && !disabled);
           image.writeToFile(client.gameDirectory.toPath().resolve("vulkan-world.png"));
         }
         System.out.println("CBBG_CLASSIC_VULKAN_WORLD presentations=" + (presentations - joinedAt));
@@ -44,6 +48,42 @@ public final class ClassicVulkanSmoke {
       }
     } catch (Exception failure) {
       throw new IllegalStateException("VulkanMod world fixture failed", failure);
+    }
+  }
+
+  private static void checkSceneFormat(boolean disabled) throws ReflectiveOperationException {
+    var renderer = Class.forName("net.vulkanmod.vulkan.Renderer");
+    var instance = renderer.getMethod("getInstance").invoke(null);
+    var mainPass = renderer.getMethod("getMainPass").invoke(instance);
+    var pass = Class.forName("net.vulkanmod.vulkan.pass.MainPass");
+    int id = (int) pass.getMethod("getColorAttachmentGlId").invoke(mainPass);
+    var textureClass = Class.forName("net.vulkanmod.gl.GlTexture");
+    var texture = textureClass.getMethod("getTexture", int.class).invoke(null, id);
+    var image = textureClass.getMethod("getVulkanImage").invoke(texture);
+    int format = image.getClass().getField("format").getInt(image);
+    if (disabled ? format != 37 && format != 44 : format != 97) {
+      throw new AssertionError(
+          "Unexpected Vulkan scene format " + format + " disabled=" + disabled);
+    }
+    System.out.println("CBBG_CLASSIC_VULKAN_SCENE format=" + format + " disabled=" + disabled);
+  }
+
+  private static void checkDivider(
+      com.mojang.blaze3d.platform.NativeImage image, boolean expectDivider) {
+    int middle = image.getWidth() / 2;
+    int matches = 0;
+    int rows = image.getHeight() / 4;
+    for (int y = 0; y < rows; y++) {
+      int left = image.getPixelRGBA(middle - 1, y);
+      int center = image.getPixelRGBA(middle, y);
+      if (Math.abs((left & 255) + (center & 255) - 255) <= 2
+          && Math.abs((left >> 8 & 255) + (center >> 8 & 255) - 255) <= 2
+          && Math.abs((left >> 16 & 255) + (center >> 16 & 255) - 255) <= 2) {
+        matches++;
+      }
+    }
+    if (expectDivider ? matches < rows * 0.8 : matches > rows * 0.2) {
+      throw new AssertionError("Unexpected Vulkan demo divider coverage: " + matches + "/" + rows);
     }
   }
 
