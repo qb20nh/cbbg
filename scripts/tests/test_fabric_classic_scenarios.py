@@ -9,7 +9,7 @@ import unittest
 from fabric_classic_scenarios import (CLASSIC_ENTRYPOINT, CLASSIC_IRIS_OPTIONS, CLASSIC_OPTIONS,
                                       REDUCED_GL_SCENARIO, SETTINGS_MANIFEST, SETTINGS_NOISE_FRAMES,
                                       VMA_PROBE_AGENT, VULKAN_FORMAT_CASES, VULKAN_NATIVE_CASES,
-                                      VULKAN_SAMPLER_CASES, VULKAN_VMA_CASES,
+                                      VULKAN_PIPELINE_CASES, VULKAN_SAMPLER_CASES, VULKAN_VMA_CASES,
                                       classic_config, classic_jvm_arguments, classic_result,
                                       pixel_cache_files, validate_classic_choice, vulkan_probe_agent)
 from runtime_catalog import load_catalog, select_targets
@@ -25,7 +25,8 @@ class ClassicScenarioTests(unittest.TestCase):
                                                        'renderscale', 'iris', 'vulkan-lifecycle',
                                                        'vulkan-pixels', 'vulkan-settings',
                                                        *VULKAN_FORMAT_CASES, *VULKAN_VMA_CASES,
-                                                       *VULKAN_NATIVE_CASES, *VULKAN_SAMPLER_CASES]}}
+                                                       *VULKAN_NATIVE_CASES, *VULKAN_SAMPLER_CASES,
+                                                       *VULKAN_PIPELINE_CASES]}}
         self.log = ('CBBG_CLASSIC_VULKAN_DEVICE mod=0.5.2 device=Test GPU api=1.3.0 glfw=no-api reference=false\n'
                     'CBBG_CLASSIC_VULKAN_SCENE format=97 disabled=false\n'
                     'CBBG_CLASSIC_VULKAN_WORLD presentations=12\n')
@@ -422,6 +423,40 @@ class ClassicScenarioTests(unittest.TestCase):
                 for bad in (log.replace(marker, marker.replace(f'freedImages={freed}', 'freedImages=0')),
                             log.replace('hooks=2', 'hooks=1'),
                             log.replace(self.log, self.log.replace('format=97', 'format=37'))):
+                    with self.assertRaises(ValueError):
+                        classic_result(scenario, 'vulkanmod', 'vulkan', bad, self.evidence, 0)
+
+    def test_pipeline_recovery_requires_released_resources_and_ordered_reload(self):
+        self.write_capture(self.evidence / 'vulkan-pipeline-fallback.png', 800, 600)
+        (self.evidence / 'final-cbbg.json').write_bytes((self.evidence / 'initial-cbbg.json').read_bytes())
+        hooks = ''.join('CBBG_PIPELINE_AGENT class=net/vulkanmod/vulkan/shader/' + name + '\n'
+                        for name in ('SPIRVUtils', 'GraphicsPipeline',
+                                     'GraphicsPipeline$VertexInputDescription', 'Pipeline', 'Pipeline$DescriptorSets'))
+        cases = {
+            'shader': ('CBBG test shader failure', 'ShaderResult=4'),
+            'native': ('Failed to create graphics pipeline cbbg_vulkanmod_dither: VK_ERROR_OUT_OF_DEVICE_MEMORY', ''),
+            'constructor': ('Failed to allocate descriptor sets. Result:-2',
+                            'DescriptorSetLayout=2, PipelineLayout=2, ShaderModule=4, DescriptorPool=4, '
+                            'DynamicOffsets=4, DescriptorHandles=4, VertexBindings=2, VertexAttributes=2, ShaderResult=4'),
+        }
+        for fault, (error, released) in cases.items():
+            with self.subTest(fault=fault):
+                scenario = 'vulkan-pipeline-' + fault
+                validate_classic_choice(self.metadata, scenario, 'vulkanmod', 'vulkan')
+                arguments = classic_jvm_arguments('candidate.jar', scenario, 'vulkan', 'vulkanmod')
+                self.assertIn('-Dcbbg.test.vulkanPipelineFault=' + fault, arguments)
+                self.assertEqual('-Dcbbg.test.vulkanTrackConstruction=true' in arguments, bool(released))
+                cleanup = f'CBBG_CLASSIC_VULKAN_CONSTRUCTION_RELEASED {{{released}}}\n' if released else ''
+                log = (hooks + (error + '\n') * 2 + cleanup
+                       + 'CBBG_CLASSIC_VULKAN_SCENE format=44 disabled=true\n' + cleanup
+                       + 'Reloading ResourceManager: vanilla\n' + self.log
+                       + f'CBBG_CLASSIC_VULKAN_PIPELINE_RECOVERED fault={fault} attempts=2 '
+                         f'cleaned={0 if released else 2}\n')
+                classic_result(scenario, 'vulkanmod', 'vulkan', log, self.evidence, 0)
+                for bad in (log.replace('Reloading ResourceManager:', 'Reload skipped:'),
+                            log.replace(error + '\n', '', 1),
+                            log.replace('ShaderResult=4', 'ShaderResult=2', 1) if released
+                            else log.replace('cleaned=2', 'cleaned=1')):
                     with self.assertRaises(ValueError):
                         classic_result(scenario, 'vulkanmod', 'vulkan', bad, self.evidence, 0)
 

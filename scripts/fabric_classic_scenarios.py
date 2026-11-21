@@ -29,6 +29,16 @@ VULKAN_NATIVE_CASES = {
                                    'RenderPass', 'RenderPass', 'Framebuffer')),
 }
 VULKAN_SAMPLER_CASES = {'vulkan-sampler-scene': 'scene', 'vulkan-sampler-noise': 'noise'}
+VULKAN_PIPELINE_ERRORS = {
+    'shader': 'CBBG test shader failure',
+    'native': 'Failed to create graphics pipeline cbbg_vulkanmod_dither: VK_ERROR_OUT_OF_DEVICE_MEMORY',
+    'constructor': 'Failed to allocate descriptor sets. Result:-2',
+}
+VULKAN_PIPELINE_CASES = {'vulkan-pipeline-' + fault: fault for fault in VULKAN_PIPELINE_ERRORS}
+VULKAN_PIPELINE_CLASSES = (
+    'SPIRVUtils', 'GraphicsPipeline', 'GraphicsPipeline$VertexInputDescription',
+    'Pipeline', 'Pipeline$DescriptorSets',
+)
 SETTINGS_MANIFEST = 'stbn_64x64x8.sha256'
 SETTINGS_NOISE_FRAMES = tuple(f'stbn_64x64x8_{index}.png' for index in range(8))
 CONTEXT_MODS = {'forcegl2': 'forcegl20', 'threatengl': 'threatengl'}
@@ -90,7 +100,8 @@ def includes_sodium(profile):
 def vulkan_probe_agent(scenario):
     if scenario in VULKAN_FORMAT_CASES:
         return FORMAT_PROBE_AGENT
-    if scenario in VULKAN_VMA_CASES or scenario in VULKAN_NATIVE_CASES or scenario in VULKAN_SAMPLER_CASES:
+    if (scenario in VULKAN_VMA_CASES or scenario in VULKAN_NATIVE_CASES
+            or scenario in VULKAN_SAMPLER_CASES or scenario in VULKAN_PIPELINE_CASES):
         return VMA_PROBE_AGENT
     return None
 
@@ -124,6 +135,11 @@ def classic_jvm_arguments(candidate, scenario, backend, profile, restart_phase=N
         if scenario in VULKAN_SAMPLER_CASES:
             arguments += ['-Dcbbg.test.vulkanSamplerRecovery=true',
                           '-Dcbbg.test.vulkanSamplerFault=' + VULKAN_SAMPLER_CASES[scenario]]
+        if scenario in VULKAN_PIPELINE_CASES:
+            fault = VULKAN_PIPELINE_CASES[scenario]
+            arguments += ['-Dcbbg.test.vulkanPipelineRecovery=true', '-Dcbbg.test.vulkanPipelineFault=' + fault]
+            if fault != 'native':
+                arguments.append('-Dcbbg.test.vulkanTrackConstruction=true')
     else:
         arguments.append('-Dcbbg.test.compatProfile=' + profile)
         if profile in CONTEXT_MODS:
@@ -397,6 +413,44 @@ def vulkan_sampler_captures(log, evidence, scenario, scenes, width, height):
     return {name: (width, height) for name in ('vulkan-sampler-fallback.png', 'vulkan-world.png')}
 
 
+def vulkan_pipeline_captures(log, evidence, scenario, scenes, width, height):
+    fault = VULKAN_PIPELINE_CASES[scenario]
+    hooks = re.findall(r'CBBG_PIPELINE_AGENT class=net/vulkanmod/vulkan/shader/(\S+)(?=\r?\n|\Z)', log)
+    if sorted(hooks) != sorted(VULKAN_PIPELINE_CLASSES):
+        raise ValueError('Vulkan pipeline probe call sites differ')
+    fallback, _, after_fallback = log.partition('CBBG_CLASSIC_VULKAN_SCENE format=44 disabled=true')
+    reloading, _, after_reload = after_fallback.partition('Reloading ResourceManager:')
+    fault_name, attempts, cleaned = one_reading(
+        log, r'CBBG_CLASSIC_VULKAN_PIPELINE_RECOVERED fault=(\w+) attempts=(\d+) cleaned=(\d+)(?=\r?\n|\Z)')
+    attempts, cleaned = int(attempts), int(cleaned)
+    error = VULKAN_PIPELINE_ERRORS[fault]
+    if (fault_name != fault or attempts not in (1, 2) or cleaned != (attempts if fault == 'native' else 0)
+            or log.count(error) != attempts or fallback.count(error) != attempts
+            or scenes != [('44', 'true'), ('97', 'false')]
+            or 'CBBG_CLASSIC_VULKAN_SCENE format=97 disabled=false' not in after_reload
+            or 'CBBG_CLASSIC_VULKAN_PIPELINE_RECOVERED' not in after_reload):
+        raise ValueError('Vulkan pipeline failure or reload recovery differs')
+    released = r'CBBG_CLASSIC_VULKAN_CONSTRUCTION_RELEASED \{([^\r\n]+)\}'
+    summaries = re.findall(released, log)
+    if fault == 'native':
+        if summaries:
+            raise ValueError('Unexpected Vulkan pipeline construction tracking')
+    else:
+        expected = {'ShaderResult': 2 * attempts}
+        if fault == 'constructor':
+            expected.update(dict.fromkeys(('DescriptorSetLayout', 'PipelineLayout', 'VertexBindings',
+                                           'VertexAttributes'), attempts))
+            expected.update(dict.fromkeys(('ShaderModule', 'DescriptorPool', 'DynamicOffsets',
+                                           'DescriptorHandles'), 2 * attempts))
+        expected_entries = sorted(f'{name}={count}' for name, count in expected.items())
+        if (len(summaries) != 2 or not re.search(released, fallback) or not re.search(released, reloading)
+                or any(sorted(summary.split(', ')) != expected_entries for summary in summaries)):
+            raise ValueError('Vulkan pipeline construction did not release every observed resource')
+    if (evidence / 'final-cbbg.json').read_bytes() != (evidence / 'initial-cbbg.json').read_bytes():
+        raise ValueError('Vulkan pipeline failure changed the saved configuration')
+    return {name: (width, height) for name in ('vulkan-pipeline-fallback.png', 'vulkan-world.png')}
+
+
 def classic_result(scenario, profile, backend, log, evidence, exit_code, restart_phase=None):
     if (type(exit_code) is not int or exit_code != 0
             or re.search(r'VUID-|Validation Error|VK_ERROR_DEVICE_LOST|AssertionError|Game crashed!'
@@ -443,6 +497,8 @@ def classic_result(scenario, profile, backend, log, evidence, exit_code, restart
             captures = vulkan_native_captures(log, evidence, scenario, scenes, width, height)
         elif scenario in VULKAN_SAMPLER_CASES:
             captures = vulkan_sampler_captures(log, evidence, scenario, scenes, width, height)
+        elif scenario in VULKAN_PIPELINE_CASES:
+            captures = vulkan_pipeline_captures(log, evidence, scenario, scenes, width, height)
         else:
             comparisons = re.findall(r'CBBG_CLASSIC_VULKAN_PIXELS mode=(\w+) channels=(\d+) mismatches=(\d+) '
                                      r'topOriginMismatches=\d+ alphaMismatches=(\d+) changedChannels=(\d+)', log)

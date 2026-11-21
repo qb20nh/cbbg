@@ -46,7 +46,10 @@ class FabricAcceptanceTests(unittest.TestCase):
              ('vulkan-native-pass', 'vulkanmod', ['vulkan-native-pass']),
              ('vulkan-native-framebuffer', 'vulkanmod', ['vulkan-native-framebuffer']),
              ('vulkan-sampler-scene', 'vulkanmod', ['vulkan-sampler-scene']),
-             ('vulkan-sampler-noise', 'vulkanmod', ['vulkan-sampler-noise'])],
+             ('vulkan-sampler-noise', 'vulkanmod', ['vulkan-sampler-noise']),
+             ('vulkan-pipeline-shader', 'vulkanmod', ['vulkan-pipeline-shader']),
+             ('vulkan-pipeline-native', 'vulkanmod', ['vulkan-pipeline-native']),
+             ('vulkan-pipeline-constructor', 'vulkanmod', ['vulkan-pipeline-constructor'])],
             [(run['suite'], run['profile'], run['entrypoints'])
              for run in runs if run['backend'] == 'vulkan'],
         )

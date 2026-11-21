@@ -218,6 +218,7 @@ def vmaProbeAgent = tasks.register('classicVmaProbeAgentJar', Jar) {
     from(sourceSets.packagedSmoke.output) {
         include 'com/qb20nh/cbbg/parity/ClassicVmaProbeAgent*.class',
                 'com/qb20nh/cbbg/parity/ClassicSamplerProbe*.class',
+                'com/qb20nh/cbbg/parity/ClassicPipelineProbe*.class',
                 'com/qb20nh/cbbg/gametest/ReleaseMapping.class', 'cbbg-test.map'
     }
     manifest.attributes('Premain-Class': 'com.qb20nh.cbbg.parity.ClassicVmaProbeAgent')
@@ -228,7 +229,8 @@ def smokeJar = tasks.register('packagedSmokeJar', Jar) {
     from(sourceSets.packagedSmoke.output) {
         exclude 'com/qb20nh/cbbg/parity/ClassicFormatProbeAgent*.class',
                 'com/qb20nh/cbbg/parity/ClassicVmaProbeAgent*.class',
-                'com/qb20nh/cbbg/parity/ClassicSamplerProbe*.class'
+                'com/qb20nh/cbbg/parity/ClassicSamplerProbe*.class',
+                'com/qb20nh/cbbg/parity/ClassicPipelineProbe*.class'
     }
     from(formatProbeAgent.flatMap { it.archiveFile }) {
         rename { 'cbbg-format-probe-agent.jar' }

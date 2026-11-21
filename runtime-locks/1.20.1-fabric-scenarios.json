@@ -135,6 +135,27 @@
       "backends": ["vulkan"],
       "restart": false,
       "entrypoints": ["vulkan-sampler-noise"]
+    },
+    {
+      "suite": "vulkan-pipeline-shader",
+      "profiles": ["vulkanmod"],
+      "backends": ["vulkan"],
+      "restart": false,
+      "entrypoints": ["vulkan-pipeline-shader"]
+    },
+    {
+      "suite": "vulkan-pipeline-native",
+      "profiles": ["vulkanmod"],
+      "backends": ["vulkan"],
+      "restart": false,
+      "entrypoints": ["vulkan-pipeline-native"]
+    },
+    {
+      "suite": "vulkan-pipeline-constructor",
+      "profiles": ["vulkanmod"],
+      "backends": ["vulkan"],
+      "restart": false,
+      "entrypoints": ["vulkan-pipeline-constructor"]
     }
   ]
 }
