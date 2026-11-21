@@ -9,6 +9,17 @@ import javax.inject.Inject
 import java.time.Duration
 
 class ReleasePlugin implements Plugin<Project> {
+    private static final String ASSETS_KEY = 'assets'
+    private static final String PUBLICATION_METADATA_PROPERTY = 'publicationMetadata'
+    private static final String GITHUB_OUTPUT_PROPERTY = 'githubOutput'
+    private static final String UTF8 = 'UTF-8'
+    private static final String TARGET_PROPERTY = 'target'
+    private static final String OUTPUT_PROPERTY = 'output'
+    private static final String CANDIDATE_PROPERTY = 'candidate'
+    private static final String RELEASE = 'release'
+    private static final String TARGETS_PROPERTY = 'targets'
+    private static final String CURSEFORGE_FILES_URL = 'https://www.curseforge.com/minecraft/mc-mods/cbbg/files/'
+
     private final ExecOperations execOperations
 
     @Inject ReleasePlugin(ExecOperations execOperations) { this.execOperations = execOperations }
@@ -36,8 +47,10 @@ class ReleasePlugin implements Plugin<Project> {
                 errorOutput = stderr
                 ignoreExitValue = true
             }
-            if (result.exitValue != 0) throw new GradleException(command[0] + ' failed: ' + stderr.toString('UTF-8').trim())
-            stdout.toString('UTF-8')
+            if (result.exitValue != 0) {
+                throw new GradleException(command[0] + ' failed: ' + stderr.toString(UTF8).trim())
+            }
+            stdout.toString(UTF8)
         }
         def local = {
             if ('true'.equalsIgnoreCase(System.getenv('CI'))) {
@@ -55,40 +68,40 @@ class ReleasePlugin implements Plugin<Project> {
             }
         }
         task('releaseIdentity', 'Resolve the shared release product and tag identity.') {
-            ReleaseIdentity identity = ReleaseIdentity.parse(required('release'))
+            ReleaseIdentity identity = ReleaseIdentity.parse(required(RELEASE))
             String expected = project.providers.gradleProperty('requireProduct').orNull
             if (expected != null) {
                 identity.requireProduct(expected)
             }
-            File output = input('output')
+            File output = input(OUTPUT_PROPERTY)
             output.parentFile.mkdirs()
             output.setText(JsonOutput.toJson([product: identity.product, version: identity.version,
                     title: identity.releaseTitle, prerelease: identity.prerelease,
-                    changelog_path: identity.changelogPath]) + '\n', 'UTF-8')
+                    changelog_path: identity.changelogPath]) + '\n', UTF8)
         }
         task('releaseNotes', 'Select shared and target-specific changelog notes for a release.') {
-            String tag = required('release')
+            String tag = required(RELEASE)
             ReleaseIdentity identity = ReleaseIdentity.parse(tag)
-            if (project.providers.gradleProperty('targets').isPresent() && project.providers.gradleProperty('target').isPresent()) {
+            if (project.providers.gradleProperty(TARGETS_PROPERTY).isPresent() && project.providers.gradleProperty(TARGET_PROPERTY).isPresent()) {
                 throw new GradleException('Use either -Ptarget or -Ptargets')
             }
-            String selection = project.providers.gradleProperty('targets').orElse(project.providers.gradleProperty('target')).orNull
+            String selection = project.providers.gradleProperty(TARGETS_PROPERTY).orElse(project.providers.gradleProperty(TARGET_PROPERTY)).orNull
             if (!selection) {
                 throw new GradleException('Release notes require an explicit target selection. Use -Ptarget=<id> for one runtime or -Ptargets=<id,id> for a shared release; IDs are listed in targets.json.')
             }
             List<Map> targets = TargetCatalog.read(new File(source(), 'targets.json')).select(selection)
             CandidateFiles.releaseTargets(tag, targets)
             String notes = ChangelogNotes.select(new File(source(), identity.changelogPath), identity.version, targets)
-            File output = input('output')
+            File output = input(OUTPUT_PROPERTY)
             output.parentFile.mkdirs()
-            output.setText(notes, 'UTF-8')
+            output.setText(notes, UTF8)
         }
         task('retrace', 'Decode a crash with its release mapping.') {
-            RetraceLog.translate(input('candidate'), required('target'), input('crash'), input('output'))
+            RetraceLog.translate(input(CANDIDATE_PROPERTY), required(TARGET_PROPERTY), input('crash'), input(OUTPUT_PROPERTY))
         }
         task('verifyLibraryDependencies', 'Verify and bind library draft or immutable dependency provenance before candidate attestation.') {
-            File manifest = input('candidate')
-            File output = input('output')
+            File manifest = input(CANDIDATE_PROPERTY)
+            File output = input(OUTPUT_PROPERTY)
             if (output.exists() || output.toPath().startsWith(manifest.parentFile.toPath())) {
                 throw new GradleException('Choose a new library verification report path outside the candidate directory')
             }
@@ -101,21 +114,21 @@ class ReleasePlugin implements Plugin<Project> {
             ReproducibleText.writeJson(manifest, candidate.data)
             File checksums = new File(manifest.parentFile, 'SHA256SUMS')
             checksums.setText(manifest.parentFile.listFiles().findAll { it.name != 'SHA256SUMS' }
-                    .sort { it.name }.collect { CandidateFiles.sha256(it) + '  ' + it.name }.join('\n') + '\n', 'UTF-8')
+                    .sort { it.name }.collect { CandidateFiles.sha256(it) + '  ' + it.name }.join('\n') + '\n', UTF8)
             CandidateFiles.writeNew(output, report)
         }
         task('verifyProvenance', 'Check candidate build attestations.') {
-            CandidateFiles.writeNew(input('output'), ReleaseChecks.provenance(
-                    input('candidate'), input('bundle'), required('repo'), run))
+            CandidateFiles.writeNew(input(OUTPUT_PROPERTY), ReleaseChecks.provenance(
+                    input(CANDIDATE_PROPERTY), input('bundle'), required('repo'), run))
         }
         task('packageReleaseEvidence', 'Package SBOM, mappings and GitHub build provenance.') {
-            File manifest = input('candidate')
+            File manifest = input(CANDIDATE_PROPERTY)
             ReleaseChecks.provenance(manifest, new File(manifest.parentFile, 'provenance.jsonl'), required('repo'), run)
             CandidateManifest candidate = new CandidateManifest(manifest)
             candidate.records.keySet().each { ReleaseEvidence.assemble(candidate, it) }
         }
         task('preparePublicReleaseAssets', 'Select public files from a verified candidate.') {
-            ReleaseChecks.preparePublicAssets(input('candidate'), input('output'))
+            ReleaseChecks.preparePublicAssets(input(CANDIDATE_PROPERTY), input(OUTPUT_PROPERTY))
         }
         project.tasks.register('runCandidateAcceptance') {
             group = 'distribution'
@@ -123,8 +136,8 @@ class ReleasePlugin implements Plugin<Project> {
             outputs.upToDateWhen { false }
             doLast {
                 local()
-                File manifest = input('candidate')
-                File output = input('output')
+                File manifest = input(CANDIDATE_PROPERTY)
+                File output = input(OUTPUT_PROPERTY)
                 def paths = { String prefix ->
                     project.properties.findAll { key, value -> key.startsWith(prefix + '.') }
                             .collectEntries { key, value -> [(key.substring(prefix.length() + 1)): project.file(value.toString()).canonicalFile] }
@@ -138,8 +151,8 @@ class ReleasePlugin implements Plugin<Project> {
                 if (weston == null) {
                     throw new GradleException('Fresh candidate acceptance displays require Weston')
                 }
-                String selection = project.providers.gradleProperty('targets').orElse(project.providers.gradleProperty('target')).orNull
-                if (project.providers.gradleProperty('targets').isPresent() && project.providers.gradleProperty('target').isPresent()) {
+                String selection = project.providers.gradleProperty(TARGETS_PROPERTY).orElse(project.providers.gradleProperty(TARGET_PROPERTY)).orNull
+                if (project.providers.gradleProperty(TARGETS_PROPERTY).isPresent() && project.providers.gradleProperty(TARGET_PROPERTY).isPresent()) {
                     throw new GradleException('Use either -Ptarget or -Ptargets')
                 }
                 Map options = [root: source(), candidate: manifest, output: output,
@@ -170,7 +183,7 @@ class ReleasePlugin implements Plugin<Project> {
                             errorOutput = stderr
                             ignoreExitValue = true
                         }
-                        log.text = stdout.toString('UTF-8') + stderr.toString('UTF-8')
+                        log.text = stdout.toString(UTF8) + stderr.toString(UTF8)
                         result.exitValue
                     }
                 }
@@ -179,29 +192,29 @@ class ReleasePlugin implements Plugin<Project> {
         }
         task('verifyCandidate', 'Check packaged candidate and complete local runtime results.') {
             local()
-            File output = input('output')
+            File output = input(OUTPUT_PROPERTY)
             if (output.exists()) {
                 throw new GradleException("Validation output already exists: ${output}. Choose a new -Poutput=<file> for this verification.")
             }
-            CandidateFiles.writeNew(output, ReleaseChecks.verify(input('candidate'), results(), input('bundle'),
+            CandidateFiles.writeNew(output, ReleaseChecks.verify(input(CANDIDATE_PROPERTY), results(), input('bundle'),
                     source(), required('repo'), run))
         }
         ['checkRelease', 'publishRelease'].each { name ->
             task(name, name == 'checkRelease' ? 'Check a GitHub draft against local acceptance results.' :
                     'Publish a verified GitHub draft after explicit approval.') {
                 local()
-                ReleaseChecks.finalizeCandidate(input('candidate'), results(), source(), required('repo'),
-                        required('release'), input('notes'), input('output'), name == 'publishRelease', run)
+                ReleaseChecks.finalizeCandidate(input(CANDIDATE_PROPERTY), results(), source(), required('repo'),
+                        required(RELEASE), input('notes'), input(OUTPUT_PROPERTY), name == 'publishRelease', run)
             }
         }
         task('preparePublication', 'Check immutable release files and prepare service metadata.') {
-            String tag = required('release')
+            String tag = required(RELEASE)
             String dryRun = project.providers.gradleProperty('dryRun').getOrElse('false')
             if (!(dryRun in ['true', 'false'])) {
                 throw new GradleException('Expected -PdryRun=true or false')
             }
-            def arguments = [tag, required('repo'), source(), input('assets'), input('output'),
-                             input('githubOutput'), project.providers.gradleProperty('services').getOrElse('both'), run]
+            def arguments = [tag, required('repo'), source(), input(ASSETS_KEY), input(OUTPUT_PROPERTY),
+                             input(GITHUB_OUTPUT_PROPERTY), project.providers.gradleProperty('services').getOrElse('both'), run]
             if (tag.contains('+mc') && !CandidateFiles.targetedRelease(tag)) {
                 ReleaseChecks.prepareLegacyPublication(*arguments)
             } else {
@@ -209,14 +222,14 @@ class ReleasePlugin implements Plugin<Project> {
             }
         }
         task('selectPublication', 'Recheck release files and select one artifact for upload.') {
-            ReleaseChecks.selectPublication(required('release'), required('repo'), source(), input('assets'),
-                    input('publicationMetadata'), required('target'), input('githubOutput'), run,
+            ReleaseChecks.selectPublication(required(RELEASE), required('repo'), source(), input(ASSETS_KEY),
+                    input(PUBLICATION_METADATA_PROPERTY), required(TARGET_PROPERTY), input(GITHUB_OUTPUT_PROPERTY), run,
                     null, project.providers.gradleProperty('services').getOrElse('both'))
         }
         task('planCurseForgeUploads', 'Check saved receipts and select one complete CurseForge upload family.') {
-            File metadataFile = input('publicationMetadata')
+            File metadataFile = input(PUBLICATION_METADATA_PROPERTY)
             Map metadata = CandidateFiles.read(metadataFile)
-            String selected = project.providers.gradleProperty('target').orNull
+            String selected = project.providers.gradleProperty(TARGET_PROPERTY).orNull
             List<String> owners = metadata.records.collect { it.targets[0] as String }
             String resumeRun = project.providers.gradleProperty('curseforgeResumeRun').getOrElse('')
             if (resumeRun && !(resumeRun ==~ /[1-9][0-9]*/)) {
@@ -233,12 +246,12 @@ class ReleasePlugin implements Plugin<Project> {
             Map resumeEvidence = resumeRun && jobsFile
                     ? [run_id: resumeRun, pages: CandidateFiles.read(project.file(jobsFile))] : [:]
             targets.each { target ->
-                Map plan = CurseForgeUploads.plan(metadataFile, input('curseforgeReceipts'), input('assets'), target,
+                Map plan = CurseForgeUploads.plan(metadataFile, input('curseforgeReceipts'), input(ASSETS_KEY), target,
                         !resumeRun.isEmpty(), unattempted.contains(target), resumeEvidence, source())
                 if (selected) {
-                    CandidateFiles.writeNew(input('output'), plan)
-                    File githubOutput = input('githubOutput')
-                    githubOutput.withWriterAppend('UTF-8') { writer ->
+                    CandidateFiles.writeNew(input(OUTPUT_PROPERTY), plan)
+                    File githubOutput = input(GITHUB_OUTPUT_PROPERTY)
+                    githubOutput.withWriterAppend(UTF8) { writer ->
                         ['file_path', 'additional_files', 'parent_file_id', 'display_name', 'receipt', 'manual_release'].each { key ->
                             String delimiter = 'CF_' + UUID.randomUUID().toString()
                             writer.write(key + '<<' + delimiter + '\n' + plan[key] + '\n' + delimiter + '\n')
@@ -264,12 +277,12 @@ class ReleasePlugin implements Plugin<Project> {
                     (!(evidenceIdentifier ==~ /[0-9]+/) || new BigInteger(evidenceIdentifier) <= 0)) {
                 throw new GradleException('CurseForge returned no valid evidence file ID; check the project before retrying')
             }
-            File metadataFile = input('publicationMetadata')
+            File metadataFile = input(PUBLICATION_METADATA_PROPERTY)
             Map metadata = CandidateFiles.read(metadataFile)
             if (!(metadata.records instanceof List)) {
                 throw new GradleException('Expected publication records')
             }
-            String selected = project.providers.gradleProperty('target').orNull
+            String selected = project.providers.gradleProperty(TARGET_PROPERTY).orNull
             List<Map> matches = selected ? metadata.records.findAll { it.targets?.contains(selected) } : metadata.records
             if (matches.size() != 1) {
                 throw new GradleException('Select one publication record with -Ptarget')
@@ -278,14 +291,14 @@ class ReleasePlugin implements Plugin<Project> {
             Map result = [release: metadata.release, source_commit: metadata.source_commit,
                           targets: record.targets, artifact: record.artifact,
                           metadata_sha256: CandidateFiles.sha256(metadataFile), file_id: identifier,
-                          url: 'https://www.curseforge.com/minecraft/mc-mods/cbbg/files/' + identifier]
+                          url: CURSEFORGE_FILES_URL + identifier]
             if (sourcesIdentifier != null) {
                 if (!(record.sources instanceof Map)) {
                     throw new GradleException('Missing sources publication record')
                 }
                 result.sources = record.sources
                 result.sources_file_id = sourcesIdentifier
-                result.sources_url = 'https://www.curseforge.com/minecraft/mc-mods/cbbg/files/' + sourcesIdentifier
+                result.sources_url = CURSEFORGE_FILES_URL + sourcesIdentifier
             }
             if (evidenceIdentifier != null) {
                 if (!(record.evidence instanceof Map)) {
@@ -293,7 +306,7 @@ class ReleasePlugin implements Plugin<Project> {
                 }
                 result.evidence = record.evidence
                 result.evidence_file_id = evidenceIdentifier
-                result.evidence_url = 'https://www.curseforge.com/minecraft/mc-mods/cbbg/files/' + evidenceIdentifier
+                result.evidence_url = CURSEFORGE_FILES_URL + evidenceIdentifier
             }
             [utilities: 'utilitiesFileId', utilities_sources: 'utilitiesSourcesFileId',
              library: 'libraryFileId', library_sources: 'librarySourcesFileId'].each { kind, property ->
@@ -307,10 +320,10 @@ class ReleasePlugin implements Plugin<Project> {
                     }
                     result[kind] = record[kind]
                     result[kind + '_file_id'] = fileIdentifier
-                    result[kind + '_url'] = 'https://www.curseforge.com/minecraft/mc-mods/cbbg/files/' + fileIdentifier
+                    result[kind + '_url'] = CURSEFORGE_FILES_URL + fileIdentifier
                 }
             }
-            CandidateFiles.writeNew(input('output'), result)
+            CandidateFiles.writeNew(input(OUTPUT_PROPERTY), result)
             project.logger.lifecycle(result.url as String)
         }
         task('selectChecks', 'Select development checks from Git changes.') {
@@ -332,26 +345,30 @@ class ReleasePlugin implements Plugin<Project> {
             List<String> availableBuilds = catalog.matrix(catalog.defaults()*.id.join(','))*.id
             project.logger.lifecycle('Selected target builds: {}', selectedBuilds.join(', ') ?: 'none')
             project.logger.lifecycle('Skipped target builds: {}', (availableBuilds - selectedBuilds).join(', ') ?: 'none')
-            File output = input('output')
+            File output = input(OUTPUT_PROPERTY)
             output.parentFile.mkdirs()
-            output.setText(JsonOutput.prettyPrint(JsonOutput.toJson(report)) + '\n', 'UTF-8')
-            def githubOutput = project.providers.gradleProperty('githubOutput').orNull
+            output.setText(JsonOutput.prettyPrint(JsonOutput.toJson(report)) + '\n', UTF8)
+            def githubOutput = project.providers.gradleProperty(GITHUB_OUTPUT_PROPERTY).orNull
             if (githubOutput) {
-                project.file(githubOutput).withWriterAppend('UTF-8') { writer ->
+                project.file(githubOutput).withWriterAppend(UTF8) { writer ->
                     report.ci.each { key, value -> writer.write(key + '=' + JsonOutput.toJson(value) + '\n') }
                 }
             }
         }
         task('checkHotfix', 'Check selected targets against explicit prior release manifests.') {
             List<File> baselines = required('baselines').split(',', -1).collect { value ->
-                if (!value) throw new GradleException('Empty baseline manifest path')
+                if (!value) {
+                    throw new GradleException('Empty baseline manifest path')
+                }
                 project.file(value)
             }
-            String selected = project.providers.gradleProperty('targets').orElse(project.providers.gradleProperty('target')).orNull
-            if (!selected) throw new GradleException('Hotfix requires an explicit -Ptargets selection')
+            String selected = project.providers.gradleProperty(TARGETS_PROPERTY).orElse(project.providers.gradleProperty(TARGET_PROPERTY)).orNull
+            if (!selected) {
+                throw new GradleException('Hotfix requires an explicit -Ptargets selection')
+            }
             Map report = ChangeImpact.hotfix(project.rootDir,
                     project.providers.gradleProperty('head').getOrElse('HEAD'), baselines, selected.split(',', -1).toList())
-            CandidateFiles.writeNew(input('output'), report)
+            CandidateFiles.writeNew(input(OUTPUT_PROPERTY), report)
         }
     }
 }

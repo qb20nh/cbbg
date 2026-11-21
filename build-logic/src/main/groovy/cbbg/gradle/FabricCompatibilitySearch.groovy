@@ -9,6 +9,8 @@ import java.util.zip.ZipFile
 
 /** Searches released versions; results describe tested boundaries, not every intervening release. */
 class FabricCompatibilitySearch {
+    private static final String FABRIC_API = 'fabric-api'
+
     static List<Integer> numbers(String version) {
         String base = version.split('\\+', 2)[0]
         if (!(base ==~ /\d+\.\d+\.\d+/)) {
@@ -134,12 +136,12 @@ class FabricCompatibilitySearch {
                                 !(newMetadata.depends instanceof Map) ||
                                 newMetadata.depends.fabricloader !=
                                         '>=' + bounds.minimumLoader + ' <' + bounds.loaderUpperExclusive ||
-                                newMetadata.depends['fabric-api'] !=
+                                newMetadata.depends[FABRIC_API] !=
                                         '>=' + bounds.minimumFabricApi + ' <' + bounds.fabricApiUpperExclusive) {
                             throw new GradleException('Rebuilt Fabric artifact has incorrect dependency bounds')
                         }
                         newMetadata.depends.fabricloader = oldMetadata.depends.fabricloader
-                        newMetadata.depends['fabric-api'] = oldMetadata.depends['fabric-api']
+                        newMetadata.depends[FABRIC_API] = oldMetadata.depends[FABRIC_API]
                         if (oldMetadata != newMetadata) {
                             throw new GradleException('Fabric artifact metadata changed beyond dependency bounds')
                         }

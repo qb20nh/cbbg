@@ -13,6 +13,8 @@ import org.gradle.jvm.toolchain.JavaLanguageVersion
 import org.gradle.process.CommandLineArgumentProvider
 
 class QualityPlugin implements Plugin<Project> {
+    private static final String ERROR_PRONE_CONFIGURATION = 'errorprone'
+
     static final String PMD_VERSION = '7.28.0'
     static final String ERROR_PRONE_VERSION = '2.50.0'
     static final String GUAVA_VERSION = '33.8.0-jre'
@@ -58,10 +60,10 @@ class QualityPlugin implements Plugin<Project> {
         }
         project.tasks.named('check') { dependsOn quality }
         project.tasks.matching { it.name == 'ciCheck' }.configureEach { dependsOn quality }
-        project.dependencies.add('errorprone', "com.google.errorprone:error_prone_core:${ERROR_PRONE_VERSION}")
-        project.dependencies.add('errorprone', "com.google.guava:guava:${GUAVA_VERSION}")
-        project.dependencies.add('errorprone', "com.uber.nullaway:nullaway:${NULLAWAY_VERSION}")
-        project.dependencies.add('errorprone', project.files(modelClasspath()))
+        project.dependencies.add(ERROR_PRONE_CONFIGURATION, "com.google.errorprone:error_prone_core:${ERROR_PRONE_VERSION}")
+        project.dependencies.add(ERROR_PRONE_CONFIGURATION, "com.google.guava:guava:${GUAVA_VERSION}")
+        project.dependencies.add(ERROR_PRONE_CONFIGURATION, "com.uber.nullaway:nullaway:${NULLAWAY_VERSION}")
+        project.dependencies.add(ERROR_PRONE_CONFIGURATION, project.files(modelClasspath()))
         def cpd = project.configurations.create('cpdTool') {
             canBeConsumed = false
             canBeResolved = true

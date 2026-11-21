@@ -12,6 +12,18 @@ import org.jspecify.annotations.Nullable;
 /** Client-only command grammar for games predating Brigadier. */
 @NullMarked
 public final class LegacyCommandGrammar {
+  private static final String COMMAND = "/cbbg";
+  private static final String FORMAT = "format";
+  private static final String NOTIFICATION = "notification";
+  private static final String TOAST = "toast";
+  private static final String DEPTH = "depth";
+  private static final String GENERATE = "generate";
+  private static final String RESET = "reset";
+  private static final String CURRENT_SUFFIX = ".current";
+  private static final String USAGE_SUFFIX = ".usage";
+  private static final String STBN_PREFIX = "stbn.";
+  private static final String NOTIFICATION_PREFIX = "notification.";
+
   private LegacyCommandGrammar() {}
 
   public interface Feedback {
@@ -23,52 +35,59 @@ public final class LegacyCommandGrammar {
   /** Null leaves completion to vanilla; an empty list claims an invalid CBBG argument. */
   public static @Nullable List<String> suggest(String message, boolean toast) {
     String[] args = message.split("\\s+", -1);
-    if (!args[0].equals("/cbbg")) return null;
+    if (!args[0].equals(COMMAND)) return null;
     List<String> candidates = new ArrayList<>();
-    if (args.length == 1) candidates.add("/cbbg");
+    if (args.length == 1) candidates.add(COMMAND);
     else if (args.length == 2) {
-      java.util.Collections.addAll(candidates, "help", "mode", "format", "stbn", "notification");
+      java.util.Collections.addAll(candidates, "help", "mode", FORMAT, "stbn", NOTIFICATION);
     } else if (args.length == 3) {
-      if (args[1].equals("mode") || args[1].equals("format")) candidates.add("set");
-      else if (args[1].equals("stbn")) {
-        java.util.Collections.addAll(candidates, "generate", "size", "depth", "seed", "reset");
-      } else if (args[1].equals("notification")) {
-        candidates.add("chat");
-        if (toast) candidates.add("toast");
-      }
+      suggestAction(candidates, args[1], toast);
     } else if (args.length == 4) {
-      if (args[1].equals("mode") && args[2].equals("set")) {
-        for (Mode mode : Mode.values()) candidates.add(mode.getSerializedName());
-      } else if (args[1].equals("format") && args[2].equals("set")) {
-        for (PixelFormat format : PixelFormat.values()) {
-          if (format != PixelFormat.RGBA8) candidates.add(format.getSerializedName());
-        }
-      } else if (args[1].equals("notification")
-          && (args[2].equals("chat") || (args[2].equals("toast") && toast))) {
-        java.util.Collections.addAll(candidates, "true", "false");
-      }
+      suggestValue(candidates, args[1], args[2], toast);
     }
     String prefix = args[args.length - 1].toLowerCase(Locale.ROOT);
     candidates.removeIf(candidate -> !candidate.startsWith(prefix));
     return candidates;
   }
 
+  private static void suggestAction(List<String> candidates, String kind, boolean toast) {
+    if (kind.equals("mode") || kind.equals(FORMAT)) candidates.add("set");
+    else if (kind.equals("stbn")) {
+      java.util.Collections.addAll(candidates, GENERATE, "size", DEPTH, "seed", RESET);
+    } else if (kind.equals(NOTIFICATION)) {
+      candidates.add("chat");
+      if (toast) candidates.add(TOAST);
+    }
+  }
+
+  private static void suggestValue(
+      List<String> candidates, String kind, String action, boolean toast) {
+    if (kind.equals("mode") && action.equals("set")) {
+      for (Mode mode : Mode.values()) candidates.add(mode.getSerializedName());
+    } else if (kind.equals(FORMAT) && action.equals("set")) {
+      for (PixelFormat format : PixelFormat.values()) {
+        if (format != PixelFormat.RGBA8) candidates.add(format.getSerializedName());
+      }
+    } else if (kind.equals(NOTIFICATION)
+        && (action.equals("chat") || (action.equals(TOAST) && toast))) {
+      java.util.Collections.addAll(candidates, "true", "false");
+    }
+  }
+
   public static boolean execute(
       String message, boolean toast, Feedback feedback, Runnable regenerate, Runnable reload) {
     String[] args = message.trim().split("\\s+");
-    if (!args[0].equals("/cbbg")) return false;
+    if (!args[0].equals(COMMAND)) return false;
     if (args.length == 1 || (args.length == 2 && args[1].equals("help"))) {
       for (String key :
-          new String[] {
-            "header", "mode", "mode_set", "format", "format_set", "stbn", "notification"
-          }) {
+          new String[] {"header", "mode", "mode_set", FORMAT, "format_set", "stbn", NOTIFICATION}) {
         send(feedback, false, "root.help." + key);
       }
-    } else if (args[1].equals("mode") || args[1].equals("format")) {
+    } else if (args[1].equals("mode") || args[1].equals(FORMAT)) {
       selection(args, feedback);
     } else if (args[1].equals("stbn")) {
       noise(args, feedback, regenerate, reload);
-    } else if (args[1].equals("notification")) {
+    } else if (args[1].equals(NOTIFICATION)) {
       notification(args, toast, feedback);
     } else {
       usage(feedback);
@@ -79,11 +98,11 @@ public final class LegacyCommandGrammar {
   private static void selection(String[] args, Feedback feedback) {
     String kind = args[1];
     if (args.length == 2) {
-      send(feedback, false, kind + ".current", name(kind, feedback));
+      send(feedback, false, kind + CURRENT_SUFFIX, name(kind, feedback));
       return;
     }
     if (args.length != 4 || !args[2].equals("set")) {
-      send(feedback, true, kind + ".usage");
+      send(feedback, true, kind + USAGE_SUFFIX);
       return;
     }
     String value = args[3];
@@ -135,57 +154,68 @@ public final class LegacyCommandGrammar {
           config.stbnSize(),
           config.stbnDepth(),
           config.stbnSeed());
-      for (String key : new String[] {"generate", "size", "depth", "seed", "reset"}) {
+      for (String key : new String[] {GENERATE, "size", DEPTH, "seed", RESET}) {
         send(feedback, false, "stbn.usage." + key);
       }
       return;
     }
     String kind = args[2];
-    if (args.length == 3 && kind.equals("generate")) {
+    if (args.length == 3 && kind.equals(GENERATE)) {
       send(feedback, false, "stbn.generating");
       regenerate.run();
-    } else if (args.length == 3 && kind.equals("reset")) {
+    } else if (args.length == 3 && kind.equals(RESET)) {
       CbbgConfig.setStbnSize(128);
       CbbgConfig.setStbnDepth(64);
       CbbgConfig.setStbnSeed(0);
       reload.run();
       send(feedback, false, "stbn.reset");
-    } else if (kind.equals("size") || kind.equals("depth") || kind.equals("seed")) {
-      if (args.length == 3) {
-        CbbgConfig config = CbbgConfig.get();
-        long value =
-            kind.equals("size")
-                ? config.stbnSize()
-                : kind.equals("depth") ? config.stbnDepth() : config.stbnSeed();
-        send(feedback, false, "stbn." + kind + ".current", value);
-        send(feedback, false, "stbn." + kind + ".usage");
-        return;
-      }
-      if (args.length != 4) {
-        usage(feedback);
-        return;
-      }
-      long value;
-      try {
-        value = Long.parseLong(args[3]);
-      } catch (NumberFormatException invalid) {
-        send(feedback, true, "stbn." + kind + ".usage");
-        return;
-      }
-      if (kind.equals("seed")) CbbgConfig.setStbnSeed(value);
-      else {
-        int minimum = kind.equals("size") ? 16 : 8;
-        int maximum = kind.equals("size") ? 256 : 128;
-        if (value < minimum || value > maximum || Long.bitCount(value) != 1) {
-          send(feedback, true, "stbn." + kind + ".invalid_pow2");
-          send(feedback, true, "stbn." + kind + ".usage");
-          return;
-        }
-        if (kind.equals("size")) CbbgConfig.setStbnSize((int) value);
-        else CbbgConfig.setStbnDepth((int) value);
-      }
-      send(feedback, false, "stbn." + kind + ".set", value);
+    } else if (kind.equals("size") || kind.equals(DEPTH) || kind.equals("seed")) {
+      noiseSetting(args, kind, feedback);
     } else usage(feedback);
+  }
+
+  private static void noiseSetting(String[] args, String kind, Feedback feedback) {
+    if (args.length == 3) {
+      CbbgConfig config = CbbgConfig.get();
+      long value =
+          kind.equals("size")
+              ? config.stbnSize()
+              : kind.equals(DEPTH) ? config.stbnDepth() : config.stbnSeed();
+      send(feedback, false, STBN_PREFIX + kind + CURRENT_SUFFIX, value);
+      send(feedback, false, STBN_PREFIX + kind + USAGE_SUFFIX);
+      return;
+    }
+    if (args.length != 4) {
+      usage(feedback);
+      return;
+    }
+    long value;
+    try {
+      value = Long.parseLong(args[3]);
+    } catch (NumberFormatException invalid) {
+      send(feedback, true, STBN_PREFIX + kind + USAGE_SUFFIX);
+      return;
+    }
+    if (kind.equals("seed")) {
+      CbbgConfig.setStbnSeed(value);
+    } else if (!setNoiseDimension(kind, value, feedback)) {
+      return;
+    }
+    send(feedback, false, STBN_PREFIX + kind + ".set", value);
+  }
+
+  private static boolean setNoiseDimension(String kind, long value, Feedback feedback) {
+    boolean size = kind.equals("size");
+    int minimum = size ? 16 : 8;
+    int maximum = size ? 256 : 128;
+    if (value < minimum || value > maximum || Long.bitCount(value) != 1) {
+      send(feedback, true, STBN_PREFIX + kind + ".invalid_pow2");
+      send(feedback, true, STBN_PREFIX + kind + USAGE_SUFFIX);
+      return false;
+    }
+    if (size) CbbgConfig.setStbnSize((int) value);
+    else CbbgConfig.setStbnDepth((int) value);
+    return true;
   }
 
   private static void notification(String[] args, boolean toast, Feedback feedback) {
@@ -199,7 +229,7 @@ public final class LegacyCommandGrammar {
       return;
     }
     String kind = args[2];
-    if (!kind.equals("chat") && !(kind.equals("toast") && toast)) {
+    if (!kind.equals("chat") && !(kind.equals(TOAST) && toast)) {
       usage(feedback);
       return;
     }
@@ -208,15 +238,15 @@ public final class LegacyCommandGrammar {
       if (kind.equals("chat")) CbbgConfig.setNotifyChat(value);
       else CbbgConfig.setNotifyToast(value);
     } else if (args.length != 3) {
-      send(feedback, true, "notification." + kind + ".usage");
+      send(feedback, true, NOTIFICATION_PREFIX + kind + USAGE_SUFFIX);
       return;
     }
     send(
         feedback,
         false,
-        "notification." + kind + ".current",
+        NOTIFICATION_PREFIX + kind + CURRENT_SUFFIX,
         kind.equals("chat") ? CbbgConfig.get().notifyChat() : CbbgConfig.get().notifyToast());
-    if (args.length == 3) send(feedback, false, "notification." + kind + ".usage");
+    if (args.length == 3) send(feedback, false, NOTIFICATION_PREFIX + kind + USAGE_SUFFIX);
   }
 
   private static void usage(Feedback feedback) {

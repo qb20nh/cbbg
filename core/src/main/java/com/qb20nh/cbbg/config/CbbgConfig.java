@@ -337,45 +337,33 @@ public final class CbbgConfig {
 
       json.beginObject();
       while (json.hasNext()) {
-        String name = json.nextName();
-        if ("mode".equals(name)) {
-          if (json.peek() == JsonToken.NULL) {
-            json.nextNull();
-            mode = null;
-          } else {
-            mode = modeValue(json.nextString());
-          }
-        } else if ("pixelFormat".equals(name)) {
-          if (json.peek() == JsonToken.NULL) {
-            json.nextNull();
-            pixelFormat = null;
-          } else {
-            pixelFormat = pixelFormatValue(json.nextString());
-          }
-        } else if ("stbnSize".equals(name)) {
-          if (json.peek() == JsonToken.NULL) json.nextNull();
-          else stbnSize = readInt(json);
-        } else if ("stbnDepth".equals(name)) {
-          if (json.peek() == JsonToken.NULL) json.nextNull();
-          else stbnDepth = readInt(json);
-        } else if ("stbnSeed".equals(name)) {
-          if (json.peek() == JsonToken.NULL) json.nextNull();
-          else stbnSeed = readLong(json);
-        } else if ("strength".equals(name)) {
-          if (json.peek() == JsonToken.NULL) {
-            json.nextNull();
-            strength = 1.0f;
-          } else {
-            strength = (float) json.nextDouble();
-          }
-        } else if ("notifyChat".equals(name)) {
-          if (json.peek() == JsonToken.NULL) json.nextNull();
-          else notifyChat = readBoolean(json);
-        } else if ("notifyToast".equals(name)) {
-          if (json.peek() == JsonToken.NULL) json.nextNull();
-          else notifyToast = readBoolean(json);
-        } else {
-          json.skipValue();
+        switch (json.nextName()) {
+          case "mode":
+            mode = modeValue(readNullableString(json));
+            break;
+          case "pixelFormat":
+            pixelFormat = pixelFormatValue(readNullableString(json));
+            break;
+          case "stbnSize":
+            stbnSize = readInt(json, stbnSize);
+            break;
+          case "stbnDepth":
+            stbnDepth = readInt(json, stbnDepth);
+            break;
+          case "stbnSeed":
+            stbnSeed = readLong(json, stbnSeed);
+            break;
+          case "strength":
+            strength = readStrength(json);
+            break;
+          case "notifyChat":
+            notifyChat = readBoolean(json, notifyChat);
+            break;
+          case "notifyToast":
+            notifyToast = readBoolean(json, notifyToast);
+            break;
+          default:
+            json.skipValue();
         }
       }
       json.endObject();
@@ -393,37 +381,56 @@ public final class CbbgConfig {
     }
   }
 
-  private static int readInt(JsonReader json) throws IOException {
+  private static boolean consumeNull(JsonReader json) throws IOException {
+    if (json.peek() != JsonToken.NULL) {
+      return false;
+    }
+    json.nextNull();
+    return true;
+  }
+
+  private static @Nullable String readNullableString(JsonReader json) throws IOException {
+    return consumeNull(json) ? null : json.nextString();
+  }
+
+  private static float readStrength(JsonReader json) throws IOException {
+    return consumeNull(json) ? 1.0f : (float) json.nextDouble();
+  }
+
+  private static int readInt(JsonReader json, int previous) throws IOException {
     try {
-      return json.nextInt();
+      return consumeNull(json) ? previous : json.nextInt();
     } catch (NumberFormatException e) {
       throw new ParseFailureException(e);
     }
   }
 
-  private static long readLong(JsonReader json) throws IOException {
+  private static long readLong(JsonReader json, long previous) throws IOException {
     try {
-      return json.nextLong();
+      return consumeNull(json) ? previous : json.nextLong();
     } catch (NumberFormatException e) {
       throw new ParseFailureException(e);
     }
   }
 
-  private static boolean readBoolean(JsonReader json) throws IOException {
+  private static boolean readBoolean(JsonReader json, boolean previous) throws IOException {
+    if (consumeNull(json)) {
+      return previous;
+    }
     if (json.peek() == JsonToken.STRING) {
       return Boolean.parseBoolean(json.nextString());
     }
     return json.nextBoolean();
   }
 
-  private static @Nullable Mode modeValue(String name) {
+  private static @Nullable Mode modeValue(@Nullable String name) {
     for (Mode value : Mode.values()) {
       if (value.name().equals(name)) return value;
     }
     return null;
   }
 
-  private static @Nullable PixelFormat pixelFormatValue(String name) {
+  private static @Nullable PixelFormat pixelFormatValue(@Nullable String name) {
     for (PixelFormat value : PixelFormat.values()) {
       if (value.name().equals(name)) return value;
     }

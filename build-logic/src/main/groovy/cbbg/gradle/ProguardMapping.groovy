@@ -19,7 +19,9 @@ class ProguardMapping {
                     false
                 }
         ] as MappingProcessor)
-        if (names.isEmpty()) throw new GradleException('Mapping contains no classes')
+        if (names.isEmpty()) {
+            throw new GradleException('Mapping contains no classes')
+        }
         names
     }
 }

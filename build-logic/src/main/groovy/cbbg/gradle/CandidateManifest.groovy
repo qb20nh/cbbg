@@ -3,6 +3,15 @@ package cbbg.gradle
 import org.gradle.api.GradleException
 
 class CandidateManifest {
+    private static final String LIBRARY_SOURCES = 'library_sources'
+    private static final String LIBRARY = 'library'
+    private static final String LIBRARY_PROVENANCE = 'library_provenance'
+    private static final String LIBRARY_RELEASE = 'library_release'
+    private static final String UTILITIES = 'utilities'
+    private static final String UTILITIES_SOURCES = 'utilities_sources'
+    private static final String MAPPING = 'mapping'
+    private static final String PROVENANCE_FILE = 'provenance.jsonl'
+
     final File file
     final Map data
     final Map<String, Map> records
@@ -32,7 +41,7 @@ class CandidateManifest {
                 if (!(target.mapping instanceof Map) || target.processing != [tool: 'proguard', version: ProguardMapping.VERSION]) {
                     throw new GradleException('Processed candidate requires a mapping and supported ProGuard version')
                 }
-            } else if (target.containsKey('mapping') || target.containsKey('processing')) {
+            } else if (target.containsKey(MAPPING) || target.containsKey('processing')) {
                 throw new GradleException('Processed candidates require schema 3')
             }
         }
@@ -55,43 +64,54 @@ class CandidateManifest {
         CandidateFiles.releaseTargets(data.release as String, specifications.values())
         specifications.each { id, specification ->
             if (specification.artifactOf) {
-                (['artifact', 'sources', 'source_inventory'] + (data.schema == 3 ? ['mapping'] : []) +
-                        (records[id].containsKey('sbom') || records[specification.artifactOf].containsKey('sbom') ? ['sbom'] : [])).each { kind ->
-                    if (records[id][kind]?.sha256 != records[specification.artifactOf][kind]?.sha256) {
-                        throw new GradleException('Shared ' + kind + ' differs from owner: ' + id)
-                    }
-                }
-                ['utilities', 'utilities_sources', 'library', 'library_sources', 'library_release', 'library_provenance', 'library_source_commit'].each { kind ->
-                    if (records[id][kind] != records[specification.artifactOf][kind]) {
-                        throw new GradleException('Shared ' + kind + ' differs from owner: ' + id)
-                    }
-                }
+                verifySharedArtifacts(id, records[id], records[specification.artifactOf], data.schema == 3)
+            }
+        }
+    }
+
+    private static void verifySharedArtifacts(String id, Map record, Map owner, boolean processed) {
+        List<String> artifacts = ['artifact', 'sources', 'source_inventory']
+        if (processed) {
+            artifacts.add(MAPPING)
+        }
+        if (record.containsKey('sbom') || owner.containsKey('sbom')) {
+            artifacts.add('sbom')
+        }
+        artifacts.each { kind ->
+            if (record[kind]?.sha256 != owner[kind]?.sha256) {
+                throw new GradleException('Shared ' + kind + ' differs from owner: ' + id)
+            }
+        }
+        [UTILITIES, UTILITIES_SOURCES, LIBRARY, LIBRARY_SOURCES, LIBRARY_RELEASE,
+         LIBRARY_PROVENANCE, 'library_source_commit'].each { kind ->
+            if (record[kind] != owner[kind]) {
+                throw new GradleException('Shared ' + kind + ' differs from owner: ' + id)
             }
         }
     }
 
     static List<Map> references(Map target) {
-        if (target.containsKey('utilities') != target.containsKey('utilities_sources')) {
+        if (target.containsKey(UTILITIES) != target.containsKey(UTILITIES_SOURCES)) {
             throw new GradleException('Candidate requires utilities and utilities_sources together')
         }
-        if (target.containsKey('library') != target.containsKey('library_sources')) {
+        if (target.containsKey(LIBRARY) != target.containsKey(LIBRARY_SOURCES)) {
             throw new GradleException('Candidate requires library and library_sources together')
         }
-        if (target.containsKey('library_provenance') &&
-                (!target.containsKey('library') || !(target.library_source_commit ==~ /[0-9a-f]{40}/))) {
+        if (target.containsKey(LIBRARY_PROVENANCE) &&
+                (!target.containsKey(LIBRARY) || !(target.library_source_commit ==~ /[0-9a-f]{40}/))) {
             throw new GradleException('Library provenance requires its dependency artifact and source commit')
         }
-        if (target.containsKey('library_release')) {
+        if (target.containsKey(LIBRARY_RELEASE)) {
             ReleaseIdentity.parse(target.library_release as String).requireProduct('lib')
         }
         def tests = target.client_tests
         if (!(tests instanceof Map) || !(tests.drivers instanceof Map) || tests.drivers.isEmpty()) {
             throw new GradleException('Missing client test drivers')
         }
-        (['artifact', 'sources', 'source_inventory'] + (target.containsKey('mapping') ? ['mapping'] : []) +
-                (target.containsKey('utilities') ? ['utilities', 'utilities_sources'] : []) +
-                (target.containsKey('library') ? ['library', 'library_sources'] : []) +
-                (target.containsKey('library_provenance') ? ['library_provenance'] : []) +
+        (['artifact', 'sources', 'source_inventory'] + (target.containsKey(MAPPING) ? [MAPPING] : []) +
+                (target.containsKey(UTILITIES) ? [UTILITIES, UTILITIES_SOURCES] : []) +
+                (target.containsKey(LIBRARY) ? [LIBRARY, LIBRARY_SOURCES] : []) +
+                (target.containsKey(LIBRARY_PROVENANCE) ? [LIBRARY_PROVENANCE] : []) +
                 (target.containsKey('sbom') ? ['sbom'] : [])).collect { target[it] as Map } +
                 ['catalog', 'contract', 'ordinary_metadata', 'runtime_lock', 'dependency_lock'].collect { tests[it] as Map } +
                 tests.drivers.values().collect { it as Map } +
@@ -104,22 +124,25 @@ class CandidateManifest {
             def runtime = specifications[id]
             def target = specifications[runtime.artifactOf ?: id]
             String version = packageVersion(data.release as String, target)
-            if (record.containsKey('utilities') && (identity.product == 'lib' || record.containsKey('library_release'))) {
-                String utilityVersion = identity.product == 'lib' ? identity.version :
-                        record.containsKey('library_release') ? ReleaseIdentity.parse(record.library_release as String).version : identity.version
-                ['utilities': 'cbbg-utilities-' + utilityVersion + '.jar',
-                 'utilities_sources': 'cbbg-utilities-' + utilityVersion + '-sources.jar'].each { kind, expected ->
-                    if (record[kind].path != expected) {
-                        throw new GradleException('Utility filename differs from its product version: ' + record[kind].path +
-                                '; expected ' + expected + '. Build utilities with the library version for library dependencies.')
-                    }
-                }
+            if (record.containsKey(UTILITIES) && (identity.product == 'lib' || record.containsKey(LIBRARY_RELEASE))) {
+                verifyUtilityNames(record, identity.product == 'lib' ? identity.version :
+                        ReleaseIdentity.parse(record.library_release as String).version)
             }
             PackageChecks.verifyCandidatePackage(file.parentFile, record, target, version, sourceRoot, identity.product)
             reports[id] = [target: id, manifest_sha256: CandidateFiles.sha256(file),
                            source_commit: data.commit, release: data.release]
         }
         reports
+    }
+
+    private static void verifyUtilityNames(Map record, String version) {
+        [(UTILITIES): 'cbbg-utilities-' + version + '.jar',
+         (UTILITIES_SOURCES): 'cbbg-utilities-' + version + '-sources.jar'].each { kind, expected ->
+            if (record[kind].path != expected) {
+                throw new GradleException('Utility filename differs from its product version: ' + record[kind].path +
+                        '; expected ' + expected + '. Build utilities with the library version for library dependencies.')
+            }
+        }
     }
 
     static String packageVersion(String release, Map target) {
@@ -136,7 +159,7 @@ class CandidateManifest {
         records.values().each { record ->
             references(record).each { reference ->
                 String name = reference.path
-                if (!name || name.contains('/') || name.contains('\\') || name in ['.', '..', 'candidate.json', 'SHA256SUMS', 'provenance.jsonl']) {
+                if (!name || name.contains('/') || name.contains('\\') || name in ['.', '..', 'candidate.json', 'SHA256SUMS', PROVENANCE_FILE]) {
                     throw new GradleException('Release candidate assets must have distinct flat names')
                 }
                 if (files.containsKey(name) && files[name] != reference.sha256) {
@@ -151,7 +174,7 @@ class CandidateManifest {
             throw new GradleException('Candidate checksum list differs from manifest')
         }
         files.SHA256SUMS = CandidateFiles.sha256(checksums)
-        files['provenance.jsonl'] = CandidateFiles.sha256(new File(file.parentFile, 'provenance.jsonl'))
+        files[PROVENANCE_FILE] = CandidateFiles.sha256(new File(file.parentFile, PROVENANCE_FILE))
         records.each { id, record ->
             if (record.containsKey('sbom')) {
                 Map evidence = ReleaseEvidence.reference(this, id)

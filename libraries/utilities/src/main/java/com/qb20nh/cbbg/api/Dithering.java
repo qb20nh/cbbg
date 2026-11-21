@@ -26,21 +26,24 @@ public final class Dithering {
         int ny = (int) Math.floor((y + 0.5) * options.scaleY());
         int pixel = noise.pixelABGR(nx, ny, frame);
         double strength = options.demo() && x < middle ? 0 : options.strength();
-        for (int channel = 0; channel < 4; channel++) {
-          float value = source[offset + channel];
-          if (!Float.isFinite(value)) {
-            throw new IllegalArgumentException("Image components must be finite");
-          }
-          if (channel < 3) value = Math.max(0, Math.min(1, value));
-          double amount =
-              channel == 3 ? 0 : ((pixel >>> (channel * 8) & 255) / 255.0 - 0.5) * strength;
-          int quantized =
-              Math.max(0, Math.min(255, (int) Math.floor(value * 255.0 + amount + 0.5)));
-          output[offset + channel] =
-              (byte) (channel < 3 && options.demo() && x == middle ? 255 - quantized : quantized);
-        }
+        quantizePixel(source, output, offset, pixel, strength, options.demo() && x == middle);
       }
     }
     return output;
+  }
+
+  private static void quantizePixel(
+      float[] source, byte[] output, int offset, int pixel, double strength, boolean invertRgb) {
+    for (int channel = 0; channel < 4; channel++) {
+      float value = source[offset + channel];
+      if (!Float.isFinite(value)) {
+        throw new IllegalArgumentException("Image components must be finite");
+      }
+      boolean rgb = channel < 3;
+      if (rgb) value = Math.max(0, Math.min(1, value));
+      double amount = rgb ? ((pixel >>> (channel * 8) & 255) / 255.0 - 0.5) * strength : 0;
+      int quantized = Math.max(0, Math.min(255, (int) Math.floor(value * 255.0 + amount + 0.5)));
+      output[offset + channel] = (byte) (rgb && invertRgb ? 255 - quantized : quantized);
+    }
   }
 }

@@ -6,8 +6,10 @@ import org.gradle.language.jvm.tasks.ProcessResources
 
 /** Stable encoding for generated release files. Array order is preserved. */
 class ReproducibleText {
+    private static final String UTF8 = 'UTF-8'
+
     static void configureResources(Project project) {
-        project.tasks.withType(ProcessResources).configureEach { filteringCharset = 'UTF-8' }
+        project.tasks.withType(ProcessResources).configureEach { filteringCharset = UTF8 }
         project.afterEvaluate {
             project.tasks.withType(ProcessResources).configureEach {
                 doLast {
@@ -24,14 +26,14 @@ class ReproducibleText {
     }
 
     static void writeJson(File file, Object value) {
-        file.setText(json(value), 'UTF-8')
+        file.setText(json(value), UTF8)
     }
 
     static void normalize(File file) {
-        String original = file.getText('UTF-8')
+        String original = file.getText(UTF8)
         String normalized = original.replace('\r\n', '\n').replace('\r', '\n')
         if (original != normalized) {
-            file.setText(normalized, 'UTF-8')
+            file.setText(normalized, UTF8)
         }
     }
 }

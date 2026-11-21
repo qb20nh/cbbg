@@ -17,6 +17,12 @@ import java.util.concurrent.Future
 
 /** Resumable local acceptance of the immutable packaged Fabric candidate. */
 class FabricCandidateAcceptance {
+    private static final String CLIENT_CACHE_DIRECTORY = '.cbbg'
+    private static final String TARGET_OPTION = '--target'
+    private static final String INPUTS_FILE = 'inputs.json'
+    private static final String UTF8 = 'UTF-8'
+    private static final String DEPENDENCIES_DIRECTORY = 'dependencies'
+
     static final Map INITIAL_CONFIG = [mode: 'ENABLED', pixelFormat: 'RGBA16F', stbnSize: 16,
                                        stbnDepth: 8, stbnSeed: 74123, strength: 2.0]
     private static final String PLAN = '''import json,sys
@@ -74,7 +80,7 @@ print(json.dumps({'runs':runs,'dependencies':{p:locked_dependencies(spec,p,lock)
                 'LD_LIBRARY_PATH', 'LD_PRELOAD', '__EGL_VENDOR_LIBRARY_FILENAMES',
                 '__EGL_VENDOR_LIBRARY_DIRS', 'LIBGL_DRIVERS_PATH'].findAll { System.getenv(it) != null }.collectEntries { name ->
             [(name): java.security.MessageDigest.getInstance('SHA-256')
-                    .digest(System.getenv(name).getBytes('UTF-8')).encodeHex().toString()]
+                    .digest(System.getenv(name).getBytes(UTF8)).encodeHex().toString()]
         }
         inputs.host = hostInputs(options)
         inputs.python = parse(command.call(python(options, root, '''import json,sys
@@ -83,7 +89,7 @@ print(json.dumps({'pythonVersion':sys.version,'launcherVersion':version('minecra
         if (inputs.python.launcherVersion != '8.0') {
             throw new GradleException('Candidate acceptance requires minecraft-launcher-lib==8.0')
         }
-        File identity = new File(output, 'inputs.json')
+        File identity = new File(output, INPUTS_FILE)
         if (identity.exists()) {
             if (CandidateFiles.read(identity) != inputs) {
                 throw new GradleException('Acceptance inputs changed: ' + identity + '. Use a fresh output directory for this candidate and host.')
@@ -135,7 +141,7 @@ print(json.dumps({'pythonVersion':sys.version,'launcherVersion':version('minecra
             String profile = 'fabric-loader-' + target.dependencies.loader + '-' + target.minecraft
             FabricRuntimeInstallation.ensure(runtime, id, profile) { boolean resume ->
                 List install = [options.python, new File(root, 'scripts/install_fabric_parity_runtime.py'),
-                                '--target', id, '--runtime', runtime]
+                                TARGET_OPTION, id, '--runtime', runtime]
                 if (resume) {
                     install.add('--resume')
                 }
@@ -151,7 +157,7 @@ print(json.dumps({'pythonVersion':sys.version,'launcherVersion':version('minecra
             File gametest = options.gametestApis?.get(id) as File
             if (gametest == null) {
                 String version = gametestApiVersion(lock.gametestApi.coordinate as String, id)
-                gametest = download(new File(output, 'dependencies'), lock.gametestApi.sha256 as String,
+                gametest = download(new File(output, DEPENDENCIES_DIRECTORY), lock.gametestApi.sha256 as String,
                         'https://maven.fabricmc.net/net/fabricmc/fabric-api/fabric-client-gametest-api-v1/' +
                                 version + '/fabric-client-gametest-api-v1-' + version + '.jar')
             }
@@ -163,7 +169,7 @@ print(json.dumps({'pythonVersion':sys.version,'launcherVersion':version('minecra
                 Map requirement = runs.find { key(it) == key(row) }
                 verify(candidate, target, files, requirement, row, targetOutput, options, command)
                 if (requirement.startupMode == 'cold') {
-                    coldCaches[requirement.backend] = new File(receipt(targetOutput, row).parentFile, '.cbbg')
+                    coldCaches[requirement.backend] = new File(receipt(targetOutput, row).parentFile, CLIENT_CACHE_DIRECTORY)
                 }
             }
             File config = null
@@ -193,7 +199,7 @@ print(json.dumps({'pythonVersion':sys.version,'launcherVersion':version('minecra
                 throw new GradleException('Candidate acceptance needs at least 512 MiB free before the next client: ' + output + '. Free space and resume this same output.')
             }
             Map dependencies = (context.plan.dependencies[requirement.profile] as Map).collectEntries { name, entry ->
-                [(name): entry + [file: dependency(entry as Map, new File(output, 'dependencies'))]]
+                [(name): entry + [file: dependency(entry as Map, new File(output, DEPENDENCIES_DIRECTORY))]]
             }
             File startupCache = requirement.startupMode in ['warm', 'damaged'] ? context.coldCaches[requirement.backend] :
                     requirement.startupMode == 'seed-mismatch' ? options.seedCaches[context.id] as File : null
@@ -234,12 +240,12 @@ print(json.dumps({'pythonVersion':sys.version,'launcherVersion':version('minecra
             context.rows.add(row)
             writeIndex(context.index as File, context.rows as List)
             if (requirement.startupMode == 'cold') {
-                context.coldCaches[requirement.backend] = new File(saved.parentFile, '.cbbg')
+                context.coldCaches[requirement.backend] = new File(saved.parentFile, CLIENT_CACHE_DIRECTORY)
             }
         })
         contexts.each { Map context ->
             command.call([options.python, new File(root, 'scripts/fabric_acceptance.py'), '--candidate', candidate.file,
-                          '--target', context.id, '--results', context.index].collect { it.toString() }, root)
+                          TARGET_OPTION, context.id, '--results', context.index].collect { it.toString() }, root)
         }
     }
 
@@ -331,7 +337,7 @@ print(json.dumps({'pythonVersion':sys.version,'launcherVersion':version('minecra
     static void requireSeedCache(File directory, String target) {
         if (directory == null || !directory.isDirectory() ||
                 !new File(directory, 'stbn_16x16x8.sha256').isFile() ||
-                !new File(directory, 'stbn_16x16x8.sha256').getText('UTF-8').startsWith('# seed 0\n')) {
+                !new File(directory, 'stbn_16x16x8.sha256').getText(UTF8).startsWith('# seed 0\n')) {
             throw new GradleException('Provide -PacceptanceSeedZeroCache.' + target + '=<actual seed-zero cache directory>')
         }
     }
@@ -412,12 +418,12 @@ from parity_evidence import read_json
 print(json.dumps(reuse_arguments(json.loads(sys.argv[1]),Path(sys.argv[2]),json.loads(sys.argv[3]),current_driver=Path(sys.argv[4]),dependencies=read_json(sys.argv[5]),current_inputs=Path(sys.argv[6]),base=Path(sys.argv[7]))))'''
             Map reused = parse(command.call(python(options, options.root as File, code,
                     [JsonOutput.toJson(row), saved, JsonOutput.toJson(target), currentDriver, dependencies,
-                     new File(base.parentFile, 'inputs.json'), base]), options.root as File))
+                     new File(base.parentFile, INPUTS_FILE), base]), options.root as File))
             source = reused.source_commit
             driver = reused.driver_sha256
         }
         List args = [options.python, new File(options.root as File, 'scripts/fabric_run_evidence.py'),
-                     '--receipt', saved, '--target', target.id, '--source-commit', source,
+                     '--receipt', saved, TARGET_OPTION, target.id, '--source-commit', source,
                      '--candidate-sha256', candidate.records[target.id].artifact.sha256,
                      '--driver-sha256', driver,
                      '--catalog', files.catalog, '--runtime-lock', files.runtime_lock, '--dependency-lock', files.dependency_lock]
@@ -454,7 +460,7 @@ print(json.dumps(reuse_arguments(json.loads(sys.argv[1]),Path(sys.argv[2]),json.
         if (!oldIndex.isFile()) {
             return
         }
-        File oldIdentity = new File(previous, 'inputs.json')
+        File oldIdentity = new File(previous, INPUTS_FILE)
         Map oldInputs = CandidateFiles.read(oldIdentity) as Map
         if (!(oldInputs.executionEnvironment instanceof Map) || oldInputs.executionEnvironment || inputs.executionEnvironment) {
             options.cacheDecision?.call(target.id, [], 'run', 'Cached execution environment is unknown or uses custom overrides')
@@ -462,7 +468,7 @@ print(json.dumps(reuse_arguments(json.loads(sys.argv[1]),Path(sys.argv[2]),json.
         }
         Map sources = EXECUTION_SOURCES.collectEntries { name ->
             String text = command.call(['git', 'show', oldInputs.source + ':' + name], options.root as File)
-            [(name): java.security.MessageDigest.getInstance('SHA-256').digest(text.getBytes('UTF-8')).encodeHex().toString()]
+            [(name): java.security.MessageDigest.getInstance('SHA-256').digest(text.getBytes(UTF8)).encodeHex().toString()]
         }
         if (sources != inputs.executionSources) {
             return
@@ -470,7 +476,7 @@ print(json.dumps(reuse_arguments(json.loads(sys.argv[1]),Path(sys.argv[2]),json.
         String prefix = 'reuse/' + CandidateFiles.sha256(oldIdentity)
         File copied = new File(output, prefix)
         copyResults(oldIndex.parentFile, copied)
-        File copiedInputs = new File(copied, 'inputs.json')
+        File copiedInputs = new File(copied, INPUTS_FILE)
         if (!copiedInputs.exists()) {
             Files.createLink(copiedInputs.toPath(), oldIdentity.toPath())
         }
@@ -547,7 +553,7 @@ print(json.dumps(reuse_arguments(json.loads(sys.argv[1]),Path(sys.argv[2]),json.
     static void writeIndex(File index, List<Map> rows) {
         File staged = File.createTempFile('results-', '.json', index.parentFile)
         try {
-            staged.setText(JsonOutput.prettyPrint(JsonOutput.toJson(rows)) + '\n', 'UTF-8')
+            staged.setText(JsonOutput.prettyPrint(JsonOutput.toJson(rows)) + '\n', UTF8)
             Files.move(staged.toPath(), index.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
         } finally { staged.delete() }
     }
@@ -560,7 +566,7 @@ print(json.dumps(reuse_arguments(json.loads(sys.argv[1]),Path(sys.argv[2]),json.
         games.each { File game ->
             List<String> disposable = ['.fabric', 'saves', 'natives']
             if (ordinary) {
-                disposable.add('.cbbg')
+                disposable.add(CLIENT_CACHE_DIRECTORY)
             }
             List<Map> reports = game.listFiles().findAll { it.name == 'probe.json' || it.name.endsWith('-probe.json') }
                     .collect { CandidateFiles.read(it) as Map }
@@ -593,7 +599,7 @@ print(json.dumps(reuse_arguments(json.loads(sys.argv[1]),Path(sys.argv[2]),json.
 
     static void deduplicateMods(File output, File saved, boolean restart) {
         File root = output.canonicalFile
-        File pool = new File(root, 'dependencies')
+        File pool = new File(root, DEPENDENCIES_DIRECTORY)
         if (Files.isSymbolicLink(pool.toPath())) {
             throw new GradleException('Acceptance jar pool is a symlink: ' + pool)
         }
@@ -659,7 +665,7 @@ print(json.dumps(reuse_arguments(json.loads(sys.argv[1]),Path(sys.argv[2]),json.
         URLConnection connection = url.openConnection()
         connection.connectTimeout = 30000
         connection.readTimeout = 30000
-        connection.inputStream.withCloseable { it.getText('UTF-8') }
+        connection.inputStream.withCloseable { it.getText(UTF8) }
     }
 
     static String gametestApiVersion(String coordinate, String id) {

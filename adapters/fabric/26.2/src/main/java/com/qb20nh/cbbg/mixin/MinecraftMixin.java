@@ -29,6 +29,13 @@ public abstract class MinecraftMixin {
   @Unique private static CbbgConfig.@Nullable Mode lastMode;
   @Unique private static CbbgConfig.@Nullable PixelFormat lastPixelFormat;
 
+  @Unique
+  private static void cbbg$rememberPresentationSettings(
+      CbbgConfig.Mode mode, CbbgConfig.PixelFormat pixelFormat) {
+    lastMode = mode;
+    lastPixelFormat = pixelFormat;
+  }
+
   @Inject(method = "renderFrame", at = @At("HEAD"))
   private void cbbg$prepareFrame(boolean advanceGameTime, CallbackInfo ci) {
     if (Minecraft.getInstance().gameRenderer.mainRenderTarget() instanceof MainTarget target) {
@@ -69,8 +76,7 @@ public abstract class MinecraftMixin {
       CbbgDither.resetAfterToggle();
       resize |= mode.isActive();
     }
-    lastMode = mode;
-    lastPixelFormat = pixelFormat;
+    cbbg$rememberPresentationSettings(mode, pixelFormat);
     if (resize) {
       RenderSystem.queueFencedTask(
           () -> {

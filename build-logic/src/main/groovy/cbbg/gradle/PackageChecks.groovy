@@ -13,6 +13,10 @@ import java.util.zip.ZipFile
 import java.util.zip.ZipInputStream
 
 class PackageChecks {
+    private static final String PACKAGE = 'package'
+    private static final String CLASS_SUFFIX = '.class'
+    private static final String JAVA_SUFFIX = '.java'
+
     static final String MINECRAFT_1211_MIXIN_EXTRAS_MINIMUM = '0.4.0'
     private static final List<String> TEST_PREFIXES = [
             'com/qb20nh/cbbg/parity/', 'com/qb20nh/cbbg/gametest/',
@@ -32,25 +36,29 @@ class PackageChecks {
 
     static Map verifyArtifact(File artifact, File sources, int javaVersion, Collection<File> sourceRoots,
                               File mapping = null, File sbom = null) {
-        if (javaVersion < 8) throw new GradleException('Invalid target Java baseline')
+        if (javaVersion < 8) {
+            throw new GradleException('Invalid target Java baseline')
+        }
         Map<String, byte[]> expected = [:]
         for (File coreSources : sourceRoots) {
             if (coreSources.isDirectory()) {
                 coreSources.eachFileRecurse(FileType.FILES) { File file ->
-                    if (file.name.endsWith('.java') && !(file.name in ['package-info.java', 'module-info.java'])) {
+                    if (file.name.endsWith(JAVA_SUFFIX) && !(file.name in ['package-info.java', 'module-info.java'])) {
                         expected[coreSources.toPath().relativize(file.toPath()).toString().replace('\\', '/')] = file.bytes
                     }
                 }
             }
         }
-        if (expected.isEmpty()) throw new GradleException('No core sources to verify')
+        if (expected.isEmpty()) {
+            throw new GradleException('No core sources to verify')
+        }
         Set<String> coreNames = expected.keySet().collect { it.substring(0, it.length() - 5) } as Set
         Map<String, String> renamed = mapping == null ? [:] : ProguardMapping.classes(mapping)
         Set<String> coreOutputNames = renamed.findAll { original, output ->
             original.split('\\$', 2)[0] in coreNames
         }.values() as Set
         renamed.keySet().each { original ->
-            if (TEST_PREFIXES.any { original.startsWith(it) } || original + '.class' in TEST_RESOURCES) {
+            if (TEST_PREFIXES.any { original.startsWith(it) } || original + CLASS_SUFFIX in TEST_RESOURCES) {
                 throw new GradleException('Test class in production mapping: ' + original)
             }
         }
@@ -58,9 +66,13 @@ class PackageChecks {
         int coreClasses = 0
         new ZipFile(artifact).withCloseable { ZipFile zip ->
             for (String name : productionEntries(zip)) {
-                if (!name.endsWith('.class')) continue
+                if (!name.endsWith(CLASS_SUFFIX)) {
+                    continue
+                }
                 byte[] header = zip.getInputStream(zip.getEntry(name)).withCloseable { it.readNBytes(8) }
-                if (header.length != 8) throw new GradleException('Truncated class header: ' + name)
+                if (header.length != 8) {
+                    throw new GradleException('Truncated class header: ' + name)
+                }
                 int magic = ((header[0] & 255) << 24) | ((header[1] & 255) << 16) |
                         ((header[2] & 255) << 8) | (header[3] & 255)
                 int minor = ((header[4] & 255) << 8) | (header[5] & 255)
@@ -68,21 +80,29 @@ class PackageChecks {
                 if (magic != (int) 0xCAFEBABE || major < 45 || minor == 65535) {
                     throw new GradleException('Invalid or preview class header: ' + name)
                 }
-                if (major > javaVersion + 44) throw new GradleException('Class exceeds target Java baseline: ' + name)
+                if (major > javaVersion + 44) {
+                    throw new GradleException('Class exceeds target Java baseline: ' + name)
+                }
                 classes.add(name)
                 String base = name.substring(0, name.length() - 6).split('\\$', 2)[0]
                 if (mapping == null ? coreNames.contains(base) : coreOutputNames.contains(name.substring(0, name.length() - 6))) {
-                    if (major != 52) throw new GradleException('Core class is not Java 8: ' + name)
+                    if (major != 52) {
+                        throw new GradleException('Core class is not Java 8: ' + name)
+                    }
                     coreClasses++
                 }
             }
             for (String name : (mapping == null ? coreNames : renamed.values())) {
-                if (!classes.contains(name + '.class')) throw new GradleException('Missing core class: ' + name)
+                if (!classes.contains(name + CLASS_SUFFIX)) {
+                    throw new GradleException('Missing core class: ' + name)
+                }
             }
         }
         new ZipFile(sources).withCloseable { ZipFile zip ->
             Set<String> names = productionEntries(zip) as Set
-            if (names.any { it.endsWith('.class') }) throw new GradleException('Binary class in source archive')
+            if (names.any { it.endsWith(CLASS_SUFFIX) }) {
+                throw new GradleException('Binary class in source archive')
+            }
             if (mapping != null && (!names.contains('META-INF/cbbg/proguard.map') ||
                     !Arrays.equals(read(zip, 'META-INF/cbbg/proguard.map'), mapping.bytes))) {
                 throw new GradleException('Missing or changed release mapping in source archive')
@@ -111,12 +131,16 @@ class PackageChecks {
         Map<String, String> expected = [:]
         Set<String> sourcePaths = [] as Set
         for (Object item : inventory.sources) {
-            if (!(item instanceof Map)) throw new GradleException('Invalid source inventory entry')
+            if (!(item instanceof Map)) {
+                throw new GradleException('Invalid source inventory entry')
+            }
             Map entry = (Map) item
             String archivePath = javaPath(entry.archive_path)
             String sourcePath = javaPath(entry.source_path)
             String hash = entry.sha256
-            if (!(hash ==~ /[0-9a-f]{64}/)) throw new GradleException('Invalid source hash: ' + archivePath)
+            if (!(hash ==~ /[0-9a-f]{64}/)) {
+                throw new GradleException('Invalid source hash: ' + archivePath)
+            }
             if (expected.containsKey(archivePath) || !sourcePaths.add(sourcePath)) {
                 throw new GradleException('Duplicate source inventory entry: ' + archivePath)
             }
@@ -124,13 +148,17 @@ class PackageChecks {
             if (!file.toPath().startsWith(root.toPath()) || !file.isFile()) {
                 throw new GradleException('Missing or invalid source file: ' + sourcePath)
             }
-            if (digest(file.bytes) != hash) throw new GradleException('Source file differs from inventory: ' + sourcePath)
+            if (digest(file.bytes) != hash) {
+                throw new GradleException('Source file differs from inventory: ' + sourcePath)
+            }
             expected[archivePath] = hash
         }
         new ZipFile(sources).withCloseable { ZipFile zip ->
             List<String> names = zip.entries().collect { it.name }
-            if (names.size() != names.toSet().size()) throw new GradleException('Duplicate source archive entry')
-            Set<String> actual = names.findAll { it.endsWith('.java') } as Set
+            if (names.size() != names.toSet().size()) {
+                throw new GradleException('Duplicate source archive entry')
+            }
+            Set<String> actual = names.findAll { it.endsWith(JAVA_SUFFIX) } as Set
             if (actual != expected.keySet()) {
                 throw new GradleException('Source archive differs from inventory; missing=' +
                         (expected.keySet() - actual).sort() + '; unexpected=' + (actual - expected.keySet()).sort())
@@ -146,10 +174,14 @@ class PackageChecks {
 
     static Map verifyFabricMetadata(File artifact, Map target, String version, String product = 'cbbg',
                                     String libraryDependency = null) {
-        if (target.loader != 'fabric') throw new GradleException('Expected a Fabric target')
+        if (target.loader != 'fabric') {
+            throw new GradleException('Expected a Fabric target')
+        }
         new ZipFile(artifact).withCloseable { ZipFile zip ->
             List<String> names = zip.entries().collect { it.name }
-            if (names.size() != names.toSet().size()) throw new GradleException('Duplicate archive entry')
+            if (names.size() != names.toSet().size()) {
+                throw new GradleException('Duplicate archive entry')
+            }
             Set<String> present = names as Set
             Map metadata = jsonResource(zip, present, 'fabric.mod.json')
             Map expected = [schemaVersion: 1, id: product == 'lib' ? 'cbbg_lib' : 'cbbg', version: version, environment: 'client']
@@ -214,7 +246,7 @@ class PackageChecks {
                     }
                     Map config = jsonResource(zip, present, 'cbbg_lib.gl3.mixins.json')
                     if (config.required != true || config.compatibilityLevel != 'JAVA_' + target.java ||
-                            config['package'] != 'com.qb20nh.cbbg.mixin' ||
+                            config[PACKAGE] != 'com.qb20nh.cbbg.mixin' ||
                             config.client != ['GameRendererReloadShadersMixin'] ||
                             config.get('mixins', []) != [] || config.get('server', []) != []) {
                         throw new GradleException('Invalid CBBG Lib shader lifecycle mixin')
@@ -245,26 +277,38 @@ class PackageChecks {
             }
             for (String name : (List<String>) mixins) {
                 Map config = jsonResource(zip, present, name)
-                if (config.required != true) throw new GradleException('Mixin configuration must be required: ' + name)
+                if (config.required != true) {
+                    throw new GradleException('Mixin configuration must be required: ' + name)
+                }
                 if (config.compatibilityLevel != 'JAVA_' + target.java) {
                     throw new GradleException('Mixin Java version differs from target: ' + name)
                 }
-                if (!(config['package'] instanceof String) || !config['package']) {
+                if (!(config[PACKAGE] instanceof String) || !config[PACKAGE]) {
                     throw new GradleException('Missing mixin package: ' + name)
                 }
                 int count = 0
                 for (String section : ['client', 'mixins', 'server']) {
                     Object entries = config.get(section, [])
-                    if (!(entries instanceof List)) throw new GradleException('Invalid mixin class list: ' + name)
+                    if (!(entries instanceof List)) {
+                        throw new GradleException('Invalid mixin class list: ' + name)
+                    }
                     for (Object entry : (List) entries) {
-                        if (!(entry instanceof String)) throw new GradleException('Invalid mixin class: ' + name)
-                        checkClass(present, config['package'] + '.' + entry)
+                        if (!(entry instanceof String)) {
+                            throw new GradleException('Invalid mixin class: ' + name)
+                        }
+                        checkClass(present, config[PACKAGE] + '.' + entry)
                         count++
                     }
                 }
-                if (!count) throw new GradleException('Empty mixin configuration: ' + name)
-                if (config.containsKey('plugin')) checkClass(present, config.plugin)
-                if (config.containsKey('refmap')) jsonResource(zip, present, config.refmap)
+                if (!count) {
+                    throw new GradleException('Empty mixin configuration: ' + name)
+                }
+                if (config.containsKey('plugin')) {
+                    checkClass(present, config.plugin)
+                }
+                if (config.containsKey('refmap')) {
+                    jsonResource(zip, present, config.refmap)
+                }
                 declared += count
             }
             [declared_classes: declared, mixin_configs: mixins.size()]
@@ -280,7 +324,9 @@ class PackageChecks {
         File sources = CandidateFiles.checked(base, (Map) targetRecord.sources)
         File inventoryFile = CandidateFiles.checked(base, (Map) targetRecord.source_inventory)
         Object inventory = CandidateFiles.read(inventoryFile)
-        if (!(inventory instanceof Map)) throw new GradleException('Invalid source inventory schema')
+        if (!(inventory instanceof Map)) {
+            throw new GradleException('Invalid source inventory schema')
+        }
         Map sourceCheck = verifySourceInventory(sources, (Map) inventory, sourceRoot)
         Set<File> sharedRoots = [new File(sourceRoot, product == 'lib' ? 'libraries/utilities/src/main/java' : 'core/src/main/java')] as Set
         inventory.sources.each { entry ->
@@ -327,7 +373,7 @@ class PackageChecks {
                     }
                 }
             }
-            Set<String> duplicateClasses = outer.intersect(nested).findAll { it.endsWith('.class') } as Set
+            Set<String> duplicateClasses = outer.intersect(nested).findAll { it.endsWith(CLASS_SUFFIX) } as Set
             if (duplicateClasses) {
                 throw new GradleException('CBBG and CBBG Lib contain duplicate classes: ' + duplicateClasses.sort())
             }
@@ -346,14 +392,18 @@ class PackageChecks {
         Set<String> seen = [] as Set
         for (ZipEntry entry : zip.entries()) {
             String name = entry.name
-            if (!seen.add(name)) throw new GradleException('Duplicate archive entry: ' + name)
+            if (!seen.add(name)) {
+                throw new GradleException('Duplicate archive entry: ' + name)
+            }
             if (TEST_PREFIXES.any { name.startsWith(it) } || TEST_RESOURCES.contains(name)) {
                 throw new GradleException('Test-only entry in production archive: ' + name)
             }
             byte[] bytes = zip.getInputStream(entry).withCloseable { it.bytes }
             CRC32 crc = new CRC32()
             crc.update(bytes)
-            if (entry.crc != crc.value) throw new GradleException('Corrupt archive entry: ' + name)
+            if (entry.crc != crc.value) {
+                throw new GradleException('Corrupt archive entry: ' + name)
+            }
             names.add(name)
         }
         names
@@ -365,7 +415,9 @@ class PackageChecks {
                 value.split('/', -1).any { !it || it in ['.', '..'] }) {
             throw new GradleException('Invalid source path: ' + value)
         }
-        if (!value.endsWith('.java')) throw new GradleException('Expected Java source: ' + value)
+        if (!value.endsWith(JAVA_SUFFIX)) {
+            throw new GradleException('Expected Java source: ' + value)
+        }
         value
     }
 
@@ -385,7 +437,9 @@ class PackageChecks {
         } catch (Exception ignored) {
             throw new GradleException('Invalid JSON: ' + name)
         }
-        if (!(parsed instanceof Map)) throw new GradleException('Expected JSON object: ' + name)
+        if (!(parsed instanceof Map)) {
+            throw new GradleException('Expected JSON object: ' + name)
+        }
         (Map) parsed
     }
 
@@ -393,7 +447,7 @@ class PackageChecks {
         if (!(name instanceof String) || !(name ==~ /[A-Za-z_$][A-Za-z0-9_$]*(\.[A-Za-z_$][A-Za-z0-9_$]*)*/)) {
             throw new GradleException('Invalid class name: ' + name)
         }
-        if (!names.contains(name.replace('.', '/') + '.class')) {
+        if (!names.contains(name.replace('.', '/') + CLASS_SUFFIX)) {
             throw new GradleException('Missing declared class: ' + name)
         }
     }

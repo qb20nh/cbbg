@@ -1,6 +1,8 @@
 package cbbg.gradle
 
 class TargetCatalog {
+    private static final String FABRIC = 'fabric'
+
     final Map data
     private static final Set OPTIONAL_DEPENDENCIES = [
             'modMenu', 'clothConfig', 'yacl', 'sodium', 'iris', 'sulkan', 'renderScale',
@@ -45,7 +47,7 @@ class TargetCatalog {
             if (!ids.add(id)) {
                 throw new IllegalArgumentException('Duplicate target: ' + id)
             }
-            if (!(target.loader in ['fabric', 'legacy-fabric', 'forge', 'neoforge', 'quilt'])) {
+            if (!(target.loader in [FABRIC, 'legacy-fabric', 'forge', 'neoforge', 'quilt'])) {
                 throw new IllegalArgumentException('Unknown loader: ' + id)
             }
             if (!(target.minecraft instanceof String) || id != "${target.minecraft}-${target.loader}") {
@@ -129,7 +131,7 @@ class TargetCatalog {
             it.containsKey('compatibleMinecraft') || it.containsKey('minecraftDependency')
         }) {
             if (!owner.containsKey('compatibleMinecraft')) {
-                if (owner.loader != 'fabric' || owner.artifactOf != null ||
+                if (owner.loader != FABRIC || owner.artifactOf != null ||
                         !(owner.minecraft ==~ /[0-9]+\.[0-9]+/) ||
                         owner.minecraftDependency != '~' + owner.minecraft) {
                     throw new IllegalArgumentException('Invalid Minecraft dependency: ' + owner.id)
@@ -140,7 +142,7 @@ class TargetCatalog {
             List<String> base = owner.minecraft.tokenize('.')
             String dependency = base.size() == 2 && base.every { it ==~ /[0-9]+/ } ?
                     ">=${owner.minecraft} <${base[0]}.${base[1].toInteger() + 1}" : null
-            if (owner.loader != 'fabric' || owner.artifactOf != null || versions.isEmpty() ||
+            if (owner.loader != FABRIC || owner.artifactOf != null || versions.isEmpty() ||
                     owner.minecraftDependency != dependency ||
                     versions.size() != versions.toSet().size() ||
                     versions.any { !(it instanceof String) ||
@@ -157,9 +159,9 @@ class TargetCatalog {
             boolean compatiblePatch = owner != null && owner.compatibleMinecraft instanceof List &&
                     owner.compatibleMinecraft.contains(target.minecraft) && owner.java == target.java
             boolean quiltAlias = target.loader == 'quilt' && (sameMinecraft || compatiblePatch)
-            boolean fabricAlias = target.loader == 'fabric' && compatiblePatch
+            boolean fabricAlias = target.loader == FABRIC && compatiblePatch
             if (owner == null || owner.is(target) || owner.artifactOf != null ||
-                    owner.loader != 'fabric' || !(quiltAlias || fabricAlias) ||
+                    owner.loader != FABRIC || !(quiltAlias || fabricAlias) ||
                     owner.java > target.java ||
                     owner.renderer != target.renderer || owner.projectionApi != target.projectionApi ||
                     owner.backends.toSet() != target.backends.toSet()) {
@@ -195,7 +197,9 @@ class TargetCatalog {
         List<String> parts = []
         for (String part : path.split('/')) {
             if (part == '..') {
-                if (parts.isEmpty()) return false
+                if (parts.isEmpty()) {
+                    return false
+                }
                 parts.remove(parts.size() - 1)
             } else if (part && part != '.') {
                 parts.add(part)
@@ -246,7 +250,9 @@ class TargetCatalog {
             if (requireImplemented && !owner.implemented) {
                 throw new IllegalArgumentException('Artifact owner not implemented: ' + owner.id)
             }
-            if (seen.add(owner.id)) owners.add(owner)
+            if (seen.add(owner.id)) {
+                owners.add(owner)
+            }
         }
         owners
     }

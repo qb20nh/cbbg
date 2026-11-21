@@ -13,7 +13,9 @@ class ChangeImpactTest {
         Map target = [id: "1-${loader}".toString(), minecraft: '1', loader: loader, java: 25,
                       renderer: loader == 'forge' ? 'legacy' : 'modern',
                       backends: ['opengl'], implemented: false]
-        if (owner) target.artifactOf = owner
+        if (owner) {
+            target.artifactOf = owner
+        }
         else {
             target.buildProfile = loader
             target.sourceGroups = [group]
@@ -24,7 +26,9 @@ class ChangeImpactTest {
     private static Map catalogData(boolean includeForge = true) {
         List targets = [target('fabric', 'adapters/fabric'),
                         target('quilt', null, '1-fabric')]
-        if (includeForge) targets << target('forge', 'adapters/forge')
+        if (includeForge) {
+            targets << target('forge', 'adapters/forge')
+        }
         [schema: 1, ciTargets: ['1-fabric'], targets: targets]
     }
 

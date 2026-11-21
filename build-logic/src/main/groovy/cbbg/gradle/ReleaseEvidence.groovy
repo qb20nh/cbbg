@@ -7,6 +7,8 @@ import java.util.zip.ZipOutputStream
 
 /** Portable release metadata containing the original GitHub attestations. */
 class ReleaseEvidence {
+    private static final String CHECKSUMS_FILE = 'SHA256SUMS'
+
     private static Map<String, File> contents(CandidateManifest candidate, String target) {
         Map record = candidate.records[target]
         if (!(record?.sbom instanceof Map)) {
@@ -29,7 +31,7 @@ class ReleaseEvidence {
 
     private static byte[] checksums(CandidateManifest candidate) {
         Map<String, String> files = ReleaseChecks.publicFiles(candidate)
-        (files.keySet().findAll { it != 'SHA256SUMS' }.sort()
+        (files.keySet().findAll { it != CHECKSUMS_FILE }.sort()
                 .collect { files[it] + '  ' + it }.join('\n') + '\n').getBytes('UTF-8')
     }
 
@@ -51,17 +53,8 @@ class ReleaseEvidence {
                 ZipOutputStream zip = new ZipOutputStream(stream)
                 try {
                     zip.setLevel(9)
-                    (files.keySet() + ['SHA256SUMS']).sort().each { name ->
-                        ZipEntry entry = new ZipEntry(name)
-                        entry.time = 0
-                        zip.putNextEntry(entry)
-                        if (name == 'SHA256SUMS') {
-                            zip.write(checksumList)
-                        }
-                        else {
-                            files[name].withInputStream { input -> input.transferTo(zip) }
-                        }
-                        zip.closeEntry()
+                    (files.keySet() + [CHECKSUMS_FILE]).sort().each { name ->
+                        writeEntry(zip, name, files, checksumList)
                     }
                 } finally {
                     zip.close()
@@ -79,6 +72,18 @@ class ReleaseEvidence {
         }
     }
 
+    private static void writeEntry(ZipOutputStream zip, String name, Map<String, File> files, byte[] checksums) {
+        ZipEntry entry = new ZipEntry(name)
+        entry.time = 0
+        zip.putNextEntry(entry)
+        if (name == CHECKSUMS_FILE) {
+            zip.write(checksums)
+        } else {
+            files[name].withInputStream { input -> input.transferTo(zip) }
+        }
+        zip.closeEntry()
+    }
+
     static Map reference(CandidateManifest candidate, String target) {
         Map<String, File> files = contents(candidate, target)
         File output = archive(candidate, target)
@@ -87,7 +92,7 @@ class ReleaseEvidence {
         }
         new ZipFile(output).withCloseable { zip ->
             List<String> names = zip.entries().collect { it.name }
-            if (names.size() != files.size() + 1 || names.toSet() != (files.keySet() + ['SHA256SUMS']) as Set) {
+            if (names.size() != files.size() + 1 || names.toSet() != (files.keySet() + [CHECKSUMS_FILE]) as Set) {
                 throw new GradleException('Release evidence archive has different entries')
             }
             files.each { name, file ->
@@ -96,10 +101,10 @@ class ReleaseEvidence {
                     throw new GradleException('Release evidence archive differs: ' + name)
                 }
             }
-            byte[] actualChecksums = zip.getInputStream(zip.getEntry('SHA256SUMS')).withCloseable { it.readAllBytes() }
+            byte[] actualChecksums = zip.getInputStream(zip.getEntry(CHECKSUMS_FILE)).withCloseable { it.readAllBytes() }
             // Already published archives contain the original candidate checksum list.
             if (!Arrays.equals(actualChecksums, checksums(candidate)) &&
-                    !Arrays.equals(actualChecksums, new File(candidate.file.parentFile, 'SHA256SUMS').bytes)) {
+                    !Arrays.equals(actualChecksums, new File(candidate.file.parentFile, CHECKSUMS_FILE).bytes)) {
                 throw new GradleException('Release evidence archive differs: SHA256SUMS')
             }
         }

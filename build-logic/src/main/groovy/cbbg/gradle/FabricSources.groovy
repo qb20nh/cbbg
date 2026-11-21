@@ -5,6 +5,17 @@ import org.gradle.api.Project
 
 /** Source selections shared by Fabric builds and CI change selection. */
 class FabricSources {
+    private static final String TEXTURE_FORMAT_RENDERER = 'blaze-texture-format'
+    private static final String MC_1_21_11 = '1.21.11'
+    private static final String IRIS_FIXTURE = 'gametest/IrisFixture'
+    private static final String RENDER_SCALE_TEST_ACCESS = 'gametest/RenderScaleTestAccess'
+    private static final String IRIS_IMAGE_PIXELS = 'gametest/IrisImagePixels'
+    private static final String RENDER_SCALE_TARGET_FORMAT = 'gametest/RenderScaleTargetFormat'
+    private static final String MAIN_TARGETS = 'render/MainTargets'
+    private static final String FABRIC_UPSTREAM = 'fabric-upstream'
+    private static final String MODERN_GAMETEST_SOURCES = 'renderers/modern/src/gametest/java'
+    private static final String CORE_TEST_SUPPORT_SOURCES = 'core/src/testSupport/java'
+
     private static final String PACKAGE = 'com/qb20nh/cbbg/'
 
     private static Map tree(String path, List<String> includes = [], List<String> excludes = []) {
@@ -16,7 +27,7 @@ class FabricSources {
     }
 
     static Map layout(Map target, Map owner) {
-        if (!(owner.buildProfile in ['fabric-modern', 'fabric-upstream'])) {
+        if (!(owner.buildProfile in ['fabric-modern', FABRIC_UPSTREAM])) {
             return null
         }
         Map result = [main: [java: [], resources: []], test: [java: [], resources: []],
@@ -27,7 +38,7 @@ class FabricSources {
         result.libraryInputs = [tree('libraries/utilities/src/main'), tree('libraries/fabric/src/main'),
                                 tree("libraries/fabric/src/${owner.renderer}/java"),
                                 tree("libraries/fabric/src/${owner.renderer}/resources")]
-        if (owner.renderer == 'blaze-texture-format') {
+        if (owner.renderer == TEXTURE_FORMAT_RENDERER) {
             result.libraryInputs += [tree("libraries/fabric/src/${owner.minecraft}/java"),
                                      tree('libraries/fabric/src/gpu/resources')]
         } else if (owner.renderer == 'renderpearl') {
@@ -35,10 +46,10 @@ class FabricSources {
         }
         List<Map> processed = result.processedGametest.java
         List<String> progress = classes('gametest/mixin/ScenarioProgressMixin',
-                'gametest/IrisFixture', 'gametest/IrisImagePixels',
-                'gametest/RenderScaleTestAccess', 'gametest/RenderScaleTargetFormat')
+                IRIS_FIXTURE, IRIS_IMAGE_PIXELS,
+                RENDER_SCALE_TEST_ACCESS, RENDER_SCALE_TARGET_FORMAT)
         Map irisResources = tree('renderers/modern/src/gametest/resources', ['cbbg-iris-fixture/**'])
-        if (owner.buildProfile == 'fabric-upstream') {
+        if (owner.buildProfile == FABRIC_UPSTREAM) {
             String adapter = 'adapters/fabric/' + owner.minecraft + '/src/'
             result.main.java << tree(adapter + 'main/java')
             result.main.resources << tree('src/main/resources')
@@ -50,13 +61,13 @@ class FabricSources {
                     'render/Rgba8Capture', 'render/DitherController',
                     'render/GenerationNotifications', 'render/NotificationPlatform'))
             List<String> compatibility = classes('platform/LoaderPlatform', 'compat/sulkan/SulkanCompat',
-                    'platform/Text', 'render/MainTargets', 'compat/sodium/CbbgSodiumConfig')
+                    'platform/Text', MAIN_TARGETS, 'compat/sodium/CbbgSodiumConfig')
             result.main.java << tree('adapters/fabric/shared/src/main/java', compatibility)
             result.main.java << tree('adapters/fabric/modern/src/main/java', compatibility)
             processed << tree(adapter + 'processedGametest/java')
             result.processedGametest.resources << tree(adapter + 'processedGametest/resources')
         } else {
-            boolean textureFormat = target.renderer == 'blaze-texture-format'
+            boolean textureFormat = target.renderer == TEXTURE_FORMAT_RENDERER
             boolean gl3 = target.renderer == 'gl3'
             boolean sharedLifecycle = textureFormat || gl3
             List<String> groups = (["renderers/${target.renderer}", "adapters/minecraft/${owner.minecraft}",
@@ -64,7 +75,7 @@ class FabricSources {
             if (textureFormat) {
                 groups << 'adapters/minecraft/blaze-texture-format'
             }
-            if (owner.minecraft in ['1.21.1', '1.21.11']) {
+            if (owner.minecraft in ['1.21.1', MC_1_21_11]) {
                 groups << 'adapters/minecraft/gui-graphics'
             }
             for (String group : groups) {
@@ -76,15 +87,15 @@ class FabricSources {
             }
             result.test.java << tree('adapters/fabric/modern/src/test/java')
             result.test.resources << tree('build-config/fabric-modern/src/test/resources')
-            result.gametest.java << tree('core/src/testSupport/java')
+            result.gametest.java << tree(CORE_TEST_SUPPORT_SOURCES)
             result.main.java << tree('adapters/fabric/shared/src/main/java', sharedLifecycle ? [] : classes(
                     'Cbbg', 'platform/LoaderPlatform', 'command/CbbgClientCommands', 'platform/Text',
                     'command/CommandPlatform', 'config/gui/CbbgConfigWidgets', 'config/gui/WidgetPlatform',
                     'compat/iris/IrisCompat', 'compat/renderscale/RenderScaleCompat',
                     'compat/modmenu/CbbgModMenuApi', 'compat/sodium/CbbgSodiumConfig',
                     'render/stbn/STBNGenerator', 'render/stbn/STBNLoader',
-                    'render/stbn/StbnImagePixels', 'render/stbn/STBNCache', 'render/MainTargets'),
-                    gl3 ? classes('render/MainTargets', 'render/stbn/StbnImagePixels',
+                    'render/stbn/StbnImagePixels', 'render/stbn/STBNCache', MAIN_TARGETS),
+                    gl3 ? classes(MAIN_TARGETS, 'render/stbn/StbnImagePixels',
                             'config/gui/WidgetPlatform') : [])
             result.gametest.java << tree('adapters/fabric/shared/src/gametest/java',
                     sharedLifecycle ? [] : classes('gametest/CbbgConfigScreenGameTest'),
@@ -104,13 +115,13 @@ class FabricSources {
                 result.main.java << tree('renderers/modern/src/main/java', classes(
                         'render/GenerationNotifications', 'render/DitherController',
                         'config/gui/CbbgConfigScreen', 'config/gui/ConfigCanvas'))
-                result.gametest.java << tree('renderers/modern/src/gametest/java', classes(
+                result.gametest.java << tree(MODERN_GAMETEST_SOURCES, classes(
                         'gametest/ModMenuGameTest', 'gametest/OptionalModsGameTest',
-                        'gametest/RenderScaleTestAccess', 'gametest/IrisFixture') +
-                        (gl3 ? [] : classes('gametest/IrisImagePixels', 'gametest/RenderScaleTargetFormat')))
+                        RENDER_SCALE_TEST_ACCESS, IRIS_FIXTURE) +
+                        (gl3 ? [] : classes(IRIS_IMAGE_PIXELS, RENDER_SCALE_TARGET_FORMAT)))
                 processed << tree("renderers/${owner.renderer}/src/processedGametest/java", [],
                         ((owner.java as int) < 25 ? classes('gametest/mixin/ReleaseNoiseMixin') : []) +
-                                (owner.minecraft == '1.21.11' ? classes('gametest/mixin/ReleaseStartupRenderPassMixin',
+                                (owner.minecraft == MC_1_21_11 ? classes('gametest/mixin/ReleaseStartupRenderPassMixin',
                                         'gametest/mixin/ReleaseAllocationFailureMixin') : []))
                 processed << tree("adapters/fabric/${owner.minecraft}/src/processedGametest/java")
                 processed << tree("adapters/minecraft/${owner.minecraft}/src/processedGametest/java")
@@ -119,14 +130,14 @@ class FabricSources {
             } else if (target.id == '26.3-fabric') {
                 processed << tree('renderers/renderpearl/src/processedGametest/java')
                 List<String> shared = classes('gametest/mixin/ScenarioProgressMixin', 'reference/DitherReference',
-                        'gametest/FloatPrecisionGameTest', 'gametest/IrisFixture', 'gametest/IrisImagePixels',
-                        'gametest/RenderScaleTestAccess',
-                        'gametest/RenderScaleTargetFormat',
+                        'gametest/FloatPrecisionGameTest', IRIS_FIXTURE, IRIS_IMAGE_PIXELS,
+                        RENDER_SCALE_TEST_ACCESS,
+                        RENDER_SCALE_TARGET_FORMAT,
                         'gametest/EarlyStartupGameTest', 'gametest/mixin/EarlyPipelineCacheMixin',
                         'gametest/mixin/EarlyRenderPassMixin', 'gametest/WindowResizeGameTest')
                 processed << tree('renderers/renderpearl/src/gametest/java', shared)
-                processed << tree('renderers/modern/src/gametest/java', shared)
-                processed << tree('core/src/testSupport/java', shared)
+                processed << tree(MODERN_GAMETEST_SOURCES, shared)
+                processed << tree(CORE_TEST_SUPPORT_SOURCES, shared)
                 result.processedGametest.resources << tree('renderers/renderpearl/src/processedGametest/resources')
                 result.copies.processedGametest << tree('renderers/renderpearl/src/gametest/resources',
                         ['cbbg-world-goldens/**', 'cbbg.early-startup-test.mixins.json'])
@@ -134,17 +145,17 @@ class FabricSources {
             List<String> resources = ['assets/cbbg/icon.png', 'assets/cbbg/lang/*.json']
             result.copies.main << tree('src/main/resources', resources)
         }
-        if (owner.buildProfile == 'fabric-upstream' || owner.renderer in ['blaze-texture-format', 'gl3']) {
+        if (owner.buildProfile == FABRIC_UPSTREAM || owner.renderer in [TEXTURE_FORMAT_RENDERER, 'gl3']) {
             if (owner.renderer == 'gl3') {
-                processed << tree('renderers/modern/src/gametest/java',
-                        classes('gametest/RenderScaleTestAccess', 'gametest/IrisFixture'))
+                processed << tree(MODERN_GAMETEST_SOURCES,
+                        classes(RENDER_SCALE_TEST_ACCESS, IRIS_FIXTURE))
                 processed << tree('renderers/gl3/src/gametest/java',
-                        classes('gametest/RenderScaleTargetFormat', 'gametest/IrisImagePixels'))
+                        classes(RENDER_SCALE_TARGET_FORMAT, IRIS_IMAGE_PIXELS))
             } else {
                 processed << tree('renderers/renderpearl/src/gametest/java', progress)
-                processed << tree('renderers/modern/src/gametest/java', progress)
+                processed << tree(MODERN_GAMETEST_SOURCES, progress)
             }
-            processed << tree('core/src/testSupport/java', classes('reference/DitherReference'))
+            processed << tree(CORE_TEST_SUPPORT_SOURCES, classes('reference/DitherReference'))
             processed << tree('adapters/fabric/shared/src/processedGametest/java',
                     owner.renderer == 'gl3' ? classes('gametest/ReleaseCacheGameTest',
                             'gametest/ReleaseSettingsGuiGameTest', 'gametest/ReleaseUtilitiesGameTest',
@@ -159,9 +170,9 @@ class FabricSources {
                             'gametest/ReleaseRenderScaleGameTest', 'gametest/ReleaseCommands',
                             'gametest/ReleaseGraphics', 'gametest/ReleaseGameNames',
                             'gametest/ReleaseMapping', 'gametest/ReleaseMaximumNoiseCacheGameTest') : [],
-                    (owner.renderer in ['gl3', 'blaze-texture-format'] ? [] :
+                    (owner.renderer in ['gl3', TEXTURE_FORMAT_RENDERER] ? [] :
                             classes('gametest/ReleaseModMenuGameTest', 'gametest/ReleaseIrisGameTest')) +
-                            (owner.minecraft == '1.21.11' ? classes('gametest/ReleaseGuiCharacters') : []))
+                            (owner.minecraft == MC_1_21_11 ? classes('gametest/ReleaseGuiCharacters') : []))
             result.copies.processedGametest << tree('adapters/fabric/shared/src/processedGametest/resources', [],
                     owner.renderer == 'gl3' ? ['cbbg.release-allocation.mixins.json',
                                                'cbbg.release-startup.mixins.json',

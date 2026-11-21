@@ -17,20 +17,32 @@ class JdkLibraries {
         }
         targetHome.map { installation ->
             File home = installation.asFile
-            File jmods = new File(home, 'jmods')
-            if (jmods.isDirectory()) {
-                def modules = moduleNames.isEmpty()
-                        ? jmods.listFiles().findAll { it.name.endsWith('.jmod') }.sort()
-                        : moduleNames.collect { new File(jmods, it + '.jmod') }
-                if (!modules.isEmpty() && modules.every { it.isFile() }) return project.files(modules)
+            List<File> modules = runtimeModules(home, moduleNames)
+            if (modules) {
+                return project.files(modules)
             }
             File rtJar = new File(home, 'jre/lib/rt.jar')
-            if (!rtJar.isFile()) rtJar = new File(home, 'lib/rt.jar')
-            if (rtJar.isFile()) return project.files(rtJar)
+            if (!rtJar.isFile()) {
+                rtJar = new File(home, 'lib/rt.jar')
+            }
+            if (rtJar.isFile()) {
+                return project.files(rtJar)
+            }
             if (new File(home, 'lib/modules').isFile() && new File(home, 'lib/jrt-fs.jar').isFile()) {
                 return project.files(runtimeJar.flatMap { it.outputJar })
             }
             throw new GradleException('Missing Java runtime libraries for ' + home)
         }
+    }
+
+    private static List<File> runtimeModules(File home, List<String> moduleNames) {
+        File jmods = new File(home, 'jmods')
+        if (!jmods.isDirectory()) {
+            return []
+        }
+        List<File> modules = moduleNames.isEmpty()
+                ? jmods.listFiles().findAll { it.name.endsWith('.jmod') }.sort()
+                : moduleNames.collect { new File(jmods, it + '.jmod') }
+        modules.every { it.isFile() } ? modules : []
     }
 }

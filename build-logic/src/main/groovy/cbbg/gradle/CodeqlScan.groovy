@@ -17,6 +17,8 @@ import org.gradle.process.ExecOperations
 import javax.inject.Inject
 
 abstract class CodeqlScan extends DefaultTask {
+    private static final String DATABASE = 'database'
+
     @Internal abstract DirectoryProperty getRepositoryDirectory()
     @Internal abstract RegularFileProperty getCodeqlExecutable()
     @InputFile abstract RegularFileProperty getCatalogFile()
@@ -82,11 +84,11 @@ abstract class CodeqlScan extends DefaultTask {
                     spec.commandLine([executable] + args)
                 }.assertNormalExitValue()
             }
-            run(['database', 'init', database.absolutePath, '--language=java', '--build-mode=manual',
+            run([DATABASE, 'init', database.absolutePath, '--language=java', '--build-mode=manual',
                  '--source-root=' + root.absolutePath])
-            run(['database', 'trace-command', database.absolutePath, '--'] + build)
-            run(['database', 'finalize', database.absolutePath, '--threads=2', '--ram=4096'])
-            run(['database', 'analyze', database.absolutePath,
+            run([DATABASE, 'trace-command', database.absolutePath, '--'] + build)
+            run([DATABASE, 'finalize', database.absolutePath, '--threads=2', '--ram=4096'])
+            run([DATABASE, 'analyze', database.absolutePath,
                  'codeql/java-queries:codeql-suites/java-code-scanning.qls',
                  '--format=sarif-latest', '--output=' + report.absolutePath,
                  '--sarif-category=' + target.category, '--threads=2', '--ram=4096'])

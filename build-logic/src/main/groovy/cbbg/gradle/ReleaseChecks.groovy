@@ -6,6 +6,31 @@ import java.security.MessageDigest
 import org.gradle.api.GradleException
 
 class ReleaseChecks {
+    private static final String DIRECTORY_OPTION = '--dir'
+    private static final String REPOSITORY_OPTION = '--repo'
+    private static final String RELEASE = 'release'
+    private static final String DOWNLOAD = 'download'
+    private static final String PATTERN_OPTION = '--pattern'
+    private static final String TAG_REF_PREFIX = 'refs/tags/'
+    private static final String COMMITS_PATH = '/commits/'
+    private static final String RELEASE_TAGS_PATH = '/releases/tags/'
+    private static final String SHA256_PREFIX = 'sha256:'
+    private static final String ARTIFACT = 'artifact'
+    private static final String SOURCES = 'sources'
+    private static final String PROVENANCE_FILE = 'provenance.jsonl'
+    private static final String REPOSITORIES_PATH = 'repos/'
+    private static final String UTF8 = 'UTF-8'
+    private static final String UTILITIES = 'utilities'
+    private static final String UTILITIES_SOURCES = 'utilities_sources'
+    private static final String LIBRARY = 'library'
+    private static final String LIBRARY_SOURCES = 'library_sources'
+    private static final String CANDIDATE_FILE = 'candidate.json'
+    private static final String CHECKSUMS_FILE = 'SHA256SUMS'
+    private static final String VERIFY_OPTION = '--verify'
+    private static final String PEEL_TO_COMMIT = '^{commit}'
+    private static final String TAG_MISMATCH_MESSAGE = 'Live release tag differs from source checkout'
+    private static final String REV_PARSE = 'rev-parse'
+
     private static final String PREDICATE = 'https://slsa.dev/provenance/v1'
 
     static Map provenance(File manifest, File bundle, String repo, Closure run) {
@@ -19,25 +44,27 @@ class ReleaseChecks {
         Map<String, File> subjects = [(manifestHash): candidate.file]
         Map<File, String> files = [(candidate.file): manifestHash]
         candidate.records.values().each { record ->
-            (['artifact', 'sources'] + (candidate.data.schema == 3 ? ['mapping'] : []) +
-                    (record.containsKey('utilities') ? ['utilities', 'utilities_sources'] : []) +
-                    (record.containsKey('library') ? ['library', 'library_sources'] : []) +
+            ([ARTIFACT, SOURCES] + (candidate.data.schema == 3 ? ['mapping'] : []) +
+                    (record.containsKey(UTILITIES) ? [UTILITIES, UTILITIES_SOURCES] : []) +
+                    (record.containsKey(LIBRARY) ? [LIBRARY, LIBRARY_SOURCES] : []) +
                     (record.containsKey('sbom') ? ['sbom'] : [])).each { kind ->
                 File path = CandidateFiles.checked(candidate.file.parentFile, record[kind] as Map)
                 String hash = record[kind].sha256
                 files[path] = hash
-                if (!subjects.containsKey(hash)) subjects[hash] = path
+                if (!subjects.containsKey(hash)) {
+                    subjects[hash] = path
+                }
             }
         }
         List reports = []
         subjects.each { String hash, File path ->
             stable(path, hash, bundle, bundleHash)
             List<String> command = ['gh', 'attestation', 'verify', path.absolutePath,
-                    '--bundle', bundle.absolutePath, '--repo', repo,
+                    '--bundle', bundle.absolutePath, REPOSITORY_OPTION, repo,
                     '--signer-workflow', repo + '/.github/workflows/release.yml',
                     '--signer-digest', candidate.data.commit,
                     '--source-digest', candidate.data.commit,
-                    '--source-ref', 'refs/tags/' + candidate.data.release,
+                    '--source-ref', TAG_REF_PREFIX + candidate.data.release,
                     '--deny-self-hosted-runners', '--predicate-type', PREDICATE,
                     '--format', 'json']
             Object verified = CandidateFiles.parse(new StringReader(run(command, candidate.file.parentFile) as String))
@@ -89,14 +116,18 @@ class ReleaseChecks {
                     '--candidate', candidate.file.absolutePath, '--target', id,
                     '--results', indexes[selected.indexOf(id)].absolutePath], sourceRoot) as String
             Object parsed = CandidateFiles.parse(new StringReader(result))
-            if (!(parsed instanceof Map)) throw new IllegalArgumentException('Invalid runtime validation result')
+            if (!(parsed instanceof Map)) {
+                throw new IllegalArgumentException('Invalid runtime validation result')
+            }
             Map runtime = (Map) parsed
             identity(runtime, expected, id)
             targets[id] = [package: packageReport, runtime: runtime]
         }
         Map attestation = provenance(candidate.file, bundle, repo, run)
         identity(attestation, expected)
-        if (attestation.repository != repo) throw new IllegalArgumentException('Provenance repository differs')
+        if (attestation.repository != repo) {
+            throw new IllegalArgumentException('Provenance repository differs')
+        }
         if (CandidateFiles.sha256(candidate.file) != hash) {
             throw new IllegalArgumentException('Candidate manifest changed during validation')
         }
@@ -106,20 +137,26 @@ class ReleaseChecks {
     static Map finalizeCandidate(File manifest, Map results, File sourceRoot, String repo, String tag,
                                   File notes, File output, boolean publish, Closure run) {
         repository(repo)
-        if (manifest.name != 'candidate.json') throw new IllegalArgumentException('Expected candidate.json')
+        if (manifest.name != CANDIDATE_FILE) {
+            throw new IllegalArgumentException('Expected candidate.json')
+        }
         outputGuard(manifest, output)
         CandidateManifest candidate = new CandidateManifest(manifest)
         Map<String, String> internalFiles = candidate.releaseFiles()
-        if (candidate.data.release != tag) throw new IllegalArgumentException('Requested release differs from candidate')
+        if (candidate.data.release != tag) {
+            throw new IllegalArgumentException('Requested release differs from candidate')
+        }
         cleanSource(sourceRoot, candidate.data.commit as String, run)
         Map libraryDependencies = verifyLibraryDependencies(candidate, repo, sourceRoot, run)
-        String body = notes.getText('UTF-8')
-        if (!body.trim()) throw new IllegalArgumentException('Release notes are required')
+        String body = notes.getText(UTF8)
+        if (!body.trim()) {
+            throw new IllegalArgumentException('Release notes are required')
+        }
         Map validation = verify(candidate.file, results,
-                new File(candidate.file.parentFile, 'provenance.jsonl'), sourceRoot, repo, run)
-        String endpoint = 'repos/' + repo
-        String tagEndpoint = endpoint + '/commits/' + segment('refs/tags/' + tag)
-        String releaseEndpoint = endpoint + '/releases/tags/' + segment(tag)
+                new File(candidate.file.parentFile, PROVENANCE_FILE), sourceRoot, repo, run)
+        String endpoint = REPOSITORIES_PATH + repo
+        String tagEndpoint = endpoint + COMMITS_PATH + segment(TAG_REF_PREFIX + tag)
+        String releaseEndpoint = endpoint + RELEASE_TAGS_PATH + segment(tag)
         if (api(tagEndpoint, sourceRoot, run).sha != candidate.data.commit) {
             throw new IllegalArgumentException('Release tag differs from candidate commit')
         }
@@ -138,8 +175,8 @@ class ReleaseChecks {
         Map snapshot = draftSnapshot(release, tag, files)
         File download = Files.createTempDirectory('cbbg-finalize-').toFile()
         try {
-            run(['gh', 'release', 'download', tag, '--repo', repo, '--dir',
-                 download.absolutePath, '--pattern', '*'], sourceRoot)
+            run(['gh', RELEASE, DOWNLOAD, tag, REPOSITORY_OPTION, repo, DIRECTORY_OPTION,
+                 download.absolutePath, PATTERN_OPTION, '*'], sourceRoot)
             if (localFiles(download) != files) {
                 throw new IllegalArgumentException('Downloaded draft files differ from candidate')
             }
@@ -154,7 +191,7 @@ class ReleaseChecks {
             throw new IllegalArgumentException('Release tag changed during finalization checks')
         }
         Map report = [release: tag, repository: repo, source_commit: candidate.data.commit,
-                       manifest_sha256: internalFiles['candidate.json'], files: files, draft: snapshot,
+                       manifest_sha256: internalFiles[CANDIDATE_FILE], files: files, draft: snapshot,
                       validation: validation, library_dependencies: libraryDependencies, notes: body, published: false]
         CandidateFiles.writeNew(output, report)
         if (publish) {
@@ -166,7 +203,7 @@ class ReleaseChecks {
             overwrite(output, report)
             File request = File.createTempFile('cbbg-release-request-', '.json')
             try {
-                request.setText(JsonOutput.toJson([draft: false, body: body]), 'UTF-8')
+                request.setText(JsonOutput.toJson([draft: false, body: body]), UTF8)
                 try {
                     run(['gh', 'api', '--method', 'PATCH', endpoint + '/releases/' + snapshot.id,
                          '--input', request.absolutePath], sourceRoot)
@@ -197,7 +234,7 @@ class ReleaseChecks {
         }
         Map reports = [:]
         candidate.records.each { id, record ->
-            if (!record.containsKey('library')) {
+            if (!record.containsKey(LIBRARY)) {
                 return
             }
             if (!(record.library_release instanceof String)) {
@@ -206,47 +243,47 @@ class ReleaseChecks {
             }
             ReleaseIdentity library = ReleaseIdentity.parse(record.library_release as String)
             library.requireProduct('lib')
-            String endpoint = 'repos/' + repo
-            Map release = releaseApi(endpoint + '/releases/tags/' + segment(library.tag), source, run)
+            String endpoint = REPOSITORIES_PATH + repo
+            Map release = releaseApi(endpoint + RELEASE_TAGS_PATH + segment(library.tag), source, run)
             Map snapshot = allowDraft && release.draft == true
                     ? draftSnapshot(release, library.tag) : publishedSnapshot(release, library.tag)
-            String tagEndpoint = endpoint + '/commits/' + segment('refs/tags/' + library.tag)
+            String tagEndpoint = endpoint + COMMITS_PATH + segment(TAG_REF_PREFIX + library.tag)
             String commit = api(tagEndpoint, source, run).sha as String
             CandidateFiles.releaseIdentity(library.tag, commit)
-            List<String> kinds = ['library', 'library_sources', 'utilities', 'utilities_sources']
+            List<String> kinds = [LIBRARY, LIBRARY_SOURCES, UTILITIES, UTILITIES_SOURCES]
             if (kinds.any { !(record[it] instanceof Map) }) {
                 throw new GradleException('Library dependency requires exact library and utility binary/source references for ' + id)
             }
-            Set names = (kinds.collect { record[it].path } + ['provenance.jsonl']) as Set
+            Set names = (kinds.collect { record[it].path } + [PROVENANCE_FILE]) as Set
             if (!release.assets*.name.containsAll(names)) {
                 throw new GradleException('Immutable library release ' + library.tag + ' is missing dependency assets for ' + id)
             }
             File download = Files.createTempDirectory('cbbg-library-release-').toFile()
             try {
-                List<String> command = ['gh', 'release', 'download', library.tag, '--repo', repo, '--dir', download.absolutePath]
-                names.each { command.addAll(['--pattern', it as String]) }
+                List<String> command = ['gh', RELEASE, DOWNLOAD, library.tag, REPOSITORY_OPTION, repo, DIRECTORY_OPTION, download.absolutePath]
+                names.each { command.addAll([PATTERN_OPTION, it as String]) }
                 run(command, source)
                 kinds.each { kind ->
                     Map reference = record[kind] as Map
                     CandidateFiles.checked(download, reference)
                     Map remote = release.assets.find { it.name == reference.path } as Map
-                    if (!(remote.digest in [null, 'sha256:' + reference.sha256])) {
+                    if (!(remote.digest in [null, SHA256_PREFIX + reference.sha256])) {
                         throw new GradleException('Published library asset digest differs: ' + reference.path)
                     }
                 }
-                File bundle = new File(download, 'provenance.jsonl')
+                File bundle = new File(download, PROVENANCE_FILE)
                 String provenanceHash = CandidateFiles.sha256(bundle)
                 Map remoteProvenance = release.assets.find { it.name == bundle.name } as Map
-                if (!(remoteProvenance.digest in [null, 'sha256:' + provenanceHash])) {
+                if (!(remoteProvenance.digest in [null, SHA256_PREFIX + provenanceHash])) {
                     throw new GradleException('Published library provenance digest differs: ' + library.tag)
                 }
                 kinds.each { kind ->
                     File asset = CandidateFiles.checked(download, record[kind] as Map)
                     Object verified = CandidateFiles.parse(new StringReader(run(['gh', 'attestation', 'verify', asset.absolutePath,
-                            '--bundle', bundle.absolutePath, '--repo', repo,
+                            '--bundle', bundle.absolutePath, REPOSITORY_OPTION, repo,
                             '--signer-workflow', repo + '/.github/workflows/release.yml',
                             '--signer-digest', commit, '--source-digest', commit,
-                            '--source-ref', 'refs/tags/' + library.tag, '--deny-self-hosted-runners',
+                            '--source-ref', TAG_REF_PREFIX + library.tag, '--deny-self-hosted-runners',
                             '--predicate-type', PREDICATE, '--format', 'json'], source) as String))
                     if (!(verified instanceof List) || verified.isEmpty() || verified.any { item ->
                         Map statement = item?.verificationResult?.statement as Map
@@ -260,8 +297,8 @@ class ReleaseChecks {
                 if (CandidateFiles.sha256(bundle) != provenanceHash ||
                         api(tagEndpoint, source, run).sha != commit ||
                         (allowDraft && release.draft == true
-                                ? draftSnapshot(releaseApi(endpoint + '/releases/tags/' + segment(library.tag), source, run), library.tag)
-                                : publishedSnapshot(releaseApi(endpoint + '/releases/tags/' + segment(library.tag), source, run), library.tag)) != snapshot) {
+                                ? draftSnapshot(releaseApi(endpoint + RELEASE_TAGS_PATH + segment(library.tag), source, run), library.tag)
+                                : publishedSnapshot(releaseApi(endpoint + RELEASE_TAGS_PATH + segment(library.tag), source, run), library.tag)) != snapshot) {
                     throw new GradleException('Library release or provenance changed during dependency verification: ' + library.tag)
                 }
                 if (record.containsKey('library_provenance') &&
@@ -306,14 +343,16 @@ class ReleaseChecks {
         String commit = sourceCommit(source, run)
         CandidateFiles.releaseIdentity(tag, commit)
         cleanSource(source, commit, run)
-        String localTag = run(['git', 'rev-parse', '--verify',
-                'refs/tags/' + tag + '^{commit}'], source).trim()
-        if (localTag != commit) throw new IllegalArgumentException('Source checkout differs from selected tag')
-        String endpoint = 'repos/' + repo
-        String tagEndpoint = endpoint + '/commits/' + segment('refs/tags/' + tag)
-        String releaseEndpoint = endpoint + '/releases/tags/' + segment(tag)
+        String localTag = run(['git', REV_PARSE, VERIFY_OPTION,
+                TAG_REF_PREFIX + tag + PEEL_TO_COMMIT], source).trim()
+        if (localTag != commit) {
+            throw new IllegalArgumentException('Source checkout differs from selected tag')
+        }
+        String endpoint = REPOSITORIES_PATH + repo
+        String tagEndpoint = endpoint + COMMITS_PATH + segment(TAG_REF_PREFIX + tag)
+        String releaseEndpoint = endpoint + RELEASE_TAGS_PATH + segment(tag)
         if (api(tagEndpoint, source, run).sha != commit) {
-            throw new IllegalArgumentException('Live release tag differs from source checkout')
+            throw new IllegalArgumentException(TAG_MISMATCH_MESSAGE)
         }
         Map published = releaseApi(releaseEndpoint, source, run)
         String candidateRun = candidateRunId(published.body as String)
@@ -322,13 +361,13 @@ class ReleaseChecks {
         assetDir.mkdirs()
         if (candidateRun) {
             checkedCandidateRun(candidateRun, repo, commit, tag, source, run)
-            run(['gh', 'run', 'download', candidateRun, '--repo', repo, '--name',
-                 'cbbg-candidate', '--dir', assetDir.absolutePath], source)
+            run(['gh', 'run', DOWNLOAD, candidateRun, REPOSITORY_OPTION, repo, '--name',
+                 'cbbg-candidate', DIRECTORY_OPTION, assetDir.absolutePath], source)
         } else {
-            run(['gh', 'release', 'download', tag, '--repo', repo, '--dir',
-                 assetDir.absolutePath, '--pattern', '*'], source)
+            run(['gh', RELEASE, DOWNLOAD, tag, REPOSITORY_OPTION, repo, DIRECTORY_OPTION,
+                 assetDir.absolutePath, PATTERN_OPTION, '*'], source)
         }
-        File manifest = new File(assetDir, 'candidate.json')
+        File manifest = new File(assetDir, CANDIDATE_FILE)
         CandidateManifest candidate = new CandidateManifest(manifest)
         Map<String, String> files = candidate.releaseFiles()
         if (candidate.data.release != tag || candidate.data.commit != commit) {
@@ -347,8 +386,8 @@ class ReleaseChecks {
         if (candidateRun) {
             File publicDir = Files.createTempDirectory('cbbg-public-assets-').toFile()
             try {
-                run(['gh', 'release', 'download', tag, '--repo', repo, '--dir',
-                     publicDir.absolutePath, '--pattern', '*'], source)
+                run(['gh', RELEASE, DOWNLOAD, tag, REPOSITORY_OPTION, repo, DIRECTORY_OPTION,
+                     publicDir.absolutePath, PATTERN_OPTION, '*'], source)
                 if (localFiles(publicDir) != releaseFiles) {
                     throw new IllegalArgumentException('Downloaded release assets differ from candidate')
                 }
@@ -356,7 +395,7 @@ class ReleaseChecks {
                 removeTree(publicDir)
             }
         }
-        provenance(manifest, new File(assetDir, 'provenance.jsonl'), repo, run)
+        provenance(manifest, new File(assetDir, PROVENANCE_FILE), repo, run)
         if (!draft) {
             verifyLibraryDependencies(candidate, repo, source, run)
         }
@@ -372,12 +411,12 @@ class ReleaseChecks {
         }
         checkFiles(assetDir, files)
         CandidateFiles.writeNew(metadataFile, metadata)
-        githubOutput.append(matrixValue(metadata), 'UTF-8')
+        githubOutput.append(matrixValue(metadata), UTF8)
         if (metadata.records.size() == 1) {
             Map record = (Map) metadata.records[0]
             githubOutput.append(githubValues(record, candidate.specifications[record.targets[0]],
                     CandidateFiles.checked(assetDir, record.artifact as Map),
-                    CandidateFiles.checked(assetDir, record.sources as Map)), 'UTF-8')
+                    CandidateFiles.checked(assetDir, record.sources as Map)), UTF8)
         }
         metadata
     }
@@ -409,14 +448,14 @@ class ReleaseChecks {
             throw new IllegalArgumentException('Legacy release tag differs from source properties')
         }
         cleanSource(source, commit, run)
-        if (run(['git', 'rev-parse', '--verify', 'refs/tags/' + tag + '^{commit}'], source).trim() != commit) {
+        if (run(['git', REV_PARSE, VERIFY_OPTION, TAG_REF_PREFIX + tag + PEEL_TO_COMMIT], source).trim() != commit) {
             throw new IllegalArgumentException('Source checkout differs from selected tag')
         }
-        String endpoint = 'repos/' + repo
-        String tagEndpoint = endpoint + '/commits/' + segment('refs/tags/' + tag)
-        String releaseEndpoint = endpoint + '/releases/tags/' + segment(tag)
+        String endpoint = REPOSITORIES_PATH + repo
+        String tagEndpoint = endpoint + COMMITS_PATH + segment(TAG_REF_PREFIX + tag)
+        String releaseEndpoint = endpoint + RELEASE_TAGS_PATH + segment(tag)
         if (api(tagEndpoint, source, run).sha != commit) {
-            throw new IllegalArgumentException('Live release tag differs from source checkout')
+            throw new IllegalArgumentException(TAG_MISMATCH_MESSAGE)
         }
         boolean prerelease = version.contains('-')
         Map published = releaseApi(releaseEndpoint, source, run)
@@ -429,13 +468,13 @@ class ReleaseChecks {
             throw new IllegalArgumentException('Published legacy assets differ from expected jars')
         }
         assetDir.mkdirs()
-        run(['gh', 'release', 'download', tag, '--repo', repo, '--dir',
-             assetDir.absolutePath, '--pattern', artifactName, '--pattern', sourcesName], source)
+        run(['gh', RELEASE, DOWNLOAD, tag, REPOSITORY_OPTION, repo, DIRECTORY_OPTION,
+             assetDir.absolutePath, PATTERN_OPTION, artifactName, PATTERN_OPTION, sourcesName], source)
         Map<String, String> downloaded = localFiles(assetDir)
         if (downloaded.keySet() != expectedNames ||
                 assetDir.listFiles().size() != downloaded.size() ||
                 expectedNames.any { name -> snapshot.assets[name] != null &&
-                        snapshot.assets[name] != 'sha256:' + downloaded[name] }) {
+                        snapshot.assets[name] != SHA256_PREFIX + downloaded[name] }) {
             throw new IllegalArgumentException('Downloaded legacy assets differ from release')
         }
         Map metadata = Publication.resolve(
@@ -448,9 +487,9 @@ class ReleaseChecks {
         }
         CandidateFiles.writeNew(metadataFile, metadata)
         Map record = (Map) metadata.records[0]
-        githubOutput.append(matrixValue(metadata), 'UTF-8')
+        githubOutput.append(matrixValue(metadata), UTF8)
         githubOutput.append(githubValues(record, [java: LegacyPublication.javaVersion(source)],
-                new File(assetDir, artifactName), new File(assetDir, sourcesName)), 'UTF-8')
+                new File(assetDir, artifactName), new File(assetDir, sourcesName)), UTF8)
         metadata
     }
 
@@ -467,14 +506,14 @@ class ReleaseChecks {
         String commit = sourceCommit(sourceRoot, run)
         cleanSource(sourceRoot, commit, run)
         if (metadata.release != tag || metadata.source_commit != commit ||
-                run(['git', 'rev-parse', '--verify', 'refs/tags/' + tag + '^{commit}'], sourceRoot).trim() != commit) {
+                run(['git', REV_PARSE, VERIFY_OPTION, TAG_REF_PREFIX + tag + PEEL_TO_COMMIT], sourceRoot).trim() != commit) {
             throw new IllegalArgumentException('Publishing metadata differs from selected tag or source')
         }
-        String endpoint = 'repos/' + repo
-        String tagEndpoint = endpoint + '/commits/' + segment('refs/tags/' + tag)
-        String releaseEndpoint = endpoint + '/releases/tags/' + segment(tag)
+        String endpoint = REPOSITORIES_PATH + repo
+        String tagEndpoint = endpoint + COMMITS_PATH + segment(TAG_REF_PREFIX + tag)
+        String releaseEndpoint = endpoint + RELEASE_TAGS_PATH + segment(tag)
         if (api(tagEndpoint, sourceRoot, run).sha != commit) {
-            throw new IllegalArgumentException('Live release tag differs from source checkout')
+            throw new IllegalArgumentException(TAG_MISMATCH_MESSAGE)
         }
         Map release = releaseApi(releaseEndpoint, sourceRoot, run)
         boolean draft = metadata.dry_run_only == true
@@ -490,23 +529,23 @@ class ReleaseChecks {
             snapshot = publishedSnapshot(release, tag, null, release.prerelease as Boolean)
             expected = LegacyPublication.metadata(sourceRoot, tag, snapshot.body as String,
                     release.prerelease as boolean, assets, commit)
-            files = expected.records[0].subMap(['artifact', 'sources']).values().collectEntries {
+            files = expected.records[0].subMap([ARTIFACT, SOURCES]).values().collectEntries {
                 [(it.path): it.sha256]
             }
             if (files.any { name, digest -> !snapshot.assets.containsKey(name) ||
-                    !(snapshot.assets[name] in [null, 'sha256:' + digest]) }) {
+                    !(snapshot.assets[name] in [null, SHA256_PREFIX + digest]) }) {
                 throw new IllegalArgumentException('Legacy assets differ from immutable release')
             }
             specification = [java: LegacyPublication.javaVersion(sourceRoot)]
         } else {
-            CandidateManifest candidate = new CandidateManifest(new File(assets, 'candidate.json'))
+            CandidateManifest candidate = new CandidateManifest(new File(assets, CANDIDATE_FILE))
             files = candidate.releaseFiles()
             if (candidate.data.release != tag || candidate.data.commit != commit) {
                 throw new IllegalArgumentException('Candidate differs from selected tag or source')
             }
             Map releasedFiles = candidateRunId(release.body as String) ? publicFiles(candidate) : files
             snapshot = draft ? draftSnapshot(release, tag, releasedFiles) : publishedSnapshot(release, tag, releasedFiles)
-            provenance(candidate.file, new File(assets, 'provenance.jsonl'), repo, run)
+            provenance(candidate.file, new File(assets, PROVENANCE_FILE), repo, run)
             expected = Publication.metadata(candidate.file, sourceRoot, snapshot.body as String)
             specification = candidate.specifications[target]
         }
@@ -523,7 +562,7 @@ class ReleaseChecks {
         }
         Map current = releaseApi(releaseEndpoint, sourceRoot, run)
         Map selectedFiles = metadata.legacy == true ? null :
-                (candidateRunId(release.body as String) ? publicFiles(new CandidateManifest(new File(assets, 'candidate.json'))) : files)
+                (candidateRunId(release.body as String) ? publicFiles(new CandidateManifest(new File(assets, CANDIDATE_FILE))) : files)
         Map currentSnapshot = draft ? draftSnapshot(current, tag, selectedFiles) :
                 publishedSnapshot(current, tag, selectedFiles,
                         metadata.legacy == true ? release.prerelease as Boolean : null)
@@ -536,7 +575,7 @@ class ReleaseChecks {
         Map record = matches[0]
         githubOutput.append(githubValues(record, specification,
                 CandidateFiles.checked(assets, record.artifact as Map),
-                CandidateFiles.checked(assets, record.sources as Map)), 'UTF-8')
+                CandidateFiles.checked(assets, record.sources as Map)), UTF8)
         record
     }
 
@@ -546,7 +585,9 @@ class ReleaseChecks {
 
     private static void identity(Map report, Map expected, String target = null) {
         expected.each { key, value ->
-            if (report[key] != value) throw new IllegalArgumentException('Validation result differs from candidate: ' + key)
+            if (report[key] != value) {
+                throw new IllegalArgumentException('Validation result differs from candidate: ' + key)
+            }
         }
         if (target != null && report.target != target) {
             throw new IllegalArgumentException('Validation result differs from selected target: ' + target)
@@ -566,8 +607,10 @@ class ReleaseChecks {
     }
 
     private static String sourceCommit(File root, Closure run) {
-        String commit = run(['git', 'rev-parse', 'HEAD'], root).trim()
-        if (!(commit ==~ /[0-9a-f]{40}/)) throw new IllegalArgumentException('Invalid source commit')
+        String commit = run(['git', REV_PARSE, 'HEAD'], root).trim()
+        if (!(commit ==~ /[0-9a-f]{40}/)) {
+            throw new IllegalArgumentException('Invalid source commit')
+        }
         commit
     }
 
@@ -581,7 +624,9 @@ class ReleaseChecks {
 
     private static Map api(String endpoint, File cwd, Closure run) {
         Object parsed = CandidateFiles.parse(new StringReader(run(['gh', 'api', endpoint], cwd) as String))
-        if (!(parsed instanceof Map)) throw new IllegalArgumentException('Invalid GitHub API response')
+        if (!(parsed instanceof Map)) {
+            throw new IllegalArgumentException('Invalid GitHub API response')
+        }
         parsed as Map
     }
 
@@ -593,12 +638,12 @@ class ReleaseChecks {
                 throw error
             }
         }
-        String marker = '/releases/tags/'
+        String marker = RELEASE_TAGS_PATH
         int split = endpoint.indexOf(marker)
         if (split < 0) {
             throw new IllegalArgumentException('Invalid release endpoint')
         }
-        String tag = java.net.URLDecoder.decode(endpoint.substring(split + marker.length()), 'UTF-8')
+        String tag = java.net.URLDecoder.decode(endpoint.substring(split + marker.length()), UTF8)
         String repo = endpoint.substring(0, split)
         for (int page = 1; ; page++) {
             Object parsed = CandidateFiles.parse(new StringReader(run(
@@ -621,7 +666,7 @@ class ReleaseChecks {
     }
 
     private static String segment(String value) {
-        java.net.URLEncoder.encode(value, 'UTF-8')
+        java.net.URLEncoder.encode(value, UTF8)
     }
 
     private static Map draftSnapshot(Map release, String tag, Map files = null) {
@@ -642,7 +687,7 @@ class ReleaseChecks {
             assets[asset.name] = asset.subMap(['id', 'size', 'digest', 'updated_at'])
         }
         if (files != null && (assets.keySet() != files.keySet() ||
-                files.any { name, hash -> !(assets[name].digest in [null, 'sha256:' + hash]) })) {
+                files.any { name, hash -> !(assets[name].digest in [null, SHA256_PREFIX + hash]) })) {
             throw new IllegalArgumentException('Draft assets differ from candidate')
         }
         [id: release.id, tag: tag, assets: assets, name: release.name,
@@ -669,7 +714,7 @@ class ReleaseChecks {
             assets[name] = asset.digest
         }
         if (files != null && (assets.keySet() != files.keySet() ||
-                files.any { name, hash -> !(assets[name] in [null, 'sha256:' + hash]) })) {
+                files.any { name, hash -> !(assets[name] in [null, SHA256_PREFIX + hash]) })) {
             throw new IllegalArgumentException('Published assets differ from candidate')
         }
         [id: release.id, body: release.body, assets: assets]
@@ -677,9 +722,9 @@ class ReleaseChecks {
 
     static Map<String, String> publicFiles(CandidateManifest candidate) {
         Map<String, String> files = [:]
-        List<String> kinds = ['artifact', 'sources', 'library_provenance']
+        List<String> kinds = [ARTIFACT, SOURCES, 'library_provenance']
         if (candidate.identity.product == 'lib' || !candidate.data.containsKey('product')) {
-            kinds += ['utilities', 'utilities_sources']
+            kinds += [UTILITIES, UTILITIES_SOURCES]
         }
         candidate.records.values().each { record ->
             kinds.each { kind ->
@@ -694,9 +739,9 @@ class ReleaseChecks {
                 }
             }
         }
-        files['provenance.jsonl'] = CandidateFiles.sha256(new File(candidate.file.parentFile, 'provenance.jsonl'))
+        files[PROVENANCE_FILE] = CandidateFiles.sha256(new File(candidate.file.parentFile, PROVENANCE_FILE))
         String list = files.keySet().sort().collect { files[it] + '  ' + it }.join('\n') + '\n'
-        files.SHA256SUMS = MessageDigest.getInstance('SHA-256').digest(list.getBytes('UTF-8')).encodeHex().toString()
+        files.SHA256SUMS = MessageDigest.getInstance('SHA-256').digest(list.getBytes(UTF8)).encodeHex().toString()
         files
     }
 
@@ -711,13 +756,13 @@ class ReleaseChecks {
         }
         try {
             files.each { name, hash ->
-                if (name != 'SHA256SUMS') {
+                if (name != CHECKSUMS_FILE) {
                     File source = new File(candidate.file.parentFile, name)
                     Files.copy(source.toPath(), new File(output, name).toPath())
                 }
             }
-            new File(output, 'SHA256SUMS').setText(files.keySet().findAll { it != 'SHA256SUMS' }
-                    .sort().collect { files[it] + '  ' + it }.join('\n') + '\n', 'UTF-8')
+            new File(output, CHECKSUMS_FILE).setText(files.keySet().findAll { it != CHECKSUMS_FILE }
+                    .sort().collect { files[it] + '  ' + it }.join('\n') + '\n', UTF8)
             if (localFiles(output) != files) {
                 throw new IllegalArgumentException('Public assets changed during preparation')
             }
@@ -744,7 +789,7 @@ class ReleaseChecks {
     }
 
     private static void checkedCandidateRun(String id, String repo, String commit, String tag, File source, Closure run) {
-        Map result = api('repos/' + repo + '/actions/runs/' + id, source, run)
+        Map result = api(REPOSITORIES_PATH + repo + '/actions/runs/' + id, source, run)
         String workflow = '.github/workflows/release.yml'
         if (result.head_sha != commit || result.event != 'workflow_dispatch' ||
                 result.conclusion != 'success' ||
@@ -756,7 +801,9 @@ class ReleaseChecks {
     private static Map<String, String> localFiles(File directory) {
         Map<String, String> files = [:]
         directory.listFiles().each { file ->
-            if (file.isFile() && !Files.isSymbolicLink(file.toPath())) files[file.name] = CandidateFiles.sha256(file)
+            if (file.isFile() && !Files.isSymbolicLink(file.toPath())) {
+                files[file.name] = CandidateFiles.sha256(file)
+            }
         }
         files
     }
@@ -774,7 +821,7 @@ class ReleaseChecks {
     }
 
     private static void overwrite(File output, Map report) {
-        output.setText(JsonOutput.prettyPrint(JsonOutput.toJson(report)) + '\n', 'UTF-8')
+        output.setText(JsonOutput.prettyPrint(JsonOutput.toJson(report)) + '\n', UTF8)
     }
 
     private static void removeTree(File root) {
@@ -794,7 +841,7 @@ class ReleaseChecks {
                       cf_relations: curseforge.relations, cf_changelog: curseforge.changelog]
         values.evidence = record.evidence
                 ? CandidateFiles.checked(artifact.parentFile, record.evidence as Map).absolutePath : ''
-        ['utilities', 'utilities_sources', 'library', 'library_sources'].each { kind ->
+        [UTILITIES, UTILITIES_SOURCES, LIBRARY, LIBRARY_SOURCES].each { kind ->
             values[kind] = record[kind]
                     ? CandidateFiles.checked(artifact.parentFile, record[kind] as Map).absolutePath : ''
         }

@@ -8,10 +8,18 @@ import org.gradle.jvm.toolchain.JavaLanguageVersion
 import org.gradle.jvm.toolchain.JavaToolchainService
 
 class TargetsPlugin implements Plugin<Project> {
+    private static final String CI_CHECK_TASK = 'ciCheck'
+    private static final String JVM_ARGS_PROPERTY = 'org.gradle.jvmargs'
+    private static final String VERIFICATION_GROUP = 'verification'
+    private static final String TARGETS_FILE = 'targets.json'
+    private static final String VERIFY_FABRIC_COMPATIBILITY_TASK = 'verifyFabricCompatibility'
+    private static final String RUN_CLIENT_TASK = 'runClient'
+    private static final String CHECK_TASK = 'check'
+
     void apply(Project project) {
         project.pluginManager.apply('base')
         project.pluginManager.apply('jvm-toolchains')
-        def catalog = TargetCatalog.read(project.file('targets.json'))
+        def catalog = TargetCatalog.read(project.file(TARGETS_FILE))
         def single = project.providers.gradleProperty('target')
         def multiple = project.providers.gradleProperty('targets')
         if (single.present && multiple.present) {
@@ -27,44 +35,48 @@ class TargetsPlugin implements Plugin<Project> {
         Map<String, String> forwarded = [:]
         ['compat', 'backend', 'testJava', 'testRenderScale'].each { key ->
             def value = project.providers.gradleProperty(key)
-            if (value.present) forwarded[key] = value.get()
+            if (value.present) {
+                forwarded[key] = value.get()
+            }
         }
         List<String> options = []
         Map<String, String> systemProperties = project.gradle.startParameter.systemPropertiesArgs
-        String jvmArgs = systemProperties.containsKey('org.gradle.jvmargs')
-                ? systemProperties['org.gradle.jvmargs'] : project.providers.gradleProperty('org.gradle.jvmargs').orNull
+        String jvmArgs = systemProperties.containsKey(JVM_ARGS_PROPERTY)
+                ? systemProperties[JVM_ARGS_PROPERTY] : project.providers.gradleProperty(JVM_ARGS_PROPERTY).orNull
         if (jvmArgs != null) {
             options.add('-Dorg.gradle.jvmargs=' + jvmArgs)
         }
         options.add('--max-workers=' + project.gradle.startParameter.maxWorkerCount)
-        if (project.gradle.startParameter.rerunTasks) options.add('--rerun-tasks')
+        if (project.gradle.startParameter.rerunTasks) {
+            options.add('--rerun-tasks')
+        }
         options.add(project.gradle.startParameter.buildCacheEnabled ? '--build-cache' : '--no-build-cache')
         List<String> requested = project.gradle.startParameter.taskNames
-        int checkIndex = requested.findIndexOf { it in ['ciCheck', ':ciCheck'] }
+        int checkIndex = requested.findIndexOf { it in [CI_CHECK_TASK, ':ciCheck'] }
         int devIndex = requested.findIndexOf { it in ['dev', ':dev'] }
         boolean checkedDev = checkIndex >= 0 && devIndex == checkIndex + 1 &&
                 !project.gradle.startParameter.continueOnFailure &&
                 project.gradle.startParameter.excludedTaskNames.empty
-        ['build', 'check', 'ciCheck', 'qualityCheck', 'runClient', 'genSources', 'dev', 'compileJava',
+        ['build', CHECK_TASK, CI_CHECK_TASK, 'qualityCheck', RUN_CLIENT_TASK, 'genSources', 'dev', 'compileJava',
          'checkPackages', 'optimizeReleaseJar', 'candidateBuildOutputs'].each { operation ->
             def parent = project.tasks.names.contains(operation)
                     ? project.tasks.named(operation) : project.tasks.register(operation)
             parent.configure {
-                group = operation in ['check', 'ciCheck', 'qualityCheck'] ? 'verification' : 'build'
+                group = operation in [CHECK_TASK, CI_CHECK_TASK, 'qualityCheck'] ? VERIFICATION_GROUP : 'build'
                 description = "Run ${operation} for the selected targets."
             }
             if (operation == 'dev' && checkedDev) {
-                parent.configure { dependsOn(project.tasks.named('ciCheck')) }
+                parent.configure { dependsOn(project.tasks.named(CI_CHECK_TASK)) }
                 return
             }
-            def targets = operation == 'runClient' ? selected : owners
+            def targets = operation == RUN_CLIENT_TASK ? selected : owners
             targets.each { target ->
                 def child = project.tasks.register("${operation}_${target.id}", TargetBuild) {
                     repositoryDirectory.set(project.layout.projectDirectory)
                     targetId.set(target.id as String)
                     profile.set((target.buildProfile ?: '') as String)
                     delegate.operation.set(operation)
-                    if (operation == 'ciCheck' && checkedDev) {
+                    if (operation == CI_CHECK_TASK && checkedDev) {
                         additionalOperations.set(['dev'])
                     }
                     offline.set(project.gradle.startParameter.offline)
@@ -77,7 +89,7 @@ class TargetsPlugin implements Plugin<Project> {
                     }.map { it.metadata.installationPath })
                     usesService(serial)
                     doFirst {
-                        if (operation == 'runClient' && selected.size() != 1) {
+                        if (operation == RUN_CLIENT_TASK && selected.size() != 1) {
                             throw new GradleException('runClient requires exactly one target; selected: ' +
                                     selected.collect { it.id }.join(', ') + '. Launch with ./gradlew runClient -Ptarget=<id>; IDs are listed in targets.json.')
                         }
@@ -87,7 +99,7 @@ class TargetsPlugin implements Plugin<Project> {
             }
         }
         def minimums = project.tasks.register('determineFabricMinimums') {
-            group = 'verification'
+            group = VERIFICATION_GROUP
             description = 'Locally find dependency lower/upper bounds, update metadata and verify the release jar.'
         }
         Map<String, String> localInputs = [:]
@@ -116,16 +128,16 @@ class TargetsPlugin implements Plugin<Project> {
             List<Map> phases = []
             if (family.size() > 1) {
                 phases.add([name: 'local_search_' + owner.id,
-                        target: owner, operation: 'verifyFabricCompatibility', strict: false])
+                        target: owner, operation: VERIFY_FABRIC_COMPATIBILITY_TASK, strict: false])
                 phases.add([name: 'local_updateFabricMinimums', target: owner,
                         operation: 'updateFabricMinimums', strict: false])
                 family.each { target -> phases.add([name: 'local_strict_' + target.id,
-                        target: target, operation: 'verifyFabricCompatibility', strict: true]) }
+                        target: target, operation: VERIFY_FABRIC_COMPATIBILITY_TASK, strict: true]) }
             } else {
                 phases.add([name: 'local_updateFabricMinimums', target: family.first(),
                         operation: 'updateFabricMinimums', strict: false])
                 phases.add([name: 'local_verifyFabricCompatibility', target: family.first(),
-                        operation: 'verifyFabricCompatibility', strict: true])
+                        operation: VERIFY_FABRIC_COMPATIBILITY_TASK, strict: true])
             }
             def previousPhase = null
             phases.each { plan ->
@@ -151,10 +163,10 @@ class TargetsPlugin implements Plugin<Project> {
             minimums.configure { dependsOn(previousPhase) }
         }
         project.tasks.register('checkCatalog') {
-            group = 'verification'
+            group = VERIFICATION_GROUP
             description = 'Validate the distribution catalog.'
-            inputs.file(project.layout.projectDirectory.file('targets.json'))
-            doLast { TargetCatalog.read(project.file('targets.json')) }
+            inputs.file(project.layout.projectDirectory.file(TARGETS_FILE))
+            doLast { TargetCatalog.read(project.file(TARGETS_FILE)) }
         }
         project.tasks.register('targetMatrix') {
             group = 'help'
@@ -175,10 +187,10 @@ class TargetsPlugin implements Plugin<Project> {
             }
         }
         project.tasks.register('codeqlScan', CodeqlScan) {
-            group = 'verification'
+            group = VERIFICATION_GROUP
             description = 'Analyze each supported artifact in a separate CodeQL database.'
             repositoryDirectory.set(project.layout.projectDirectory)
-            catalogFile.set(project.layout.projectDirectory.file('targets.json'))
+            catalogFile.set(project.layout.projectDirectory.file(TARGETS_FILE))
             codeqlExecutable.set(project.layout.file(project.providers.gradleProperty('codeqlExecutable')
                     .map { project.file(it) }))
             legacyTarget.set(project.providers.gradleProperty('codeqlLegacyTarget').orElse(''))
@@ -186,7 +198,7 @@ class TargetsPlugin implements Plugin<Project> {
             outputDirectory.set(project.layout.projectDirectory.dir('.gradle/codeql-results'))
             outputs.upToDateWhen { false }
         }
-        project.tasks.named('check') { dependsOn('checkCatalog') }
+        project.tasks.named(CHECK_TASK) { dependsOn('checkCatalog') }
         project.tasks.register('bundleCandidate', BundleCandidate) {
             group = 'distribution'
             description = 'Bundle recorded build outputs without rebuilding them.'
