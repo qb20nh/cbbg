@@ -11,6 +11,7 @@ import java.util.Collections;
 import java.util.EnumMap;
 import java.util.Set;
 import java.util.WeakHashMap;
+import java.util.function.BooleanSupplier;
 import java.util.function.IntConsumer;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL30;
@@ -22,6 +23,10 @@ public final class ClassicFramebuffers {
   private static final Set<RenderTarget> TARGETS = Collections.newSetFromMap(new WeakHashMap<>());
   private static CbbgConfig.PixelFormat previousFormat;
   private static boolean previousActive;
+  private static BooleanSupplier noFloatFormats =
+      () ->
+          Boolean.FALSE.equals(SUPPORTED.get(CbbgConfig.PixelFormat.RGBA16F))
+              && Boolean.FALSE.equals(SUPPORTED.get(CbbgConfig.PixelFormat.RGBA32F));
 
   private ClassicFramebuffers() {}
 
@@ -34,8 +39,11 @@ public final class ClassicFramebuffers {
   }
 
   public static boolean hasDetectedNoFloatFormats() {
-    return Boolean.FALSE.equals(SUPPORTED.get(CbbgConfig.PixelFormat.RGBA16F))
-        && Boolean.FALSE.equals(SUPPORTED.get(CbbgConfig.PixelFormat.RGBA32F));
+    return noFloatFormats.getAsBoolean();
+  }
+
+  public static void setFormatStatus(BooleanSupplier unsupported) {
+    noFloatFormats = unsupported;
   }
 
   public static void tick() {

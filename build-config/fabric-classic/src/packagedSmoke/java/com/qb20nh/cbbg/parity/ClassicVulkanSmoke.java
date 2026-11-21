@@ -8,6 +8,8 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.Screenshot;
 import net.minecraft.client.gui.screens.TitleScreen;
 import org.lwjgl.glfw.GLFW;
+import org.lwjgl.system.MemoryUtil;
+import org.lwjgl.system.Pointer;
 
 /** Observes VulkanMod on a GLFW no-API window without using OpenGL for the test. */
 public final class ClassicVulkanSmoke {
@@ -27,6 +29,27 @@ public final class ClassicVulkanSmoke {
 
   public static void observePresent() {
     presentations++;
+  }
+
+  /** Called only by the fixture agent after the real Vulkan format query. */
+  public static void maskFormatFeatures(int format, Object properties) {
+    String profile = System.getProperty("cbbg.test.vulkanFormatMask", "");
+    if ((format == 109 && (profile.equals("full") || profile.equals("both")))
+        || (format == 97 && profile.equals("both"))) {
+      try {
+        long offset = properties.getClass().getField("OPTIMALTILINGFEATURES").getLong(null);
+        long address = ((Pointer) properties).address() + offset;
+        int original = MemoryUtil.memGetInt(address);
+        int blend = 0x100;
+        if ((original & blend) == 0) {
+          throw new AssertionError("The test device already lacks blend support for " + format);
+        }
+        MemoryUtil.memPutInt(address, original & ~blend);
+        System.out.println("CBBG_CLASSIC_VULKAN_MASK format=" + format + " feature=blend");
+      } catch (ReflectiveOperationException failure) {
+        throw new AssertionError("Could not mask the Vulkan test capability", failure);
+      }
+    }
   }
 
   public static void observeDither(Object pipeline) {
@@ -73,7 +96,9 @@ public final class ClassicVulkanSmoke {
         } else {
           boolean reference = Boolean.getBoolean("cbbg.test.reference");
           boolean disabled = Boolean.getBoolean("cbbg.test.disabled");
-          if (!reference) checkSceneFormat(disabled ? 44 : 97);
+          if (!reference) {
+            checkSceneFormat(Integer.getInteger("cbbg.test.vulkanSceneFormat", disabled ? 44 : 97));
+          }
           capture(client, "vulkan-world.png", !reference && !disabled);
         }
         System.out.println("CBBG_CLASSIC_VULKAN_WORLD presentations=" + (presentations - joinedAt));

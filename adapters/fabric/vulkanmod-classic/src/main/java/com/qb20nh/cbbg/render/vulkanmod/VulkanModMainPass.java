@@ -4,6 +4,8 @@ import static org.lwjgl.vulkan.VK10.*;
 
 import com.qb20nh.cbbg.CbbgClient;
 import com.qb20nh.cbbg.config.CbbgConfig;
+import com.qb20nh.cbbg.render.ClassicFramebuffers;
+import com.qb20nh.cbbg.render.FormatPolicy;
 import net.vulkanmod.gl.GlTexture;
 import net.vulkanmod.vulkan.Renderer;
 import net.vulkanmod.vulkan.Vulkan;
@@ -24,10 +26,15 @@ public final class VulkanModMainPass implements MainPass {
   private boolean active;
   private CbbgConfig.PixelFormat requested;
   private int format;
+  private boolean checkedFormats;
+  private boolean halfFloatSupported;
+  private boolean fullFloatSupported;
 
   public VulkanModMainPass(Renderer renderer, MainPass original) {
     this.renderer = renderer;
     this.original = original;
+    ClassicFramebuffers.setFormatStatus(
+        () -> checkedFormats && !halfFloatSupported && !fullFloatSupported);
   }
 
   @Override
@@ -44,7 +51,20 @@ public final class VulkanModMainPass implements MainPass {
     }
     if (requested != CbbgConfig.get().pixelFormat()) {
       requested = CbbgConfig.get().pixelFormat();
-      format = selectFormat(requested, stack);
+      if (!checkedFormats) {
+        VkFormatProperties properties = VkFormatProperties.malloc(stack);
+        halfFloatSupported = supportsFormat(VK_FORMAT_R16G16B16A16_SFLOAT, properties);
+        fullFloatSupported = supportsFormat(VK_FORMAT_R32G32B32A32_SFLOAT, properties);
+        checkedFormats = true;
+      }
+      format =
+          toVkFormat(
+              FormatPolicy.effective(
+                  requested,
+                  candidate ->
+                      candidate == CbbgConfig.PixelFormat.RGBA16F
+                          ? halfFloatSupported
+                          : fullFloatSupported));
     }
     var swapchain = renderer.getSwapChain();
     int width = swapchain.getWidth();
@@ -131,18 +151,12 @@ public final class VulkanModMainPass implements MainPass {
     }
   }
 
-  @SuppressWarnings("deprecation")
-  private static int selectFormat(CbbgConfig.PixelFormat requested, MemoryStack stack) {
-    VkFormatProperties properties = VkFormatProperties.malloc(stack);
-    if (requested == CbbgConfig.PixelFormat.RGBA32F
-        && supportsFormat(VK_FORMAT_R32G32B32A32_SFLOAT, properties)) {
-      return VK_FORMAT_R32G32B32A32_SFLOAT;
-    }
-    if (requested != CbbgConfig.PixelFormat.RGBA8
-        && supportsFormat(VK_FORMAT_R16G16B16A16_SFLOAT, properties)) {
-      return VK_FORMAT_R16G16B16A16_SFLOAT;
-    }
-    return VK_FORMAT_R8G8B8A8_UNORM;
+  private static int toVkFormat(CbbgConfig.PixelFormat format) {
+    return switch (format) {
+      case RGBA8 -> VK_FORMAT_R8G8B8A8_UNORM;
+      case RGBA16F -> VK_FORMAT_R16G16B16A16_SFLOAT;
+      case RGBA32F -> VK_FORMAT_R32G32B32A32_SFLOAT;
+    };
   }
 
   private static boolean supportsFormat(int format, VkFormatProperties properties) {
@@ -151,7 +165,8 @@ public final class VulkanModMainPass implements MainPass {
     int required =
         VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT
             | VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT
-            | VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT;
+            | VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT
+            | VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT;
     return (properties.optimalTilingFeatures() & required) == required;
   }
 
