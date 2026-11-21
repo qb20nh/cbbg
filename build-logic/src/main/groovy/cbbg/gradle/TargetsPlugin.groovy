@@ -33,7 +33,9 @@ class TargetsPlugin implements Plugin<Project> {
         Map<String, String> systemProperties = project.gradle.startParameter.systemPropertiesArgs
         String jvmArgs = systemProperties.containsKey('org.gradle.jvmargs')
                 ? systemProperties['org.gradle.jvmargs'] : project.providers.gradleProperty('org.gradle.jvmargs').orNull
-        if (jvmArgs != null) options.add('-Dorg.gradle.jvmargs=' + jvmArgs)
+        if (jvmArgs != null) {
+            options.add('-Dorg.gradle.jvmargs=' + jvmArgs)
+        }
         options.add('--max-workers=' + project.gradle.startParameter.maxWorkerCount)
         if (project.gradle.startParameter.rerunTasks) options.add('--rerun-tasks')
         options.add(project.gradle.startParameter.buildCacheEnabled ? '--build-cache' : '--no-build-cache')
@@ -62,7 +64,9 @@ class TargetsPlugin implements Plugin<Project> {
                     targetId.set(target.id as String)
                     profile.set((target.buildProfile ?: '') as String)
                     delegate.operation.set(operation)
-                    if (operation == 'ciCheck' && checkedDev) additionalOperations.set(['dev'])
+                    if (operation == 'ciCheck' && checkedDev) {
+                        additionalOperations.set(['dev'])
+                    }
                     offline.set(project.gradle.startParameter.offline)
                     delegate.options.set(options)
                     buildProperties.set(forwarded)
@@ -90,7 +94,9 @@ class TargetsPlugin implements Plugin<Project> {
         ['compatibilityPython', 'compatibilityRuntime', 'compatibilityJava', 'compatibilityManageDisplay',
          'compatibilityDisplayDirectory', 'compatibilityWaylandDisplay', 'compatibilityEglVendorFile'].each { key ->
             def value = project.providers.gradleProperty(key)
-            if (value.present) localInputs[key] = value.get()
+            if (value.present) {
+                localInputs[key] = value.get()
+            }
         }
         Map owner = owners.size() == 1 ? owners.first() : null
         List<Map> family = []

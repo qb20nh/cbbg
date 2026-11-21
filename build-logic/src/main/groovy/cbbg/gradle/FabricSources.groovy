@@ -16,7 +16,9 @@ class FabricSources {
     }
 
     static Map layout(Map target, Map owner) {
-        if (!(owner.buildProfile in ['fabric-modern', 'fabric-upstream'])) return null
+        if (!(owner.buildProfile in ['fabric-modern', 'fabric-upstream'])) {
+            return null
+        }
         Map result = [main: [java: [], resources: []], test: [java: [], resources: []],
                       gametest: [java: [], resources: []], processedGametest: [java: [], resources: []],
                       copies: [main: [], gametest: [], processedGametest: []],
@@ -59,8 +61,12 @@ class FabricSources {
             boolean sharedLifecycle = textureFormat || gl3
             List<String> groups = (["renderers/${target.renderer}", "adapters/minecraft/${owner.minecraft}",
                     "adapters/fabric/${owner.minecraft}"] + (target.sourceGroups ?: [])).unique()
-            if (textureFormat) groups << 'adapters/minecraft/blaze-texture-format'
-            if (owner.minecraft in ['1.21.1', '1.21.11']) groups << 'adapters/minecraft/gui-graphics'
+            if (textureFormat) {
+                groups << 'adapters/minecraft/blaze-texture-format'
+            }
+            if (owner.minecraft in ['1.21.1', '1.21.11']) {
+                groups << 'adapters/minecraft/gui-graphics'
+            }
             for (String group : groups) {
                 result.main.java << tree(group + '/src/main/java')
                 result.main.resources << tree(group + '/src/main/resources')
@@ -185,8 +191,12 @@ class FabricSources {
             layout[name][kind].eachWithIndex { Map spec, int index ->
                 def tree = project.objects.sourceDirectorySet("${name}${kind}${index}", spec.path as String)
                 tree.srcDir(new File(root, spec.path as String))
-                if (spec.includes) tree.include(spec.includes)
-                if (spec.excludes) tree.exclude(spec.excludes)
+                if (spec.includes) {
+                    tree.include(spec.includes)
+                }
+                if (spec.excludes) {
+                    tree.exclude(spec.excludes)
+                }
                 selected.add(tree)
             }
             if (kind == 'java' && name in ['gametest', 'processedGametest'] && layout.legacyGametestApi) {
@@ -208,8 +218,12 @@ class FabricSources {
     static void copyResources(Project project, File root, Map layout, String name, Object task) {
         for (Map spec : layout.copies[name]) {
             task.from(project.fileTree(new File(root, spec.path as String)) {
-                if (spec.includes) include(spec.includes)
-                if (spec.excludes) exclude(spec.excludes)
+                if (spec.includes) {
+                    include(spec.includes)
+                }
+                if (spec.excludes) {
+                    exclude(spec.excludes)
+                }
             })
         }
     }
@@ -221,8 +235,12 @@ class FabricSources {
     }
 
     static boolean contains(Map spec, String path) {
-        if (spec.file) return path == spec.path
-        if (!path.startsWith(spec.path + '/')) return false
+        if (spec.file) {
+            return path == spec.path
+        }
+        if (!path.startsWith(spec.path + '/')) {
+            return false
+        }
         String relative = path.substring(spec.path.length() + 1)
         (!spec.includes || spec.includes.any { SelectorUtils.matchPath(it as String, relative, true) }) &&
                 !spec.excludes.any { SelectorUtils.matchPath(it as String, relative, true) }

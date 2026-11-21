@@ -60,7 +60,9 @@ class ReleaseIdentity {
     }
 
     void requireTargets(Collection<Map> targets) {
-        if (!targeted) return
+        if (!targeted) {
+            return
+        }
         Set owners = targets.collect { it.artifactOf ?: (it.id ?: "${it.minecraft}-${it.loader}") } as Set
         Map owner = owners.size() == 1 ? targets.find {
             (it.id ?: "${it.minecraft}-${it.loader}") == owners.first()

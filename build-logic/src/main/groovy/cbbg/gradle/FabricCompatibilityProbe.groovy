@@ -94,9 +94,13 @@ class FabricCompatibilityProbe {
 
     static boolean usesX11(Map target) {
         // GLFW needs a keyboard-capable Xwayland display; Minecraft 26.3 switches to SDL.
-        List<String> version = target.minecraft.tokenize('.')
-        int major = version[0].toInteger()
-        major < 26 || (major == 26 && version[1].toInteger() < 3)
+        String version = target.minecraft
+        def match = version =~ /([0-9]+)\.([0-9]+)(?:\.[0-9]+)*/
+        if (!match.matches() || !match.group(1).isInteger() || !match.group(2).isInteger()) {
+            throw new GradleException('Invalid Minecraft version for display selection: ' + version)
+        }
+        int major = match.group(1).toInteger()
+        major < 26 || (major == 26 && match.group(2).toInteger() < 3)
     }
 
     static Map cacheInputs(Map reportInputs, Map spec, File coordinator, File search) {
@@ -172,7 +176,9 @@ class FabricCompatibilityProbe {
                         '--backend=headless-backend.so', '--renderer=gl', '--socket=' + display,
                         '--width=1280', '--height=720',
                         '--log=' + new File(cell, 'compositor.log').absolutePath]
-                if (x11) compositorCommand.add('--xwayland')
+                if (x11) {
+                    compositorCommand.add('--xwayland')
+                }
                 def builder = new ProcessBuilder(compositorCommand)
                 builder.environment().put('XDG_RUNTIME_DIR', displayDirectory.absolutePath)
                 if (spec.eglVendor != null) {
@@ -186,9 +192,13 @@ class FabricCompatibilityProbe {
                     File compositorLog = new File(cell, 'compositor.log')
                     if (x11 && compositorLog.isFile()) {
                         def match = compositorLog.text =~ /xserver listening on display (:\d+)/
-                        if (match.find()) xDisplay = match.group(1)
+                        if (match.find()) {
+                            xDisplay = match.group(1)
+                        }
                     }
-                    if (new File(displayDirectory, display).exists() && (!x11 || xDisplay != null)) break
+                    if (new File(displayDirectory, display).exists() && (!x11 || xDisplay != null)) {
+                        break
+                    }
                     Thread.sleep(50)
                 }
                 if (!new File(displayDirectory, display).exists() || (x11 && xDisplay == null)) {
@@ -201,10 +211,10 @@ class FabricCompatibilityProbe {
             (spec.optionalMods as Map).each { name, mod ->
                 locked[name] = [pin: mod.pin, sha256: mod.sha256]
             }
-            if (spec.dependencyLock == null) lock.text = JsonOutput.toJson([schemaVersion: 1, target: spec.target.id,
+            if (spec.dependencyLock == null) { lock.text = JsonOutput.toJson([schemaVersion: 1, target: spec.target.id,
                     dependencies: locked,
                     gametestApi: [fabricApiPin: spec.target.dependencies.fabricApi,
-                            sha256: CandidateFiles.sha256(spec.gametest as File)]])
+                            sha256: CandidateFiles.sha256(spec.gametest as File)]]) }
             List command = [spec.python, new File(spec.root as File, 'scripts/fabric_parity_runtime.py'),
                     '--target', spec.target.id, '--runtime', spec.runtime.directory,
                     '--java', spec.java, '--game-dir', new File(cell, 'game'),
@@ -216,21 +226,33 @@ class FabricCompatibilityProbe {
                     '--timeout', '600',
                     '--loader-version', spec.loaderVersion, '--fabric-api-version', spec.apiVersion,
                     '--gametest-api-version', spec.target.dependencies.fabricApi]
-            if (!spec.restart && spec.config != null) command.addAll(['--cbbg-config', spec.config])
-            if (spec.externalLibrary != null) command.addAll(['--external-library', spec.externalLibrary])
+            if (!spec.restart && spec.config != null) {
+                command.addAll(['--cbbg-config', spec.config])
+            }
+            if (spec.externalLibrary != null) {
+                command.addAll(['--external-library', spec.externalLibrary])
+            }
             (spec.optionalMods as Map).each { name, mod ->
                 command.addAll(['--dependency', name + '=' + mod.file.absolutePath])
             }
-            if (spec.startupMode != null) command.addAll(['--startup-mode', spec.startupMode])
-            if (spec.startupCache != null) command.addAll(['--startup-cache', spec.startupCache])
-            if (!spec.strict && !spec.restart) command.add('--test-dependency-minimums')
+            if (spec.startupMode != null) {
+                command.addAll(['--startup-mode', spec.startupMode])
+            }
+            if (spec.startupCache != null) {
+                command.addAll(['--startup-cache', spec.startupCache])
+            }
+            if (!spec.strict && !spec.restart) {
+                command.add('--test-dependency-minimums')
+            }
             Map result
             List<String> phases = spec.restart ? ['control', 'prepare', 'verify'] : [null]
             for (String phase : phases) {
                 List phaseCommand = new ArrayList(command)
                 File game = new File(cell, phase == 'control' ? 'control-game' : 'game')
                 phaseCommand[phaseCommand.indexOf('--game-dir') + 1] = game
-                if (phase != null) phaseCommand.addAll(['--restart-phase', phase])
+                if (phase != null) {
+                    phaseCommand.addAll(['--restart-phase', phase])
+                }
                 File log = new File(cell, phase == null ? 'runner.log' : phase + '-runner.log')
                 int exit = run.call(phaseCommand, log)
                 File receipt = new File(game, phase == null ? 'probe.json' : phase + '-probe.json')
@@ -248,7 +270,9 @@ class FabricCompatibilityProbe {
                 List failures = gameLines.findAll {
                     it.contains('java.lang.AssertionError:') || it.startsWith('Caused by:')
                 }
-                if (!passed && failures) reason = failures.last()
+                if (!passed && failures) {
+                    reason = failures.last()
+                }
                 String signal = gameLines.find { it.startsWith('#  SIG') }
                 if (!passed && signal) {
                     reason = 'Native crash: ' + signal.substring(1).trim()
@@ -267,17 +291,23 @@ class FabricCompatibilityProbe {
                 }
                 result = [status: status, receipt: receipt.absolutePath, reason: passed ? null : reason,
                           graphicsEnvironment: environment]
-                if (!passed) break
+                if (!passed) {
+                    break
+                }
             }
             List<File> evidence = []
             cell.traverse(type: FileType.FILES) { File file ->
-                if (!file.name.endsWith('.lock')) evidence.add(file)
+                if (!file.name.endsWith('.lock')) {
+                    evidence.add(file)
+                }
             }
             result + [files: evidence]
         } finally {
             if (compositor != null) {
                 compositor.destroy()
-                if (!compositor.waitFor(5, TimeUnit.SECONDS)) compositor.destroyForcibly().waitFor()
+                if (!compositor.waitFor(5, TimeUnit.SECONDS)) {
+                    compositor.destroyForcibly().waitFor()
+                }
             }
             if (spec.manageDisplay) {
                 displayDirectory.listFiles()?.each { Files.deleteIfExists(it.toPath()) }

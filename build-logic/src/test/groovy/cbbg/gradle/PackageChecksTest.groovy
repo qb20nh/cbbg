@@ -138,8 +138,12 @@ class PackageChecksTest {
         assertEquals([declared_classes: 2, mixin_configs: 1],
                 PackageChecks.verifyFabricMetadata(s.artifact, s.target, '1.4.0'))
         for (String requirement : [null, '>=0.3.6']) {
-            if (requirement == null) s.metadata.depends.remove('mixinextras')
-            else s.metadata.depends.mixinextras = requirement
+            if (requirement == null) {
+                s.metadata.depends.remove('mixinextras')
+            }
+            else {
+                s.metadata.depends.mixinextras = requirement
+            }
             s.binary['fabric.mod.json'] = json(s.metadata)
             archive(s.artifact, s.binary)
             fails('Dependencies differ from target') {

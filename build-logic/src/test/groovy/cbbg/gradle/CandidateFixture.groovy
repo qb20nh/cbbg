@@ -17,7 +17,9 @@ class CandidateFixture {
                 renderer: 'renderpearl', backends: ['opengl', 'vulkan'], implemented: implemented,
                 buildProfile: 'fabric-modern', sourceGroups: ['adapters/fabric/modern'],
                 dependencies: [loader: '0.19.5'], compatibilityProfiles: [none: ['opengl', 'vulkan']]]
-        if (minecraftDependency != null) target.minecraftDependency = minecraftDependency
+        if (minecraftDependency != null) {
+            target.minecraftDependency = minecraftDependency
+        }
         Map catalog = [schema: 1, ciTargets: [target.id], targets: [target],
                        projects: [modrinth: 'UBlXUQbC', curseforge: '1408371']]
         new File(root, 'gradle.properties').text = 'mod_version=1.4.0\narchives_base_name=cbbg\nmodrinth_project_id=UBlXUQbC\ncurseforge_project_id=1408371\n'
@@ -58,11 +60,13 @@ class CandidateFixture {
             name + ' -> ' + name + ':'
         }.join('\n') + '\n'
         File sbom = new File(bundle, base + '-sbom.cdx.json')
-        if (withSbom) CandidateFiles.writeNew(sbom, [bomFormat: 'CycloneDX', specVersion: '1.6', version: 1,
+        if (withSbom) { CandidateFiles.writeNew(sbom, [bomFormat: 'CycloneDX', specVersion: '1.6', version: 1,
                                      components: [[type: 'library', group: 'com.google.code.gson',
                                                    name: 'gson', version: '2.8.9',
-                                                   purl: 'pkg:maven/com.google.code.gson/gson@2.8.9']]])
-        if (withSbom) sources['META-INF/cbbg/sbom.cdx.json'] = sbom.bytes
+                                                   purl: 'pkg:maven/com.google.code.gson/gson@2.8.9']]]) }
+        if (withSbom) {
+            sources['META-INF/cbbg/sbom.cdx.json'] = sbom.bytes
+        }
         sources['META-INF/cbbg/proguard.map'] = new File(bundle, base + '-mapping.txt').bytes
         archive(new File(bundle, base + '-sources.jar'), sources)
         def reference = { String name -> CandidateFiles.reference(bundle, name) }
@@ -75,7 +79,9 @@ class CandidateFixture {
                               ordinary_metadata: reference('ordinary-metadata.json'),
                               runtime_lock: reference('runtime-lock.json'), dependency_lock: reference('dependency-lock.json'),
                               drivers: [ordinary: reference('ordinary-driver.jar')]]]
-        if (withSbom) record.sbom = reference(sbom.name)
+        if (withSbom) {
+            record.sbom = reference(sbom.name)
+        }
         Map manifest = [schema: 3, release: 'v1.4.0', commit: 'a' * 40,
                         catalog_sha256: CandidateFiles.canonicalHash(catalog), selected_targets: [target.id], targets: [record]]
         File manifestFile = new File(bundle, 'candidate.json')

@@ -21,7 +21,9 @@ class Publication {
     }
 
     static void requireUploadAllowed(Map metadata) {
-        if (metadata.legacy != true) ReleaseIdentity.parse(metadata.release as String).requireProduct('cbbg')
+        if (metadata.legacy != true) {
+            ReleaseIdentity.parse(metadata.release as String).requireProduct('cbbg')
+        }
         if (metadata.dry_run_only == true) {
             throw new GradleException('Draft publication metadata is dry-run only; refusing upload')
         }
@@ -119,9 +121,13 @@ class Publication {
         }
         for (int index = 0; index < expected.records.size(); index++) {
             Object item = published.records[index]
-            if (!(item instanceof Map)) throw new GradleException('Invalid publishing record')
+            if (!(item instanceof Map)) {
+                throw new GradleException('Invalid publishing record')
+            }
             Map normalized = new LinkedHashMap((Map) item)
-            if (!(normalized.curseforge instanceof Map)) throw new GradleException('Invalid CurseForge metadata')
+            if (!(normalized.curseforge instanceof Map)) {
+                throw new GradleException('Invalid CurseForge metadata')
+            }
             normalized.curseforge = new LinkedHashMap(normalized.curseforge)
             normalized.curseforge.remove('game_versions')
             if (normalized != expected.records[index]) {
@@ -139,7 +145,9 @@ class Publication {
         if (!(services in ['both', 'modrinth', 'curseforge'])) {
             throw new GradleException('Invalid publishing service selection')
         }
-        if (metadata.legacy != true) ReleaseIdentity.parse(metadata.release as String).requireProduct('cbbg')
+        if (metadata.legacy != true) {
+            ReleaseIdentity.parse(metadata.release as String).requireProduct('cbbg')
+        }
         Map resolved = (Map) CandidateFiles.parse(new StringReader(JsonOutput.toJson(metadata)))
         List modrinthVersions = []
         List modrinthLoaders = []
@@ -217,7 +225,9 @@ class Publication {
         Map expected = (Map) checked[0]
         Map record = (Map) checked[1]
         String metadataHash = (String) checked[2]
-        if (record.targets[0] != target) throw new GradleException('Publishing target differs from selected target')
+        if (record.targets[0] != target) {
+            throw new GradleException('Publishing target differs from selected target')
+        }
         File assets = candidate != null ? candidate.parentFile : legacyAssets
         Map upload = record.modrinth
         List<String> kinds = uploadKinds(record)
@@ -247,7 +257,9 @@ class Publication {
                       metadata_sha256: metadataHash,
                       project_id: project.id, version_number: upload.version_number,
                       artifact: record.artifact, sources: record.sources, action: 'upload']
-        if (record.containsKey('evidence')) result.evidence = record.evidence
+        if (record.containsKey('evidence')) {
+            result.evidence = record.evidence
+        }
         if (candidate != null) result.manifest_sha256 = expected.manifest_sha256
         if (!matches.isEmpty()) {
             Map existing = matches[0]
@@ -304,10 +316,18 @@ class Publication {
                 Map item = fileMatches[0]
                 String sha512 = digest(file, 'SHA-512')
                 List fileTypes = [null]
-                if (kind == 'sources') fileTypes = ['sources-jar']
-                else if (kind in ['utilities_sources', 'library_sources']) fileTypes = [null, 'sources-jar']
-                else if (kind in ['utilities', 'library']) fileTypes = [null, 'other']
-                else if (kind == 'evidence' && uploadedVersionId == null) fileTypes = [null, 'signature']
+                if (kind == 'sources') {
+                    fileTypes = ['sources-jar']
+                }
+                else if (kind in ['utilities_sources', 'library_sources']) {
+                    fileTypes = [null, 'sources-jar']
+                }
+                else if (kind in ['utilities', 'library']) {
+                    fileTypes = [null, 'other']
+                }
+                else if (kind == 'evidence' && uploadedVersionId == null) {
+                    fileTypes = [null, 'signature']
+                }
                 if (item.hashes?.sha512 != sha512 || item.primary != (kind == 'artifact') ||
                         !fileTypes.contains(item.file_type)) {
                     throw new GradleException('Existing Modrinth file differs from candidate: ' + kind)

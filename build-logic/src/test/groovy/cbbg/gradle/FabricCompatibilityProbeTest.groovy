@@ -19,6 +19,15 @@ class FabricCompatibilityProbeTest {
         assertFalse(FabricCompatibilityProbe.usesX11([minecraft: '26.3', java: 25]))
     }
 
+    @Test void rejectsMalformedMinecraftVersionsBeforeSelectingADisplay() {
+        [null, '', '26', '26..2', '26.x', 'x.3', '26.999999999999'].each { version ->
+            GradleException failure = assertThrows(GradleException) {
+                FabricCompatibilityProbe.usesX11([minecraft: version])
+            }
+            assertEquals('Invalid Minecraft version for display selection: ' + version, failure.message)
+        }
+    }
+
     @Test void attributesDependencyErrorsToTheReportedMods() {
         String framework = 'HARD_DEP cbbg-renderer-test 1.0.0 {depends fabric-client-gametest-api-v1 @ [*]}, ' +
                 'HARD_DEP_NO_CANDIDATE fabric-client-gametest-api-v1 2.0.0 {depends fabricloader @ [>=0.16.0]}'
@@ -328,7 +337,9 @@ class FabricCompatibilityProbeTest {
             FabricCompatibilityProbe.execute(spec + [startupMode: mode, startupCache: selectedCache]) { List args, File log ->
                 assertEquals(mode, args[args.indexOf('--startup-mode') + 1])
                 assertEquals(selectedCache != null, args.contains('--startup-cache'))
-                if (selectedCache != null) assertEquals(selectedCache, args[args.indexOf('--startup-cache') + 1])
+                if (selectedCache != null) {
+                    assertEquals(selectedCache, args[args.indexOf('--startup-cache') + 1])
+                }
                 assertEquals(spec.config, args[args.indexOf('--cbbg-config') + 1])
                 log.text = 'forwarded startup inputs'
                 1

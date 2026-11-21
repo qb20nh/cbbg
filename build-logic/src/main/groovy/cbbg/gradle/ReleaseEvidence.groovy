@@ -9,15 +9,21 @@ import java.util.zip.ZipOutputStream
 class ReleaseEvidence {
     private static Map<String, File> contents(CandidateManifest candidate, String target) {
         Map record = candidate.records[target]
-        if (!(record?.sbom instanceof Map)) throw new GradleException('Release evidence requires an SBOM')
+        if (!(record?.sbom instanceof Map)) {
+            throw new GradleException('Release evidence requires an SBOM')
+        }
         Map<String, File> files = ['candidate.json': candidate.file,
                                   'provenance.jsonl': new File(candidate.file.parentFile, 'provenance.jsonl')]
         ['sbom', 'mapping'].each { kind ->
             File file = CandidateFiles.checked(candidate.file.parentFile, record[kind] as Map)
-            if (files.containsKey(file.name)) throw new GradleException('Duplicate release evidence filename')
+            if (files.containsKey(file.name)) {
+                throw new GradleException('Duplicate release evidence filename')
+            }
             files[file.name] = file
         }
-        if (files.values().any { !it.isFile() }) throw new GradleException('Missing release evidence input')
+        if (files.values().any { !it.isFile() }) {
+            throw new GradleException('Missing release evidence input')
+        }
         files
     }
 
@@ -37,7 +43,9 @@ class ReleaseEvidence {
         Map<String, String> hashes = files.collectEntries { name, file -> [(name): CandidateFiles.sha256(file)] }
         byte[] checksumList = checksums(candidate)
         File output = archive(candidate, target)
-        if (output.exists()) throw new GradleException('Release evidence archive already exists')
+        if (output.exists()) {
+            throw new GradleException('Release evidence archive already exists')
+        }
         try {
             output.withOutputStream { stream ->
                 ZipOutputStream zip = new ZipOutputStream(stream)
@@ -47,8 +55,12 @@ class ReleaseEvidence {
                         ZipEntry entry = new ZipEntry(name)
                         entry.time = 0
                         zip.putNextEntry(entry)
-                        if (name == 'SHA256SUMS') zip.write(checksumList)
-                        else files[name].withInputStream { input -> input.transferTo(zip) }
+                        if (name == 'SHA256SUMS') {
+                            zip.write(checksumList)
+                        }
+                        else {
+                            files[name].withInputStream { input -> input.transferTo(zip) }
+                        }
                         zip.closeEntry()
                     }
                 } finally {
@@ -70,7 +82,9 @@ class ReleaseEvidence {
     static Map reference(CandidateManifest candidate, String target) {
         Map<String, File> files = contents(candidate, target)
         File output = archive(candidate, target)
-        if (!output.isFile()) throw new GradleException('Missing release evidence archive')
+        if (!output.isFile()) {
+            throw new GradleException('Missing release evidence archive')
+        }
         new ZipFile(output).withCloseable { zip ->
             List<String> names = zip.entries().collect { it.name }
             if (names.size() != files.size() + 1 || names.toSet() != (files.keySet() + ['SHA256SUMS']) as Set) {

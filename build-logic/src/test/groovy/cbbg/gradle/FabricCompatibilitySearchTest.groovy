@@ -153,7 +153,9 @@ class FabricCompatibilitySearchTest {
             FabricCompatibilitySearch.familyPasses(targets, '0.18.4', '0.143.12+26.1') {
                 Map target, String loader, String api ->
                 tested.add(target.id)
-                if (target.id == '26.1.1-fabric') throw new GradleException('GPU blocked')
+                if (target.id == '26.1.1-fabric') {
+                    throw new GradleException('GPU blocked')
+                }
                 true
             }
         }
@@ -269,7 +271,9 @@ class FabricCompatibilitySearchTest {
                             '\n[selected: selected, names: modNames]') as Map
             Set expected = profile.tokenize('+') as Set
             expected.add('sodium')
-            if (expected.contains('renderscale')) expected.add('clothconfig')
+            if (expected.contains('renderscale')) {
+                expected.add('clothconfig')
+            }
             assertEquals(expected, resolved.selected)
             assertEquals('sulkan', resolved.names.sulkan)
             resolved.selected.each { assertNotNull(target.dependencies[resolved.names[it]]) }
@@ -309,7 +313,9 @@ class FabricCompatibilitySearchTest {
     @Test void stopsOnAnInconclusiveTest() {
         assertThrows(GradleException) {
             FabricCompatibilitySearch.minimum(['1.0.0', '1.0.1', '1.0.2'], '1.0.2') {
-                if (it == '1.0.0') throw new GradleException('Test runtime unavailable')
+                if (it == '1.0.0') {
+                    throw new GradleException('Test runtime unavailable')
+                }
                 true
             }
         }

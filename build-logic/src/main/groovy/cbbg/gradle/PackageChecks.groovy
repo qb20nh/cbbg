@@ -163,8 +163,12 @@ class PackageChecks {
                     minecraft: target.minecraftDependency ?: target.minecraft, java: '>=' + target.java,
                     'fabric-api': (target.dependencies.minimumFabricApi ? '>=' + target.dependencies.minimumFabricApi : '*') +
                             (target.dependencies.fabricApiUpperExclusive ? ' <' + target.dependencies.fabricApiUpperExclusive : '')]
-            if (product == 'lib') dependencies.remove('fabric-api')
-            if (libraryDependency != null) dependencies.cbbg_lib = libraryDependency
+            if (product == 'lib') {
+                dependencies.remove('fabric-api')
+            }
+            if (libraryDependency != null) {
+                dependencies.cbbg_lib = libraryDependency
+            }
             if (product == 'cbbg' && target.minecraft == '1.21.1') {
                 dependencies.mixinextras = '>=' + MINECRAFT_1211_MIXIN_EXTRAS_MINIMUM
             }
@@ -181,23 +185,33 @@ class PackageChecks {
                 }
                 ['com/qb20nh/cbbg/api/Dithering.class', 'com/qb20nh/cbbg/api/DitherOptions.class',
                  'com/qb20nh/cbbg/api/NoiseVolume.class', 'com/qb20nh/cbbg/render/DitherPass.class'].each { name ->
-                    if (!present.contains(name)) throw new GradleException('Missing CBBG Lib public API: ' + name)
+                    if (!present.contains(name)) {
+                        throw new GradleException('Missing CBBG Lib public API: ' + name)
+                    }
                 }
                 String helper = target.minecraft == '26.2' ? 'DitherPipelines' :
                         target.renderer == 'gl3' ? 'CbbgShaders' : null
-                if (helper != null) checkClass(present, 'com.qb20nh.cbbg.render.' + helper)
+                if (helper != null) {
+                    checkClass(present, 'com.qb20nh.cbbg.render.' + helper)
+                }
                 List<String> resources = target.renderer == 'gl3' ?
                         ['assets/minecraft/shaders/core/cbbg_dither.fsh', 'assets/minecraft/shaders/core/cbbg_demo.fsh',
                          'assets/minecraft/shaders/include/cbbg_dither.glsl'] :
                         ['assets/cbbg/shaders/core/cbbg_dither.fsh', 'assets/cbbg/shaders/core/cbbg_demo.fsh',
                          'assets/cbbg/shaders/include/dither.glsl']
-                if (target.renderer in ['blaze-gpu-format', 'renderpearl']) resources.remove('assets/cbbg/shaders/core/cbbg_demo.fsh')
+                if (target.renderer in ['blaze-gpu-format', 'renderpearl']) {
+                    resources.remove('assets/cbbg/shaders/core/cbbg_demo.fsh')
+                }
                 resources.each { name ->
-                    if (!present.contains(name)) throw new GradleException('Missing CBBG Lib shader resource: ' + name)
+                    if (!present.contains(name)) {
+                        throw new GradleException('Missing CBBG Lib shader resource: ' + name)
+                    }
                 }
                 boolean gl3 = target.renderer == 'gl3'
                 if (gl3) {
-                    if (metadata.mixins != ['cbbg_lib.gl3.mixins.json']) throw new GradleException('Unexpected CBBG Lib mixins')
+                    if (metadata.mixins != ['cbbg_lib.gl3.mixins.json']) {
+                        throw new GradleException('Unexpected CBBG Lib mixins')
+                    }
                     Map config = jsonResource(zip, present, 'cbbg_lib.gl3.mixins.json')
                     if (config.required != true || config.compatibilityLevel != 'JAVA_' + target.java ||
                             config['package'] != 'com.qb20nh.cbbg.mixin' ||
@@ -271,7 +285,9 @@ class PackageChecks {
         Set<File> sharedRoots = [new File(sourceRoot, product == 'lib' ? 'libraries/utilities/src/main/java' : 'core/src/main/java')] as Set
         inventory.sources.each { entry ->
             def match = entry.source_path =~ /^(core\/(?:[^\/]+\/)?src\/main\/java)\//
-            if (product == 'cbbg' && match.find()) sharedRoots.add(new File(sourceRoot, match.group(1)))
+            if (product == 'cbbg' && match.find()) {
+                sharedRoots.add(new File(sourceRoot, match.group(1)))
+            }
         }
         if (product == 'cbbg' && targetRecord.containsKey('library')) {
             verifyNestedLibrary(artifact, CandidateFiles.checked(base, targetRecord.library as Map))
@@ -291,20 +307,30 @@ class PackageChecks {
             Set<String> outer = zip.entries().collect { it.name } as Set
             Map metadata = jsonResource(zip, outer, 'fabric.mod.json')
             String path = 'META-INF/jars/' + library.name
-            if (metadata.jars != [[file: path]]) throw new GradleException('CBBG must declare its single nested library')
+            if (metadata.jars != [[file: path]]) {
+                throw new GradleException('CBBG must declare its single nested library')
+            }
             ZipEntry entry = zip.getEntry(path)
-            if (entry == null) throw new GradleException('Missing nested CBBG Lib: ' + path)
+            if (entry == null) {
+                throw new GradleException('Missing nested CBBG Lib: ' + path)
+            }
             byte[] bytes = zip.getInputStream(entry).withCloseable { it.bytes }
-            if (!Arrays.equals(bytes, library.bytes)) throw new GradleException('Nested CBBG Lib differs from the standalone artifact')
+            if (!Arrays.equals(bytes, library.bytes)) {
+                throw new GradleException('Nested CBBG Lib differs from the standalone artifact')
+            }
             Set<String> nested = [] as Set
             new ZipInputStream(new ByteArrayInputStream(bytes)).withCloseable { stream ->
                 ZipEntry item
                 while ((item = stream.nextEntry) != null) {
-                    if (!nested.add(item.name)) throw new GradleException('Duplicate entry in nested CBBG Lib: ' + item.name)
+                    if (!nested.add(item.name)) {
+                        throw new GradleException('Duplicate entry in nested CBBG Lib: ' + item.name)
+                    }
                 }
             }
             Set<String> duplicateClasses = outer.intersect(nested).findAll { it.endsWith('.class') } as Set
-            if (duplicateClasses) throw new GradleException('CBBG and CBBG Lib contain duplicate classes: ' + duplicateClasses.sort())
+            if (duplicateClasses) {
+                throw new GradleException('CBBG and CBBG Lib contain duplicate classes: ' + duplicateClasses.sort())
+            }
             if (outer.any { it.startsWith('com/qb20nh/cbbg/api/') ||
                     it.startsWith('com/qb20nh/cbbg/lib/internal/') ||
                     it == 'com/qb20nh/cbbg/render/DitherPass.class' ||

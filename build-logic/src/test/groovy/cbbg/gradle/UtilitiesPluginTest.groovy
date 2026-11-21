@@ -36,7 +36,9 @@ dependencies { compileOnly 'org.jspecify:jspecify:1.0.1' }
         assertNull(rawBuild.task(':optimizeUtilitiesJar'))
         assertTrue(new File(directory, 'build/libs/cbbg-utilities-1.0.0-raw.jar').isFile())
         List<String> arguments = ['utilitiesSourcesJar', '--offline', '--stacktrace']
-        if (version != '1.0.0') arguments.add("-Plibrary_version=${version}".toString())
+        if (version != '1.0.0') {
+            arguments.add("-Plibrary_version=${version}".toString())
+        }
         GradleRunner.create().withProjectDir(directory).withPluginClasspath()
                 .withArguments(arguments).build()
         File artifact = new File(directory, "build/libs/cbbg-utilities-${version}.jar")

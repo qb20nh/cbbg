@@ -17,6 +17,19 @@ import static org.junit.jupiter.api.Assertions.*
 class FabricCandidateAcceptanceTest {
     @TempDir File directory
 
+    @Test void extractsOnlyAValidGametestApiVersion() {
+        String prefix = 'net.fabricmc.fabric-api:fabric-client-gametest-api-v1:'
+        String id = '26.1-fabric'
+        assertEquals('4.0.0+123abc', FabricCandidateAcceptance.gametestApiVersion(prefix + '4.0.0+123abc', id))
+        [null, prefix, prefix + ':', prefix + '4.0.0:classifier', prefix + '../4.0.0',
+         prefix + '..\\4.0.0', 'other:artifact:4.0.0'].each { coordinate ->
+            GradleException failure = assertThrows(GradleException) {
+                FabricCandidateAcceptance.gametestApiVersion(coordinate, id)
+            }
+            assertTrue(failure.message.contains('-PacceptanceGametestApi.' + id))
+        }
+    }
+
     @ParameterizedTest
     @ValueSource(strings = ['generation', 'maximum-noise-cache', 'generating-shutdown'])
     void memoryIntensiveScenarioFinishesBeforeTheNextWorkerStarts(String suite) {
@@ -25,10 +38,14 @@ class FabricCandidateAcceptanceTest {
             [context: [coldCaches: [:]], requirement: [suite: name, startupMode: null]]
         }
         FabricCandidateAcceptance.runPending(jobs, 2, { job ->
-            if (job.requirement.suite == 'ordinary') assertTrue(heavySaved)
+            if (job.requirement.suite == 'ordinary') {
+                assertTrue(heavySaved)
+            }
             [name: job.requirement.suite]
         }, { spec -> [name: spec.name] }, { job, result ->
-            if (job.requirement.suite == suite) heavySaved = true
+            if (job.requirement.suite == suite) {
+                heavySaved = true
+            }
         })
         assertTrue(jobs.empty)
     }
@@ -108,11 +125,15 @@ class FabricCandidateAcceptanceTest {
         }
         FabricCandidateAcceptance.runPending(jobs, 2, { job ->
             String mode = job.requirement.startupMode
-            if (mode != 'cold') assertNotNull(context.coldCaches.opengl)
+            if (mode != 'cold') {
+                assertNotNull(context.coldCaches.opengl)
+            }
             launched.add(mode)
             [mode: mode]
         }, { spec -> [mode: spec.mode] }, { job, result ->
-            if (result.mode == 'cold') context.coldCaches.opengl = directory
+            if (result.mode == 'cold') {
+                context.coldCaches.opengl = directory
+            }
         })
         assertEquals('cold', launched.first())
         assertEquals(['cold', 'warm', 'damaged'] as Set, launched as Set)
@@ -211,7 +232,9 @@ class FabricCandidateAcceptanceTest {
                 profile: 'fabric-loader-0.19.5-26.3', installed: true])
         Map requirement = [suite: 'ordinary', profile: 'none', backend: 'opengl', restart: false,
                            startupMode: null, entrypoints: ['example.Test'], externalLibrary: product == 'external']
-        if (product != 'external') requirement.remove('externalLibrary')
+        if (product != 'external') {
+            requirement.remove('externalLibrary')
+        }
         Map options = [root: fixture.root, candidate: fixture.file, output: new File(directory, 'acceptance'),
                        hostLibraryDirectories: [],
                        python: python, java21: python, java25: python, weston: python,
@@ -224,15 +247,15 @@ class FabricCandidateAcceptanceTest {
         String head = 'a' * 40
         boolean wrongCachedLibrary = false
         Closure command = { List args, File root ->
-            if (args[0] == 'git') return args[1] == 'rev-parse' ? head :
-                    args[1] == 'show' ? 'runner implementation' : ''
+            if (args[0] == 'git') { return args[1] == 'rev-parse' ? head :
+                    args[1] == 'show' ? 'runner implementation' : '' }
             if (args.contains('-c') && args[args.indexOf('-c') + 1].contains('reuse_arguments')) {
                 return JsonOutput.toJson([source_commit: 'a' * 40,
                     driver_sha256: fixture.record.client_tests.drivers.ordinary.sha256])
             }
-            if (args.contains('-c')) return args[args.indexOf('-c') + 1].contains('client_candidate') ?
+            if (args.contains('-c')) { return args[args.indexOf('-c') + 1].contains('client_candidate') ?
                     JsonOutput.toJson([runs: [requirement], dependencies: [none: [fabricApi: entry]]]) :
-                    JsonOutput.toJson([pythonVersion: 'test', launcherVersion: '8.0'])
+                    JsonOutput.toJson([pythonVersion: 'test', launcherVersion: '8.0']) }
             if (args[1].toString().endsWith('fabric_run_evidence.py')) {
                 verifications++
                 File receipt = new File(args[args.indexOf('--receipt') + 1].toString())
@@ -250,8 +273,12 @@ class FabricCandidateAcceptanceTest {
             launches++
             assertTrue(spec.strict)
             assertEquals(lockFile, spec.dependencyLock)
-            if (product == 'lib') assertNull(spec.config)
-            else assertEquals(FabricCandidateAcceptance.INITIAL_CONFIG, CandidateFiles.read(spec.config as File))
+            if (product == 'lib') {
+                assertNull(spec.config)
+            }
+            else {
+                assertEquals(FabricCandidateAcceptance.INITIAL_CONFIG, CandidateFiles.read(spec.config as File))
+            }
             assertEquals(product == 'external' ? new File(fixture.bundle, fixture.record.library.path) : null, spec.externalLibrary)
             File game = new File(spec.output as File, 'runs/client/game')
             game.mkdirs()

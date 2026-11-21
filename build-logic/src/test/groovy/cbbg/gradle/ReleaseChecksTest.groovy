@@ -620,8 +620,12 @@ class ReleaseChecksTest {
 
     private static Closure modrinthLabels() {
         { String url, Map headers ->
-            if (url.endsWith('/tag/game_version')) return [[version: '26.3']]
-            if (url.endsWith('/tag/loader')) return [[name: 'fabric']]
+            if (url.endsWith('/tag/game_version')) {
+                return [[version: '26.3']]
+            }
+            if (url.endsWith('/tag/loader')) {
+                return [[name: 'fabric']]
+            }
             throw new AssertionError('Unexpected lookup: ' + url)
         }
     }
@@ -630,8 +634,12 @@ class ReleaseChecksTest {
     void sharedReleasePreflightChecksAllRecordsAndSelectionRevalidatesRelease() {
         Map fixture = SharedPublicationFixture.multiple(directory)
         Closure fetch = { String url, Map headers ->
-            if (url.endsWith('/tag/game_version')) return [[version: '26.3'], [version: '26.2']]
-            if (url.endsWith('/tag/loader')) return [[name: 'fabric']]
+            if (url.endsWith('/tag/game_version')) {
+                return [[version: '26.3'], [version: '26.2']]
+            }
+            if (url.endsWith('/tag/loader')) {
+                return [[name: 'fabric']]
+            }
             throw new AssertionError('Unexpected lookup: ' + url)
         }
         File assets = new File(directory, 'download')
@@ -718,10 +726,16 @@ class ReleaseChecksTest {
                 if (command.take(2) == ['gh', 'api'] && command[2].contains('/releases/tags/')) {
                     reads++
                     Map release = CandidateFiles.parse(new StringReader(response)) as Map
-                    if (field == 'missing') release.assets.remove(0)
+                    if (field == 'missing') {
+                        release.assets.remove(0)
+                    }
                     else if (reads > 1) {
-                        if (field in ['digest', 'updated_at']) release.assets[0][field] = 'changed'
-                        else release[field] = field == 'id' ? 99 : 'Changed'
+                        if (field in ['digest', 'updated_at']) {
+                            release.assets[0][field] = 'changed'
+                        }
+                        else {
+                            release[field] = field == 'id' ? 99 : 'Changed'
+                        }
                     }
                     return JsonOutput.toJson(release)
                 }

@@ -12,7 +12,9 @@ class CurseForgeUploads {
                     File sourceRoot = null) {
         Map metadata = CandidateFiles.read(metadataFile)
         List records = metadata.records.findAll { it.targets[0] == target }
-        if (records.size() != 1) throw new GradleException('Select one CurseForge artifact owner: ' + target)
+        if (records.size() != 1) {
+            throw new GradleException('Select one CurseForge artifact owner: ' + target)
+        }
         if (confirmedUnattempted && !resuming) {
             throw new GradleException('Unattempted target confirmation requires a CurseForge resume run')
         }
@@ -23,7 +25,9 @@ class CurseForgeUploads {
         List<File> legacy = []
         List<File> legacyAttachments = []
         receiptsDirectory.eachFileRecurse { file ->
-            if (file.name == 'curseforge-main-plan.json' && CandidateFiles.read(file).target == target) mainPlans.add(file)
+            if (file.name == 'curseforge-main-plan.json' && CandidateFiles.read(file).target == target) {
+                mainPlans.add(file)
+            }
             if (file.name == 'curseforge-plan.json' && CandidateFiles.read(file).target == target) {
                 if (!new File(file.parentFile, 'curseforge-action-receipt.json').isFile()) {
                     if (!confirmedUnattempted || !uploaderWasSkipped(resumeEvidence, target)) {
@@ -39,9 +43,13 @@ class CurseForgeUploads {
                     !new File(file.parentFile, 'curseforge-plan.json').isFile()) {
                 throw new GradleException('CurseForge action receipt is missing its plan; reconcile the upload before retrying')
             }
-            if (file.name == 'curseforge-result.json' && CandidateFiles.read(file).targets == record.targets) legacy.add(file)
+            if (file.name == 'curseforge-result.json' && CandidateFiles.read(file).targets == record.targets) {
+                legacy.add(file)
+            }
             if (file.name ==~ /curseforge-.+-result\.json/ &&
-                    CandidateFiles.read(file).targets?.contains(target)) legacyAttachments.add(file)
+                    CandidateFiles.read(file).targets?.contains(target)) {
+                legacyAttachments.add(file)
+            }
         }
         if (legacyAttachments) {
             throw new GradleException('Legacy attachment receipts for ' + target + '; reconcile them before retrying: ' +
@@ -85,7 +93,9 @@ class CurseForgeUploads {
             if (!(parent instanceof String) || (parent && !(parent ==~ /[1-9][0-9]*/))) {
                 throw new GradleException('Invalid CurseForge parent ID')
             }
-            if (plans) receipt = new File(plans[0].parentFile, 'curseforge-action-receipt.json').absolutePath
+            if (plans) {
+                receipt = new File(plans[0].parentFile, 'curseforge-action-receipt.json').absolutePath
+            }
         }
         if (legacy && !plans) {
             Map saved = CandidateFiles.read(legacy[0])
@@ -109,13 +119,17 @@ class CurseForgeUploads {
             record[it] instanceof Map && (it != 'artifact' || !parent)
         }
         List<String> files = kinds.collect { CandidateFiles.checked(assets, (Map) record[it]).absolutePath }
-        if (files.isEmpty()) throw new GradleException('No CurseForge files selected')
+        if (files.isEmpty()) {
+            throw new GradleException('No CurseForge files selected')
+        }
         Map result = [target: target, release: metadata.release, source_commit: metadata.source_commit, record: record,
          file_path: files.first(), additional_files: files.drop(1).join('\n'), parent_file_id: parent,
          display_name: parent ? new File(files.first()).name : record.curseforge.display_name,
          receipt: receipt]
         result.manual_release = previousPlan?.manual_release ?: (receipt ? 'auto' : 'false')
-        if (confirmedUnattempted) result.confirmed_unattempted = true
+        if (confirmedUnattempted) {
+            result.confirmed_unattempted = true
+        }
         if (previousPlan && ['file_path', 'additional_files', 'display_name'].any { previousPlan[it] != result[it] }) {
             throw new GradleException('CurseForge upload file selection changed')
         }
@@ -123,15 +137,21 @@ class CurseForgeUploads {
     }
 
     private static boolean sameRecord(Object previous, Map record, Map metadata, File sourceRoot) {
-        if (previous == record) return true
-        if (!(previous instanceof Map) || sourceRoot == null || !(metadata.release_notes instanceof String)) return false
+        if (previous == record) {
+            return true
+        }
+        if (!(previous instanceof Map) || sourceRoot == null || !(metadata.release_notes instanceof String)) {
+            return false
+        }
         List<Map> targets = TargetCatalog.read(new File(sourceRoot, 'targets.json')).select(record.targets.join(','))
         String oldNotes = ChangelogNotes.forTargets(metadata.release_notes, targets)
         String newNotes = ChangelogNotes.forPublication(metadata.release_notes, targets)
         Map adjusted = new LinkedHashMap((Map) previous)
         for (String service : ['modrinth', 'curseforge']) {
             if (!(previous[service] instanceof Map) || !(record[service] instanceof Map) ||
-                    previous[service].changelog != oldNotes || record[service].changelog != newNotes) return false
+                    previous[service].changelog != oldNotes || record[service].changelog != newNotes) {
+                return false
+            }
             adjusted[service] = new LinkedHashMap((Map) previous[service])
             adjusted[service].changelog = newNotes
         }
@@ -142,7 +162,9 @@ class CurseForgeUploads {
         if (!(evidence.run_id instanceof String) || !(evidence.run_id ==~ /[1-9][0-9]*/) ||
                 !(evidence.pages instanceof List) || !evidence.pages || evidence.pages.any {
                     !(it instanceof Map) || !(it.jobs instanceof List) || it.jobs.any { !(it instanceof Map) }
-                }) return false
+                }) {
+            return false
+        }
         List jobs = evidence.pages.collectMany { it.jobs }.findAll { it.name == 'publish (' + target + ')' }
         jobs && jobs.every { job ->
             List steps = job.steps instanceof List ? job.steps.findAll {

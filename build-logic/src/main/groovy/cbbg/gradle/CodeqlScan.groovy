@@ -27,7 +27,9 @@ abstract class CodeqlScan extends DefaultTask {
 
     static List<Map> targets(TargetCatalog catalog, String legacyTarget) {
         List<String> ids = catalog.defaults()*.id + catalog.select().findAll { it.implemented }*.id
-        if (legacyTarget) ids.add(legacyTarget)
+        if (legacyTarget) {
+            ids.add(legacyTarget)
+        }
         String legacyOwner = legacyTarget ? catalog.artifacts(legacyTarget).first().id : null
         catalog.artifacts(ids.unique().join(',')).collect { target ->
             if (!(target.id ==~ /[A-Za-z0-9][A-Za-z0-9._+-]*/) || !target.buildProfile) {
@@ -60,8 +62,12 @@ abstract class CodeqlScan extends DefaultTask {
                     ['-p', profile.absolutePath, 'compileJava', '--rerun-tasks', '--no-build-cache',
                      '--no-daemon', '--no-watch-fs', '--project-cache-dir',
                      new File(root, '.gradle/codeql/' + target.id).absolutePath]
-            if (target.buildProfile != 'fabric-upstream') build.add('-Ptarget=' + target.id)
-            if (project.gradle.startParameter.offline) build.add('--offline')
+            if (target.buildProfile != 'fabric-upstream') {
+                build.add('-Ptarget=' + target.id)
+            }
+            if (project.gradle.startParameter.offline) {
+                build.add('--offline')
+            }
             File javaHome = toolchains.launcherFor { spec ->
                 spec.languageVersion.set(JavaLanguageVersion.of(target.buildJava as int))
             }.get().metadata.installationPath.asFile

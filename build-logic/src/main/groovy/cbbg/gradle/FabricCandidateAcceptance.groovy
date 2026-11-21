@@ -51,14 +51,18 @@ print(json.dumps({'runs':runs,'dependencies':{p:locked_dependencies(spec,p,lock)
                       sharedRuntime: options.sharedRuntime == null ? null : (options.sharedRuntime as File).canonicalPath]
         ['python', 'java21', 'java25', 'weston', 'eglVendor'].each { name ->
             File file = options[name] as File
-            if (file != null) inputs.executables[name] = [path: file.absolutePath,
-                    resolvedPath: file.canonicalPath, sha256: CandidateFiles.sha256(file)]
+            if (file != null) { inputs.executables[name] = [path: file.absolutePath,
+                    resolvedPath: file.canonicalPath, sha256: CandidateFiles.sha256(file)] }
         }
         targets.each { id ->
             File seed = options.seedCaches?.get(id) as File
-            if (seed != null) inputs.seedCaches[id] = inventory(seed)
+            if (seed != null) {
+                inputs.seedCaches[id] = inventory(seed)
+            }
             File api = options.gametestApis?.get(id) as File
-            if (api != null) inputs.gametestApis[id] = [path: api.canonicalPath, sha256: CandidateFiles.sha256(api)]
+            if (api != null) {
+                inputs.gametestApis[id] = [path: api.canonicalPath, sha256: CandidateFiles.sha256(api)]
+            }
         }
         inputs.scripts = inventory(new File(root, 'scripts'))
         inputs.executionSources = executionSources(root)
@@ -76,18 +80,24 @@ print(json.dumps({'runs':runs,'dependencies':{p:locked_dependencies(spec,p,lock)
         inputs.python = parse(command.call(python(options, root, '''import json,sys
 from importlib.metadata import version
 print(json.dumps({'pythonVersion':sys.version,'launcherVersion':version('minecraft-launcher-lib')}))''', []), root))
-        if (inputs.python.launcherVersion != '8.0') throw new GradleException('Candidate acceptance requires minecraft-launcher-lib==8.0')
+        if (inputs.python.launcherVersion != '8.0') {
+            throw new GradleException('Candidate acceptance requires minecraft-launcher-lib==8.0')
+        }
         File identity = new File(output, 'inputs.json')
         if (identity.exists()) {
             if (CandidateFiles.read(identity) != inputs) {
                 throw new GradleException('Acceptance inputs changed: ' + identity + '. Use a fresh output directory for this candidate and host.')
             }
         } else {
-            if (output.listFiles().length != 0) throw new GradleException('Acceptance output has no matching input identity: ' + output)
+            if (output.listFiles().length != 0) {
+                throw new GradleException('Acceptance output has no matching input identity: ' + output)
+            }
             CandidateFiles.writeNew(identity, inputs)
         }
         int workers = options.workers == null ? 1 : options.workers as int
-        if (workers < 1) throw new GradleException('Acceptance workers must be a positive integer')
+        if (workers < 1) {
+            throw new GradleException('Acceptance workers must be a positive integer')
+        }
         List<Map> contexts = []
         targets.each { String id ->
             Map record = candidate.records[id]
@@ -101,7 +111,9 @@ print(json.dumps({'pythonVersion':sys.version,'launcherVersion':version('minecra
             }
             Map plan = parse(command.call(python(options, root, PLAN, [candidate.file, id]), root))
             List<Map> runs = plan.runs
-            if (runs.any { it.startupMode == 'seed-mismatch' }) requireSeedCache(options.seedCaches?.get(id) as File, id)
+            if (runs.any { it.startupMode == 'seed-mismatch' }) {
+                requireSeedCache(options.seedCaches?.get(id) as File, id)
+            }
             File targetOutput = new File(output, id)
             targetOutput.mkdirs()
             File index = new File(targetOutput, 'results.json')
@@ -124,8 +136,12 @@ print(json.dumps({'pythonVersion':sys.version,'launcherVersion':version('minecra
             FabricRuntimeInstallation.ensure(runtime, id, profile) { boolean resume ->
                 List install = [options.python, new File(root, 'scripts/install_fabric_parity_runtime.py'),
                                 '--target', id, '--runtime', runtime]
-                if (resume) install.add('--resume')
-                if (options.sharedRuntime != null) install.addAll(['--shared-runtime', options.sharedRuntime])
+                if (resume) {
+                    install.add('--resume')
+                }
+                if (options.sharedRuntime != null) {
+                    install.addAll(['--shared-runtime', options.sharedRuntime])
+                }
                 command.call(install.collect { it.toString() }, root)
                 0
             }
@@ -134,16 +150,14 @@ print(json.dumps({'pythonVersion':sys.version,'launcherVersion':version('minecra
             Map lock = CandidateFiles.read(files.dependency_lock as File) as Map
             File gametest = options.gametestApis?.get(id) as File
             if (gametest == null) {
-                String coordinate = lock.gametestApi.coordinate
-                if (!(coordinate ==~ /net\.fabricmc\.fabric-api:fabric-client-gametest-api-v1:[^\/\\]+/)) {
-                    throw new GradleException('Provide -PacceptanceGametestApi.' + id + ' for the packaged test-only backport')
-                }
-                String version = coordinate.tokenize(':')[2]
+                String version = gametestApiVersion(lock.gametestApi.coordinate as String, id)
                 gametest = download(new File(output, 'dependencies'), lock.gametestApi.sha256 as String,
                         'https://maven.fabricmc.net/net/fabricmc/fabric-api/fabric-client-gametest-api-v1/' +
                                 version + '/fabric-client-gametest-api-v1-' + version + '.jar')
             }
-            if (CandidateFiles.sha256(gametest) != lock.gametestApi.sha256) throw new GradleException('Gametest API checksum differs for ' + id)
+            if (CandidateFiles.sha256(gametest) != lock.gametestApi.sha256) {
+                throw new GradleException('Gametest API checksum differs for ' + id)
+            }
             Map<String, File> coldCaches = [:]
             rows.each { Map row ->
                 Map requirement = runs.find { key(it) == key(row) }
@@ -155,8 +169,12 @@ print(json.dumps({'pythonVersion':sys.version,'launcherVersion':version('minecra
             File config = null
             if (candidate.identity.product != 'lib') {
                 config = new File(targetOutput, 'initial-cbbg.json')
-                if (!config.exists()) CandidateFiles.writeNew(config, INITIAL_CONFIG)
-                if (CandidateFiles.read(config) != INITIAL_CONFIG) throw new GradleException('Acceptance config changed: ' + config)
+                if (!config.exists()) {
+                    CandidateFiles.writeNew(config, INITIAL_CONFIG)
+                }
+                if (CandidateFiles.read(config) != INITIAL_CONFIG) {
+                    throw new GradleException('Acceptance config changed: ' + config)
+                }
             }
             contexts.add([id: id, record: record, target: target, tests: tests, base: base,
                           files: files, plan: plan, runs: runs, rows: rows, output: targetOutput,
@@ -171,7 +189,9 @@ print(json.dumps({'pythonVersion':sys.version,'launcherVersion':version('minecra
             Map context = job.context
             Map requirement = job.requirement
             requireSource(root, candidate, command)
-            if (output.usableSpace < 512L * 1024 * 1024) throw new GradleException('Candidate acceptance needs at least 512 MiB free before the next client: ' + output + '. Free space and resume this same output.')
+            if (output.usableSpace < 512L * 1024 * 1024) {
+                throw new GradleException('Candidate acceptance needs at least 512 MiB free before the next client: ' + output + '. Free space and resume this same output.')
+            }
             Map dependencies = (context.plan.dependencies[requirement.profile] as Map).collectEntries { name, entry ->
                 [(name): entry + [file: dependency(entry as Map, new File(output, 'dependencies'))]]
             }
@@ -197,8 +217,8 @@ print(json.dumps({'pythonVersion':sys.version,'launcherVersion':version('minecra
         }, probe, { Map job, Map result ->
             Map context = job.context
             Map requirement = job.requirement
-            if (result.status != 'passed') throw new GradleException('Acceptance failed for ' + context.id + ' ' + key(requirement) +
-                    ': ' + result.reason + '. Saved receipt: ' + result.receipt)
+            if (result.status != 'passed') { throw new GradleException('Acceptance failed for ' + context.id + ' ' + key(requirement) +
+                    ': ' + result.reason + '. Saved receipt: ' + result.receipt) }
             File saved = new File(result.receipt as String)
             File targetOutput = context.output as File
             Map row = [suite: requirement.suite, profile: requirement.profile, backend: requirement.backend,
@@ -213,7 +233,9 @@ print(json.dumps({'pythonVersion':sys.version,'launcherVersion':version('minecra
             verify(candidate, context.target as Map, context.files as Map, requirement, row, targetOutput, options, command)
             context.rows.add(row)
             writeIndex(context.index as File, context.rows as List)
-            if (requirement.startupMode == 'cold') context.coldCaches[requirement.backend] = new File(saved.parentFile, '.cbbg')
+            if (requirement.startupMode == 'cold') {
+                context.coldCaches[requirement.backend] = new File(saved.parentFile, '.cbbg')
+            }
         })
         contexts.each { Map context ->
             command.call([options.python, new File(root, 'scripts/fabric_acceptance.py'), '--candidate', candidate.file,
@@ -223,7 +245,9 @@ print(json.dumps({'pythonVersion':sys.version,'launcherVersion':version('minecra
 
     static void runPending(List<Map> pending, int workers, Closure<Map> prepare,
                            Closure<Map> probe, Closure finished) {
-        if (workers < 1) throw new GradleException('Acceptance workers must be a positive integer')
+        if (workers < 1) {
+            throw new GradleException('Acceptance workers must be a positive integer')
+        }
         def executor = Executors.newFixedThreadPool(workers)
         def completions = new ExecutorCompletionService<Map>(executor)
         int running = 0
@@ -239,7 +263,9 @@ print(json.dumps({'pythonVersion':sys.version,'launcherVersion':version('minecra
                                         candidate.context.coldCaches[candidate.requirement.backend] != null) &&
                                         (running == 0 || !memoryIntensive(candidate))
                             }
-                            if (job == null) break
+                            if (job == null) {
+                                break
+                            }
                             pending.remove(job)
                             Map spec = prepare.call(job)
                             completions.submit({ -> [job: job, result: probe.call(spec)] } as Callable<Map>)
@@ -249,7 +275,9 @@ print(json.dumps({'pythonVersion':sys.version,'launcherVersion':version('minecra
                     } catch (Exception error) { failure = error }
                 }
                 if (running == 0) {
-                    if (failure == null && pending) throw new GradleException('Pending startup tests require a verified cold cache')
+                    if (failure == null && pending) {
+                        throw new GradleException('Pending startup tests require a verified cold cache')
+                    }
                     break
                 }
                 Future<Map> completed = completions.take()
@@ -259,13 +287,19 @@ print(json.dumps({'pythonVersion':sys.version,'launcherVersion':version('minecra
                     Map result = completed.get()
                     finished.call(result.job, result.result)
                 } catch (java.util.concurrent.ExecutionException error) {
-                    if (failure == null) failure = new GradleException('Acceptance client failed', error.cause)
+                    if (failure == null) {
+                        failure = new GradleException('Acceptance client failed', error.cause)
+                    }
                 } catch (Exception error) {
-                    if (failure == null) failure = error
+                    if (failure == null) {
+                        failure = error
+                    }
                 }
             }
         } finally { executor.shutdown() }
-        if (failure != null) throw failure
+        if (failure != null) {
+            throw failure
+        }
     }
 
     private static boolean memoryIntensive(Map job) {
@@ -276,14 +310,20 @@ print(json.dumps({'pythonVersion':sys.version,'launcherVersion':version('minecra
         String head = command.call(['git', 'rev-parse', 'HEAD'], root).trim()
         String changed = command.call(['git', 'status', '--porcelain', '--untracked-files=all',
                                        '--', '.', ':(top,exclude)docs/**'], root).trim()
-        if (head != candidate.data.commit || changed) throw new GradleException('Acceptance requires clean source HEAD ' + candidate.data.commit + ': ' + root)
+        if (head != candidate.data.commit || changed) {
+            throw new GradleException('Acceptance requires clean source HEAD ' + candidate.data.commit + ': ' + root)
+        }
     }
 
     static Map inventory(File directory) {
-        if (!directory.isDirectory()) throw new GradleException('Missing acceptance input directory: ' + directory)
+        if (!directory.isDirectory()) {
+            throw new GradleException('Missing acceptance input directory: ' + directory)
+        }
         Map files = new TreeMap()
         directory.traverse(type: FileType.FILES) { File file ->
-            if (!file.toPath().any { it.toString() == '__pycache__' }) files[relative(directory, file)] = CandidateFiles.sha256(file)
+            if (!file.toPath().any { it.toString() == '__pycache__' }) {
+                files[relative(directory, file)] = CandidateFiles.sha256(file)
+            }
         }
         [path: directory.canonicalPath, files: files]
     }
@@ -304,17 +344,23 @@ print(json.dumps({'pythonVersion':sys.version,'launcherVersion':version('minecra
             files.addAll(['release', 'lib/modules', 'lib/server/libjvm.so'].collect { new File(home, it) })
         }
         File machine = new File('/etc/machine-id')
-        if (machine.isFile()) files.add(machine)
+        if (machine.isFile()) {
+            files.add(machine)
+        }
         File graphics = new File('/sys/class/drm')
-        if (graphics.isDirectory()) graphics.listFiles().findAll { it.name ==~ /card\d+/ }.each { card ->
+        if (graphics.isDirectory()) { graphics.listFiles().findAll { it.name ==~ /card\d+/ }.each { card ->
             ['device/vendor', 'device/device', 'device/subsystem_device'].each { name ->
                 File file = new File(card, name)
-                if (file.isFile()) files.add(file)
+                if (file.isFile()) {
+                    files.add(file)
+                }
             }
-        }
+        } }
         File displayPrefix = (options.weston as File).canonicalFile.parentFile.parentFile
         File xwayland = new File(displayPrefix, 'bin/Xwayland')
-        if (xwayland.isFile()) files.add(xwayland)
+        if (xwayland.isFile()) {
+            files.add(xwayland)
+        }
         List<File> libraries = (options.hostLibraryDirectories == null ? ['/usr/lib', '/usr/lib64'].collect { new File(it) } :
                 options.hostLibraryDirectories as List<File>) +
                 ['lib', 'lib64'].collect { new File(displayPrefix, it) }
@@ -330,7 +376,9 @@ print(json.dumps({'pythonVersion':sys.version,'launcherVersion':version('minecra
                     it.isDirectory() && (it.name.startsWith('libweston-') || it.name in ['weston', 'dri'])
                 }.each { File modules ->
                     modules.traverse(type: FileType.FILES) { File module ->
-                        if (module.name ==~ /.*\.so.*/) files.add(module)
+                        if (module.name ==~ /.*\.so.*/) {
+                            files.add(module)
+                        }
                     }
                 }
             }
@@ -373,8 +421,12 @@ print(json.dumps(reuse_arguments(json.loads(sys.argv[1]),Path(sys.argv[2]),json.
                      '--candidate-sha256', candidate.records[target.id].artifact.sha256,
                      '--driver-sha256', driver,
                      '--catalog', files.catalog, '--runtime-lock', files.runtime_lock, '--dependency-lock', files.dependency_lock]
-        if (requirement.restart) args.addAll(['--restart', '--control-receipt', CandidateFiles.checked(base, row.control_receipt as Map)])
-        else if (row.containsKey('control_receipt')) throw new GradleException('Ordinary cell has a restart control receipt')
+        if (requirement.restart) {
+            args.addAll(['--restart', '--control-receipt', CandidateFiles.checked(base, row.control_receipt as Map)])
+        }
+        else if (row.containsKey('control_receipt')) {
+            throw new GradleException('Ordinary cell has a restart control receipt')
+        }
         Map verified = parse(command.call(args.collect { it.toString() }, options.root as File))
         if (verified.profile != requirement.profile || verified.backend != requirement.backend ||
                 verified.scenarios != requirement.entrypoints || verified.startupMode != requirement.startupMode ||
@@ -399,7 +451,9 @@ print(json.dumps(reuse_arguments(json.loads(sys.argv[1]),Path(sys.argv[2]),json.
             throw new GradleException('Reuse must reference a separate acceptance directory')
         }
         File oldIndex = new File(previous, target.id + '/results.json')
-        if (!oldIndex.isFile()) return
+        if (!oldIndex.isFile()) {
+            return
+        }
         File oldIdentity = new File(previous, 'inputs.json')
         Map oldInputs = CandidateFiles.read(oldIdentity) as Map
         if (!(oldInputs.executionEnvironment instanceof Map) || oldInputs.executionEnvironment || inputs.executionEnvironment) {
@@ -410,26 +464,38 @@ print(json.dumps(reuse_arguments(json.loads(sys.argv[1]),Path(sys.argv[2]),json.
             String text = command.call(['git', 'show', oldInputs.source + ':' + name], options.root as File)
             [(name): java.security.MessageDigest.getInstance('SHA-256').digest(text.getBytes('UTF-8')).encodeHex().toString()]
         }
-        if (sources != inputs.executionSources) return
+        if (sources != inputs.executionSources) {
+            return
+        }
         String prefix = 'reuse/' + CandidateFiles.sha256(oldIdentity)
         File copied = new File(output, prefix)
         copyResults(oldIndex.parentFile, copied)
         File copiedInputs = new File(copied, 'inputs.json')
-        if (!copiedInputs.exists()) Files.createLink(copiedInputs.toPath(), oldIdentity.toPath())
+        if (!copiedInputs.exists()) {
+            Files.createLink(copiedInputs.toPath(), oldIdentity.toPath())
+        }
         List<Map> priorRows = CandidateFiles.read(oldIndex) as List<Map>
         priorRows.each { old ->
             Map requirement = runs.find { key(it) == key(old) }
-            if (requirement == null || rows.any { key(it) == key(old) }) return
+            if (requirement == null || rows.any { key(it) == key(old) }) {
+                return
+            }
             try {
                 Map row = old + [receipt: old.receipt + [path: prefix + '/' + old.receipt.path],
                                  reuse: [inputs: CandidateFiles.reference(output, prefix + '/inputs.json'),
                                          execution_sources: sources]]
-                if (candidate.identity.product != 'lib') row.reuse.config = CandidateFiles.reference(output, prefix + '/initial-cbbg.json')
+                if (candidate.identity.product != 'lib') {
+                    row.reuse.config = CandidateFiles.reference(output, prefix + '/initial-cbbg.json')
+                }
                 if (old.reuse != null) {
                     row.reuse.inputs = old.reuse.inputs + [path: prefix + '/' + old.reuse.inputs.path]
-                    if (old.reuse.config != null) row.reuse.config = old.reuse.config + [path: prefix + '/' + old.reuse.config.path]
+                    if (old.reuse.config != null) {
+                        row.reuse.config = old.reuse.config + [path: prefix + '/' + old.reuse.config.path]
+                    }
                 }
-                if (old.control_receipt != null) row.control_receipt = old.control_receipt + [path: prefix + '/' + old.control_receipt.path]
+                if (old.control_receipt != null) {
+                    row.control_receipt = old.control_receipt + [path: prefix + '/' + old.control_receipt.path]
+                }
                 verify(candidate, target, files, requirement, row, output, options, command)
                 rows.add(row)
                 options.cacheDecision?.call(target.id, key(row), 'reuse', null)
@@ -444,12 +510,16 @@ print(json.dumps(reuse_arguments(json.loads(sys.argv[1]),Path(sys.argv[2]),json.
         destination.mkdirs()
         Files.walkFileTree(source.toPath(), new SimpleFileVisitor<Path>() {
             @Override FileVisitResult preVisitDirectory(Path path, BasicFileAttributes attributes) {
-                if (path.fileName.toString() in ['.fabric', 'natives', 'saves']) return FileVisitResult.SKIP_SUBTREE
+                if (path.fileName.toString() in ['.fabric', 'natives', 'saves']) {
+                    return FileVisitResult.SKIP_SUBTREE
+                }
                 new File(destination, source.toPath().relativize(path).toString()).mkdirs()
                 FileVisitResult.CONTINUE
             }
             @Override FileVisitResult visitFile(Path path, BasicFileAttributes attributes) {
-                if (Files.isSymbolicLink(path)) throw new GradleException('Cached result contains a symlink: ' + path)
+                if (Files.isSymbolicLink(path)) {
+                    throw new GradleException('Cached result contains a symlink: ' + path)
+                }
                 File target = new File(destination, source.toPath().relativize(path).toString())
                 if (target.exists()) {
                     if (CandidateFiles.sha256(target) != CandidateFiles.sha256(path.toFile())) {
@@ -484,10 +554,14 @@ print(json.dumps(reuse_arguments(json.loads(sys.argv[1]),Path(sys.argv[2]),json.
 
     static void cleanup(File saved, boolean restart, boolean ordinary = false) {
         List<File> games = [saved.parentFile]
-        if (restart) games.add(new File(saved.parentFile.parentFile, 'control-game'))
+        if (restart) {
+            games.add(new File(saved.parentFile.parentFile, 'control-game'))
+        }
         games.each { File game ->
             List<String> disposable = ['.fabric', 'saves', 'natives']
-            if (ordinary) disposable.add('.cbbg')
+            if (ordinary) {
+                disposable.add('.cbbg')
+            }
             List<Map> reports = game.listFiles().findAll { it.name == 'probe.json' || it.name.endsWith('-probe.json') }
                     .collect { CandidateFiles.read(it) as Map }
             disposable.each { String name ->
@@ -495,7 +569,9 @@ print(json.dumps(reuse_arguments(json.loads(sys.argv[1]),Path(sys.argv[2]),json.
                     throw new GradleException('Generated directory is used by receipt evidence: ' + name)
                 }
                 File generated = new File(game, name)
-                if (Files.isSymbolicLink(generated.toPath())) throw new GradleException('Generated acceptance directory is a symlink: ' + generated)
+                if (Files.isSymbolicLink(generated.toPath())) {
+                    throw new GradleException('Generated acceptance directory is a symlink: ' + generated)
+                }
                 if (generated.exists()) {
                     Files.walkFileTree(generated.toPath(), new SimpleFileVisitor<Path>() {
                         @Override FileVisitResult visitFile(Path file, BasicFileAttributes attributes) {
@@ -503,7 +579,9 @@ print(json.dumps(reuse_arguments(json.loads(sys.argv[1]),Path(sys.argv[2]),json.
                             FileVisitResult.CONTINUE
                         }
                         @Override FileVisitResult postVisitDirectory(Path directory, IOException error) {
-                            if (error != null) throw error
+                            if (error != null) {
+                                throw error
+                            }
                             Files.delete(directory)
                             FileVisitResult.CONTINUE
                         }
@@ -516,10 +594,14 @@ print(json.dumps(reuse_arguments(json.loads(sys.argv[1]),Path(sys.argv[2]),json.
     static void deduplicateMods(File output, File saved, boolean restart) {
         File root = output.canonicalFile
         File pool = new File(root, 'dependencies')
-        if (Files.isSymbolicLink(pool.toPath())) throw new GradleException('Acceptance jar pool is a symlink: ' + pool)
+        if (Files.isSymbolicLink(pool.toPath())) {
+            throw new GradleException('Acceptance jar pool is a symlink: ' + pool)
+        }
         pool.mkdirs()
         List<File> games = [saved.parentFile]
-        if (restart) games.add(new File(saved.parentFile.parentFile, 'control-game'))
+        if (restart) {
+            games.add(new File(saved.parentFile.parentFile, 'control-game'))
+        }
         games.each { File game ->
             File mods = new File(game, 'mods')
             if (!mods.canonicalFile.toPath().startsWith(root.toPath()) || Files.isSymbolicLink(mods.toPath())) {
@@ -531,8 +613,12 @@ print(json.dumps(reuse_arguments(json.loads(sys.argv[1]),Path(sys.argv[2]),json.
                 }
                 String hash = CandidateFiles.sha256(jar)
                 File shared = new File(pool, hash + '.jar')
-                if (Files.isSymbolicLink(shared.toPath())) throw new GradleException('Acceptance pooled jar is a symlink: ' + shared)
-                if (!shared.exists()) Files.createLink(shared.toPath(), jar.toPath())
+                if (Files.isSymbolicLink(shared.toPath())) {
+                    throw new GradleException('Acceptance pooled jar is a symlink: ' + shared)
+                }
+                if (!shared.exists()) {
+                    Files.createLink(shared.toPath(), jar.toPath())
+                }
                 if (!shared.isFile() || CandidateFiles.sha256(shared) != hash) {
                     throw new GradleException('Acceptance pooled jar checksum differs: ' + shared)
                 }
@@ -550,14 +636,22 @@ print(json.dumps(reuse_arguments(json.loads(sys.argv[1]),Path(sys.argv[2]),json.
 
     private static File dependency(Map entry, File directory) {
         File cached = new File(directory, entry.sha256 + '.jar')
-        if (cached.isFile() && CandidateFiles.sha256(cached) == entry.sha256) return cached
+        if (cached.isFile() && CandidateFiles.sha256(cached) == entry.sha256) {
+            return cached
+        }
         URI source = new URI(entry.source as String)
-        if (source.scheme != 'https' || source.host != 'api.modrinth.com') throw new GradleException('Unexpected locked dependency source: ' + source)
+        if (source.scheme != 'https' || source.host != 'api.modrinth.com') {
+            throw new GradleException('Unexpected locked dependency source: ' + source)
+        }
         Map version = parse(readUrl(source.toURL()))
         List<Map> jars = version.files?.findAll { it.primary == true && it.filename?.endsWith('.jar') } ?: []
-        if (jars.size() != 1) throw new GradleException('Expected one primary locked dependency jar: ' + source)
+        if (jars.size() != 1) {
+            throw new GradleException('Expected one primary locked dependency jar: ' + source)
+        }
         URI url = new URI(jars[0].url as String)
-        if (url.scheme != 'https' || url.host != 'cdn.modrinth.com') throw new GradleException('Unexpected dependency download: ' + url)
+        if (url.scheme != 'https' || url.host != 'cdn.modrinth.com') {
+            throw new GradleException('Unexpected dependency download: ' + url)
+        }
         download(directory, entry.sha256 as String, url.toString())
     }
 
@@ -568,18 +662,32 @@ print(json.dumps(reuse_arguments(json.loads(sys.argv[1]),Path(sys.argv[2]),json.
         connection.inputStream.withCloseable { it.getText('UTF-8') }
     }
 
+    static String gametestApiVersion(String coordinate, String id) {
+        def match = coordinate =~ /net\.fabricmc\.fabric-api:fabric-client-gametest-api-v1:([^:\/\\]+)/
+        if (!match.matches()) {
+            throw new GradleException('Provide -PacceptanceGametestApi.' + id + ' for the packaged test-only backport')
+        }
+        match.group(1)
+    }
+
     private static File download(File directory, String hash, String url) {
-        if (!(hash ==~ /[0-9a-f]{64}/)) throw new GradleException('Invalid dependency SHA-256')
+        if (!(hash ==~ /[0-9a-f]{64}/)) {
+            throw new GradleException('Invalid dependency SHA-256')
+        }
         directory.mkdirs()
         File file = new File(directory, hash + '.jar')
-        if (file.isFile() && CandidateFiles.sha256(file) == hash) return file
+        if (file.isFile() && CandidateFiles.sha256(file) == hash) {
+            return file
+        }
         File staged = File.createTempFile('dependency-', '.jar', directory)
         try {
             URLConnection connection = new URI(url).toURL().openConnection()
             connection.connectTimeout = 30000
             connection.readTimeout = 30000
             connection.inputStream.withCloseable { Files.copy(it, staged.toPath(), StandardCopyOption.REPLACE_EXISTING) }
-            if (CandidateFiles.sha256(staged) != hash) throw new GradleException('Locked dependency checksum mismatch: ' + url)
+            if (CandidateFiles.sha256(staged) != hash) {
+                throw new GradleException('Locked dependency checksum mismatch: ' + url)
+            }
             Files.move(staged.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING)
         } finally { staged.delete() }
         file

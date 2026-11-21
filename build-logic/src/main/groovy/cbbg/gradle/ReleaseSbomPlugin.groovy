@@ -38,7 +38,9 @@ class ReleaseSbomPlugin implements Plugin<Project> {
                 }
                 if (project.extensions.extraProperties.has('libraryArchive')) {
                     File library = project.libraryArchive
-                    if (!library.isFile()) throw new org.gradle.api.GradleException('Missing nested library for release SBOM')
+                    if (!library.isFile()) {
+                        throw new org.gradle.api.GradleException('Missing nested library for release SBOM')
+                    }
                     String hash = java.security.MessageDigest.getInstance('SHA-256').digest(library.bytes).encodeHex().toString()
                     String reference = 'cbbg-lib:' + hash
                     List components = bom.components ?: []
@@ -57,7 +59,9 @@ class ReleaseSbomPlugin implements Plugin<Project> {
                 }
                 bom.components = (bom.components ?: []).sort { JsonOutput.toJson(CandidateFiles.sorted(it)) }
                 bom.dependencies = (bom.dependencies ?: []).each {
-                    if (it.dependsOn != null) it.dependsOn = it.dependsOn.sort()
+                    if (it.dependsOn != null) {
+                        it.dependsOn = it.dependsOn.sort()
+                    }
                 }.sort { it.ref }
                 ReproducibleText.writeJson(file, bom)
             }

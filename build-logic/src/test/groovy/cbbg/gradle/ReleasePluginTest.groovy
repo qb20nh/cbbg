@@ -142,7 +142,9 @@ cbbg.gradle.FabricCandidateAcceptance.metaClass.static.execute = { Map options, 
         for (String selection : ['', '-Ptarget=missing']) {
             List args = ['recordCurseForgeUpload', '-PpublicationMetadata=publication.json',
                          '-Poutput=other-receipt.json', '-PfileId=123']
-            if (selection) args.add(selection)
+            if (selection) {
+                args.add(selection)
+            }
             assertTrue(runner(*(args as String[])).buildAndFail().output.contains('Select one publication record'))
         }
     }

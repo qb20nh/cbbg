@@ -64,7 +64,9 @@ abstract class BundleCandidate extends DefaultTask {
         if (multipleInputs && [buildOutputs, contract, runtimeLock, dependencyLock].any { it.present }) {
             throw new GradleException('Explicit targets cannot be combined with single-target input overrides')
         }
-        if (!multipleInputs) ids = [CandidateFiles.read(buildOutputs.get().asFile).target as String]
+        if (!multipleInputs) {
+            ids = [CandidateFiles.read(buildOutputs.get().asFile).target as String]
+        }
         Map<String, Map> selected = catalog.releaseTargets(ids)
         CandidateFiles.releaseTargets(release, selected.values())
         Map<String, Map> files = [:]
@@ -103,9 +105,13 @@ abstract class BundleCandidate extends DefaultTask {
             throw new GradleException("Build outputs do not identify the current clean source: ${outputsFile} records commit ${built.source_commit}, dirty=${built.source_dirty}, schema=${built.schema}; expected commit ${commit}, dirty=false, schema=2. Rerun candidateBuildOutputs with -Ptarget=${owner.id} from the committed source.")
         }
         identity.requireProduct(built.containsKey('product') ? built.product as String : 'cbbg')
-        if (built.target != owner.id) throw new GradleException("Build outputs identify target ${built.target}; expected ${owner.id}: ${outputsFile}. Rerun candidateBuildOutputs with -Ptarget=${owner.id}.")
+        if (built.target != owner.id) {
+            throw new GradleException("Build outputs identify target ${built.target}; expected ${owner.id}: ${outputsFile}. Rerun candidateBuildOutputs with -Ptarget=${owner.id}.")
+        }
         String version = CandidateManifest.packageVersion(release, owner)
-        if (built.version != version) throw new GradleException("Build version ${built.version} differs from requested release ${version} for ${owner.id}: ${outputsFile}. Set the intended ${identity.product == 'lib' ? 'library_version' : 'mod_version'} and rerun candidateBuildOutputs before bundling.")
+        if (built.version != version) {
+            throw new GradleException("Build version ${built.version} differs from requested release ${version} for ${owner.id}: ${outputsFile}. Set the intended ${identity.product == 'lib' ? 'library_version' : 'mod_version'} and rerun candidateBuildOutputs before bundling.")
+        }
         Map scenarios = CandidateFiles.read(contractFile)
         if (scenarios.schemaVersion != 1 || scenarios.target != target.id) {
             throw new GradleException("Scenario contract ${contractFile} identifies target ${scenarios.target}, schema ${scenarios.schemaVersion}; expected ${target.id}, schema 1. Use the selected runtime's contract.")
@@ -174,7 +180,9 @@ abstract class BundleCandidate extends DefaultTask {
         record.client_tests.test_dependencies = add(prefix + 'test-dependencies.json', dependencies)
         records[target.id] = record
         }
-        if (!output.isDirectory() && !output.mkdirs()) throw new GradleException("Could not create candidate directory: ${output}. Check directory permissions and free disk space.")
+        if (!output.isDirectory() && !output.mkdirs()) {
+            throw new GradleException("Could not create candidate directory: ${output}. Check directory permissions and free disk space.")
+        }
         try {
             files.each { name, reference ->
                 File copied = new File(output, name)

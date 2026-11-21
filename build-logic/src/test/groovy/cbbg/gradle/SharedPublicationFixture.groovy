@@ -29,7 +29,9 @@ class SharedPublicationFixture {
                 String text = original.getText('UTF-8').replace('26.3', '26.2')
                 names.each { oldName, newName -> text = text.replace('"' + oldName + '"', '"' + newName + '"') }
                 copied.setText(text, 'UTF-8')
-            } else copied.bytes = original.bytes
+            } else {
+                copied.bytes = original.bytes
+            }
             reference.path = copied.name
             reference.sha256 = CandidateFiles.sha256(copied)
         }

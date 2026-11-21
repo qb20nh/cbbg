@@ -122,8 +122,12 @@ elif args[1] == 'analyze':
             List<String> command = call.args.drop(4)
             assertFalse(command.contains('clean'))
             assertTrue(command.containsAll(['compileJava', '--rerun-tasks', '--no-build-cache']))
-            if (call.args[2].endsWith('26.2-fabric')) assertFalse(command.any { it.startsWith('-Ptarget=') })
-            else assertTrue(command.any { it.startsWith('-Ptarget=') })
+            if (call.args[2].endsWith('26.2-fabric')) {
+                assertFalse(command.any { it.startsWith('-Ptarget=') })
+            }
+            else {
+                assertTrue(command.any { it.startsWith('-Ptarget=') })
+            }
             assertFalse(new File(call.args[2] as String).exists())
         }
         runner(root).build()
