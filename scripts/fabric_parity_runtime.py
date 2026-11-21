@@ -11,11 +11,13 @@ import shutil
 import subprocess
 import zipfile
 
-from fabric_classic_scenarios import (CLASSIC_IRIS_OPTIONS, CLASSIC_OPTIONS, CLASSIC_RESTART_FILES,
+from fabric_classic_scenarios import (CLASSIC_CACHE_SCENARIOS, CLASSIC_IRIS_OPTIONS, CLASSIC_OPTIONS,
+                                      CLASSIC_RESTART_FILES,
                                       REDUCED_GL_SCENARIO, SETTINGS_MANIFEST, SETTINGS_NOISE_FRAMES,
                                       VMA_PROBE_AGENT,
                                       classic_config, classic_jvm_arguments,
-                                      classic_result, classic_viewport, pixel_cache_files,
+                                      classic_result, classic_viewport, pixel_cache_files, prepare_classic_cache,
+                                      retain_classic_cache,
                                       validate_classic_choice, vulkan_probe_agent)
 from fabric_dependency_lock import verify_dependencies, verify_gametest_api
 from fabric_runtime_lock import verify_runtime
@@ -366,6 +368,8 @@ def main():
                 for name, contents in pixel_cache_files().items():
                     (cache / name).write_bytes(contents)
                     (retained / name).write_bytes(contents)
+            if args.classic_scenario in CLASSIC_CACHE_SCENARIOS:
+                prepare_classic_cache(game, evidence, args.classic_scenario)
         if args.startup_mode:
             prepare_startup_cache(game, evidence, args.startup_mode, args.startup_cache)
         if args.test_dependency_minimums:
@@ -400,6 +404,8 @@ def main():
         if classic:
             for capture in game.glob('*.png'):
                 capture.replace(evidence / capture.name)
+            if args.classic_scenario in CLASSIC_CACHE_SCENARIOS:
+                retain_classic_cache(game, evidence, args.classic_scenario)
             if args.classic_scenario == 'vulkan-settings':
                 saved = evidence / 'settings-cache'
                 saved.mkdir()

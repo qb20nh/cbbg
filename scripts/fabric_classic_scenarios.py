@@ -2,7 +2,9 @@
 
 import hashlib
 import json
+import os
 import re
+import shutil
 import struct
 import zlib
 
@@ -43,6 +45,11 @@ SETTINGS_MANIFEST = 'stbn_64x64x8.sha256'
 SETTINGS_NOISE_FRAMES = tuple(f'stbn_64x64x8_{index}.png' for index in range(8))
 CONTEXT_MODS = {'forcegl2': 'forcegl20', 'threatengl': 'threatengl'}
 REDUCED_GL_SCENARIO = 'forcegl2-mesa-3'
+CLASSIC_CACHE_SCENARIOS = ('cache-cold', 'cache-warm', 'cache-damaged')
+CLASSIC_CACHE_PROFILES = ('none', 'sodium')
+CLASSIC_CACHE_MANIFEST = 'stbn_16x16x8.sha256'
+CLASSIC_CACHE_FRAMES = tuple(f'stbn_16x16x8_{index}.png' for index in range(8))
+CLASSIC_CACHE_TIME = 946684800_000_000_000
 GLFW_CORE_PROFILE = 0x00032001
 GLFW_COMPAT_PROFILE = 0x00032002
 CLASSIC_OPTIONS = 'renderDistance:4\nsimulationDistance:5\nmaxFps:60\nguiScale:2\npauseOnLostFocus:false\n'
@@ -71,6 +78,8 @@ def validate_classic_choice(metadata, scenario, profile, backend):
         if scenario == 'world' and profile != 'vulkanmod':
             return
         if scenario == REDUCED_GL_SCENARIO and profile == 'forcegl2':
+            return
+        if scenario in CLASSIC_CACHE_SCENARIOS and profile in CLASSIC_CACHE_PROFILES:
             return
         if scenario == 'satin' and profile == 'satin':
             return
@@ -156,24 +165,88 @@ def classic_jvm_arguments(candidate, scenario, backend, profile, restart_phase=N
     return arguments
 
 
-def pixel_cache_files():
+def pixel_cache_files(offset=0):
     def chunk(kind, content):
         return (struct.pack('>I', len(content)) + kind + content
                 + struct.pack('>I', zlib.crc32(kind + content)))
 
     def pixel(x, y):
-        rgb = [(x * (11 + channel * 4) + y * (19 + channel * 10) + channel * 37) % 256
+        rgb = [(x * (11 + channel * 4) + y * (19 + channel * 10) + channel * 37 + offset) % 256
                for channel in range(3)]
         return bytes(rgb + [255])
 
     rows = [b'\0' + b''.join(pixel(x, y) for x in range(16)) for y in range(16)]
     png = (b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', 16, 16, 8, 6, 0, 0, 0))
            + chunk(b'IDAT', zlib.compress(b''.join(rows))) + chunk(b'IEND', b''))
-    files = {f'stbn_16x16x8_{index}.png': png for index in range(8)}
+    files = dict.fromkeys(CLASSIC_CACHE_FRAMES, png)
     checksum = hashlib.sha256(png).hexdigest()
     manifest = '# seed 0\n# algorithm 3\n' + ''.join(f'{checksum}  {name}\n' for name in files)
-    files['stbn_16x16x8.sha256'] = manifest.encode()
+    files[CLASSIC_CACHE_MANIFEST] = manifest.encode()
     return files
+
+
+def classic_cache_input(scenario):
+    if scenario == 'cache-cold':
+        return {}
+    files = pixel_cache_files()
+    if scenario == 'cache-damaged':
+        # Keep a valid PNG under a checksum for a different tile.
+        frame = CLASSIC_CACHE_FRAMES[3]
+        files[frame] = pixel_cache_files(offset=1)[frame]
+    return files
+
+
+def prepare_classic_cache(game, evidence, scenario):
+    cache = game / '.cbbg'
+    retained = evidence / 'cache-input'
+    retained.mkdir()
+    files = classic_cache_input(scenario)
+    if files:
+        cache.mkdir()
+    for name, content in files.items():
+        path = cache / name
+        path.write_bytes(content)
+        os.utime(path, ns=(CLASSIC_CACHE_TIME, CLASSIC_CACHE_TIME))
+        (retained / name).write_bytes(content)
+
+
+def retain_classic_cache(game, evidence, scenario):
+    cache = game / '.cbbg'
+    if {path.name for path in cache.iterdir()} != {CLASSIC_CACHE_MANIFEST, *CLASSIC_CACHE_FRAMES}:
+        raise ValueError('Classic startup cache output inventory differs')
+    retained = evidence / 'cache-output'
+    retained.mkdir()
+    for name in (CLASSIC_CACHE_MANIFEST, *CLASSIC_CACHE_FRAMES):
+        path = cache / name
+        if scenario == 'cache-warm' and path.stat().st_mtime_ns != CLASSIC_CACHE_TIME:
+            raise ValueError('Warm classic startup rewrote cache: ' + name)
+        shutil.copyfile(path, retained / name)
+
+
+def classic_cache_captures(log, evidence, scenario):
+    expected = classic_cache_input(scenario)
+    cached = evidence / 'cache-input'
+    actual = {path.name: path.read_bytes() for path in cached.iterdir()} if cached.exists() else {}
+    if actual != expected:
+        raise ValueError('Classic startup cache input differs')
+    markers = re.findall(r'Starting Async STBN Math Generation \(16x16x8\)|STBN Math Complete in '
+                         r'|STBN Images generated from math fields\.|STBN Frames loaded from cache\.'
+                         r'|CBBG_CLASSIC_SMOKE_PASS', log)
+    warm = scenario == 'cache-warm'
+    work = (['STBN Frames loaded from cache.'] if warm else
+            ['Starting Async STBN Math Generation (16x16x8)', 'STBN Math Complete in ',
+             'STBN Images generated from math fields.'])
+    if markers != work + ['CBBG_CLASSIC_SMOKE_PASS']:
+        raise ValueError('Classic startup did not load or regenerate the expected noise cache')
+    output = evidence / 'cache-output'
+    files = {path.name: path.read_bytes() for path in output.iterdir()}
+    if files.keys() != {CLASSIC_CACHE_MANIFEST, *CLASSIC_CACHE_FRAMES}:
+        raise ValueError('Classic startup cache output inventory differs')
+    checksums = ''.join(f'{hashlib.sha256(files[name]).hexdigest()}  {name}\n' for name in CLASSIC_CACHE_FRAMES)
+    if (files[CLASSIC_CACHE_MANIFEST] != ('# seed 0\n# algorithm 3\n' + checksums).encode()
+            or warm and files != actual or not warm and files == pixel_cache_files()):
+        raise ValueError('Classic startup cache output does not match its expected content')
+    return {f'cache-output/{name}': (16, 16) for name in CLASSIC_CACHE_FRAMES}
 
 
 def one_reading(log, pattern):
@@ -534,6 +607,8 @@ def classic_result(scenario, profile, backend, log, evidence, exit_code, restart
             captures = iris_captures(log, evidence, width, height, restart_phase)
         elif int(one_reading(log, r'CBBG_CLASSIC_SMOKE_PASS presentations=(\d+)')) < 10:
             raise ValueError('OpenGL world did not present enough frames')
+        if scenario in CLASSIC_CACHE_SCENARIOS:
+            captures.update(classic_cache_captures(log, evidence, scenario))
         graphics = {'backend': 'opengl', 'provider': 'minecraft', 'gpu': gpu, 'driver': driver}
         if profile in CONTEXT_MODS:
             graphics['context'] = classic_gl_context(log, scenario, profile, gpu)

@@ -6,12 +6,14 @@ import struct
 import tempfile
 import unittest
 
-from fabric_classic_scenarios import (CLASSIC_ENTRYPOINT, CLASSIC_IRIS_OPTIONS, CLASSIC_OPTIONS,
+from fabric_classic_scenarios import (CLASSIC_CACHE_SCENARIOS, CLASSIC_ENTRYPOINT, CLASSIC_IRIS_OPTIONS,
+                                      CLASSIC_OPTIONS,
                                       REDUCED_GL_SCENARIO, SETTINGS_MANIFEST, SETTINGS_NOISE_FRAMES,
                                       VMA_PROBE_AGENT, VULKAN_FORMAT_CASES, VULKAN_NATIVE_CASES,
                                       VULKAN_PIPELINE_CASES, VULKAN_SAMPLER_CASES, VULKAN_VMA_CASES,
                                       classic_config, classic_jvm_arguments, classic_result,
-                                      pixel_cache_files, validate_classic_choice, vulkan_probe_agent)
+                                      pixel_cache_files, prepare_classic_cache, retain_classic_cache,
+                                      validate_classic_choice, vulkan_probe_agent)
 from runtime_catalog import load_catalog, select_targets
 
 
@@ -22,7 +24,7 @@ class ClassicScenarioTests(unittest.TestCase):
         self.evidence = Path(temp.name)
         self.metadata = {'id': 'cbbg_classic_smoke', 'entrypoints': {'client': [CLASSIC_ENTRYPOINT]},
                          'custom': {'cbbg:scenarios': ['world', 'satin', REDUCED_GL_SCENARIO,
-                                                       'renderscale', 'iris', 'vulkan-lifecycle',
+                                                       'renderscale', 'iris', 'vulkan-lifecycle', *CLASSIC_CACHE_SCENARIOS,
                                                        'vulkan-pixels', 'vulkan-settings',
                                                        *VULKAN_FORMAT_CASES, *VULKAN_VMA_CASES,
                                                        *VULKAN_NATIVE_CASES, *VULKAN_SAMPLER_CASES,
@@ -425,6 +427,40 @@ class ClassicScenarioTests(unittest.TestCase):
                             log.replace(self.log, self.log.replace('format=97', 'format=37'))):
                     with self.assertRaises(ValueError):
                         classic_result(scenario, 'vulkanmod', 'vulkan', bad, self.evidence, 0)
+
+    def test_cache_startup_checks_frozen_inputs_and_cache_behavior(self):
+        log = ('CBBG_CLASSIC_OPENGL Test GPU / 3.2 sodium=false\n'
+               'CBBG_CLASSIC_SMOKE_PASS presentations=12\n')
+        generated = ('Starting Async STBN Math Generation (16x16x8)\nSTBN Math Complete in 1 ms\n'
+                     'STBN Images generated from math fields.\n')
+        loaded = 'STBN Frames loaded from cache.\n'
+        for scenario in CLASSIC_CACHE_SCENARIOS:
+            with self.subTest(scenario=scenario), tempfile.TemporaryDirectory() as temp:
+                game = Path(temp)
+                evidence = game / 'evidence'
+                evidence.mkdir()
+                (evidence / 'initial-cbbg.json').write_text(json.dumps(classic_config('opengl', scenario)))
+                (evidence / 'initial-options.txt').write_text(CLASSIC_OPTIONS)
+                for name in ('enabled.png', 'disabled.png'):
+                    self.write_capture(evidence / name, 800, 600)
+                validate_classic_choice(self.metadata, scenario, 'none', 'opengl')
+                validate_classic_choice(self.metadata, scenario, 'sodium', 'opengl')
+                with self.assertRaises(ValueError):
+                    validate_classic_choice(self.metadata, scenario, 'vulkanmod', 'vulkan')
+                prepare_classic_cache(game, evidence, scenario)
+                cache = game / '.cbbg'
+                warm = scenario == 'cache-warm'
+                if not warm:
+                    cache.mkdir(exist_ok=True)
+                    for name, content in pixel_cache_files(offset=2).items():
+                        (cache / name).write_bytes(content)
+                retain_classic_cache(game, evidence, scenario)
+                classic_result(scenario, 'none', 'opengl', (loaded if warm else generated) + log, evidence, 0)
+                with self.assertRaisesRegex(ValueError, 'did not load or regenerate'):
+                    classic_result(scenario, 'none', 'opengl', (generated if warm else loaded) + log, evidence, 0)
+                (evidence / 'cache-output' / 'stbn_16x16x8_3.png').write_bytes(b'corrupt')
+                with self.assertRaisesRegex(ValueError, 'expected content'):
+                    classic_result(scenario, 'none', 'opengl', (loaded if warm else generated) + log, evidence, 0)
 
     def test_pipeline_recovery_requires_released_resources_and_ordered_reload(self):
         self.write_capture(self.evidence / 'vulkan-pipeline-fallback.png', 800, 600)

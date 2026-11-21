@@ -4,6 +4,27 @@
   "ordinaryMetadata": "build-config/fabric-classic/src/packagedSmoke/resources/fabric.mod.json",
   "additionalRuns": [
     {
+      "suite": "cache-cold",
+      "profiles": ["none", "sodium"],
+      "backends": ["opengl"],
+      "restart": false,
+      "entrypoints": ["cache-cold"]
+    },
+    {
+      "suite": "cache-warm",
+      "profiles": ["none", "sodium"],
+      "backends": ["opengl"],
+      "restart": false,
+      "entrypoints": ["cache-warm"]
+    },
+    {
+      "suite": "cache-damaged",
+      "profiles": ["none", "sodium"],
+      "backends": ["opengl"],
+      "restart": false,
+      "entrypoints": ["cache-damaged"]
+    },
+    {
       "suite": "forcegl2-mesa-3",
       "profiles": ["forcegl2"],
       "backends": ["opengl"],

@@ -22,6 +22,17 @@ class FabricAcceptanceTests(unittest.TestCase):
                     for backend in backends}
         self.assertEqual(actual, expected)
 
+    def test_classic_cache_runs_require_cold_warm_and_damaged_starts_on_both_profiles(self):
+        target, = select_targets(load_catalog(), '1.20.1-fabric')
+        contract = read_json(ROOT / 'runtime-locks/1.20.1-fabric-scenarios.json')
+        runs = required_runs(target, contract)
+        self.assertEqual(
+            [(suite, profile, 'opengl', [suite], False)
+             for suite in ('cache-cold', 'cache-warm', 'cache-damaged') for profile in ('none', 'sodium')],
+            [(run['suite'], run['profile'], run['backend'], run['entrypoints'], run['restart'])
+             for run in runs if run['suite'].startswith('cache-')],
+        )
+
     def test_classic_vulkanmod_runs_use_the_packaged_driver_and_real_backend(self):
         target = select_targets(load_catalog(), '1.20.1-fabric')[0]
         contract = read_json(ROOT / 'runtime-locks/1.20.1-fabric-scenarios.json')
