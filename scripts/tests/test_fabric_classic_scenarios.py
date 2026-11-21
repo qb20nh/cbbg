@@ -5,8 +5,9 @@ import struct
 import tempfile
 import unittest
 
-from fabric_classic_scenarios import (CLASSIC_ENTRYPOINT, CLASSIC_OPTIONS, classic_config,
+from fabric_classic_scenarios import (CLASSIC_ENTRYPOINT, CLASSIC_OPTIONS, classic_config, classic_jvm_arguments,
                                       classic_result, pixel_cache_files, validate_classic_choice)
+from runtime_catalog import load_catalog, select_targets
 
 
 class ClassicScenarioTests(unittest.TestCase):
@@ -15,7 +16,7 @@ class ClassicScenarioTests(unittest.TestCase):
         self.addCleanup(temp.cleanup)
         self.evidence = Path(temp.name)
         self.metadata = {'id': 'cbbg_classic_smoke', 'entrypoints': {'client': [CLASSIC_ENTRYPOINT]},
-                         'custom': {'cbbg:scenarios': ['world', 'vulkan-lifecycle', 'vulkan-pixels']}}
+                         'custom': {'cbbg:scenarios': ['world', 'satin', 'vulkan-lifecycle', 'vulkan-pixels']}}
         self.log = ('CBBG_CLASSIC_VULKAN_DEVICE mod=0.5.2 device=Test GPU api=1.3.0 glfw=no-api reference=false\n'
                     'CBBG_CLASSIC_VULKAN_SCENE format=97 disabled=false\n'
                     'CBBG_CLASSIC_VULKAN_WORLD presentations=12\n')
@@ -50,6 +51,43 @@ class ClassicScenarioTests(unittest.TestCase):
                     self.log.replace('format=97', 'format=37')]:
             with self.assertRaises(ValueError):
                 classic_result('world', 'vulkanmod', 'vulkan', log, self.evidence, 0)
+
+    def test_opengl_world_uses_catalog_profiles_without_enabling_feature_drivers(self):
+        target, = select_targets(load_catalog(), '1.20.1-fabric')
+        for profile, backends in target['compatibilityProfiles'].items():
+            if backends != ['opengl']:
+                continue
+            with self.subTest(profile=profile):
+                if profile in ('forcegl2', 'threatengl'):
+                    with self.assertRaisesRegex(ValueError, 'profile or backend'):
+                        validate_classic_choice(self.metadata, 'world', profile, 'opengl')
+                    continue
+                validate_classic_choice(self.metadata, 'world', profile, 'opengl')
+                arguments = classic_jvm_arguments('candidate.jar', 'world', 'opengl', profile)
+                self.assertIn('-Dcbbg.test.worldProfile=' + profile, arguments)
+                self.assertNotIn('-Dcbbg.test.satin=true', arguments)
+                self.assertNotIn('-Dcbbg.test.iris=true', arguments)
+        for profile in ('iris', 'modmenu+sodium+satin'):
+            self.assertIn('-Dcbbg.test.sodium=true',
+                          classic_jvm_arguments('candidate.jar', 'world', 'opengl', profile))
+
+    def test_satin_requires_resize_reload_and_postprocessing_evidence(self):
+        validate_classic_choice(self.metadata, 'satin', 'satin', 'opengl')
+        with self.assertRaisesRegex(ValueError, 'profile or backend'):
+            validate_classic_choice(self.metadata, 'satin', 'none', 'opengl')
+        self.assertIn('-Dcbbg.test.satin=true',
+                      classic_jvm_arguments('candidate.jar', 'satin', 'opengl', 'satin'))
+        (self.evidence / 'initial-cbbg.json').write_text(json.dumps(classic_config('opengl')))
+        log = ('CBBG_CLASSIC_OPENGL Test GPU / 4.6 sodium=false\n'
+               'CBBG_CLASSIC_SATIN_STAGE initial 800x600 cases=6\n'
+               'CBBG_CLASSIC_SATIN_STAGE reloaded 800x600 cases=12\n'
+               'CBBG_CLASSIC_SATIN_STAGE smaller 736x552 cases=18\n'
+               'CBBG_CLASSIC_SATIN_STAGE restored 800x600 cases=24\n'
+               'CBBG_CLASSIC_SATIN_PASS cases=24 readableDepth=3\n')
+        classic_result('satin', 'satin', 'opengl', log, self.evidence, 0)
+        for invalid in (log.replace('736x552', '800x600'), log.replace('readableDepth=3', 'readableDepth=1')):
+            with self.assertRaises(ValueError):
+                classic_result('satin', 'satin', 'opengl', invalid, self.evidence, 0)
 
     def test_world_rejects_changed_config_and_truncated_capture(self):
         data = self.capture.read_bytes()

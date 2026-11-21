@@ -29,8 +29,11 @@ def validate_classic_choice(metadata, scenario, profile, backend):
     if profile == 'vulkanmod' and backend == 'vulkan' and (
             scenario == 'world' or scenario in VULKAN_SCENARIOS):
         return
-    if profile in ('none', 'sodium') and backend == 'opengl' and scenario == 'world':
-        return
+    if backend == 'opengl':
+        if scenario == 'world' and profile not in ('vulkanmod', 'forcegl2', 'threatengl'):
+            return
+        if scenario == 'satin' and profile == 'satin':
+            return
     raise ValueError('Unsupported classic scenario, profile or backend')
 
 
@@ -44,14 +47,22 @@ def classic_viewport(scenario):
     return (803, 601) if scenario == 'vulkan-pixels' else (800, 600)
 
 
+def includes_sodium(profile):
+    return bool({'sodium', 'iris'} & set(profile.split('+')))
+
+
 def classic_jvm_arguments(candidate, scenario, backend, profile):
     arguments = ['-Xmx1200m', '-XX:ActiveProcessorCount=4',
                  '-Dcbbg.test.jar=' + str(candidate),
-                 '-Dcbbg.test.sodium=' + str(profile == 'sodium').lower()]
+                 '-Dcbbg.test.sodium=' + str(includes_sodium(profile)).lower()]
     if backend == 'vulkan':
         arguments += ['-Dorg.lwjgl.system.stackSize=1024', '-Dcbbg.test.vulkanMod=true']
         if scenario in VULKAN_SCENARIOS:
             arguments.append('-Dcbbg.test.' + VULKAN_SCENARIOS[scenario] + '=true')
+    elif scenario == 'world':
+        arguments.append('-Dcbbg.test.worldProfile=' + profile)
+    elif scenario == 'satin':
+        arguments.append('-Dcbbg.test.satin=true')
     return arguments
 
 
@@ -136,9 +147,18 @@ def classic_result(scenario, profile, backend, log, evidence, exit_code):
             raise ValueError('OpenGL client also reported a VulkanMod device')
         gpu, driver, sodium = one_reading(
             log, r'CBBG_CLASSIC_OPENGL (.+?) / (.+?) sodium=(true|false)(?=\r?\n|\Z)')
-        presentations = int(one_reading(log, r'CBBG_CLASSIC_SMOKE_PASS presentations=(\d+)'))
-        if (sodium == 'true') != (profile == 'sodium') or presentations < 10:
-            raise ValueError('OpenGL profile or presentation count differs')
+        if (sodium == 'true') != includes_sodium(profile):
+            raise ValueError('OpenGL profile differs')
+        if scenario == 'satin':
+            stages = re.findall(r'CBBG_CLASSIC_SATIN_STAGE ([^\r\n]+)', log)
+            size = f'{width}x{height}'
+            if stages != [f'initial {size} cases=6', f'reloaded {size} cases=12',
+                          f'smaller {width - 64}x{height - 48} cases=18', f'restored {size} cases=24']:
+                raise ValueError('Incomplete Satin framebuffer checks')
+            one_reading(log, r'CBBG_CLASSIC_SATIN_PASS cases=(24) readableDepth=3(?=\r?\n|\Z)')
+            captures = {}
+        elif int(one_reading(log, r'CBBG_CLASSIC_SMOKE_PASS presentations=(\d+)')) < 10:
+            raise ValueError('OpenGL world did not present enough frames')
         graphics = {'backend': 'opengl', 'provider': 'minecraft', 'gpu': gpu, 'driver': driver}
     for name, dimensions in captures.items():
         with (evidence / name).open('rb') as stream:

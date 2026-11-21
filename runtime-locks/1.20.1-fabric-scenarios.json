@@ -4,6 +4,13 @@
   "ordinaryMetadata": "build-config/fabric-classic/src/packagedSmoke/resources/fabric.mod.json",
   "additionalRuns": [
     {
+      "suite": "satin",
+      "profiles": ["satin"],
+      "backends": ["opengl"],
+      "restart": false,
+      "entrypoints": ["satin"]
+    },
+    {
       "suite": "vulkan-lifecycle",
       "profiles": ["vulkanmod"],
       "backends": ["vulkan"],

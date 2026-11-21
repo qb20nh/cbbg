@@ -4,6 +4,7 @@ import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.platform.GlStateManager;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Set;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandManager;
 import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource;
@@ -247,14 +248,19 @@ public final class ClassicPackagedSmoke implements ClientModInitializer {
     if (sodium != Boolean.getBoolean("cbbg.test.sodium")) {
       throw new AssertionError("Unexpected Sodium presence");
     }
-    if (loader.isModLoaded("iris") != Boolean.getBoolean("cbbg.test.iris")) {
-      throw new AssertionError("Unexpected Iris presence");
-    }
-    if (loader.isModLoaded("satin") != Boolean.getBoolean("cbbg.test.satin")) {
-      throw new AssertionError("Unexpected Satin presence");
-    }
-    if (loader.isModLoaded("renderscale") != Boolean.getBoolean("cbbg.test.renderScale")) {
-      throw new AssertionError("Unexpected RenderScale presence");
+    String worldProfile = System.getProperty("cbbg.test.worldProfile");
+    if (worldProfile != null) {
+      Set<String> expected = Set.of(worldProfile.split("\\+"));
+      for (String id :
+          new String[] {
+            "iris", "satin", "renderscale", "modmenu", "immediatelyfast", "chatpatches"
+          }) {
+        requireMod(loader, id, expected.contains(id));
+      }
+    } else {
+      requireMod(loader, "iris", iris);
+      requireMod(loader, "satin", satin);
+      requireMod(loader, "renderscale", renderScale);
     }
     if (Boolean.getBoolean("cbbg.test.stack")) {
       for (String modId :
@@ -277,6 +283,12 @@ public final class ClassicPackagedSmoke implements ClientModInitializer {
       if (!loader.isModLoaded(changer))
         throw new AssertionError("Missing OpenGL context mod: " + changer);
       reportContext(client, changer);
+    }
+  }
+
+  private static void requireMod(FabricLoader loader, String id, boolean expected) {
+    if (loader.isModLoaded(id) != expected) {
+      throw new AssertionError("Unexpected " + id + " presence");
     }
   }
 
