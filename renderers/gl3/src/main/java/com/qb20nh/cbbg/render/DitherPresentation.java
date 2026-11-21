@@ -38,6 +38,9 @@ final class DitherPresentation {
   private static @Nullable ShaderInstance checkedBlit;
   private static boolean screenPassSupported;
 
+  private static final String VANILLA_PACK = "vanilla";
+  private static final String CBBG_LIB_PACK = "cbbg_lib";
+
   private DitherPresentation() {}
 
   @SuppressWarnings("ReferenceEquality") // Shader identity changes on resource reload.
@@ -61,12 +64,12 @@ final class DitherPresentation {
     return shader.getClass() == ShaderInstance.class
         && blit.getClass() == ShaderInstance.class
         && blit.getName().equals("blit_screen")
-        && builtIn(resources, "shaders/core/blit_screen.json", "vanilla")
-        && builtIn(resources, "shaders/core/blit_screen.vsh", "vanilla")
-        && builtIn(resources, "shaders/core/blit_screen.fsh", "vanilla")
-        && builtIn(resources, "shaders/core/" + shader.getName() + ".json", "cbbg_lib")
-        && builtIn(resources, "shaders/core/" + shader.getName() + ".fsh", "cbbg_lib")
-        && builtIn(resources, "shaders/include/cbbg_dither.glsl", "cbbg_lib");
+        && builtIn(resources, "shaders/core/blit_screen.json", VANILLA_PACK)
+        && builtIn(resources, "shaders/core/blit_screen.vsh", VANILLA_PACK)
+        && builtIn(resources, "shaders/core/blit_screen.fsh", VANILLA_PACK)
+        && builtIn(resources, "shaders/core/" + shader.getName() + ".json", CBBG_LIB_PACK)
+        && builtIn(resources, "shaders/core/" + shader.getName() + ".fsh", CBBG_LIB_PACK)
+        && builtIn(resources, "shaders/include/cbbg_dither.glsl", CBBG_LIB_PACK);
   }
 
   private static boolean builtIn(ResourceProvider resources, String path, String pack) {

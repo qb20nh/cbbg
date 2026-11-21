@@ -32,12 +32,7 @@ final class ColorNoise {
     double[] y = gaussian(n, BlueNoise.stbnVSeed(seed));
     double[] z = gaussian(n, seed == 0 ? 9012 : seed * 31 + 13);
     double[] temp = new double[n], xy = new double[w * h], time = new double[d];
-    for (int j = 0; j < h; j++)
-      for (int i = 0; i < w; i++) {
-        double kx = (i <= w / 2 ? (double) i : i - w) / w;
-        double ky = (j <= h / 2 ? (double) j : j - h) / h;
-        xy[j * w + i] = Math.exp(-(kx * kx + ky * ky) / .08);
-      }
+    fillSpatialWeights(xy, w, h);
     for (int k = 0; k < d; k++) {
       double kz = (k <= d / 2 ? (double) k : k - d) / d;
       time[k] = Math.exp(-kz * kz / .08);
@@ -56,6 +51,15 @@ final class ColorNoise {
       }
     }
     return new double[][] {x, y, z};
+  }
+
+  private static void fillSpatialWeights(double[] xy, int w, int h) {
+    for (int j = 0; j < h; j++)
+      for (int i = 0; i < w; i++) {
+        double kx = (i <= w / 2 ? (double) i : i - w) / w;
+        double ky = (j <= h / 2 ? (double) j : j - h) / h;
+        xy[j * w + i] = Math.exp(-(kx * kx + ky * ky) / .08);
+      }
   }
 
   private static void rank(double[] field, int[] indices, int[] scratch) {

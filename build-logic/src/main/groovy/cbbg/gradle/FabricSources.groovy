@@ -6,6 +6,7 @@ import org.gradle.api.Project
 /** Source selections shared by Fabric builds and CI change selection. */
 class FabricSources {
     private static final String TEXTURE_FORMAT_RENDERER = 'blaze-texture-format'
+    private static final String RENDERPEARL_RENDERER = 'renderpearl'
     private static final String MC_1_21_11 = '1.21.11'
     private static final String IRIS_FIXTURE = 'gametest/IrisFixture'
     private static final String RENDER_SCALE_TEST_ACCESS = 'gametest/RenderScaleTestAccess'
@@ -41,7 +42,7 @@ class FabricSources {
         if (owner.renderer == TEXTURE_FORMAT_RENDERER) {
             result.libraryInputs += [tree("libraries/fabric/src/${owner.minecraft}/java"),
                                      tree('libraries/fabric/src/gpu/resources')]
-        } else if (owner.renderer == 'renderpearl') {
+        } else if (owner.renderer == RENDERPEARL_RENDERER) {
             result.test.java << tree('renderers/renderpearl/src/test/java')
             result.libraryInputs << tree('libraries/fabric/src/blaze-gpu-format/resources')
         }
@@ -187,14 +188,14 @@ class FabricSources {
             processed << tree('renderers/blaze-shared/src/processedGametest/java', [],
                     owner.minecraft == MC_1_21_11 ? classes('gametest/mixin/ReleaseNoiseWriteMixin') : [])
         }
-        if (owner.buildProfile == FABRIC_UPSTREAM || owner.renderer == 'renderpearl') {
+        if (owner.buildProfile == FABRIC_UPSTREAM || owner.renderer == RENDERPEARL_RENDERER) {
             result.main.java << tree('renderers/vulkan/src/main/java')
             result.libraryInputs << tree('libraries/fabric/src/vulkan/resources')
             result.main.java << tree('renderers/blaze-texture-format/src/main/java',
                     classes('render/WindowFramebuffer'))
         }
         result.copies.processedGametest << irisResources
-        if (owner.renderer == 'renderpearl') {
+        if (owner.renderer == RENDERPEARL_RENDERER) {
             result.main.java << tree('adapters/minecraft/26.1/src/main/java',
                     classes('config/gui/ConfigScreenPlatform', 'render/HudPlatform'))
             processed << tree('adapters/fabric/shared/src/processedGametest/java',
