@@ -84,6 +84,25 @@ class TargetCatalogTest {
     }
 
     @Test
+    void classicVulkanModIsLimitedToItsPinnedCompatibilityProfile() {
+        Map data = copyData()
+        Map entry = target(data, '1.20.1-fabric')
+        assertEquals(['opengl'], entry.backends)
+        assertEquals(['opengl'], entry.compatibilityProfiles.none)
+        assertEquals(['vulkan'], entry.compatibilityProfiles.vulkanmod)
+        new TargetCatalog(data)
+
+        entry.compatibilityProfiles.none << 'vulkan'
+        rejects(data, 'compatibility backends')
+        data = copyData()
+        target(data, '1.20.1-fabric').dependencies.remove('vulkanModSha512')
+        rejects(data, 'pinned classic Fabric adapter')
+        data = copyData()
+        target(data, '1.20.1-fabric').compatibilityProfiles.vulkanmod = ['opengl']
+        rejects(data, 'compatibility backends')
+    }
+
+    @Test
     void selectionsRejectUnknownDuplicatesAndPendingTargets() {
         TargetCatalog catalog = TargetCatalog.read(CATALOG)
         for (String selection : ['', '26.3-fabric,', '26.3-fabric,26.3-fabric']) {

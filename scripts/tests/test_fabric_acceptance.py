@@ -22,6 +22,33 @@ class FabricAcceptanceTests(unittest.TestCase):
                     for backend in backends}
         self.assertEqual(actual, expected)
 
+    def test_classic_vulkanmod_runs_use_the_packaged_driver_and_real_backend(self):
+        target = select_targets(load_catalog(), '1.20.1-fabric')[0]
+        contract = read_json(ROOT / 'runtime-locks/1.20.1-fabric-scenarios.json')
+        runs = required_runs(target, contract)
+        self.assertEqual(
+            {(profile, backend) for profile, backends in target['compatibilityProfiles'].items()
+             for backend in backends},
+            {(run['profile'], run['backend']) for run in runs if run['suite'] == 'ordinary'},
+        )
+        self.assertEqual(
+            [('ordinary', 'vulkanmod', ['world']),
+             ('vulkan-lifecycle', 'vulkanmod', ['vulkan-lifecycle']),
+             ('vulkan-pixels', 'vulkanmod', ['vulkan-pixels'])],
+            [(run['suite'], run['profile'], run['entrypoints'])
+             for run in runs if run['backend'] == 'vulkan'],
+        )
+
+    def test_classic_rejects_undeclared_scenarios_and_gametest_metadata(self):
+        target = select_targets(load_catalog(), '1.20.1-fabric')[0]
+        contract = read_json(ROOT / 'runtime-locks/1.20.1-fabric-scenarios.json')
+        contract['additionalRuns'][0]['entrypoints'] = ['unknown']
+        with self.assertRaisesRegex(ValueError, 'one supported scenario'):
+            required_runs(target, contract)
+        contract['ordinaryMetadata'] = self.contract['ordinaryMetadata']
+        with self.assertRaisesRegex(ValueError, 'Unexpected classic test driver metadata'):
+            required_runs(target, contract)
+
     def test_library_consumer_uses_only_its_independent_profile(self):
         for target_id in ('1.21.1-fabric', '1.21.11-fabric', '26.1-fabric',
                           '26.1.1-fabric', '26.1.2-fabric', '26.2-fabric', '26.3-fabric'):

@@ -24,17 +24,32 @@ def required_runs(target, contract, root=ROOT, metadata_path=None):
         if root.resolve() not in metadata_path.parents:
             raise EvidenceError('Ordinary metadata is outside the repository')
     metadata = read_json(metadata_path)
-    ordinary = metadata['entrypoints']['fabric-client-gametest']
     library = contract.get('product') == 'lib'
-    if metadata.get('id') != ('cbbg-library-test' if library else 'cbbg-renderer-test'):
-        raise EvidenceError('Unexpected ordinary test metadata')
+    classic = target.get('buildProfile') == 'fabric-classic'
+    if classic:
+        if (library or metadata.get('id') != 'cbbg_classic_smoke'
+                or metadata.get('entrypoints', {}).get('client')
+                != ['com.qb20nh.cbbg.parity.ClassicPackagedSmoke']):
+            raise EvidenceError('Unexpected classic test driver metadata')
+        supported_scenarios = metadata.get('custom', {}).get('cbbg:scenarios', [])
+        if (not isinstance(supported_scenarios, list) or 'world' not in supported_scenarios
+                or any(not isinstance(name, str) or not name for name in supported_scenarios)
+                or len(set(supported_scenarios)) != len(supported_scenarios)):
+            raise EvidenceError('Classic test driver must declare its world scenario')
+        ordinary = ['world']
+    else:
+        if metadata.get('id') != ('cbbg-library-test' if library else 'cbbg-renderer-test'):
+            raise EvidenceError('Unexpected ordinary test metadata')
+        ordinary = metadata['entrypoints']['fabric-client-gametest']
     profiles = target['compatibilityProfiles']
     if library:
         if contract.get('ordinaryProfiles') != ['none']:
             raise EvidenceError('Library acceptance requires the independent consumer profile')
         profiles = {'none': target['backends']}
+    available_backends = (list(dict.fromkeys(backend for supported in profiles.values()
+                                            for backend in supported)) if classic else target['backends'])
     suites = [{'suite': 'ordinary', 'profiles': list(profiles),
-               'backends': target['backends'], 'restart': False, 'entrypoints': ordinary}]
+               'backends': available_backends, 'restart': False, 'entrypoints': ordinary}]
     for extra in contract['additionalRuns']:
         suite = dict(extra)
         if ('profiles' in suite) == ('requiresMod' in suite):
@@ -42,7 +57,8 @@ def required_runs(target, contract, root=ROOT, metadata_path=None):
         if 'requiresMod' in suite:
             suite['profiles'] = [profile for profile in profiles
                                  if suite['requiresMod'] in profile.split('+')]
-        suite['entrypoints'] = ['com.qb20nh.cbbg.gametest.' + name for name in suite['entrypoints']]
+        if not classic:
+            suite['entrypoints'] = ['com.qb20nh.cbbg.gametest.' + name for name in suite['entrypoints']]
         suites.append(suite)
     names = set()
     runs = []
@@ -56,6 +72,8 @@ def required_runs(target, contract, root=ROOT, metadata_path=None):
                 or any(not isinstance(value, str) or not value for value in scenarios)
                 or len(scenarios) != len(set(scenarios))):
             raise EvidenceError('Invalid suite entrypoints: ' + name)
+        if classic and (len(scenarios) != 1 or scenarios[0] not in supported_scenarios):
+            raise EvidenceError('Classic suite requires one supported scenario: ' + name)
         startup_mode = suite.get('startupMode')
         if ((STARTUP_DRIVER in scenarios and
              (scenarios != [STARTUP_DRIVER] or startup_mode not in ('cold', 'warm', 'damaged', 'seed-mismatch')
@@ -67,7 +85,7 @@ def required_runs(target, contract, root=ROOT, metadata_path=None):
         if (not isinstance(selected, list) or not selected
                 or len(selected) != len(set(selected)) or not set(selected) <= profiles.keys()
                 or not isinstance(backends, list) or not backends
-                or len(backends) != len(set(backends)) or not set(backends) <= set(target['backends'])
+                or len(backends) != len(set(backends)) or not set(backends) <= set(available_backends)
                 or type(suite['restart']) is not bool):
             raise EvidenceError('Invalid suite selection: ' + name)
         count = 0

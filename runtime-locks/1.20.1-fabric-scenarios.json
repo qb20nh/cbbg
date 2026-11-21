@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "target": "1.20.1-fabric",
+  "ordinaryMetadata": "build-config/fabric-classic/src/packagedSmoke/resources/fabric.mod.json",
+  "additionalRuns": [
+    {
+      "suite": "vulkan-lifecycle",
+      "profiles": ["vulkanmod"],
+      "backends": ["vulkan"],
+      "restart": false,
+      "entrypoints": ["vulkan-lifecycle"]
+    },
+    {
+      "suite": "vulkan-pixels",
+      "profiles": ["vulkanmod"],
+      "backends": ["vulkan"],
+      "restart": false,
+      "entrypoints": ["vulkan-pixels"]
+    }
+  ]
+}

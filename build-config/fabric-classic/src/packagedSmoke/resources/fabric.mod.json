@@ -6,5 +6,8 @@
   "entrypoints": {
     "client": ["com.qb20nh.cbbg.parity.ClassicPackagedSmoke"]
   },
+  "custom": {
+    "cbbg:scenarios": ["world", "vulkan-lifecycle", "vulkan-pixels"]
+  },
   "mixins": ["cbbg.classic-smoke.mixins.json"]
 }

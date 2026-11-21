@@ -27,6 +27,7 @@ def compatibility = providers.gradleProperty('compat').getOrElse('none')
 def compatibilityDependencies = [
     modmenu: "maven.modrinth:modmenu:${target.dependencies.modMenu}",
     sodium: "maven.modrinth:sodium:${target.dependencies.sodium}",
+    vulkanmod: "maven.modrinth:vulkanmod:${target.dependencies.vulkanMod}",
     forcegl2: "maven.modrinth:forcegl2.0-remapped:${target.dependencies.forceGl2}",
     threatengl: "maven.modrinth:threatengl:${target.dependencies.threatenGl}"
 ]

@@ -109,9 +109,17 @@ class TargetCatalog {
                 for (Object item : profiles.entrySet()) {
                     Map.Entry profile = (Map.Entry) item
                     Object supported = profile.value
+                    List available = backends
+                    if (profile.key == 'vulkanmod') {
+                        if (target.buildProfile != 'fabric-classic' || !target.dependencies?.vulkanMod ||
+                                !(target.dependencies?.vulkanModSha512 ==~ /[0-9a-f]{128}/)) {
+                            throw new IllegalArgumentException('VulkanMod compatibility requires a pinned classic Fabric adapter: ' + id)
+                        }
+                        available = ['vulkan']
+                    }
                     if (!(profile.key instanceof String) || !profile.key ||
                             !(supported instanceof List) || supported.isEmpty() ||
-                            supported.any { !(it instanceof String) || !backends.contains(it) } ||
+                            supported.any { !(it instanceof String) || !available.contains(it) } ||
                             supported.size() != supported.toSet().size()) {
                         throw new IllegalArgumentException('Invalid compatibility backends: ' + id)
                     }
