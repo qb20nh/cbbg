@@ -1,7 +1,9 @@
 package com.qb20nh.cbbg.parity;
 
 import com.qb20nh.cbbg.gametest.IrisFixture;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Arrays;
 import java.util.Objects;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Screenshot;
@@ -18,10 +20,12 @@ final class ClassicIrisSmoke {
   }
 
   private final boolean restart;
+  private final boolean restoreAfterReload = Boolean.getBoolean("cbbg.test.irisCycle");
   private Phase phase;
   private int phaseStarted;
   private long baseline;
   private boolean captureRequested;
+  private byte[] savedConfig;
 
   ClassicIrisSmoke(boolean restart, int ticks, long presentations) {
     this.restart = restart;
@@ -32,12 +36,19 @@ final class ClassicIrisSmoke {
 
   boolean tick(Minecraft client, int ticks, long presentations) throws Exception {
     if (ticks < phaseStarted + 8) return false;
+    Path config = client.gameDirectory.toPath().resolve("config/cbbg.json");
+    if (restoreAfterReload
+        && savedConfig != null
+        && !Arrays.equals(savedConfig, Files.readAllBytes(config))) {
+      throw new AssertionError("Iris changed the saved CBBG configuration");
+    }
     switch (phase) {
       case INACTIVE -> {
         if (presentations < baseline + 10) return false;
         requireActive(false);
         ClassicPackagedSmoke.requireFormat(client, GL30.GL_RGBA16F);
         capture(client, "iris-inactive.png");
+        if (restoreAfterReload) savedConfig = Files.readAllBytes(config);
         // The screenshot also invokes the dither shader while Iris is inactive.
         baseline = ClassicPackagedSmoke.presentationCount();
         IrisFixture.installPack();
@@ -59,14 +70,19 @@ final class ClassicIrisSmoke {
       case RELOADED -> {
         if (!checkSuppressed(client, presentations, "iris-reloaded.png")) return false;
         System.out.println("CBBG_CLASSIC_IRIS_RELOAD_PASS");
-        return true;
+        if (!restoreAfterReload) return true;
+        setShaders(false);
+        phase = Phase.RECOVERED;
       }
       case RECOVERED -> {
         if (presentations < baseline + 10) return false;
         requireActive(false);
         ClassicPackagedSmoke.requireFormat(client, GL30.GL_RGBA16F);
         capture(client, "iris-restored.png");
-        System.out.println("CBBG_CLASSIC_IRIS_RESTART_PASS presentations=" + presentations);
+        System.out.println(
+            (restart ? "CBBG_CLASSIC_IRIS_RESTART_PASS" : "CBBG_CLASSIC_IRIS_CYCLE_PASS")
+                + " presentations="
+                + (presentations - baseline));
         return true;
       }
     }

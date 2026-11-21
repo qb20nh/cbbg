@@ -18,7 +18,7 @@ class ClassicScenarioTests(unittest.TestCase):
         self.evidence = Path(temp.name)
         self.metadata = {'id': 'cbbg_classic_smoke', 'entrypoints': {'client': [CLASSIC_ENTRYPOINT]},
                          'custom': {'cbbg:scenarios': ['world', 'satin', REDUCED_GL_SCENARIO,
-                                                       'renderscale', 'vulkan-lifecycle', 'vulkan-pixels']}}
+                                                       'renderscale', 'iris', 'vulkan-lifecycle', 'vulkan-pixels']}}
         self.log = ('CBBG_CLASSIC_VULKAN_DEVICE mod=0.5.2 device=Test GPU api=1.3.0 glfw=no-api reference=false\n'
                     'CBBG_CLASSIC_VULKAN_SCENE format=97 disabled=false\n'
                     'CBBG_CLASSIC_VULKAN_WORLD presentations=12\n')
@@ -169,6 +169,34 @@ class ClassicScenarioTests(unittest.TestCase):
         (self.evidence / 'initial-options.txt').write_text(CLASSIC_OPTIONS.replace('60', '30'))
         with self.assertRaisesRegex(ValueError, 'config or options differ'):
             classic_result('world', 'vulkanmod', 'vulkan', self.log, self.evidence, 0)
+
+    def test_iris_requires_activation_reload_recovery_and_unchanged_saved_mode(self):
+        validate_classic_choice(self.metadata, 'iris', 'iris', 'opengl')
+        with self.assertRaisesRegex(ValueError, 'profile or backend'):
+            validate_classic_choice(self.metadata, 'iris', 'sodium', 'opengl')
+        arguments = classic_jvm_arguments('candidate.jar', 'iris', 'opengl', 'iris')
+        self.assertIn('-Dcbbg.test.iris=true', arguments)
+        self.assertIn('-Dcbbg.test.irisCycle=true', arguments)
+        config = json.dumps(classic_config('opengl', 'iris'))
+        self.assertEqual('DEMO', json.loads(config)['mode'])
+        (self.evidence / 'initial-cbbg.json').write_text(config)
+        (self.evidence / 'final-cbbg.json').write_text(config)
+        (self.evidence / 'initial-iris.properties').write_text(CLASSIC_IRIS_OPTIONS)
+        for name in ('inactive', 'active', 'reloaded', 'restored'):
+            self.write_capture(self.evidence / f'iris-{name}.png', 800, 600)
+        log = ('CBBG_CLASSIC_OPENGL Test GPU / 3.2 sodium=true\n'
+               'CBBG_CLASSIC_IRIS_SUPPRESSED iris-active.png format=RGBA8 draws=0\n'
+               'CBBG_CLASSIC_IRIS_SUPPRESSED iris-reloaded.png format=RGBA8 draws=0\n'
+               'CBBG_CLASSIC_IRIS_RELOAD_PASS\n'
+               'CBBG_CLASSIC_IRIS_CYCLE_PASS presentations=10\n')
+        classic_result('iris', 'iris', 'opengl', log, self.evidence, 0)
+        for bad in (log.replace('draws=0', 'draws=1', 1), log.replace('iris-reloaded', 'iris-active'),
+                    log.replace('presentations=10', 'presentations=9')):
+            with self.assertRaises(ValueError):
+                classic_result('iris', 'iris', 'opengl', bad, self.evidence, 0)
+        (self.evidence / 'final-cbbg.json').write_text(config.replace('DEMO', 'DISABLED'))
+        with self.assertRaisesRegex(ValueError, 'saved CBBG configuration'):
+            classic_result('iris', 'iris', 'opengl', log, self.evidence, 0)
 
     def test_pixel_oracle_requires_all_three_comparisons_and_frozen_tile(self):
         tile = self.evidence / 'pixel-input'

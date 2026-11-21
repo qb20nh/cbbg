@@ -148,7 +148,7 @@ def main():
                         args.test_dependency_minimums, args.external_library,
                         args.loader_version, args.fabric_api_version))):
             parser.error('Classic runs require a packaged scenario and X display without GameTest options')
-        config = classic_config(args.backend)
+        config = classic_config(args.backend, args.classic_scenario)
         if initial_config is not None and json.loads(initial_config) != config:
             parser.error('Classic scenario settings differ from the fixed workload')
         initial_config = (json.dumps(config, indent=2) + '\n').encode()
@@ -374,6 +374,8 @@ def main():
         if classic:
             for capture in game.glob('*.png'):
                 capture.replace(evidence / capture.name)
+            if args.classic_scenario == 'iris':
+                shutil.copyfile(game / 'config/cbbg.json', evidence / 'final-cbbg.json')
             scenarios, receipt['graphics'] = classic_result(
                 args.classic_scenario, args.compat, args.backend, log_text, evidence, result.returncode)
         else:

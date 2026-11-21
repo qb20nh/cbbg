@@ -25,6 +25,13 @@
       "entrypoints": ["renderscale"]
     },
     {
+      "suite": "iris",
+      "requiresMod": "iris",
+      "backends": ["opengl"],
+      "restart": false,
+      "entrypoints": ["iris"]
+    },
+    {
       "suite": "vulkan-lifecycle",
       "profiles": ["vulkanmod"],
       "backends": ["vulkan"],

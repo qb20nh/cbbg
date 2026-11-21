@@ -41,13 +41,13 @@ def validate_classic_choice(metadata, scenario, profile, backend):
             return
         if scenario == 'satin' and profile == 'satin':
             return
-        if scenario == 'renderscale' and 'renderscale' in profile.split('+'):
+        if scenario in ('iris', 'renderscale') and scenario in profile.split('+'):
             return
     raise ValueError('Unsupported classic scenario, profile or backend')
 
 
-def classic_config(backend):
-    return {'mode': 'DEMO' if backend == 'vulkan' else 'ENABLED',
+def classic_config(backend, scenario='world'):
+    return {'mode': 'DEMO' if backend == 'vulkan' or scenario == 'iris' else 'ENABLED',
             'pixelFormat': 'RGBA16F', 'stbnSize': 16, 'stbnDepth': 8, 'stbnSeed': 0,
             'strength': 2, 'notifyChat': False, 'notifyToast': False}
 
@@ -76,6 +76,8 @@ def classic_jvm_arguments(candidate, scenario, backend, profile):
             arguments.append('-Dcbbg.test.satin=true')
         elif scenario == 'renderscale':
             arguments.append('-Dcbbg.test.renderScale=true')
+        elif scenario == 'iris':
+            arguments += ['-Dcbbg.test.iris=true', '-Dcbbg.test.irisCycle=true']
     return arguments
 
 
@@ -152,12 +154,28 @@ def renderscale_captures(log, width, height):
     return captures
 
 
+def iris_captures(log, evidence, width, height):
+    events = re.findall(r'CBBG_CLASSIC_IRIS_(SUPPRESSED [^\r\n]+|RELOAD_PASS|'
+                        r'CYCLE_PASS presentations=\d+)(?=\r?\n|\Z)', log)
+    if len(events) != 4 or events[:3] != ['SUPPRESSED iris-active.png format=RGBA8 draws=0',
+                                        'SUPPRESSED iris-reloaded.png format=RGBA8 draws=0',
+                                        'RELOAD_PASS']:
+        raise ValueError('Incomplete Iris activation or reload evidence')
+    recovered = re.fullmatch(r'CYCLE_PASS presentations=(\d+)', events[3])
+    if not recovered or int(recovered[1]) < 10:
+        raise ValueError('Iris deactivation did not restore CBBG presentation')
+    if (evidence / 'final-cbbg.json').read_bytes() != (evidence / 'initial-cbbg.json').read_bytes():
+        raise ValueError('Iris changed the saved CBBG configuration')
+    return {name: (width, height) for name in
+            ('iris-inactive.png', 'iris-active.png', 'iris-reloaded.png', 'iris-restored.png')}
+
+
 def classic_result(scenario, profile, backend, log, evidence, exit_code):
     if (type(exit_code) is not int or exit_code != 0
             or re.search(r'VUID-|Validation Error|VK_ERROR_DEVICE_LOST|AssertionError|Game crashed!'
                          r'|GL_INVALID_(?:ENUM|VALUE|OPERATION|FRAMEBUFFER_OPERATION)|GL_OUT_OF_MEMORY', log)):
         raise ValueError('Classic client or graphics validation failed')
-    if (json.loads((evidence / 'initial-cbbg.json').read_text()) != classic_config(backend)
+    if (json.loads((evidence / 'initial-cbbg.json').read_text()) != classic_config(backend, scenario)
             or (evidence / 'initial-options.txt').read_text() != CLASSIC_OPTIONS):
         raise ValueError('Classic initial config or options differ')
     if ('iris' in profile.split('+')
@@ -221,6 +239,8 @@ def classic_result(scenario, profile, backend, log, evidence, exit_code):
             captures = {}
         elif scenario == 'renderscale':
             captures = renderscale_captures(log, width, height)
+        elif scenario == 'iris':
+            captures = iris_captures(log, evidence, width, height)
         elif int(one_reading(log, r'CBBG_CLASSIC_SMOKE_PASS presentations=(\d+)')) < 10:
             raise ValueError('OpenGL world did not present enough frames')
         graphics = {'backend': 'opengl', 'provider': 'minecraft', 'gpu': gpu, 'driver': driver}
