@@ -8,6 +8,7 @@ import unittest
 
 from fabric_classic_scenarios import (CLASSIC_ENTRYPOINT, CLASSIC_IRIS_OPTIONS, CLASSIC_OPTIONS,
                                       REDUCED_GL_SCENARIO, SETTINGS_MANIFEST, SETTINGS_NOISE_FRAMES,
+                                      VULKAN_FORMAT_CASES,
                                       classic_config, classic_jvm_arguments, classic_result,
                                       pixel_cache_files, validate_classic_choice)
 from runtime_catalog import load_catalog, select_targets
@@ -21,7 +22,8 @@ class ClassicScenarioTests(unittest.TestCase):
         self.metadata = {'id': 'cbbg_classic_smoke', 'entrypoints': {'client': [CLASSIC_ENTRYPOINT]},
                          'custom': {'cbbg:scenarios': ['world', 'satin', REDUCED_GL_SCENARIO,
                                                        'renderscale', 'iris', 'vulkan-lifecycle',
-                                                       'vulkan-pixels', 'vulkan-settings']}}
+                                                       'vulkan-pixels', 'vulkan-settings',
+                                                       *VULKAN_FORMAT_CASES]}}
         self.log = ('CBBG_CLASSIC_VULKAN_DEVICE mod=0.5.2 device=Test GPU api=1.3.0 glfw=no-api reference=false\n'
                     'CBBG_CLASSIC_VULKAN_SCENE format=97 disabled=false\n'
                     'CBBG_CLASSIC_VULKAN_WORLD presentations=12\n')
@@ -272,6 +274,37 @@ class ClassicScenarioTests(unittest.TestCase):
         (cache / SETTINGS_NOISE_FRAMES[0]).write_bytes(b'changed')
         with self.assertRaisesRegex(ValueError, 'noise frame differs'):
             classic_result(scenario, 'vulkanmod', 'vulkan', log, self.evidence, 0)
+
+    def test_vulkan_fallback_requires_capability_mask_real_format_and_saved_preference(self):
+        self.write_capture(self.evidence / 'vulkan-format-settings.png', 800, 600)
+        for scenario, (mask, observed) in VULKAN_FORMAT_CASES.items():
+            with self.subTest(scenario=scenario):
+                validate_classic_choice(self.metadata, scenario, 'vulkanmod', 'vulkan')
+                config = classic_config('vulkan', scenario)
+                self.assertEqual('RGBA32F', config['pixelFormat'])
+                for name in ('initial-cbbg.json', 'final-cbbg.json'):
+                    (self.evidence / name).write_text(json.dumps(config))
+                flags = classic_jvm_arguments('candidate.jar', scenario, 'vulkan', 'vulkanmod')
+                self.assertIn('-Dcbbg.test.vulkanFormatMask=' + mask, flags)
+                self.assertIn('-Dcbbg.test.vulkanSceneFormat=' + str(observed), flags)
+                log = (self.log.replace('format=97', f'format={observed}')
+                       + f'CBBG_CLASSIC_VULKAN_SCENE format={observed} disabled=false\n'
+                       'CBBG_FORMAT_AGENT querySites=1\n'
+                       'CBBG_CLASSIC_VULKAN_MASK format=109 feature=blend\n')
+                if mask == 'both':
+                    log += ('CBBG_CLASSIC_VULKAN_MASK format=97 feature=blend\n'
+                            'CBBG_CLASSIC_VULKAN_FORMAT_LABEL x=200 y=243 width=223 height=9 text=Localized warning\n')
+                log += f'CBBG_CLASSIC_VULKAN_FORMAT_WARNING format={observed} draws={4 if mask == "both" else 0}\n'
+                classic_result(scenario, 'vulkanmod', 'vulkan', log, self.evidence, 0)
+                for bad in (log.replace('querySites=1', 'querySites=2'),
+                            log.replace('format=109 feature=blend', 'format=37 feature=blend'),
+                            log.replace('draws=4' if mask == 'both' else 'draws=0',
+                                        'draws=0' if mask == 'both' else 'draws=1')):
+                    with self.assertRaises(ValueError):
+                        classic_result(scenario, 'vulkanmod', 'vulkan', bad, self.evidence, 0)
+                (self.evidence / 'final-cbbg.json').write_text(json.dumps({**config, 'pixelFormat': 'RGBA8'}))
+                with self.assertRaisesRegex(ValueError, 'saved precision preference'):
+                    classic_result(scenario, 'vulkanmod', 'vulkan', log, self.evidence, 0)
 
     def test_pixel_oracle_requires_all_three_comparisons_and_frozen_tile(self):
         tile = self.evidence / 'pixel-input'

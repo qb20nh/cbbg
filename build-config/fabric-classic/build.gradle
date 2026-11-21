@@ -203,10 +203,24 @@ tasks.named('processPackagedSmokeResources') {
         include 'cbbg-iris-fixture/**'
     }
 }
+def formatProbeAgent = tasks.register('classicFormatProbeAgentJar', Jar) {
+    archiveClassifier = 'format-probe-agent'
+    destinationDirectory = layout.buildDirectory.dir('intermediates/smoke')
+    from(sourceSets.packagedSmoke.output) {
+        include 'com/qb20nh/cbbg/parity/ClassicFormatProbeAgent*.class',
+                'com/qb20nh/cbbg/gametest/ReleaseMapping.class', 'cbbg-test.map'
+    }
+    manifest.attributes('Premain-Class': 'com.qb20nh.cbbg.parity.ClassicFormatProbeAgent')
+}
 def smokeJar = tasks.register('packagedSmokeJar', Jar) {
     archiveClassifier = 'smoke-named'
     destinationDirectory = layout.buildDirectory.dir('intermediates/smoke')
-    from(sourceSets.packagedSmoke.output)
+    from(sourceSets.packagedSmoke.output) {
+        exclude 'com/qb20nh/cbbg/parity/ClassicFormatProbeAgent*.class'
+    }
+    from(formatProbeAgent.flatMap { it.archiveFile }) {
+        rename { 'cbbg-format-probe-agent.jar' }
+    }
 }
 def remappedSmoke = tasks.register('remapPackagedSmokeJar', net.fabricmc.loom.task.RemapJarTask) {
     dependsOn smokeJar

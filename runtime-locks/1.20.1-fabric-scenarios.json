@@ -58,6 +58,20 @@
       "backends": ["vulkan"],
       "restart": false,
       "entrypoints": ["vulkan-settings"]
+    },
+    {
+      "suite": "vulkan-fallback-float",
+      "profiles": ["vulkanmod"],
+      "backends": ["vulkan"],
+      "restart": false,
+      "entrypoints": ["vulkan-fallback-float"]
+    },
+    {
+      "suite": "vulkan-fallback-eight-bit",
+      "profiles": ["vulkanmod"],
+      "backends": ["vulkan"],
+      "restart": false,
+      "entrypoints": ["vulkan-fallback-eight-bit"]
     }
   ]
 }

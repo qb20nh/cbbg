@@ -10,6 +10,9 @@ CLASSIC_DRIVER = 'cbbg_classic_smoke'
 CLASSIC_ENTRYPOINT = 'com.qb20nh.cbbg.parity.ClassicPackagedSmoke'
 VULKAN_SCENARIOS = {'vulkan-lifecycle': 'vulkanLifecycle', 'vulkan-pixels': 'vulkanPixels',
                     'vulkan-settings': 'vulkanSettings'}
+VULKAN_FORMAT_CASES = {'vulkan-fallback-float': ('full', 97),
+                       'vulkan-fallback-eight-bit': ('both', 37)}
+FORMAT_PROBE_AGENT = 'cbbg-format-probe-agent.jar'
 SETTINGS_MANIFEST = 'stbn_64x64x8.sha256'
 SETTINGS_NOISE_FRAMES = tuple(f'stbn_64x64x8_{index}.png' for index in range(8))
 CONTEXT_MODS = {'forcegl2': 'forcegl20', 'threatengl': 'threatengl'}
@@ -36,7 +39,7 @@ def validate_classic_choice(metadata, scenario, profile, backend):
     if scenario not in classic_scenarios(metadata):
         raise ValueError('Classic scenario is not declared by its packaged driver')
     if profile == 'vulkanmod' and backend == 'vulkan' and (
-            scenario == 'world' or scenario in VULKAN_SCENARIOS):
+            scenario == 'world' or scenario in VULKAN_SCENARIOS or scenario in VULKAN_FORMAT_CASES):
         return
     if backend == 'opengl':
         if scenario == 'world' and profile != 'vulkanmod':
@@ -53,7 +56,8 @@ def validate_classic_choice(metadata, scenario, profile, backend):
 def classic_config(backend, scenario='world'):
     settings = scenario == 'vulkan-settings'
     return {'mode': 'DEMO' if backend == 'vulkan' or scenario == 'iris' else 'ENABLED',
-            'pixelFormat': 'RGBA16F', 'stbnSize': 64 if settings else 16, 'stbnDepth': 8,
+            'pixelFormat': 'RGBA32F' if scenario in VULKAN_FORMAT_CASES else 'RGBA16F',
+            'stbnSize': 64 if settings else 16, 'stbnDepth': 8,
             'stbnSeed': 0, 'strength': 2, 'notifyChat': settings, 'notifyToast': settings}
 
 
@@ -73,6 +77,10 @@ def classic_jvm_arguments(candidate, scenario, backend, profile, restart_phase=N
         arguments += ['-Dorg.lwjgl.system.stackSize=1024', '-Dcbbg.test.vulkanMod=true']
         if scenario in VULKAN_SCENARIOS:
             arguments.append('-Dcbbg.test.' + VULKAN_SCENARIOS[scenario] + '=true')
+        if scenario in VULKAN_FORMAT_CASES:
+            mask, expected_format = VULKAN_FORMAT_CASES[scenario]
+            arguments += ['-Dcbbg.test.vulkanFormatWarning=true', '-Dcbbg.test.vulkanFormatMask=' + mask,
+                          '-Dcbbg.test.vulkanSceneFormat=' + str(expected_format)]
     else:
         arguments.append('-Dcbbg.test.compatProfile=' + profile)
         if profile in CONTEXT_MODS:
@@ -228,6 +236,25 @@ def vulkan_settings_captures(log, evidence, width, height):
     return captures
 
 
+def vulkan_fallback_captures(log, evidence, scenario, scenes, width, height):
+    mask, expected_format = VULKAN_FORMAT_CASES[scenario]
+    queries = int(one_reading(log, r'CBBG_FORMAT_AGENT querySites=(\d+)(?=\r?\n|\Z)'))
+    actual_mask = set(re.findall(r'CBBG_CLASSIC_VULKAN_MASK format=(\d+) feature=blend', log))
+    expected_mask = {'97', '109'} if mask == 'both' else {'109'}
+    if (queries != 1 or actual_mask != expected_mask
+            or scenes != [(str(expected_format), 'false')] * 2):
+        raise ValueError('Vulkan format probe or framebuffer fallback differs')
+    format_id, draws = one_reading(log, r'CBBG_CLASSIC_VULKAN_FORMAT_WARNING format=(\d+) draws=(\d+)')
+    labels = re.findall(r'CBBG_CLASSIC_VULKAN_FORMAT_LABEL x=\d+ y=\d+ width=[1-9]\d* height=[1-9]\d* '
+                        r'text=([^\r\n]+)', log)
+    if (int(format_id) != expected_format or (int(draws) > 0) != (expected_format == 37)
+            or len(labels) != (1 if expected_format == 37 else 0)):
+        raise ValueError('Vulkan localized fallback warning differs')
+    if (evidence / 'final-cbbg.json').read_bytes() != (evidence / 'initial-cbbg.json').read_bytes():
+        raise ValueError('Vulkan fallback changed the saved precision preference')
+    return {name: (width, height) for name in ('vulkan-world.png', 'vulkan-format-settings.png')}
+
+
 def classic_result(scenario, profile, backend, log, evidence, exit_code, restart_phase=None):
     if (type(exit_code) is not int or exit_code != 0
             or re.search(r'VUID-|Validation Error|VK_ERROR_DEVICE_LOST|AssertionError|Game crashed!'
@@ -274,6 +301,8 @@ def classic_result(scenario, profile, backend, log, evidence, exit_code, restart
             captures = {name: (width, height) for name in (
                 'vulkan-demo-before.png', 'vulkan-disabled.png', 'vulkan-rgba32f.png')}
             captures.update({'vulkan-world.png': resized, 'vulkan-resized.png': resized})
+        elif scenario in VULKAN_FORMAT_CASES:
+            captures = vulkan_fallback_captures(log, evidence, scenario, scenes, width, height)
         else:
             comparisons = re.findall(r'CBBG_CLASSIC_VULKAN_PIXELS mode=(\w+) channels=(\d+) mismatches=(\d+) '
                                      r'topOriginMismatches=\d+ alphaMismatches=(\d+) changedChannels=(\d+)', log)

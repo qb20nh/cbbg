@@ -12,7 +12,8 @@ import subprocess
 import zipfile
 
 from fabric_classic_scenarios import (CLASSIC_IRIS_OPTIONS, CLASSIC_OPTIONS, CLASSIC_RESTART_FILES,
-                                      REDUCED_GL_SCENARIO, SETTINGS_MANIFEST, SETTINGS_NOISE_FRAMES,
+                                      FORMAT_PROBE_AGENT, REDUCED_GL_SCENARIO, SETTINGS_MANIFEST,
+                                      SETTINGS_NOISE_FRAMES, VULKAN_FORMAT_CASES,
                                       classic_config, classic_jvm_arguments,
                                       classic_result, classic_viewport, pixel_cache_files,
                                       validate_classic_choice)
@@ -221,11 +222,14 @@ def main():
     receipt_path = game / (args.restart_phase + '-probe.json' if args.restart_phase else 'probe.json')
     identity = 'fabric-loader-' + target['dependencies']['loader'] + '-' + target['minecraft']
     width, height = classic_viewport(args.classic_scenario) if classic else (960, 540)
+    format_probe = classic and args.classic_scenario in VULKAN_FORMAT_CASES
     jvm_arguments = ['-XX:-CreateCoredumpOnCrash', '-Djava.awt.headless=true']
     if classic:
         jvm_arguments += classic_jvm_arguments(game / 'mods/candidate.jar',
                                                args.classic_scenario, args.backend, args.compat,
                                                args.restart_phase)
+        if format_probe:
+            jvm_arguments.append('-javaagent:' + str(evidence / FORMAT_PROBE_AGENT))
     else:
         jvm_arguments += [
             '-Xmx2G', *display_jvm_arguments, '-Dfabric.client.gametest',
@@ -381,6 +385,9 @@ def main():
             receipt['artifacts'][name] = digest(mods / name)
         verify_dependencies(target, args.compat,
                             {name: mods / (name + '.jar') for name in dependencies}, dependency_lock)
+        if format_probe:
+            with zipfile.ZipFile(mods / 'driver.jar') as driver:
+                (evidence / FORMAT_PROBE_AGENT).write_bytes(driver.read(FORMAT_PROBE_AGENT))
         if not classic:
             verify_gametest_api(gametest_target, mods / 'fabric-gametest-api.jar', dependency_lock)
         with log_path.open('w') as log:
@@ -397,6 +404,8 @@ def main():
                 shutil.copyfile(game / 'vulkan-settings-warm.sha256', saved / 'warm.sha256')
                 for name in (SETTINGS_MANIFEST, *SETTINGS_NOISE_FRAMES):
                     shutil.copyfile(game / '.cbbg' / name, saved / name)
+            if format_probe:
+                shutil.copyfile(game / 'config/cbbg.json', evidence / 'final-cbbg.json')
             if args.classic_scenario == 'iris':
                 shutil.copyfile(game / 'config/cbbg.json', evidence / 'final-cbbg.json')
                 if args.restart_phase:
