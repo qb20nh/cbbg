@@ -9,6 +9,10 @@ import zlib
 CLASSIC_DRIVER = 'cbbg_classic_smoke'
 CLASSIC_ENTRYPOINT = 'com.qb20nh.cbbg.parity.ClassicPackagedSmoke'
 VULKAN_SCENARIOS = {'vulkan-lifecycle': 'vulkanLifecycle', 'vulkan-pixels': 'vulkanPixels'}
+CONTEXT_MODS = {'forcegl2': 'forcegl20', 'threatengl': 'threatengl'}
+REDUCED_GL_SCENARIO = 'forcegl2-mesa-3'
+GLFW_CORE_PROFILE = 0x00032001
+GLFW_COMPAT_PROFILE = 0x00032002
 CLASSIC_OPTIONS = 'renderDistance:4\nsimulationDistance:5\nmaxFps:60\nguiScale:2\npauseOnLostFocus:false\n'
 
 
@@ -30,7 +34,9 @@ def validate_classic_choice(metadata, scenario, profile, backend):
             scenario == 'world' or scenario in VULKAN_SCENARIOS):
         return
     if backend == 'opengl':
-        if scenario == 'world' and profile not in ('vulkanmod', 'forcegl2', 'threatengl'):
+        if scenario == 'world' and profile != 'vulkanmod':
+            return
+        if scenario == REDUCED_GL_SCENARIO and profile == 'forcegl2':
             return
         if scenario == 'satin' and profile == 'satin':
             return
@@ -59,8 +65,10 @@ def classic_jvm_arguments(candidate, scenario, backend, profile):
         arguments += ['-Dorg.lwjgl.system.stackSize=1024', '-Dcbbg.test.vulkanMod=true']
         if scenario in VULKAN_SCENARIOS:
             arguments.append('-Dcbbg.test.' + VULKAN_SCENARIOS[scenario] + '=true')
-    elif scenario == 'world':
+    elif scenario in ('world', REDUCED_GL_SCENARIO):
         arguments.append('-Dcbbg.test.worldProfile=' + profile)
+        if profile in CONTEXT_MODS:
+            arguments.append('-Dcbbg.test.contextMod=' + CONTEXT_MODS[profile])
     elif scenario == 'satin':
         arguments.append('-Dcbbg.test.satin=true')
     return arguments
@@ -91,6 +99,31 @@ def one_reading(log, pattern):
     if len(readings) != 1:
         raise ValueError('Missing or conflicting classic client evidence: ' + pattern)
     return readings[0]
+
+
+def classic_gl_context(log, scenario, profile, gpu):
+    mod, version, glfw_profile, gl30, gl32, glsl = one_reading(
+        log, r'CBBG_CLASSIC_CONTEXT mod=(\w+) reference=false actual=(\d+\.\d+) profile=(\d+) '
+             r'gl30=(true|false) gl32=(true|false) glsl=([^\r\n]+)')
+    actual_version = tuple(map(int, version.split('.')))
+    glfw_profile = int(glfw_profile)
+    if (mod != CONTEXT_MODS[profile] or actual_version < (3, 0) or gl30 != 'true'
+            or (gl32 == 'true') != (actual_version >= (3, 2))):
+        raise ValueError('Unexpected OpenGL changer or capabilities')
+    if profile == 'forcegl2':
+        if (glfw_profile != (GLFW_COMPAT_PROFILE if gl32 == 'true' else 0)
+                or 'Overriding GLFW_CONTEXT_VERSION_MAJOR: 3 -> 2' not in log
+                or 'Overriding GLFW_CONTEXT_VERSION_MINOR: 2 -> 0' not in log):
+            raise ValueError('ForceGL2 did not produce a usable compatibility context')
+        if (scenario == REDUCED_GL_SCENARIO
+                and (actual_version != (3, 0) or gl32 != 'false' or not gpu.startswith('llvmpipe'))):
+            raise ValueError('ForceGL2 reduced-context run requires actual Mesa software OpenGL 3.0')
+    elif (actual_version < (4, 6) or glfw_profile != GLFW_CORE_PROFILE
+          or 'Threatened Minecraft to use GLFW_CONTEXT_VERSION_MAJOR 4' not in log
+          or 'Threatened Minecraft to use GLFW_CONTEXT_VERSION_MINOR 6' not in log):
+        raise ValueError('ThreatenGL did not produce the requested OpenGL core context')
+    return {'changer': mod, 'version': version, 'glfwProfile': glfw_profile,
+            'openGL30': gl30 == 'true', 'openGL32': gl32 == 'true', 'glsl': glsl}
 
 
 def classic_result(scenario, profile, backend, log, evidence, exit_code):
@@ -160,6 +193,8 @@ def classic_result(scenario, profile, backend, log, evidence, exit_code):
         elif int(one_reading(log, r'CBBG_CLASSIC_SMOKE_PASS presentations=(\d+)')) < 10:
             raise ValueError('OpenGL world did not present enough frames')
         graphics = {'backend': 'opengl', 'provider': 'minecraft', 'gpu': gpu, 'driver': driver}
+        if profile in CONTEXT_MODS:
+            graphics['context'] = classic_gl_context(log, scenario, profile, gpu)
     for name, dimensions in captures.items():
         with (evidence / name).open('rb') as stream:
             header = stream.read(24)

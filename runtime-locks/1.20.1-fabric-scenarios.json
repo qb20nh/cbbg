@@ -4,6 +4,13 @@
   "ordinaryMetadata": "build-config/fabric-classic/src/packagedSmoke/resources/fabric.mod.json",
   "additionalRuns": [
     {
+      "suite": "forcegl2-mesa-3",
+      "profiles": ["forcegl2"],
+      "backends": ["opengl"],
+      "restart": false,
+      "entrypoints": ["forcegl2-mesa-3"]
+    },
+    {
       "suite": "satin",
       "profiles": ["satin"],
       "backends": ["opengl"],

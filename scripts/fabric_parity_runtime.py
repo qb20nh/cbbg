@@ -11,8 +11,9 @@ import shutil
 import subprocess
 import zipfile
 
-from fabric_classic_scenarios import (CLASSIC_OPTIONS, classic_config, classic_jvm_arguments, classic_result,
-                                      classic_viewport, pixel_cache_files, validate_classic_choice)
+from fabric_classic_scenarios import (CLASSIC_OPTIONS, REDUCED_GL_SCENARIO, classic_config,
+                                      classic_jvm_arguments, classic_result, classic_viewport,
+                                      pixel_cache_files, validate_classic_choice)
 from fabric_dependency_lock import verify_dependencies, verify_gametest_api
 from fabric_runtime_lock import verify_runtime
 from fabric_scenario_evidence import (STARTUP_CACHE_FILES, STARTUP_DRIVER, graphics_identity,
@@ -256,6 +257,8 @@ def main():
                            SDL_VIDEODRIVER='wayland')
     else:
         environment.update(DISPLAY=args.x_display, XDG_SESSION_TYPE='x11', SDL_VIDEODRIVER='x11')
+    if classic and args.classic_scenario == REDUCED_GL_SCENARIO:
+        environment.update(LIBGL_ALWAYS_SOFTWARE='1', LP_NUM_THREADS='4', MESA_GL_VERSION_OVERRIDE='3.0')
 
     # A new directory prevents interference with personal profiles and stale evidence.
     if args.restart_phase != 'verify':
