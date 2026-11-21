@@ -45,9 +45,9 @@ abstract class TargetBuild extends DefaultTask {
                     '. Expected build.gradle inside ' + profiles + '. Check buildProfile in targets.json and restore the profile files.')
         }
         boolean windows = System.getProperty('os.name').toLowerCase(Locale.ROOT).contains('windows')
+        // Included builds need separate task histories to keep their compile outputs isolated.
         List<String> args = wrapperCommand(root, directory, windows) + ['-p', directory.absolutePath] +
-                operations + ['--no-daemon', '--no-watch-fs',
-                             '--project-cache-dir', new File(root, '.gradle/dispatch/' + targetId.get()).absolutePath]
+                operations + ['--no-daemon', '--no-watch-fs']
         if (profile.get() != 'fabric-upstream') {
             args.add('-Ptarget=' + targetId.get())
         }
