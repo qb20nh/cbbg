@@ -1,5 +1,6 @@
 package com.qb20nh.cbbg.parity;
 
+import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.platform.GlStateManager;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -33,13 +34,16 @@ public final class ClassicPackagedSmoke implements ClientModInitializer {
     DISABLED,
     RESTARTED_DISABLED,
     IRIS,
+    SATIN,
     DONE
   }
 
   private static long presentations;
   private final boolean restart = Boolean.getBoolean("cbbg.test.restart");
   private final boolean iris = Boolean.getBoolean("cbbg.test.iris");
+  private final boolean satin = Boolean.getBoolean("cbbg.test.satin");
   private ClassicIrisSmoke irisSmoke;
+  private ClassicSatinSmoke satinSmoke;
   private int ticks;
   private Phase phase = Phase.TITLE;
   private long enabledStart;
@@ -83,11 +87,19 @@ public final class ClassicPackagedSmoke implements ClientModInitializer {
         if (iris) {
           irisSmoke = new ClassicIrisSmoke(restart, ticks, presentations);
           phase = Phase.IRIS;
+        } else if (satin) {
+          satinSmoke = new ClassicSatinSmoke(client);
+          phase = Phase.SATIN;
         } else {
           phase = restart ? Phase.RESTARTED_DISABLED : Phase.DITHERED;
         }
       } else if (phase == Phase.IRIS) {
         if (irisSmoke.tick(client, ticks, presentations)) {
+          phase = Phase.DONE;
+          client.stop();
+        }
+      } else if (phase == Phase.SATIN) {
+        if (satinSmoke.tick(client)) {
           phase = Phase.DONE;
           client.stop();
         }
@@ -150,15 +162,18 @@ public final class ClassicPackagedSmoke implements ClientModInitializer {
   }
 
   private static void setMode(Minecraft client, String mode) throws Exception {
+    command(client, "cbbg mode set " + mode);
+  }
+
+  static void command(Minecraft client, String command) throws Exception {
     var commands = ClientCommandManager.getActiveDispatcher();
     var connection = client.getConnection();
     if (commands == null
         || connection == null
         || commands.execute(
-                "cbbg mode set " + mode,
-                (FabricClientCommandSource) connection.getSuggestionsProvider())
+                command, (FabricClientCommandSource) connection.getSuggestionsProvider())
             != 1) {
-      throw new AssertionError("Could not set CBBG mode through the client command: " + mode);
+      throw new AssertionError("CBBG client command failed: " + command);
     }
   }
 
@@ -177,6 +192,9 @@ public final class ClassicPackagedSmoke implements ClientModInitializer {
     if (loader.isModLoaded("iris") != Boolean.getBoolean("cbbg.test.iris")) {
       throw new AssertionError("Unexpected Iris presence");
     }
+    if (loader.isModLoaded("satin") != Boolean.getBoolean("cbbg.test.satin")) {
+      throw new AssertionError("Unexpected Satin presence");
+    }
     System.out.println(
         "CBBG_CLASSIC_OPENGL "
             + GL11.glGetString(GL11.GL_RENDERER)
@@ -187,8 +205,12 @@ public final class ClassicPackagedSmoke implements ClientModInitializer {
   }
 
   static void requireFormat(Minecraft client, int expected) {
+    requireFormat(client.getMainRenderTarget(), expected);
+  }
+
+  static void requireFormat(RenderTarget target, int expected) {
     int old = GL11.glGetInteger(GL11.GL_TEXTURE_BINDING_2D);
-    GlStateManager._bindTexture(client.getMainRenderTarget().getColorTextureId());
+    GlStateManager._bindTexture(target.getColorTextureId());
     try {
       int actual =
           GL11.glGetTexLevelParameteri(GL11.GL_TEXTURE_2D, 0, GL11.GL_TEXTURE_INTERNAL_FORMAT);

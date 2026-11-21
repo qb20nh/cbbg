@@ -1,0 +1,12 @@
+{
+  "targets": [
+    {"name": "float", "satin:format": "RGBA16F"},
+    {"name": "eight", "satin:format": "RGBA8"}
+  ],
+  "passes": [
+    {"name": "invert", "intarget": "minecraft:main", "outtarget": "float",
+      "uniforms": [{"name": "InverseAmount", "values": [1.0]}]},
+    {"name": "blit", "intarget": "float", "outtarget": "eight"},
+    {"name": "blit", "intarget": "eight", "outtarget": "minecraft:main"}
+  ]
+}
