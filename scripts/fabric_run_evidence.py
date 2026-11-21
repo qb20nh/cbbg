@@ -7,8 +7,8 @@ from pathlib import Path
 import re
 import zipfile
 
-from fabric_classic_scenarios import (CLASSIC_RESTART_FILES, FORMAT_PROBE_AGENT, VULKAN_FORMAT_CASES,
-                                      classic_result, validate_classic_choice)
+from fabric_classic_scenarios import (CLASSIC_RESTART_FILES, classic_result, validate_classic_choice,
+                                      vulkan_probe_agent)
 from fabric_dependency_lock import verify_dependencies, verify_gametest_api
 from fabric_parity_runtime import RESTART_DRIVERS, restart_state, verify_external_library
 from fabric_scenario_evidence import graphics_identity, validate_scenarios, validate_shutdown, validate_startup
@@ -106,9 +106,10 @@ def _verify_run(receipt_path, target, *, source_commit, candidate_sha256,
     if classic:
         if report.get('initialConfigSha256') != evidence[directory + '/initial-cbbg.json']:
             raise EvidenceError('Classic initial config hash differs')
-        if scenario in VULKAN_FORMAT_CASES:
+        probe_agent = vulkan_probe_agent(scenario)
+        if probe_agent:
             with zipfile.ZipFile(installed['driver.jar']) as driver:
-                if paths[directory + '/' + FORMAT_PROBE_AGENT].read_bytes() != driver.read(FORMAT_PROBE_AGENT):
+                if paths[directory + '/' + probe_agent].read_bytes() != driver.read(probe_agent):
                     raise EvidenceError('Vulkan probe agent differs from the locked test driver')
         results, graphics = classic_result(scenario, profile, backend, log, game / directory,
                                            report['exitCode'], restart_phase)

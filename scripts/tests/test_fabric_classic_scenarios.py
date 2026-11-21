@@ -8,9 +8,9 @@ import unittest
 
 from fabric_classic_scenarios import (CLASSIC_ENTRYPOINT, CLASSIC_IRIS_OPTIONS, CLASSIC_OPTIONS,
                                       REDUCED_GL_SCENARIO, SETTINGS_MANIFEST, SETTINGS_NOISE_FRAMES,
-                                      VULKAN_FORMAT_CASES,
+                                      VMA_PROBE_AGENT, VULKAN_FORMAT_CASES, VULKAN_VMA_CASES,
                                       classic_config, classic_jvm_arguments, classic_result,
-                                      pixel_cache_files, validate_classic_choice)
+                                      pixel_cache_files, validate_classic_choice, vulkan_probe_agent)
 from runtime_catalog import load_catalog, select_targets
 
 
@@ -23,7 +23,7 @@ class ClassicScenarioTests(unittest.TestCase):
                          'custom': {'cbbg:scenarios': ['world', 'satin', REDUCED_GL_SCENARIO,
                                                        'renderscale', 'iris', 'vulkan-lifecycle',
                                                        'vulkan-pixels', 'vulkan-settings',
-                                                       *VULKAN_FORMAT_CASES]}}
+                                                       *VULKAN_FORMAT_CASES, *VULKAN_VMA_CASES]}}
         self.log = ('CBBG_CLASSIC_VULKAN_DEVICE mod=0.5.2 device=Test GPU api=1.3.0 glfw=no-api reference=false\n'
                     'CBBG_CLASSIC_VULKAN_SCENE format=97 disabled=false\n'
                     'CBBG_CLASSIC_VULKAN_WORLD presentations=12\n')
@@ -305,6 +305,41 @@ class ClassicScenarioTests(unittest.TestCase):
                 (self.evidence / 'final-cbbg.json').write_text(json.dumps({**config, 'pixelFormat': 'RGBA8'}))
                 with self.assertRaisesRegex(ValueError, 'saved precision preference'):
                     classic_result(scenario, 'vulkanmod', 'vulkan', log, self.evidence, 0)
+
+    def test_vma_depth_failure_requires_cleanup_before_retry(self):
+        scenario = 'vulkan-vma-depth'
+        validate_classic_choice(self.metadata, scenario, 'vulkanmod', 'vulkan')
+        self.assertEqual(VMA_PROBE_AGENT, vulkan_probe_agent(scenario))
+        settings = json.dumps(classic_config('vulkan', scenario))
+        for file in ('initial-cbbg.json', 'final-cbbg.json'):
+            (self.evidence / file).write_text(settings)
+        reject = 'CBBG_CLASSIC_VULKAN_REJECT depth format=129\n'
+        cleanup = 'CBBG_CLASSIC_VULKAN_PARTIAL_FREE count=1\n'
+        failure = ('VulkanMod scene allocation failed for RGBA32F at 800x600: '
+                   'Failed to create image: VK_ERROR_OUT_OF_DEVICE_MEMORY\n')
+        log = self.log + 'CBBG_ALLOC_AGENT allocationSites=1 freeSites=1\n'
+        classic_result(scenario, 'vulkanmod', 'vulkan', log + reject + cleanup + failure, self.evidence, 0)
+        for invalid in (reject + failure, reject + failure + cleanup, reject + cleanup * 2 + failure):
+            with self.assertRaisesRegex(ValueError, 'failure and cleanup'):
+                classic_result(scenario, 'vulkanmod', 'vulkan', log + invalid, self.evidence, 0)
+
+    def test_vma_total_failure_requires_original_swapchain(self):
+        scenario = 'vulkan-vma-all'
+        config = json.dumps(classic_config('vulkan', scenario))
+        for name in ('initial-cbbg.json', 'final-cbbg.json'):
+            (self.evidence / name).write_text(config)
+        log = (self.log.replace('format=97 disabled=false', 'format=44 disabled=true')
+               + 'CBBG_ALLOC_AGENT allocationSites=1 freeSites=1\n')
+        for code, name in ((109, 'RGBA32F'), (97, 'RGBA16F'), (37, 'RGBA8')):
+            log += (f'CBBG_CLASSIC_VULKAN_REJECT color format={code}\n'
+                    f'VulkanMod scene allocation failed for {name} at 800x600: '
+                    'Failed to create image: VK_ERROR_OUT_OF_DEVICE_MEMORY\n')
+        classic_result(scenario, 'vulkanmod', 'vulkan', log, self.evidence, 0)
+        with self.assertRaisesRegex(ValueError, 'fallback framebuffer'):
+            classic_result(scenario, 'vulkanmod', 'vulkan', log.replace('disabled=true', 'disabled=false'),
+                           self.evidence, 0)
+        self.assertIn('-Dcbbg.test.vulkanOriginalTarget=true',
+                      classic_jvm_arguments('candidate.jar', scenario, 'vulkan', 'vulkanmod'))
 
     def test_pixel_oracle_requires_all_three_comparisons_and_frozen_tile(self):
         tile = self.evidence / 'pixel-input'

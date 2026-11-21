@@ -37,7 +37,11 @@ class FabricAcceptanceTests(unittest.TestCase):
              ('vulkan-pixels', 'vulkanmod', ['vulkan-pixels']),
              ('vulkan-settings', 'vulkanmod', ['vulkan-settings']),
              ('vulkan-fallback-float', 'vulkanmod', ['vulkan-fallback-float']),
-             ('vulkan-fallback-eight-bit', 'vulkanmod', ['vulkan-fallback-eight-bit'])],
+             ('vulkan-fallback-eight-bit', 'vulkanmod', ['vulkan-fallback-eight-bit']),
+             ('vulkan-vma-depth', 'vulkanmod', ['vulkan-vma-depth']),
+             ('vulkan-vma-float', 'vulkanmod', ['vulkan-vma-float']),
+             ('vulkan-vma-all', 'vulkanmod', ['vulkan-vma-all']),
+             ('vulkan-vma-resize', 'vulkanmod', ['vulkan-vma-resize'])],
             [(run['suite'], run['profile'], run['entrypoints'])
              for run in runs if run['backend'] == 'vulkan'],
         )

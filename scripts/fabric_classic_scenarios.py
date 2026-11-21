@@ -13,6 +13,13 @@ VULKAN_SCENARIOS = {'vulkan-lifecycle': 'vulkanLifecycle', 'vulkan-pixels': 'vul
 VULKAN_FORMAT_CASES = {'vulkan-fallback-float': ('full', 97),
                        'vulkan-fallback-eight-bit': ('both', 37)}
 FORMAT_PROBE_AGENT = 'cbbg-format-probe-agent.jar'
+VMA_PROBE_AGENT = 'cbbg-vma-probe-agent.jar'
+VULKAN_VMA_CASES = {
+    'vulkan-vma-depth': 'depth',
+    'vulkan-vma-float': 'float',
+    'vulkan-vma-all': 'all',
+    'vulkan-vma-resize': 'resize',
+}
 SETTINGS_MANIFEST = 'stbn_64x64x8.sha256'
 SETTINGS_NOISE_FRAMES = tuple(f'stbn_64x64x8_{index}.png' for index in range(8))
 CONTEXT_MODS = {'forcegl2': 'forcegl20', 'threatengl': 'threatengl'}
@@ -39,7 +46,7 @@ def validate_classic_choice(metadata, scenario, profile, backend):
     if scenario not in classic_scenarios(metadata):
         raise ValueError('Classic scenario is not declared by its packaged driver')
     if profile == 'vulkanmod' and backend == 'vulkan' and (
-            scenario == 'world' or scenario in VULKAN_SCENARIOS or scenario in VULKAN_FORMAT_CASES):
+            scenario == 'world' or scenario in VULKAN_SCENARIOS or vulkan_probe_agent(scenario)):
         return
     if backend == 'opengl':
         if scenario == 'world' and profile != 'vulkanmod':
@@ -55,8 +62,9 @@ def validate_classic_choice(metadata, scenario, profile, backend):
 
 def classic_config(backend, scenario='world'):
     settings = scenario == 'vulkan-settings'
+    full_precision = scenario in VULKAN_FORMAT_CASES or VULKAN_VMA_CASES.get(scenario) in ('depth', 'float', 'all')
     return {'mode': 'DEMO' if backend == 'vulkan' or scenario == 'iris' else 'ENABLED',
-            'pixelFormat': 'RGBA32F' if scenario in VULKAN_FORMAT_CASES else 'RGBA16F',
+            'pixelFormat': 'RGBA32F' if full_precision else 'RGBA16F',
             'stbnSize': 64 if settings else 16, 'stbnDepth': 8,
             'stbnSeed': 0, 'strength': 2, 'notifyChat': settings, 'notifyToast': settings}
 
@@ -67,6 +75,14 @@ def classic_viewport(scenario):
 
 def includes_sodium(profile):
     return bool({'sodium', 'iris'} & set(profile.split('+')))
+
+
+def vulkan_probe_agent(scenario):
+    if scenario in VULKAN_FORMAT_CASES:
+        return FORMAT_PROBE_AGENT
+    if scenario in VULKAN_VMA_CASES:
+        return VMA_PROBE_AGENT
+    return None
 
 
 def classic_jvm_arguments(candidate, scenario, backend, profile, restart_phase=None):
@@ -81,6 +97,16 @@ def classic_jvm_arguments(candidate, scenario, backend, profile, restart_phase=N
             mask, expected_format = VULKAN_FORMAT_CASES[scenario]
             arguments += ['-Dcbbg.test.vulkanFormatWarning=true', '-Dcbbg.test.vulkanFormatMask=' + mask,
                           '-Dcbbg.test.vulkanSceneFormat=' + str(expected_format)]
+        if scenario in VULKAN_VMA_CASES:
+            mode = VULKAN_VMA_CASES[scenario]
+            arguments.append('-Dcbbg.test.vulkanAllocation=' + mode)
+            if mode == 'resize':
+                arguments += ['-Dcbbg.test.vulkanLifecycle=true', '-Dcbbg.test.vulkanResizedFormat=37']
+            else:
+                expected = {'depth': 97, 'float': 37, 'all': 44}[mode]
+                arguments.append('-Dcbbg.test.vulkanSceneFormat=' + str(expected))
+                if mode == 'all':
+                    arguments.append('-Dcbbg.test.vulkanOriginalTarget=true')
     else:
         arguments.append('-Dcbbg.test.compatProfile=' + profile)
         if profile in CONTEXT_MODS:
@@ -255,6 +281,52 @@ def vulkan_fallback_captures(log, evidence, scenario, scenes, width, height):
     return {name: (width, height) for name in ('vulkan-world.png', 'vulkan-format-settings.png')}
 
 
+def vulkan_lifecycle_captures(log, scenes, width, height, resized_format='97'):
+    resized = (width - 64, height - 48)
+    actual_size = tuple(map(int, one_reading(log, r'CBBG_CLASSIC_VULKAN_LIFECYCLE width=(\d+) height=(\d+)')))
+    expected = ([('97', 'false'), (swap, 'true'), ('109', 'false'), ('97', 'false')]
+                + [(resized_format, 'false')] * 2 for swap in ('37', '44'))
+    if (actual_size != resized or scenes not in expected
+            or 'CBBG_CLASSIC_VULKAN_NOISE sampled=32 pending-edit=16' not in log):
+        raise ValueError('Incomplete Vulkan lifecycle evidence')
+    captures = {name: (width, height) for name in (
+        'vulkan-demo-before.png', 'vulkan-disabled.png', 'vulkan-rgba32f.png')}
+    captures.update({'vulkan-world.png': resized, 'vulkan-resized.png': resized})
+    return captures
+
+
+def vulkan_vma_captures(log, evidence, scenario, scenes, width, height):
+    mode = VULKAN_VMA_CASES[scenario]
+    sites = one_reading(log, r'CBBG_ALLOC_AGENT allocationSites=(\d+) freeSites=(\d+)(?=\r?\n|\Z)')
+    # Verify the ordered failure and cleanup trace, including cleanup before the failed scene is retried.
+    trace = re.findall(r'CBBG_CLASSIC_VULKAN_(REJECT [^\r\n]+|PARTIAL_FREE [^\r\n]+)'
+                       r'|VulkanMod scene allocation failed for (\w+) at (\d+x\d+): '
+                       r'Failed to create image: VK_ERROR_OUT_OF_DEVICE_MEMORY', log)
+    observed = [marker or f'{pixel_format} {extent}' for marker, pixel_format, extent in trace]
+    size = f'{width}x{height}'
+    resize = f'{width - 64}x{height - 48}'
+    float_failures = ['REJECT color format=109', f'RGBA32F {size}',
+                      'REJECT color format=97', f'RGBA16F {size}']
+    depth_failure = ['REJECT depth format=129', 'PARTIAL_FREE count=1']
+    traces = {'depth': depth_failure + [f'RGBA32F {size}'], 'float': float_failures,
+              'all': float_failures + ['REJECT color format=37', f'RGBA8 {size}'],
+              'resize': depth_failure + [f'RGBA16F {resize}']}
+    if sites != ('1', '1') or observed != traces[mode]:
+        raise ValueError('Incomplete Vulkan VMA failure and cleanup evidence')
+    saved = json.loads((evidence / 'final-cbbg.json').read_text())
+    expected_config = classic_config('vulkan', scenario)
+    if mode == 'resize':
+        expected_config['stbnSize'] = 32
+    if saved != expected_config:
+        raise ValueError('Vulkan VMA failure changed the saved settings')
+    if mode == 'resize':
+        return vulkan_lifecycle_captures(log, scenes, width, height, resized_format='37')
+    expected_scene = {'depth': ('97', 'false'), 'float': ('37', 'false'), 'all': ('44', 'true')}[mode]
+    if scenes != [expected_scene]:
+        raise ValueError('Unexpected Vulkan VMA fallback framebuffer')
+    return {'vulkan-world.png': (width, height)}
+
+
 def classic_result(scenario, profile, backend, log, evidence, exit_code, restart_phase=None):
     if (type(exit_code) is not int or exit_code != 0
             or re.search(r'VUID-|Validation Error|VK_ERROR_DEVICE_LOST|AssertionError|Game crashed!'
@@ -292,17 +364,11 @@ def classic_result(scenario, profile, backend, log, evidence, exit_code, restart
             if scenario == 'vulkan-settings':
                 captures = vulkan_settings_captures(log, evidence, width, height)
         elif scenario == 'vulkan-lifecycle':
-            resized = (width - 64, height - 48)
-            if (tuple(map(int, one_reading(log, r'CBBG_CLASSIC_VULKAN_LIFECYCLE width=(\d+) height=(\d+)'))) != resized
-                    or scenes not in ([('97', 'false'), (swap, 'true'), ('109', 'false')]
-                                      + [('97', 'false')] * 3 for swap in ('37', '44'))
-                    or 'CBBG_CLASSIC_VULKAN_NOISE sampled=32 pending-edit=16' not in log):
-                raise ValueError('Incomplete Vulkan lifecycle evidence')
-            captures = {name: (width, height) for name in (
-                'vulkan-demo-before.png', 'vulkan-disabled.png', 'vulkan-rgba32f.png')}
-            captures.update({'vulkan-world.png': resized, 'vulkan-resized.png': resized})
+            captures = vulkan_lifecycle_captures(log, scenes, width, height)
         elif scenario in VULKAN_FORMAT_CASES:
             captures = vulkan_fallback_captures(log, evidence, scenario, scenes, width, height)
+        elif scenario in VULKAN_VMA_CASES:
+            captures = vulkan_vma_captures(log, evidence, scenario, scenes, width, height)
         else:
             comparisons = re.findall(r'CBBG_CLASSIC_VULKAN_PIXELS mode=(\w+) channels=(\d+) mismatches=(\d+) '
                                      r'topOriginMismatches=\d+ alphaMismatches=(\d+) changedChannels=(\d+)', log)

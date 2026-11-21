@@ -72,6 +72,34 @@
       "backends": ["vulkan"],
       "restart": false,
       "entrypoints": ["vulkan-fallback-eight-bit"]
+    },
+    {
+      "suite": "vulkan-vma-depth",
+      "profiles": ["vulkanmod"],
+      "backends": ["vulkan"],
+      "restart": false,
+      "entrypoints": ["vulkan-vma-depth"]
+    },
+    {
+      "suite": "vulkan-vma-float",
+      "profiles": ["vulkanmod"],
+      "backends": ["vulkan"],
+      "restart": false,
+      "entrypoints": ["vulkan-vma-float"]
+    },
+    {
+      "suite": "vulkan-vma-all",
+      "profiles": ["vulkanmod"],
+      "backends": ["vulkan"],
+      "restart": false,
+      "entrypoints": ["vulkan-vma-all"]
+    },
+    {
+      "suite": "vulkan-vma-resize",
+      "profiles": ["vulkanmod"],
+      "backends": ["vulkan"],
+      "restart": false,
+      "entrypoints": ["vulkan-vma-resize"]
     }
   ]
 }

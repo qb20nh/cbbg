@@ -212,14 +212,26 @@ def formatProbeAgent = tasks.register('classicFormatProbeAgentJar', Jar) {
     }
     manifest.attributes('Premain-Class': 'com.qb20nh.cbbg.parity.ClassicFormatProbeAgent')
 }
+def vmaProbeAgent = tasks.register('classicVmaProbeAgentJar', Jar) {
+    archiveClassifier = 'vma-probe-agent'
+    destinationDirectory = layout.buildDirectory.dir('intermediates/smoke')
+    from(sourceSets.packagedSmoke.output) {
+        include 'com/qb20nh/cbbg/parity/ClassicVmaProbeAgent*.class'
+    }
+    manifest.attributes('Premain-Class': 'com.qb20nh.cbbg.parity.ClassicVmaProbeAgent')
+}
 def smokeJar = tasks.register('packagedSmokeJar', Jar) {
     archiveClassifier = 'smoke-named'
     destinationDirectory = layout.buildDirectory.dir('intermediates/smoke')
     from(sourceSets.packagedSmoke.output) {
-        exclude 'com/qb20nh/cbbg/parity/ClassicFormatProbeAgent*.class'
+        exclude 'com/qb20nh/cbbg/parity/ClassicFormatProbeAgent*.class',
+                'com/qb20nh/cbbg/parity/ClassicVmaProbeAgent*.class'
     }
     from(formatProbeAgent.flatMap { it.archiveFile }) {
         rename { 'cbbg-format-probe-agent.jar' }
+    }
+    from(vmaProbeAgent.flatMap { it.archiveFile }) {
+        rename { 'cbbg-vma-probe-agent.jar' }
     }
 }
 def remappedSmoke = tasks.register('remapPackagedSmokeJar', net.fabricmc.loom.task.RemapJarTask) {

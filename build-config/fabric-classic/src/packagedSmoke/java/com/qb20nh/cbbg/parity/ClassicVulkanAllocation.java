@@ -1,6 +1,7 @@
 package com.qb20nh.cbbg.parity;
 
 import java.lang.reflect.Method;
+import java.net.URI;
 import java.nio.LongBuffer;
 import org.lwjgl.PointerBuffer;
 
@@ -11,6 +12,7 @@ public final class ClassicVulkanAllocation {
   private static final int RGBA32F = 109;
   private static final int OUT_OF_DEVICE_MEMORY = -2;
   private static final String PROFILE = System.getProperty("cbbg.test.vulkanAllocation", "");
+  private static final String CANDIDATE = System.getProperty("cbbg.test.jar");
   private static final StackWalker STACK =
       StackWalker.getInstance(StackWalker.Option.RETAIN_CLASS_REFERENCE);
   private static Method nativeAllocate;
@@ -77,7 +79,10 @@ public final class ClassicVulkanAllocation {
                 .map(type -> type.getProtectionDomain().getCodeSource())
                 .anyMatch(
                     source ->
-                        source != null && source.getLocation().getPath().endsWith("-fabric.jar")));
+                        source != null
+                            && CANDIDATE != null
+                            && CANDIDATE.equals(
+                                URI.create(source.getLocation().toExternalForm()).getPath())));
   }
 
   private static boolean isPartialColor(int colorFormat, Object info)

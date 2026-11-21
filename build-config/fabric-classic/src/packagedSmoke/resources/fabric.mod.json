@@ -7,7 +7,7 @@
     "client": ["com.qb20nh.cbbg.parity.ClassicPackagedSmoke"]
   },
   "custom": {
-    "cbbg:scenarios": ["world", "forcegl2-mesa-3", "satin", "renderscale", "iris", "vulkan-lifecycle", "vulkan-pixels", "vulkan-settings", "vulkan-fallback-float", "vulkan-fallback-eight-bit"]
+    "cbbg:scenarios": ["world", "forcegl2-mesa-3", "satin", "renderscale", "iris", "vulkan-lifecycle", "vulkan-pixels", "vulkan-settings", "vulkan-fallback-float", "vulkan-fallback-eight-bit", "vulkan-vma-depth", "vulkan-vma-float", "vulkan-vma-all", "vulkan-vma-resize"]
   },
   "mixins": ["cbbg.classic-smoke.mixins.json"]
 }
