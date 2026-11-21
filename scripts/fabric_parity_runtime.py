@@ -258,7 +258,9 @@ def main():
     else:
         environment.update(DISPLAY=args.x_display, XDG_SESSION_TYPE='x11', SDL_VIDEODRIVER='x11')
     if classic and args.classic_scenario == REDUCED_GL_SCENARIO:
-        environment.update(LIBGL_ALWAYS_SOFTWARE='1', LP_NUM_THREADS='4', MESA_GL_VERSION_OVERRIDE='3.0')
+        # Xwayland can select NVIDIA's GLX library before Mesa sees its overrides.
+        environment.update(__GLX_VENDOR_LIBRARY_NAME='mesa', LIBGL_ALWAYS_SOFTWARE='1',
+                           LP_NUM_THREADS='4', MESA_GL_VERSION_OVERRIDE='3.0')
 
     # A new directory prevents interference with personal profiles and stale evidence.
     if args.restart_phase != 'verify':
