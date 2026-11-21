@@ -14,6 +14,7 @@ REDUCED_GL_SCENARIO = 'forcegl2-mesa-3'
 GLFW_CORE_PROFILE = 0x00032001
 GLFW_COMPAT_PROFILE = 0x00032002
 CLASSIC_OPTIONS = 'renderDistance:4\nsimulationDistance:5\nmaxFps:60\nguiScale:2\npauseOnLostFocus:false\n'
+CLASSIC_IRIS_OPTIONS = 'enableShaders=false\n'
 
 
 def classic_scenarios(metadata):
@@ -40,6 +41,8 @@ def validate_classic_choice(metadata, scenario, profile, backend):
             return
         if scenario == 'satin' and profile == 'satin':
             return
+        if scenario == 'renderscale' and 'renderscale' in profile.split('+'):
+            return
     raise ValueError('Unsupported classic scenario, profile or backend')
 
 
@@ -65,12 +68,14 @@ def classic_jvm_arguments(candidate, scenario, backend, profile):
         arguments += ['-Dorg.lwjgl.system.stackSize=1024', '-Dcbbg.test.vulkanMod=true']
         if scenario in VULKAN_SCENARIOS:
             arguments.append('-Dcbbg.test.' + VULKAN_SCENARIOS[scenario] + '=true')
-    elif scenario in ('world', REDUCED_GL_SCENARIO):
-        arguments.append('-Dcbbg.test.worldProfile=' + profile)
+    else:
+        arguments.append('-Dcbbg.test.compatProfile=' + profile)
         if profile in CONTEXT_MODS:
             arguments.append('-Dcbbg.test.contextMod=' + CONTEXT_MODS[profile])
-    elif scenario == 'satin':
-        arguments.append('-Dcbbg.test.satin=true')
+        if scenario == 'satin':
+            arguments.append('-Dcbbg.test.satin=true')
+        elif scenario == 'renderscale':
+            arguments.append('-Dcbbg.test.renderScale=true')
     return arguments
 
 
@@ -126,6 +131,27 @@ def classic_gl_context(log, scenario, profile, gpu):
             'openGL30': gl30 == 'true', 'openGL32': gl32 == 'true', 'glsl': glsl}
 
 
+def renderscale_captures(log, width, height):
+    expected = []
+    captures = {}
+    for scale in (0.5, 1.0, 2.0):
+        world = f'{int(width * scale)}x{int(height * scale)}'
+        default_filter = 'linear' if scale > 1 else 'nearest'
+        block = 2 if scale < 1 else 1
+        for mode, format_id, filtering, grid in (
+                ('enabled', 34842, default_filter, block), ('enabled', 34842, 'linear', block),
+                ('enabled', 34836, default_filter, block), ('disabled', 32856, default_filter, 0)):
+            if grid:
+                captures[f'grid-{len(expected)}.png'] = (width, height)
+            expected.append(f'scale={scale} mode={mode} format={format_id} filter={filtering} '
+                            f'world={world} block={grid}')
+    cases = re.findall(r'CBBG_CLASSIC_RENDERSCALE_CASE ([^\r\n]+)', log)
+    passed = int(one_reading(log, r'CBBG_CLASSIC_RENDERSCALE_PASS cases=(\d+)(?=\r?\n|\Z)'))
+    if cases != expected or passed != len(expected):
+        raise ValueError('Incomplete RenderScale framebuffer and grid checks')
+    return captures
+
+
 def classic_result(scenario, profile, backend, log, evidence, exit_code):
     if (type(exit_code) is not int or exit_code != 0
             or re.search(r'VUID-|Validation Error|VK_ERROR_DEVICE_LOST|AssertionError|Game crashed!'
@@ -134,6 +160,9 @@ def classic_result(scenario, profile, backend, log, evidence, exit_code):
     if (json.loads((evidence / 'initial-cbbg.json').read_text()) != classic_config(backend)
             or (evidence / 'initial-options.txt').read_text() != CLASSIC_OPTIONS):
         raise ValueError('Classic initial config or options differ')
+    if ('iris' in profile.split('+')
+            and (evidence / 'initial-iris.properties').read_text() != CLASSIC_IRIS_OPTIONS):
+        raise ValueError('Classic Iris initial config differs')
     width, height = classic_viewport(scenario)
     captures = {'enabled.png': (width, height), 'disabled.png': (width, height)}
     if backend == 'vulkan':
@@ -190,6 +219,8 @@ def classic_result(scenario, profile, backend, log, evidence, exit_code):
                 raise ValueError('Incomplete Satin framebuffer checks')
             one_reading(log, r'CBBG_CLASSIC_SATIN_PASS cases=(24) readableDepth=3(?=\r?\n|\Z)')
             captures = {}
+        elif scenario == 'renderscale':
+            captures = renderscale_captures(log, width, height)
         elif int(one_reading(log, r'CBBG_CLASSIC_SMOKE_PASS presentations=(\d+)')) < 10:
             raise ValueError('OpenGL world did not present enough frames')
         graphics = {'backend': 'opengl', 'provider': 'minecraft', 'gpu': gpu, 'driver': driver}

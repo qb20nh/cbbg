@@ -18,6 +18,13 @@
       "entrypoints": ["satin"]
     },
     {
+      "suite": "renderscale",
+      "requiresMod": "renderscale",
+      "backends": ["opengl"],
+      "restart": false,
+      "entrypoints": ["renderscale"]
+    },
+    {
       "suite": "vulkan-lifecycle",
       "profiles": ["vulkanmod"],
       "backends": ["vulkan"],

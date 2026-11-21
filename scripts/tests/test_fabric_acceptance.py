@@ -43,6 +43,12 @@ class FabricAcceptanceTests(unittest.TestCase):
             [(run['profile'], run['backend'], run['entrypoints'])
              for run in runs if run['suite'] == 'forcegl2-mesa-3'],
         )
+        self.assertEqual(
+            {(profile, 'opengl', ('renderscale',)) for profile in target['compatibilityProfiles']
+             if 'renderscale' in profile.split('+')},
+            {(run['profile'], run['backend'], tuple(run['entrypoints'])) for run in runs
+             if run['suite'] == 'renderscale'},
+        )
 
     def test_classic_rejects_undeclared_scenarios_and_gametest_metadata(self):
         target = select_targets(load_catalog(), '1.20.1-fabric')[0]

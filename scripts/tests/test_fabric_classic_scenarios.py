@@ -5,7 +5,7 @@ import struct
 import tempfile
 import unittest
 
-from fabric_classic_scenarios import (CLASSIC_ENTRYPOINT, CLASSIC_OPTIONS, REDUCED_GL_SCENARIO,
+from fabric_classic_scenarios import (CLASSIC_ENTRYPOINT, CLASSIC_IRIS_OPTIONS, CLASSIC_OPTIONS, REDUCED_GL_SCENARIO,
                                       classic_config, classic_jvm_arguments, classic_result,
                                       pixel_cache_files, validate_classic_choice)
 from runtime_catalog import load_catalog, select_targets
@@ -18,7 +18,7 @@ class ClassicScenarioTests(unittest.TestCase):
         self.evidence = Path(temp.name)
         self.metadata = {'id': 'cbbg_classic_smoke', 'entrypoints': {'client': [CLASSIC_ENTRYPOINT]},
                          'custom': {'cbbg:scenarios': ['world', 'satin', REDUCED_GL_SCENARIO,
-                                                       'vulkan-lifecycle', 'vulkan-pixels']}}
+                                                       'renderscale', 'vulkan-lifecycle', 'vulkan-pixels']}}
         self.log = ('CBBG_CLASSIC_VULKAN_DEVICE mod=0.5.2 device=Test GPU api=1.3.0 glfw=no-api reference=false\n'
                     'CBBG_CLASSIC_VULKAN_SCENE format=97 disabled=false\n'
                     'CBBG_CLASSIC_VULKAN_WORLD presentations=12\n')
@@ -62,7 +62,7 @@ class ClassicScenarioTests(unittest.TestCase):
             with self.subTest(profile=profile):
                 validate_classic_choice(self.metadata, 'world', profile, 'opengl')
                 arguments = classic_jvm_arguments('candidate.jar', 'world', 'opengl', profile)
-                self.assertIn('-Dcbbg.test.worldProfile=' + profile, arguments)
+                self.assertIn('-Dcbbg.test.compatProfile=' + profile, arguments)
                 self.assertNotIn('-Dcbbg.test.satin=true', arguments)
                 self.assertNotIn('-Dcbbg.test.iris=true', arguments)
         for profile in ('iris', 'modmenu+sodium+satin'):
@@ -122,6 +122,43 @@ class ClassicScenarioTests(unittest.TestCase):
         for invalid in (log.replace('736x552', '800x600'), log.replace('readableDepth=3', 'readableDepth=1')):
             with self.assertRaises(ValueError):
                 classic_result('satin', 'satin', 'opengl', invalid, self.evidence, 0)
+
+    def test_renderscale_checks_all_formats_scales_filters_and_captures(self):
+        profile = 'modmenu+sodium+satin+immediatelyfast+chatpatches+iris+renderscale'
+        validate_classic_choice(self.metadata, 'renderscale', profile, 'opengl')
+        with self.assertRaisesRegex(ValueError, 'profile or backend'):
+            validate_classic_choice(self.metadata, 'renderscale', 'sodium', 'opengl')
+        arguments = classic_jvm_arguments('candidate.jar', 'renderscale', 'opengl', profile)
+        self.assertIn('-Dcbbg.test.renderScale=true', arguments)
+        self.assertIn('-Dcbbg.test.compatProfile=' + profile, arguments)
+        self.assertNotIn('-Dcbbg.test.iris=true', arguments)
+        (self.evidence / 'initial-cbbg.json').write_text(json.dumps(classic_config('opengl')))
+        iris = self.evidence / 'initial-iris.properties'
+        iris.write_text(CLASSIC_IRIS_OPTIONS)
+        log = 'CBBG_CLASSIC_OPENGL Test GPU / 3.2 sodium=true\n'
+        for scale, size, default_filter, block in (
+                ('0.5', '400x300', 'nearest', 2), ('1.0', '800x600', 'nearest', 1),
+                ('2.0', '1600x1200', 'linear', 1)):
+            for mode, fmt, filtering, grid in (
+                    ('enabled', 34842, default_filter, block), ('enabled', 34842, 'linear', block),
+                    ('enabled', 34836, default_filter, block), ('disabled', 32856, default_filter, 0)):
+                log += (f'CBBG_CLASSIC_RENDERSCALE_CASE scale={scale} mode={mode} format={fmt} '
+                        f'filter={filtering} world={size} block={grid}\n')
+        log += 'CBBG_CLASSIC_RENDERSCALE_PASS cases=12\n'
+        for index in (0, 1, 2, 4, 5, 6, 8, 9, 10):
+            self.write_capture(self.evidence / f'grid-{index}.png', 800, 600)
+        classic_result('renderscale', profile, 'opengl', log, self.evidence, 0)
+        for bad in (log.replace('block=2', 'block=1', 1), log.replace('cases=12', 'cases=11'),
+                    log.replace('world=400x300', 'world=800x600', 1)):
+            with self.assertRaisesRegex(ValueError, 'RenderScale framebuffer and grid'):
+                classic_result('renderscale', profile, 'opengl', bad, self.evidence, 0)
+        iris.write_text('enableShaders=true\n')
+        with self.assertRaisesRegex(ValueError, 'Iris initial config'):
+            classic_result('renderscale', profile, 'opengl', log, self.evidence, 0)
+        iris.write_text(CLASSIC_IRIS_OPTIONS)
+        (self.evidence / 'grid-0.png').unlink()
+        with self.assertRaises(FileNotFoundError):
+            classic_result('renderscale', profile, 'opengl', log, self.evidence, 0)
 
     def test_world_rejects_changed_config_and_truncated_capture(self):
         data = self.capture.read_bytes()

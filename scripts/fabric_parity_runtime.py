@@ -11,9 +11,9 @@ import shutil
 import subprocess
 import zipfile
 
-from fabric_classic_scenarios import (CLASSIC_OPTIONS, REDUCED_GL_SCENARIO, classic_config,
-                                      classic_jvm_arguments, classic_result, classic_viewport,
-                                      pixel_cache_files, validate_classic_choice)
+from fabric_classic_scenarios import (CLASSIC_IRIS_OPTIONS, CLASSIC_OPTIONS, REDUCED_GL_SCENARIO,
+                                      classic_config, classic_jvm_arguments, classic_result,
+                                      classic_viewport, pixel_cache_files, validate_classic_choice)
 from fabric_dependency_lock import verify_dependencies, verify_gametest_api
 from fabric_runtime_lock import verify_runtime
 from fabric_scenario_evidence import (STARTUP_CACHE_FILES, STARTUP_DRIVER, graphics_identity,
@@ -332,6 +332,9 @@ def main():
         if classic:
             (game / 'options.txt').write_text(CLASSIC_OPTIONS)
             shutil.copyfile(game / 'options.txt', evidence / 'initial-options.txt')
+            if 'iris' in args.compat.split('+'):
+                (game / 'config/iris.properties').write_text(CLASSIC_IRIS_OPTIONS)
+                shutil.copyfile(game / 'config/iris.properties', evidence / 'initial-iris.properties')
             if args.classic_scenario == 'vulkan-pixels':
                 cache = game / '.cbbg'
                 cache.mkdir()

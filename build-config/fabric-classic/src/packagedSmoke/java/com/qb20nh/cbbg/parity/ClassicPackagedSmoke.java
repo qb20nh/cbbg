@@ -248,9 +248,9 @@ public final class ClassicPackagedSmoke implements ClientModInitializer {
     if (sodium != Boolean.getBoolean("cbbg.test.sodium")) {
       throw new AssertionError("Unexpected Sodium presence");
     }
-    String worldProfile = System.getProperty("cbbg.test.worldProfile");
-    if (worldProfile != null) {
-      Set<String> expected = Set.of(worldProfile.split("\\+"));
+    String compatProfile = System.getProperty("cbbg.test.compatProfile");
+    if (compatProfile != null) {
+      Set<String> expected = Set.of(compatProfile.split("\\+"));
       for (String id :
           new String[] {
             "iris", "satin", "renderscale", "modmenu", "immediatelyfast", "chatpatches"
