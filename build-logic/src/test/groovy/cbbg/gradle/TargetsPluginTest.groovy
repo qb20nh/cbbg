@@ -60,6 +60,7 @@ case "$*" in *-Pcompat=fail*) exit 7;; esac
         assertTrue(args.contains('--offline'))
         assertTrue(args.contains('-Pbackend=vulkan'))
         assertTrue(args.contains('-Ptarget=26.3-fabric'))
+        assertFalse(args.contains('--project-cache-dir'))
         assertFalse(args.any { it.contains('python') })
         assertTrue(new File(new File(directory, 'build/java-home.txt').text.trim(), 'bin/java').isFile())
     }

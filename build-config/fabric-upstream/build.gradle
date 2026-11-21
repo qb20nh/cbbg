@@ -252,6 +252,9 @@ tasks.named("sourcesJar") {
 }
 
 def devTimestamp = new Date().format("yyyy_MM_dd__HH_mm_ss")
+ext.bandingDebugTarget = artifactTarget
+ext.bandingDebugRemapped = false
+apply from: new File(repositoryRoot, 'build-config/fabric-banding-debug.gradle')
 def devBaseName = project.base.archivesName.get()
 def devVersion = project.version
 
@@ -281,7 +284,7 @@ tasks.register("devJar") {
 	// Clean any previously generated dev jars before writing the new timestamped one.
 	dependsOn tasks.named("cleanDevJars")
 
-	def inJar = tasks.named("jar").flatMap { it.archiveFile }
+	def inJar = tasks.named("bandingDevelopmentJar", Jar).flatMap { it.archiveFile }
 	inputs.file(inJar)
 	outputs.file(devJarOut)
 

@@ -503,13 +503,16 @@ if (remappedGame) {
     apply from: new File(repositoryRoot, 'build-config/fabric-remapping.gradle')
 }
 apply from: new File(repositoryRoot, 'build-config/candidate-build-outputs.gradle')
+ext.bandingDebugTarget = artifactOwner
+ext.bandingDebugRemapped = remappedGame
+apply from: new File(repositoryRoot, 'build-config/fabric-banding-debug.gradle')
 
 tasks.register('dev', Sync) {
     group = 'build'
     description = 'Check and package local development jars without release readiness claims.'
     dependsOn tasks.named('check'), tasks.named('verifyCandidatePackaging')
     into layout.buildDirectory.dir('dev')
-    from(tasks.named(remappedGame ? 'remapJar' : 'jar', Jar).flatMap { it.archiveFile }) {
+    from(tasks.named('bandingDevelopmentJar', Jar).flatMap { it.archiveFile }) {
         rename { "${base.archivesName.get()}-${project.version}-dev.jar" }
     }
     from(tasks.named('sourcesJar').flatMap { it.archiveFile }) {

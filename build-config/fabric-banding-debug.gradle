@@ -1,0 +1,144 @@
+import groovy.json.JsonOutput
+import groovy.json.JsonSlurper
+
+// Only dev assembly and runClient include the visualizer's source set.
+def repositoryRoot = file('../..')
+def debugRoot = new File(repositoryRoot, 'adapters/fabric/banding-debug')
+def debugRenderer = bandingDebugTarget.renderer
+def legacyShaders = debugRenderer == 'gl3'
+def explicitLocations = debugRenderer in ['blaze-gpu-format', 'renderpearl']
+def debugSources = sourceSets.create('bandingDebug') {
+    java.srcDirs = [new File(debugRoot, 'java'), new File(debugRoot, debugRenderer)]
+    resources.srcDirs = [new File(debugRoot, 'resources')]
+    compileClasspath += sourceSets.main.output + sourceSets.main.compileClasspath
+}
+def debugMixin = 'cbbg_banding_debug.mixins.json'
+def writeDebugDescriptor = { File source, File output ->
+    Map metadata = new JsonSlurper().parse(source)
+    metadata.mixins = (metadata.mixins ?: []) + [debugMixin]
+    output.parentFile.mkdirs()
+    output.setText(JsonOutput.toJson(metadata), 'UTF-8')
+}
+def shaderDirectory = legacyShaders ? 'assets/minecraft/shaders/core' : 'assets/cbbg_banding_debug/shaders/core'
+def generated = tasks.register('generateBandingDebugResources') {
+    def output = layout.buildDirectory.dir('generated/banding-debug')
+    def fragment = new File(debugRoot, 'banding.fsh')
+    def legacyDescriptor = new File(repositoryRoot,
+            'libraries/fabric/src/gl3/resources/assets/minecraft/shaders/core/cbbg_dither.json')
+    inputs.file(fragment)
+    if (legacyShaders) inputs.file(legacyDescriptor)
+    inputs.property('renderer', debugRenderer)
+    inputs.property('java', bandingDebugTarget.java)
+    outputs.dir(output)
+    doLast {
+        File root = output.get().asFile
+        project.delete(root)
+        File shaders = new File(root, shaderDirectory)
+        shaders.mkdirs()
+        def source = fragment.getText('UTF-8')
+        def mixins = ['BandingSettingsMixin', 'BandingPresentationMixin', 'BandingShaderMixin']
+        if (legacyShaders) mixins.add('BandingShaderLifecycleMixin')
+        if (explicitLocations) mixins.add('BandingWindowShaderMixin')
+        new File(root, debugMixin).text = JsonOutput.toJson([
+                required: true, package: 'com.qb20nh.cbbg.banding.mixin',
+                compatibilityLevel: 'JAVA_' + bandingDebugTarget.java,
+                client: mixins, injectors: [defaultRequire: 1]
+        ])
+        for (int view = 0; view < 3; view++) {
+            for (int side = 0; side < 3; side++) {
+                String name = "cbbg_banding_${view}_${side}"
+                String header = explicitLocations
+                        ? '#version 330\n#extension GL_ARB_separate_shader_objects : require\n#define EXPLICIT_LOCATIONS\n'
+                        : '#version 150\n'
+                if (legacyShaders) header += '#define LEGACY_UNIFORMS\n'
+                new File(shaders, name + '.fsh').setText(
+                        header + "#define VIEW ${view}\n#define SIDE ${side}\n" + source, 'UTF-8')
+                if (explicitLocations) {
+                    new File(shaders, name + '_window.fsh').setText(
+                            header + "#define VIEW ${view}\n#define SIDE ${side}\n#define VULKAN_WINDOW\n" + source,
+                            'UTF-8')
+                }
+                if (legacyShaders) {
+                    Map descriptor = new JsonSlurper().parse(legacyDescriptor)
+                    descriptor.fragment = name
+                    if (side == 1) {
+                        // Before uses zero strength, so GL removes the noise bindings.
+                        descriptor.samplers = descriptor.samplers.findAll { it.name == 'InSampler' }
+                        descriptor.uniforms = []
+                    }
+                    new File(shaders, name + '.json').text = JsonOutput.toJson(descriptor)
+                }
+            }
+        }
+    }
+}
+tasks.named(debugSources.processResourcesTaskName) {
+    from(generated)
+    doFirst { project.delete(destinationDir) }
+}
+def namedDebug = tasks.register('bandingDebugJar', Jar) {
+    from(debugSources.output)
+    archiveFileName = 'cbbg-banding-debug.jar'
+    destinationDirectory = layout.buildDirectory.dir('intermediates/banding-debug')
+}
+def installableDebug = namedDebug
+if (bandingDebugRemapped) {
+    installableDebug = tasks.register('remapBandingDebugJar', fabricRemapTaskType) {
+        inputFile.set(namedDebug.flatMap { it.archiveFile })
+        classpath.from(sourceSets.main.output.classesDirs)
+        archiveFileName = 'cbbg-banding-debug.jar'
+        destinationDirectory = layout.buildDirectory.dir('intermediates/banding-debug-remapped')
+        addNestedDependencies = false
+    }
+}
+def mainOutput = sourceSets.main.output
+def launchDescriptor = tasks.register('generateBandingClientDescriptor') {
+    def descriptor = layout.buildDirectory.file('generated/banding-client/fabric.mod.json')
+    def source = tasks.named('processResources').map { new File(it.destinationDir, 'fabric.mod.json') }
+    inputs.file(source)
+    outputs.file(descriptor)
+    doLast {
+        writeDebugDescriptor(source.get(), descriptor.get().asFile)
+    }
+}
+def clientMod = tasks.register('prepareBandingDebugClient', Sync) {
+    into layout.buildDirectory.dir('intermediates/banding-client')
+    from(mainOutput) { exclude 'fabric.mod.json' }
+    from(debugSources.output) { exclude 'fabric.mod.json' }
+    from(launchDescriptor)
+}
+tasks.named('runClient') {
+    dependsOn(clientMod)
+    // Keep Loom's dependency providers but present CBBG from one descriptor and resource root.
+    def clientOutput = files(clientMod.map { it.destinationDir })
+    loom.mods.getByName('cbbg').modFiles.from(clientOutput)
+    def loomClasspath = files(classpath.from.toList())
+    classpath = loomClasspath.minus(mainOutput) + clientOutput
+}
+
+def ordinaryTask = tasks.named(bandingDebugRemapped ? 'remapJar' : 'jar')
+if (bandingDebugRemapped) {
+    // Loom's default installable filename otherwise collides with remapReleaseJar.
+    ordinaryTask.configure {
+        destinationDirectory = layout.buildDirectory.dir('intermediates/remapped-development')
+    }
+}
+def ordinaryJar = ordinaryTask.flatMap { it.archiveFile }
+def devDescriptor = tasks.register('generateBandingDevDescriptor') {
+    def descriptor = layout.buildDirectory.file('generated/banding-dev/fabric.mod.json')
+    inputs.file(ordinaryJar)
+    outputs.file(descriptor)
+    doLast {
+        File source = zipTree(ordinaryJar.get().asFile).matching { include 'fabric.mod.json' }.singleFile
+        writeDebugDescriptor(source, descriptor.get().asFile)
+    }
+}
+tasks.register('bandingDevelopmentJar', Jar) {
+    def archive = installableDebug.flatMap { it.archiveFile }
+    archiveFileName = ordinaryJar.map { it.asFile.name }
+    destinationDirectory = layout.buildDirectory.dir('intermediates/banding-dev')
+    dependsOn(ordinaryJar, archive)
+    from({ zipTree(ordinaryJar.get().asFile) }) { exclude 'fabric.mod.json' }
+    from({ zipTree(archive.get().asFile) }) { exclude 'fabric.mod.json', 'META-INF/MANIFEST.MF' }
+    from(devDescriptor)
+}

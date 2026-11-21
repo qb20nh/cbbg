@@ -12,5 +12,11 @@
     "minecraft": "${minecraft}",
     "java": ">=${java}"
   },
-  "mixins": []
+  "mixins": [],
+  "custom": {
+    "modmenu": {
+      "parent": "cbbg",
+      "badges": ["library"]
+    }
+  }
 }
