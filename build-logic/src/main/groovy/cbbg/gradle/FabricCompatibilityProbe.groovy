@@ -94,9 +94,13 @@ class FabricCompatibilityProbe {
 
     static boolean usesX11(Map target) {
         // GLFW needs a keyboard-capable Xwayland display; Minecraft 26.3 switches to SDL.
-        List<String> version = target.minecraft.tokenize('.')
-        int major = version[0].toInteger()
-        major < 26 || (major == 26 && version[1].toInteger() < 3)
+        String version = target.minecraft
+        def match = version =~ /([0-9]+)\.([0-9]+)(?:\.[0-9]+)*/
+        if (!match.matches() || !match.group(1).isInteger() || !match.group(2).isInteger()) {
+            throw new GradleException('Invalid Minecraft version for display selection: ' + version)
+        }
+        int major = match.group(1).toInteger()
+        major < 26 || (major == 26 && match.group(2).toInteger() < 3)
     }
 
     static Map cacheInputs(Map reportInputs, Map spec, File coordinator, File search) {

@@ -134,11 +134,7 @@ print(json.dumps({'pythonVersion':sys.version,'launcherVersion':version('minecra
             Map lock = CandidateFiles.read(files.dependency_lock as File) as Map
             File gametest = options.gametestApis?.get(id) as File
             if (gametest == null) {
-                String coordinate = lock.gametestApi.coordinate
-                if (!(coordinate ==~ /net\.fabricmc\.fabric-api:fabric-client-gametest-api-v1:[^\/\\]+/)) {
-                    throw new GradleException('Provide -PacceptanceGametestApi.' + id + ' for the packaged test-only backport')
-                }
-                String version = coordinate.tokenize(':')[2]
+                String version = gametestApiVersion(lock.gametestApi.coordinate as String, id)
                 gametest = download(new File(output, 'dependencies'), lock.gametestApi.sha256 as String,
                         'https://maven.fabricmc.net/net/fabricmc/fabric-api/fabric-client-gametest-api-v1/' +
                                 version + '/fabric-client-gametest-api-v1-' + version + '.jar')
@@ -566,6 +562,14 @@ print(json.dumps(reuse_arguments(json.loads(sys.argv[1]),Path(sys.argv[2]),json.
         connection.connectTimeout = 30000
         connection.readTimeout = 30000
         connection.inputStream.withCloseable { it.getText('UTF-8') }
+    }
+
+    static String gametestApiVersion(String coordinate, String id) {
+        def match = coordinate =~ /net\.fabricmc\.fabric-api:fabric-client-gametest-api-v1:([^:\/\\]+)/
+        if (!match.matches()) {
+            throw new GradleException('Provide -PacceptanceGametestApi.' + id + ' for the packaged test-only backport')
+        }
+        match.group(1)
     }
 
     private static File download(File directory, String hash, String url) {

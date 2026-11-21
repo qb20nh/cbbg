@@ -17,6 +17,19 @@ import static org.junit.jupiter.api.Assertions.*
 class FabricCandidateAcceptanceTest {
     @TempDir File directory
 
+    @Test void extractsOnlyAValidGametestApiVersion() {
+        String prefix = 'net.fabricmc.fabric-api:fabric-client-gametest-api-v1:'
+        String id = '26.1-fabric'
+        assertEquals('4.0.0+123abc', FabricCandidateAcceptance.gametestApiVersion(prefix + '4.0.0+123abc', id))
+        [null, prefix, prefix + ':', prefix + '4.0.0:classifier', prefix + '../4.0.0',
+         prefix + '..\\4.0.0', 'other:artifact:4.0.0'].each { coordinate ->
+            GradleException failure = assertThrows(GradleException) {
+                FabricCandidateAcceptance.gametestApiVersion(coordinate, id)
+            }
+            assertTrue(failure.message.contains('-PacceptanceGametestApi.' + id))
+        }
+    }
+
     @ParameterizedTest
     @ValueSource(strings = ['generation', 'maximum-noise-cache', 'generating-shutdown'])
     void memoryIntensiveScenarioFinishesBeforeTheNextWorkerStarts(String suite) {
