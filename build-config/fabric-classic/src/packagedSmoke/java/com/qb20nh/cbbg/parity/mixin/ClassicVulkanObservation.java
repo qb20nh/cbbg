@@ -12,6 +12,17 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Pseudo
 @Mixin(targets = "net.vulkanmod.vulkan.Renderer", remap = false)
 abstract class ClassicVulkanObservation {
+  @Inject(
+      method = "endFrame",
+      at =
+          @At(
+              value = "INVOKE",
+              target =
+                  "Lnet/vulkanmod/vulkan/pass/MainPass;end(Lorg/lwjgl/vulkan/VkCommandBuffer;)V"))
+  private void cbbg$drawPixelFixture(CallbackInfo ci) {
+    ClassicVulkanSmoke.drawPixelFixture();
+  }
+
   @ModifyExpressionValue(
       method = "submitFrame",
       at =

@@ -16,10 +16,13 @@ public final class ClassicVulkanSmoke {
   private static long presentations;
   private static final boolean CHECK_LIFECYCLE = Boolean.getBoolean("cbbg.test.vulkanLifecycle");
   private static final boolean CHECK_SETTINGS = Boolean.getBoolean("cbbg.test.vulkanSettings");
+  private static final boolean CHECK_PIXELS = Boolean.getBoolean("cbbg.test.vulkanPixels");
   static long ditherDraws;
   static int noiseWidth;
   private static Object ditherPipeline;
   private static Method boundTexture;
+  private static Method drawPixels;
+  private static Method checkPixels;
   private int ticks;
   private boolean opened;
   private boolean finished;
@@ -29,6 +32,15 @@ public final class ClassicVulkanSmoke {
 
   public static void observePresent() {
     presentations++;
+  }
+
+  public static void drawPixelFixture() {
+    if (!CHECK_PIXELS || drawPixels == null) return;
+    try {
+      drawPixels.invoke(null);
+    } catch (ReflectiveOperationException failure) {
+      throw new AssertionError("Could not populate the deterministic Vulkan scene", failure);
+    }
   }
 
   /** Called only by the fixture agent after the real Vulkan format query. */
@@ -53,7 +65,7 @@ public final class ClassicVulkanSmoke {
   }
 
   public static void observeDither(Object pipeline) {
-    if (!CHECK_LIFECYCLE && !CHECK_SETTINGS) return;
+    if (!CHECK_LIFECYCLE && !CHECK_SETTINGS && !CHECK_PIXELS) return;
     try {
       if (ditherPipeline == null) {
         if (!"cbbg_vulkanmod_dither".equals(pipeline.getClass().getField("name").get(pipeline))) {
@@ -84,7 +96,15 @@ public final class ClassicVulkanSmoke {
       } else if (opened && client.player != null && (client.screen == null || settings != null)) {
         if (joinedAt < 0) joinedAt = presentations;
         if (presentations < joinedAt + 12) return;
-        if (CHECK_SETTINGS) {
+        if (CHECK_PIXELS) {
+          if (checkPixels == null) {
+            if (noiseWidth != 16) return;
+            var probe = Class.forName("com.qb20nh.cbbg.parity.ClassicVulkanPixels");
+            drawPixels = probe.getMethod("draw");
+            checkPixels = probe.getMethod("check", Minecraft.class, long.class);
+          }
+          if (!(boolean) checkPixels.invoke(null, client, presentations)) return;
+        } else if (CHECK_SETTINGS) {
           if (settings == null) {
             if (noiseWidth != 64) return;
             settings = new ClassicVulkanSettings(client);
