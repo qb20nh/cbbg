@@ -38,17 +38,22 @@ public final class ClassicVulkanSettings {
   private long nextPresent;
 
   ClassicVulkanSettings(Minecraft client) throws Exception {
-    settings =
+    settings = open(client);
+    manifest = client.gameDirectory.toPath().resolve(".cbbg/stbn_64x64x8.sha256");
+    warmManifest = Files.readString(manifest);
+  }
+
+  static Screen open(Minecraft client) throws ReflectiveOperationException {
+    Screen screen =
         (Screen)
             Class.forName("com.terraformersmc.modmenu.ModMenu")
                 .getMethod("getConfigScreen", String.class, Screen.class)
                 .invoke(null, "cbbg", null);
-    if (settings == null || !titleIs(settings, "cbbg.config.title")) {
+    if (screen == null || !titleIs(screen, "cbbg.config.title")) {
       throw new AssertionError("Mod Menu did not open the packaged CBBG settings");
     }
-    manifest = client.gameDirectory.toPath().resolve(".cbbg/stbn_64x64x8.sha256");
-    warmManifest = Files.readString(manifest);
-    client.setScreen(settings);
+    client.setScreen(screen);
+    return screen;
   }
 
   public static void observeToast(Component title, List<FormattedCharSequence> lines, long time) {
@@ -181,7 +186,7 @@ public final class ClassicVulkanSettings {
         .count();
   }
 
-  private static void screenshot(Minecraft client, String file) throws Exception {
+  static void screenshot(Minecraft client, String file) throws Exception {
     try (var image = Screenshot.takeScreenshot(client.getMainRenderTarget())) {
       if (image.getWidth() != client.getWindow().getWidth()
           || image.getHeight() != client.getWindow().getHeight()) {

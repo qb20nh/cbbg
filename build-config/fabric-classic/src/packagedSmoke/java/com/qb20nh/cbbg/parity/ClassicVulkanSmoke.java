@@ -21,6 +21,7 @@ public final class ClassicVulkanSmoke {
       Boolean.getBoolean("cbbg.test.vulkanPipelineRecovery");
   private static final boolean CHECK_SAMPLER =
       Boolean.getBoolean("cbbg.test.vulkanSamplerRecovery");
+  private static final boolean CHECK_WARNING = Boolean.getBoolean("cbbg.test.vulkanFormatWarning");
   static long ditherDraws;
   static int noiseWidth;
   private static Object ditherPipeline;
@@ -35,6 +36,7 @@ public final class ClassicVulkanSmoke {
   private ClassicVulkanSettings settings;
   private ClassicVulkanPipelineFailure pipeline;
   private ClassicVulkanSamplerFailure sampler;
+  private ClassicVulkanWarning warning;
 
   public static void observePresent() {
     presentations++;
@@ -100,7 +102,9 @@ public final class ClassicVulkanSmoke {
         checkInstallation(client);
         opened = true;
         ClassicPackagedSmoke.createWorld(client);
-      } else if (opened && client.player != null && (client.screen == null || settings != null)) {
+      } else if (opened
+          && client.player != null
+          && (client.screen == null || settings != null || warning != null)) {
         if (joinedAt < 0) joinedAt = presentations;
         if (presentations < joinedAt + 12) return;
         if (CHECK_PIXELS) {
@@ -126,6 +130,9 @@ public final class ClassicVulkanSmoke {
         } else if (CHECK_SAMPLER) {
           if (sampler == null) sampler = new ClassicVulkanSamplerFailure();
           if (!sampler.tick(client, presentations)) return;
+        } else if (CHECK_WARNING) {
+          if (warning == null) warning = new ClassicVulkanWarning(client, presentations);
+          if (!warning.tick(client, presentations)) return;
         } else {
           boolean reference = Boolean.getBoolean("cbbg.test.reference");
           boolean disabled = Boolean.getBoolean("cbbg.test.disabled");
