@@ -88,6 +88,14 @@ tasks.named('processResources') {
         }
     }
 }
+tasks.named('checkPackages') {
+    doLast {
+        conventionLoader.loadClass('cbbg.gradle.PackageChecks').verifyNestedLibrary(
+                releaseOptimization.outputJar.get().asFile, libraryArchive)
+    }
+}
+// A preview may have a local runtime suite before the processed-artifact suite is ported.
+if (!tasks.names.contains('processedDriverJar')) return
 tasks.named('processProcessedGametestResources') {
     dependsOn libraryBuild.task(':optimizeReleaseJar')
     from(new File(libraryOutput, "mapping/cbbg-lib-${libraryPackageVersion}.map")) {
@@ -96,12 +104,6 @@ tasks.named('processProcessedGametestResources') {
 }
 sourceSets.processedGametest.compileClasspath += files(libraryDevelopmentArchive)
 tasks.named('compileProcessedGametestJava') { dependsOn libraryBuild.task(':jar') }
-tasks.named('checkPackages') {
-    doLast {
-        conventionLoader.loadClass('cbbg.gradle.PackageChecks').verifyNestedLibrary(
-                releaseOptimization.outputJar.get().asFile, libraryArchive)
-    }
-}
 def externalMetadata = tasks.register('processedLibraryExternalMetadata') {
     dependsOn tasks.named('processProcessedGametestResources')
     def source = layout.buildDirectory.file('resources/processedGametest/fabric.mod.json')

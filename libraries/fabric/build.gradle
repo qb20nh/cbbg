@@ -40,6 +40,9 @@ tasks.withType(JavaCompile).configureEach { options.release = target.java as int
 tasks.withType(Jar).configureEach { preserveFileTimestamps = false; reproducibleFileOrder = true }
 sourceSets.main.java.srcDirs = ["src/${target.renderer}/java"]
 if (target.renderer == 'blaze-texture-format') sourceSets.main.java.srcDir "src/${target.minecraft}/java"
+if (target.renderer == 'renderpearl') {
+    sourceSets.main.java.srcDir "src/${cbbg.gradle.TargetCatalog.renderPearlPipelineSources(target)}/java"
+}
 sourceSets.main.resources.srcDirs = ['src/main/resources', "src/${target.renderer}/resources"]
 if (target.renderer in ['blaze-gpu-format', 'renderpearl']) sourceSets.main.resources.srcDir 'src/vulkan/resources'
 tasks.named('processResources') {

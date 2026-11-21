@@ -39,12 +39,14 @@ class FabricSources {
         result.libraryInputs = [tree('libraries/utilities/src/main'), tree('libraries/fabric/src/main'),
                                 tree("libraries/fabric/src/${owner.renderer}/java"),
                                 tree("libraries/fabric/src/${owner.renderer}/resources")]
+        boolean usesSubpasses = TargetCatalog.usesRenderSubpasses(owner)
         if (owner.renderer == TEXTURE_FORMAT_RENDERER) {
             result.libraryInputs += [tree("libraries/fabric/src/${owner.minecraft}/java"),
                                      tree('libraries/fabric/src/gpu/resources')]
         } else if (owner.renderer == RENDERPEARL_RENDERER) {
-            result.test.java << tree('renderers/renderpearl/src/test/java')
+            result.test.java << tree("renderers/${usesSubpasses ? 'renderpearl-subpass' : 'renderpearl'}/src/test/java")
             result.libraryInputs << tree('libraries/fabric/src/blaze-gpu-format/resources')
+            result.libraryInputs << tree("libraries/fabric/src/${TargetCatalog.renderPearlPipelineSources(owner)}/java")
         }
         List<Map> processed = result.processedGametest.java
         List<String> progress = classes('gametest/mixin/ScenarioProgressMixin',
@@ -82,11 +84,30 @@ class FabricSources {
                 groups << 'adapters/minecraft/gui-graphics'
             }
             for (String group : groups) {
-                result.main.java << tree(group + '/src/main/java')
-                result.main.resources << tree(group + '/src/main/resources')
-                result.gametest.java << tree(group + '/src/gametest/java')
-                result.gametest.java << tree(group + '/src/parity/java')
-                result.gametest.resources << tree(group + '/src/gametest/resources')
+                List<String> excluded = []
+                List<String> excludedResources = []
+                if (usesSubpasses && group == 'renderers/renderpearl') {
+                    excluded = classes('render/DitherPresentation', 'render/FloatPipelines',
+                            'render/NoiseTextures', 'render/PipelineFormats', 'render/Rgba8Readback',
+                            'render/VulkanWindowPresentation', 'render/NeutralVignette',
+                            'debug/CbbgDebugEntry', 'mixin/DebugScreenEntriesMixin',
+                            'mixin/FrontendGpuSurfaceAccessor',
+                            'mixin/FrontendGpuSurfaceMixin', 'mixin/FrontendRenderPassMixin',
+                            'mixin/FrontendPipelineSourceMixin', 'mixin/GlCommandEncoderMixin',
+                            'mixin/HudVignetteMixin', 'mixin/MinecraftMixin', 'mixin/PipelineCacheMixin',
+                            'mixin/RenderSystemPipelineCacheAccessor', 'mixin/VulkanCommandEncoderAccessor',
+                            'mixin/VulkanGpuSurfaceMixin', 'mixin/VulkanRenderPipelineMixin')
+                    excludedResources = ['cbbg.renderpearl.mixins.json', 'cbbg.window.accesswidener']
+                } else if (usesSubpasses && group == 'adapters/fabric/modern') {
+                    excluded = classes('CbbgClient')
+                }
+                result.main.java << tree(group + '/src/main/java', [], excluded)
+                result.main.resources << tree(group + '/src/main/resources', [], excludedResources)
+                if (!usesSubpasses || group == 'renderers/renderpearl-subpass') {
+                    result.gametest.java << tree(group + '/src/gametest/java')
+                    result.gametest.java << tree(group + '/src/parity/java')
+                    result.gametest.resources << tree(group + '/src/gametest/resources')
+                }
             }
             result.test.java << tree('adapters/fabric/modern/src/test/java')
             result.test.resources << tree('build-config/fabric-modern/src/test/resources')
@@ -100,9 +121,11 @@ class FabricSources {
                     'render/stbn/StbnImagePixels', 'render/stbn/STBNCache', MAIN_TARGETS),
                     gl3 ? classes(MAIN_TARGETS, 'render/stbn/StbnImagePixels',
                             'config/gui/WidgetPlatform') : [])
-            result.gametest.java << tree('adapters/fabric/shared/src/gametest/java',
-                    sharedLifecycle ? [] : classes('gametest/CbbgConfigScreenGameTest'),
-                    sharedLifecycle ? classes('gametest/ClientTestAccess') : [])
+            if (!usesSubpasses) {
+                result.gametest.java << tree('adapters/fabric/shared/src/gametest/java',
+                        sharedLifecycle ? [] : classes('gametest/CbbgConfigScreenGameTest'),
+                        sharedLifecycle ? classes('gametest/ClientTestAccess') : [])
+            }
             if (sharedLifecycle) {
                 result.main.java << tree('adapters/fabric/modern/src/main/java', classes(
                         'CbbgClient', 'CbbgEarlyInit', 'CbbgLanguageAdapter'),
@@ -189,16 +212,18 @@ class FabricSources {
                     owner.minecraft == MC_1_21_11 ? classes('gametest/mixin/ReleaseNoiseWriteMixin') : [])
         }
         if (owner.buildProfile == FABRIC_UPSTREAM || owner.renderer == RENDERPEARL_RENDERER) {
-            result.main.java << tree('renderers/vulkan/src/main/java')
+            if (!usesSubpasses) result.main.java << tree('renderers/vulkan/src/main/java')
             result.libraryInputs << tree('libraries/fabric/src/vulkan/resources')
             result.main.java << tree('renderers/blaze-texture-format/src/main/java',
                     classes('render/WindowFramebuffer'))
         }
         result.copies.processedGametest << irisResources
         if (owner.renderer == RENDERPEARL_RENDERER) {
-            result.main.java << tree('adapters/minecraft/26.1/src/main/java',
-                    classes('config/gui/ConfigScreenPlatform', 'render/HudPlatform'))
-            processed << tree('adapters/fabric/shared/src/processedGametest/java',
+            if (!usesSubpasses) {
+                result.main.java << tree('adapters/minecraft/26.1/src/main/java',
+                        classes('config/gui/ConfigScreenPlatform', 'render/HudPlatform'))
+            }
+            if (!usesSubpasses) processed << tree('adapters/fabric/shared/src/processedGametest/java',
                     classes('gametest/ReleaseSodiumConfigGameTest', 'gametest/ReleaseUtilitiesGameTest',
                             'gametest/ReleaseLibraryResolutionGameTest',
                             'gametest/ReleaseUtilityCalls', 'gametest/ReleaseImagePixels',

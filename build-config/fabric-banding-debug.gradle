@@ -4,9 +4,12 @@ import groovy.json.JsonSlurper
 // Only dev assembly and runClient include the visualizer's source set.
 def repositoryRoot = file('../..')
 def debugRoot = new File(repositoryRoot, 'adapters/fabric/banding-debug')
-def debugRenderer = bandingDebugTarget.renderer
+def targetCatalog = plugins.getPlugin('cbbg.packaging').class.classLoader.loadClass('cbbg.gradle.TargetCatalog')
+def usesSubpasses = targetCatalog.usesRenderSubpasses(bandingDebugTarget)
+def debugRenderer = usesSubpasses ? 'renderpearl-subpass' : bandingDebugTarget.renderer
 def legacyShaders = debugRenderer == 'gl3'
-def explicitLocations = debugRenderer in ['blaze-gpu-format', 'renderpearl']
+def explicitLocations = !legacyShaders && (usesSubpasses || debugRenderer in ['blaze-gpu-format', 'renderpearl'])
+def directWindowShaders = explicitLocations && !usesSubpasses
 def debugSources = sourceSets.create('bandingDebug') {
     java.srcDirs = [new File(debugRoot, 'java'), new File(debugRoot, debugRenderer)]
     resources.srcDirs = [new File(debugRoot, 'resources')]
@@ -38,7 +41,7 @@ def generated = tasks.register('generateBandingDebugResources') {
         def source = fragment.getText('UTF-8')
         def mixins = ['BandingSettingsMixin', 'BandingPresentationMixin', 'BandingShaderMixin']
         if (legacyShaders) mixins.add('BandingShaderLifecycleMixin')
-        if (explicitLocations) mixins.add('BandingWindowShaderMixin')
+        if (directWindowShaders) mixins.add('BandingWindowShaderMixin')
         new File(root, debugMixin).text = JsonOutput.toJson([
                 required: true, package: 'com.qb20nh.cbbg.banding.mixin',
                 compatibilityLevel: 'JAVA_' + bandingDebugTarget.java,
@@ -53,7 +56,7 @@ def generated = tasks.register('generateBandingDebugResources') {
                 if (legacyShaders) header += '#define LEGACY_UNIFORMS\n'
                 new File(shaders, name + '.fsh').setText(
                         header + "#define VIEW ${view}\n#define SIDE ${side}\n" + source, 'UTF-8')
-                if (explicitLocations) {
+                if (directWindowShaders) {
                     new File(shaders, name + '_window.fsh').setText(
                             header + "#define VIEW ${view}\n#define SIDE ${side}\n#define VULKAN_WINDOW\n" + source,
                             'UTF-8')
