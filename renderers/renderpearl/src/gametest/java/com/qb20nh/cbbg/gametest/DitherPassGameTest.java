@@ -58,6 +58,22 @@ public final class DitherPassGameTest implements FabricClientGameTest {
           }
         }
       }
+      check(context, fixture, false, 1, 1, 1);
+      check(context, fixture, false, 1, 1, 1);
+      check(context, fixture, false, 1, 0.5f, 1);
+      check(context, fixture, false, 1, 0.5f, 0.5f);
+      check(context, fixture, false, 1, 1, 0.5f);
+      check(context, fixture, true, 1, 1, 0.5f);
+      var queued =
+          context.computeOnClient(
+              client ->
+                  CompletableFuture.allOf(
+                      submit(fixture, false, 0, 1, 1),
+                      submit(fixture, false, 4, 0.5f, 1),
+                      submit(fixture, true, 2, 1, 0.5f),
+                      submit(fixture, false, 1, 0.5f, 0.5f)));
+      context.waitFor(client -> queued.isDone(), 200);
+      queued.join();
       context.runOnClient(
           client -> {
             var old =
@@ -108,75 +124,89 @@ public final class DitherPassGameTest implements FabricClientGameTest {
 
   private static void check(
       ClientGameTestContext context, Fixture fixture, boolean demo, float strength, float scale) {
-    CompletableFuture<@Nullable Void> result = new CompletableFuture<>();
-    context.runOnClient(
-        client -> {
-          var output =
-              fixture.pass.render(
-                  Objects.requireNonNull(fixture.source.getColorTextureView()),
-                  fixture.view,
-                  strength,
-                  scale,
-                  scale,
-                  demo);
-          if (Objects.requireNonNull(output.getColorTexture()).getFormat()
-              != GpuFormat.RGBA8_UNORM) {
-            throw new AssertionError("Dither output must be RGBA8");
-          }
-          Screenshot.takeScreenshot(
-              output,
-              image -> {
-                try (image) {
-                  for (int y = 0; y < HEIGHT; y++) {
-                    for (int x = 0; x < WIDTH; x++) {
-                      int gpuY = HEIGHT - 1 - y;
-                      int noiseX = DitherReference.noiseCoordinate(x, scale, 2);
-                      int noiseY = DitherReference.noiseCoordinate(gpuY, scale, 2);
-                      int noise = ((noiseX + noiseY) & 1) == 0 ? 0 : 255;
-                      int channel =
-                          DitherReference.channel(127.25 / 255, noise, strength, x, WIDTH, demo);
-                      int expected = 0xff000000 | channel * 0x010101;
-                      if (image.getPixel(x, y) != expected) {
-                        throw new AssertionError(
-                            "Dither mismatch at "
-                                + x
-                                + ","
-                                + y
-                                + " demo="
-                                + demo
-                                + " strength="
-                                + strength
-                                + " scale="
-                                + scale
-                                + " expected="
-                                + Integer.toHexString(expected)
-                                + " actual="
-                                + Integer.toHexString(image.getPixel(x, y)));
-                      }
-                    }
-                  }
-                  Path path =
-                      Path.of(Objects.requireNonNull(System.getProperty("cbbg.test.evidence")))
-                          .resolve(
-                              "dither-"
-                                  + System.getProperty("cbbg.test.backend")
-                                  + "-"
-                                  + demo
-                                  + "-"
-                                  + strength
-                                  + "-"
-                                  + scale
-                                  + ".png");
-                  Files.createDirectories(Objects.requireNonNull(path.getParent()));
-                  image.writeToFile(path);
-                  result.complete(null);
-                } catch (Throwable failure) {
-                  result.completeExceptionally(failure);
-                }
-              });
-        });
+    check(context, fixture, demo, strength, scale, scale);
+  }
+
+  private static void check(
+      ClientGameTestContext context,
+      Fixture fixture,
+      boolean demo,
+      float strength,
+      float scaleX,
+      float scaleY) {
+    var result = context.computeOnClient(client -> submit(fixture, demo, strength, scaleX, scaleY));
     context.waitFor(client -> result.isDone(), 200);
     result.join();
+  }
+
+  private static CompletableFuture<@Nullable Void> submit(
+      Fixture fixture, boolean demo, float strength, float scaleX, float scaleY) {
+    String scale =
+        Float.compare(scaleX, scaleY) == 0 ? Float.toString(scaleX) : scaleX + "x" + scaleY;
+    CompletableFuture<@Nullable Void> result = new CompletableFuture<>();
+    var output =
+        fixture.pass.render(
+            Objects.requireNonNull(fixture.source.getColorTextureView()),
+            fixture.view,
+            strength,
+            scaleX,
+            scaleY,
+            demo);
+    if (Objects.requireNonNull(output.getColorTexture()).getFormat() != GpuFormat.RGBA8_UNORM) {
+      throw new AssertionError("Dither output must be RGBA8");
+    }
+    Screenshot.takeScreenshot(
+        output,
+        image -> {
+          try (image) {
+            for (int y = 0; y < HEIGHT; y++) {
+              for (int x = 0; x < WIDTH; x++) {
+                int gpuY = HEIGHT - 1 - y;
+                int noiseX = DitherReference.noiseCoordinate(x, scaleX, 2);
+                int noiseY = DitherReference.noiseCoordinate(gpuY, scaleY, 2);
+                int noise = ((noiseX + noiseY) & 1) == 0 ? 0 : 255;
+                int channel =
+                    DitherReference.channel(127.25 / 255, noise, strength, x, WIDTH, demo);
+                int expected = 0xff000000 | channel * 0x010101;
+                if (image.getPixel(x, y) != expected) {
+                  throw new AssertionError(
+                      "Dither mismatch at "
+                          + x
+                          + ","
+                          + y
+                          + " demo="
+                          + demo
+                          + " strength="
+                          + strength
+                          + " scale="
+                          + scale
+                          + " expected="
+                          + Integer.toHexString(expected)
+                          + " actual="
+                          + Integer.toHexString(image.getPixel(x, y)));
+                }
+              }
+            }
+            Path path =
+                Path.of(Objects.requireNonNull(System.getProperty("cbbg.test.evidence")))
+                    .resolve(
+                        "dither-"
+                            + System.getProperty("cbbg.test.backend")
+                            + "-"
+                            + demo
+                            + "-"
+                            + strength
+                            + "-"
+                            + scale
+                            + ".png");
+            Files.createDirectories(Objects.requireNonNull(path.getParent()));
+            image.writeToFile(path);
+            result.complete(null);
+          } catch (Throwable failure) {
+            result.completeExceptionally(failure);
+          }
+        });
+    return result;
   }
 
   private record Fixture(

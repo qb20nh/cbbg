@@ -72,9 +72,24 @@ public class CbbgConfigScreenGameTest implements FabricClientGameTest {
             assertEquals(0L, CbbgConfig.get().stbnSeed(), "empty seed");
             MouseButtonInfo click = new MouseButtonInfo(GLFW.GLFW_MOUSE_BUTTON_LEFT, 0);
 
-            // Pixel format: RGBA16F -> RGBA32F
-            w.format.onClick(
-                new MouseButtonEvent(centerX(w.format), centerY(w.format), click), false);
+            assertEquals(
+                CbbgConfig.PixelFormat.RGBA32F,
+                CbbgConfig.get().pixelFormat(),
+                "opening settings preserves the existing pixel format");
+            assertEquals(
+                CbbgConfig.PixelFormat.RGBA32F, w.format.getValue(), "existing format label");
+            assertTrue(w.format.active, "Existing pixel format must remain editable");
+            // The legacy value is displayed, but cannot be selected again after changing it.
+            for (int clickIndex = 0; clickIndex < 2; clickIndex++) {
+              w.format.onClick(
+                  new MouseButtonEvent(centerX(w.format), centerY(w.format), click), false);
+              assertEquals(
+                  CbbgConfig.PixelFormat.RGBA16F,
+                  CbbgConfig.get().pixelFormat(),
+                  "selectable pixel format");
+              assertEquals(
+                  CbbgConfig.PixelFormat.RGBA16F, w.format.getValue(), "selected format label");
+            }
 
             // Strength slider: click near max
             w.strength.onClick(
@@ -132,7 +147,7 @@ public class CbbgConfigScreenGameTest implements FabricClientGameTest {
 
   private static void setKnownBaselineConfig() {
     CbbgConfig.setMode(CbbgConfig.Mode.ENABLED);
-    CbbgConfig.setPixelFormat(CbbgConfig.PixelFormat.RGBA16F);
+    CbbgConfig.setPixelFormat(CbbgConfig.PixelFormat.RGBA32F);
     CbbgConfig.setStrength(1.0f);
     CbbgConfig.setStbnSize(128);
     CbbgConfig.setStbnDepth(64);
@@ -159,7 +174,7 @@ public class CbbgConfigScreenGameTest implements FabricClientGameTest {
     CbbgConfig cfg = CbbgConfig.get();
 
     assertEquals(CbbgConfig.Mode.DISABLED, cfg.mode(), "mode");
-    assertEquals(CbbgConfig.PixelFormat.RGBA32F, cfg.pixelFormat(), "pixelFormat");
+    assertEquals(CbbgConfig.PixelFormat.RGBA16F, cfg.pixelFormat(), "pixelFormat");
 
     // Strength slider can land on slightly below max depending on click rounding.
     assertTrue(cfg.strength() >= 3.5f, "strength expected >= 3.5, got " + cfg.strength());

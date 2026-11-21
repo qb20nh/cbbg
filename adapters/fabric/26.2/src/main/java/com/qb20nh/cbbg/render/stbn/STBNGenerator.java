@@ -71,6 +71,16 @@ public class STBNGenerator {
     return pendingFuture;
   }
 
+  /** Releases internal ownership after image conversion has finished. */
+  @SuppressWarnings("ReferenceEquality") // An older consumer must not release a newer request.
+  public static synchronized void release(CompletableFuture<@Nullable STBNFields> request) {
+    if (pendingFuture == request && request.isDone()) {
+      preparation.release(java.util.Objects.requireNonNull(preparationFuture));
+      preparationFuture = null;
+      pendingFuture = null;
+    }
+  }
+
   public static synchronized void shutdown() {
     if (pendingFuture != null) pendingFuture.cancel(false);
     preparation.close();

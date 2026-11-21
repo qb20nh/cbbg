@@ -3,6 +3,7 @@ package com.qb20nh.cbbg.gametest;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.mojang.blaze3d.platform.NativeImage;
+import com.qb20nh.cbbg.api.NoiseVolume;
 import java.lang.management.ManagementFactory;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -27,7 +28,7 @@ public final class ReleaseEarlyStartupGameTest implements FabricClientGameTest {
   private static final long SEED = 74123;
   // SHA-256 of CPU-reference decoded ARGB pixels in z/y/x order, encoded big-endian.
   private static final String PIXELS_SHA256 =
-      "4f953f23c7a2a7de8960caa4272090458b2ec986ceeea65796467a0c9109a076";
+      "4570ea457d31d0372e7be403cf7f358b130b7122b7275a5274fb841ad70c193d";
 
   @Override
   public void runTest(ClientGameTestContext context) {
@@ -119,8 +120,10 @@ public final class ReleaseEarlyStartupGameTest implements FabricClientGameTest {
     if (!Files.isRegularFile(manifest)) return null;
     try {
       List<String> lines = Files.readAllLines(manifest);
-      int offset = lines.size() == DEPTH + 1 && lines.getFirst().equals("# seed " + SEED) ? 1 : 0;
-      if (lines.size() != DEPTH + offset) return null;
+      int offset = 2;
+      if (lines.size() != DEPTH + offset
+          || !lines.getFirst().equals("# seed " + SEED)
+          || !lines.get(1).equals("# algorithm " + NoiseVolume.algorithmVersion())) return null;
       ByteBuffer pixels =
           ByteBuffer.allocate(SIZE * SIZE * DEPTH * Integer.BYTES).order(ByteOrder.BIG_ENDIAN);
       MessageDigest digest = MessageDigest.getInstance("SHA-256");

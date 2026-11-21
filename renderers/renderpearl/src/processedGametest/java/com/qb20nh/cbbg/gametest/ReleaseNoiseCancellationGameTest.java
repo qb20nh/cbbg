@@ -4,6 +4,7 @@ import com.google.gson.JsonObject;
 import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
+import com.qb20nh.cbbg.api.NoiseVolume;
 import java.io.ByteArrayInputStream;
 import java.lang.reflect.Proxy;
 import java.nio.ByteBuffer;
@@ -35,7 +36,7 @@ public final class ReleaseNoiseCancellationGameTest implements FabricClientGameT
   private static final long REPLACEMENT_SEED = 74123;
   // Independent CPU reference: decoded ARGB ints in z/y/x order, big-endian.
   private static final String REPLACEMENT_PIXELS =
-      "4f953f23c7a2a7de8960caa4272090458b2ec986ceeea65796467a0c9109a076";
+      "4570ea457d31d0372e7be403cf7f358b130b7122b7275a5274fb841ad70c193d";
 
   @Override
   // The exact replacement noise resource must survive stale completion.
@@ -166,7 +167,9 @@ public final class ReleaseNoiseCancellationGameTest implements FabricClientGameT
   private static void assertReplacementPixels() throws Exception {
     Path manifest = ReleaseClient.manifest(16, 8);
     List<String> lines = Files.readAllLines(manifest);
-    if (lines.size() != 9 || !lines.getFirst().equals("# seed " + REPLACEMENT_SEED)) {
+    if (lines.size() != 10
+        || !lines.getFirst().equals("# seed " + REPLACEMENT_SEED)
+        || !lines.get(1).equals("# algorithm " + NoiseVolume.algorithmVersion())) {
       throw new AssertionError("Replacement cache identity is incorrect");
     }
     ByteBuffer pixels =
@@ -174,7 +177,7 @@ public final class ReleaseNoiseCancellationGameTest implements FabricClientGameT
     for (int z = 0; z < 8; z++) {
       String name = "stbn_16x16x8_" + z + ".png";
       byte[] bytes = Files.readAllBytes(ReleaseClient.cache().resolve(name));
-      String[] entry = lines.get(z + 1).trim().split("\\s+", 0);
+      String[] entry = lines.get(z + 2).trim().split("\\s+", 0);
       if (entry.length != 2 || !entry[1].equals(name) || !entry[0].equals(hash(bytes))) {
         throw new AssertionError("Replacement PNG manifest mismatch at frame " + z);
       }
@@ -228,10 +231,7 @@ public final class ReleaseNoiseCancellationGameTest implements FabricClientGameT
     private boolean largeMathActive() {
       Thread thread = worker;
       if (thread == null || completions.get() != 0 || replacementStarted) return false;
-      for (StackTraceElement frame : thread.getStackTrace()) {
-        if (frame.getClassName().equals("java.util.TimSort")) return true;
-      }
-      return false;
+      return ReleaseNoiseWork.mathActive(thread);
     }
 
     private boolean workerIdle() {

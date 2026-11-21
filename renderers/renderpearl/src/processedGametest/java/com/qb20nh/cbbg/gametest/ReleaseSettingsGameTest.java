@@ -16,6 +16,7 @@ import net.minecraft.client.gui.screens.ConfirmScreen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.locale.Language;
 import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
 /** Tests the optimized artifact's settings through its real Mod Menu entry point. */
 @NullMarked
@@ -80,19 +81,20 @@ public final class ReleaseSettingsGameTest implements FabricClientGameTest {
           command(context, "stbn size 32");
           command(context, "stbn depth 16");
           open(context, mods);
+          Object oldOwner = context.computeOnClient(client -> Objects.requireNonNull(noiseOwner()));
           GpuTextureView oldNoise =
               context.computeOnClient(client -> ProcessedRenderObservations.lastDitherNoise());
           if (oldNoise == null || oldNoise.texture().isClosed()) {
             throw new AssertionError("No active UI fixture noise");
           }
           context.runOnClient(client -> editNoise(Objects.requireNonNull(client.gui.screen())));
-          retainNoise(context, oldNoise, "editing settings");
+          retainNoise(context, oldOwner, oldNoise, "editing settings");
           context.clickScreenButton("cbbg.config.button.generate_stbn");
           context.waitForScreen(ConfirmScreen.class);
           ReleaseClient.screenshot(context, "release-settings-confirm");
           context.clickScreenButton("gui.no");
           waitSettings(context);
-          retainNoise(context, oldNoise, "canceling generation");
+          retainNoise(context, oldOwner, oldNoise, "canceling generation");
           context.clickScreenButton("cbbg.config.button.generate_stbn");
           context.waitForScreen(ConfirmScreen.class);
           context.clickScreenButton("gui.yes");
@@ -102,7 +104,10 @@ public final class ReleaseSettingsGameTest implements FabricClientGameTest {
           context.waitFor(
               client -> {
                 var noise = ProcessedRenderObservations.lastDitherNoise();
-                return noise != null
+                Object owner = noiseOwner();
+                return owner != null
+                    && owner != oldOwner
+                    && noise != null
                     && noise != oldNoise
                     && !noise.texture().isClosed()
                     && noise.getWidth(0) == 16
@@ -309,19 +314,32 @@ public final class ReleaseSettingsGameTest implements FabricClientGameTest {
     ui.seed().setValue("123");
   }
 
-  // The exact noise view must survive editing and canceled generation.
+  // Cached frame views rotate; their owner must survive edits and canceled generation.
   @SuppressWarnings("ReferenceEquality")
   private static void retainNoise(
-      ClientGameTestContext context, GpuTextureView noise, String action) {
+      ClientGameTestContext context, Object owner, GpuTextureView noise, String action) {
     long before = ProcessedRenderObservations.draws();
     ReleaseClient.awaitDrawAfter(context, before);
     context.waitTicks(5);
     context.runOnClient(
         client ->
             check(
-                ProcessedRenderObservations.lastDitherNoise() == noise
-                    && !noise.texture().isClosed(),
+                noiseOwner() == owner && !noise.texture().isClosed(),
                 "GPU noise changed while " + action));
+  }
+
+  private static @Nullable Object noiseOwner() {
+    String owner = "com.qb20nh.cbbg.render.DitherPresentation";
+    try {
+      var field =
+          Class.forName(ReleaseMapping.className(owner))
+              .getDeclaredField(
+                  ReleaseMapping.memberName(owner, "com.qb20nh.cbbg.render.NoiseTextures noise"));
+      field.setAccessible(true);
+      return field.get(null);
+    } catch (ReflectiveOperationException failure) {
+      throw new LinkageError("Cannot inspect active noise owner", failure);
+    }
   }
 
   private static void waitSettings(ClientGameTestContext context) {

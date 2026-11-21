@@ -1,5 +1,7 @@
 package com.qb20nh.cbbg.mixin;
 
+import com.mojang.blaze3d.opengl.GlCommandEncoder;
+import com.mojang.blaze3d.opengl.GlDevice;
 import com.mojang.blaze3d.opengl.GlStateManager;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.textures.GpuTexture;
@@ -11,21 +13,49 @@ import com.qb20nh.cbbg.config.CbbgConfig;
 import com.qb20nh.cbbg.debug.CbbgDebugState;
 import com.qb20nh.cbbg.debug.CbbgGlNames;
 import com.qb20nh.cbbg.render.CbbgDither;
+import com.qb20nh.cbbg.render.WindowPassEncoder;
 import java.util.concurrent.atomic.AtomicBoolean;
 import net.minecraft.client.Minecraft;
 import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL30;
+import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.ModifyArg;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(targets = {"com/mojang/blaze3d/opengl/GlCommandEncoder"})
 @NullMarked
-public abstract class GlCommandEncoderMixin {
+public abstract class GlCommandEncoderMixin implements WindowPassEncoder {
+
+  @Shadow @Final private @Nullable GlDevice device;
+
+  @Unique private boolean cbbg$windowPass;
+
+  @Override
+  public void cbbg$windowPass(boolean active) {
+    cbbg$windowPass = active;
+  }
+
+  @ModifyArg(
+      method = "trySetup",
+      at = @At(value = "INVOKE", target = "Lorg/lwjgl/opengl/GL33C;glDrawBuffers([I)V"),
+      index = 0)
+  // skipcq: JAVA-W0324
+  private int[] cbbg$windowDrawBuffer(int[] buffers) {
+    if (cbbg$windowPass
+        && buffers.length == 1
+        && buffers[0] != GL11.GL_NONE
+        && GL11.glGetInteger(GL30.GL_DRAW_FRAMEBUFFER_BINDING) == 0) {
+      buffers[0] = GL11.glGetInteger(GL11.GL_DRAW_BUFFER);
+    }
+    return buffers;
+  }
 
   @Unique
   private static final ThreadLocal<Integer> PRESENT_DEPTH = ThreadLocal.withInitial(() -> 0);
@@ -62,10 +92,19 @@ public abstract class GlCommandEncoderMixin {
 
     PRESENT_DEPTH.set(PRESENT_DEPTH.get() + 1);
     try {
+      GlDevice currentDevice = device;
       boolean didPresent =
-          modeNow == CbbgConfig.Mode.DEMO
-              ? CbbgDither.blitToScreenWithDemo(textureView)
-              : CbbgDither.blitToScreenWithDither(textureView);
+          (currentDevice != null
+                  && CbbgDither.blitToWindow(
+                      textureView,
+                      modeNow,
+                      (GlCommandEncoder) (Object) this,
+                      currentDevice,
+                      swapchainWidth,
+                      swapchainHeight))
+              || (modeNow == CbbgConfig.Mode.DEMO
+                  ? CbbgDither.blitToScreenWithDemo(textureView)
+                  : CbbgDither.blitToScreenWithDither(textureView));
       if (didPresent) {
         ci.cancel();
       }
@@ -191,7 +230,8 @@ public abstract class GlCommandEncoderMixin {
 
       if (Cbbg.LOGGER.isInfoEnabled()) {
         Cbbg.LOGGER.info(
-            "cbbg verify: MainTarget internalFormat={} Lightmap internalFormat={} DefaultFB encoding={} FRAMEBUFFER_SRGB={}",
+            "cbbg verify: MainTarget internalFormat={} Lightmap internalFormat={} DefaultFB"
+                + " encoding={} FRAMEBUFFER_SRGB={}",
             CbbgGlNames.glInternalName(mainInternal),
             lightmapInternal == null ? "unknown" : CbbgGlNames.glInternalName(lightmapInternal),
             CbbgGlNames.glEncodingName(encoding),

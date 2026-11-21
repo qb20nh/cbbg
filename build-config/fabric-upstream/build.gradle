@@ -13,6 +13,8 @@ import cbbg.gradle.PackageChecks
 import cbbg.gradle.TargetCatalog
 
 def repositoryRoot = file('../..')
+loom.accessWidenerPath = new File(repositoryRoot,
+        'adapters/fabric/26.2/src/main/resources/cbbg.window.accesswidener')
 layout.buildDirectory = new File(repositoryRoot, 'build')
 apply from: new File(repositoryRoot, 'build-config/local-runtime.gradle')
 apply from: new File(repositoryRoot, 'build-config/upstream-packaging.gradle')
@@ -139,6 +141,12 @@ if (providers.gradleProperty("testRenderScale").isPresent()) {
 }
 
 processResources {
+	doLast {
+		File descriptorFile = new File(destinationDir, 'fabric.mod.json')
+		Map descriptor = new groovy.json.JsonSlurper().parse(descriptorFile)
+		descriptor.accessWidener = 'cbbg.window.accesswidener'
+		cbbg.gradle.ReproducibleText.writeJson(descriptorFile, descriptor)
+	}
 	exclude 'licenses/LICENSE_AsmFabricLoader.txt'
 	inputs.property "version", project.version
 	inputs.property "minecraft_version", project.minecraft_version

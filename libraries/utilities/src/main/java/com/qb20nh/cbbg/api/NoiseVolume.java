@@ -1,7 +1,6 @@
 package com.qb20nh.cbbg.api;
 
 import com.qb20nh.cbbg.math.BlueNoise;
-import java.util.concurrent.CancellationException;
 
 /** Immutable periodic RGB noise. Generation runs on the invoking thread. */
 public final class NoiseVolume {
@@ -30,27 +29,17 @@ public final class NoiseVolume {
     if (count < 2 || count > Integer.MAX_VALUE) {
       throw new IllegalArgumentException("Noise volume is too small or too large");
     }
-    checkCancellation();
-    double[] u = BlueNoise.generateScalarField(width, height, depth, BlueNoise.stbnUSeed(seed));
-    checkCancellation();
-    double[] v = BlueNoise.generateScalarField(width, height, depth, BlueNoise.stbnVSeed(seed));
-    checkCancellation();
-    int[] pixels = new int[(int) count];
-    for (int i = 0; i < pixels.length; i++) {
-      pixels[i] = BlueNoise.calculatePixelColor(u[i], v[i]);
-    }
-    checkCancellation();
-    return new NoiseVolume(width, height, depth, pixels);
+    return new NoiseVolume(
+        width, height, depth, BlueNoise.generatePixels(width, height, depth, seed));
   }
 
   private static boolean powerOfTwo(int value) {
     return value > 0 && (value & (value - 1)) == 0;
   }
 
-  private static void checkCancellation() {
-    if (Thread.currentThread().isInterrupted()) {
-      throw new CancellationException("Noise generation was interrupted");
-    }
+  /** Identifies deterministic generation output so consumers can invalidate older caches. */
+  public static int algorithmVersion() {
+    return 3;
   }
 
   public int width() {

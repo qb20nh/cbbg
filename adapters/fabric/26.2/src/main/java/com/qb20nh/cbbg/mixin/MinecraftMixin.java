@@ -1,7 +1,11 @@
 package com.qb20nh.cbbg.mixin;
 
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.mojang.blaze3d.pipeline.MainTarget;
 import com.mojang.blaze3d.pipeline.TextureTarget;
+import com.mojang.blaze3d.systems.CommandEncoder;
+import com.mojang.blaze3d.systems.GpuSurface;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.textures.GpuTextureView;
 import com.qb20nh.cbbg.CbbgClient;
@@ -19,7 +23,6 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.ModifyArg;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(Minecraft.class)
@@ -50,17 +53,28 @@ public abstract class MinecraftMixin {
     STBNGenerator.shutdown();
   }
 
-  @ModifyArg(
+  @WrapOperation(
       method = "renderFrame",
       at =
           @At(
               value = "INVOKE",
               target =
-                  "Lcom/mojang/blaze3d/systems/GpuSurface;blitFromTexture(Lcom/mojang/blaze3d/systems/CommandEncoder;Lcom/mojang/blaze3d/textures/GpuTextureView;)V"),
-      index = 1)
+                  "Lcom/mojang/blaze3d/systems/GpuSurface;blitFromTexture(Lcom/mojang/blaze3d/systems/CommandEncoder;Lcom/mojang/blaze3d/textures/GpuTextureView;)V"))
+  @SuppressWarnings("UnusedMethod") // Invoked by MixinExtras at the main presentation call.
+  // skipcq: JAVA-W0324
+  private void cbbg$present(
+      GpuSurface surface, CommandEncoder encoder, GpuTextureView input, Operation<Void> original) {
+    GpuTextureView output = cbbg$presentVulkan(surface, input);
+    try {
+      original.call(surface, encoder, output);
+    } finally {
+      CbbgDither.setVulkanSurface(null);
+    }
+  }
+
   // Texture identity limits presentation interception to Minecraft's main render target.
   @SuppressWarnings("ReferenceEquality")
-  private GpuTextureView cbbg$presentVulkan(GpuTextureView input) {
+  private GpuTextureView cbbg$presentVulkan(GpuSurface surface, GpuTextureView input) {
     if (MainTargetFormatSupport.isOpenGl()) {
       return input;
     }
@@ -93,6 +107,10 @@ public abstract class MinecraftMixin {
 
     Minecraft mc = Minecraft.getInstance();
     if (mc.gameRenderer.mainRenderTarget().getColorTextureView() != input) {
+      return input;
+    }
+    if (CbbgDither.canPresentToVulkanWindow(surface, input)) {
+      CbbgDither.setVulkanSurface(surface);
       return input;
     }
     TextureTarget output =

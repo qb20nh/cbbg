@@ -22,7 +22,7 @@ public final class MaximumNoiseCacheGameTest implements FabricClientGameTest {
   private static final int DEPTH = 128;
   private static final long SEED = 913727L;
   private static final String PIXEL_HASH =
-      "f366482ef363e7dd2d10cf46ab72f17d9ae6d901362c13a0eb45f8b93621d9d9";
+      "8af87b0265c4c74ad21292eb9899e52ce7cedc76b1ebef9d1d941c79e69f7ef5";
 
   @Override
   // Returning the original input view means the effect fell back.

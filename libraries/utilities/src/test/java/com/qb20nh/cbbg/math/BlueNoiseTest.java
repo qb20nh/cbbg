@@ -5,11 +5,180 @@ import static org.junit.jupiter.api.Assertions.*;
 import java.nio.ByteBuffer;
 import java.security.MessageDigest;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.Random;
+import java.util.concurrent.CancellationException;
 import org.jspecify.annotations.NullMarked;
 import org.junit.jupiter.api.Test;
 
 @NullMarked
 class BlueNoiseTest {
+  @Test
+  void cancelledSortingStopsBeforeChangingRanks() {
+    double[] values = new double[128];
+    int[] indices = new int[values.length];
+    for (int i = 0; i < values.length; i++) {
+      values[i] = values.length - i;
+      indices[i] = i;
+    }
+    int[] original = indices.clone();
+    Thread.currentThread().interrupt();
+    try {
+      assertThrows(
+          CancellationException.class,
+          () -> BlueNoise.sortIndices(values, indices, new int[indices.length]));
+      assertTrue(Thread.currentThread().isInterrupted());
+      assertArrayEquals(original, indices);
+    } finally {
+      Thread.interrupted();
+    }
+  }
+
+  @Test
+  void packedNoiseIsSeededAndUsesOpaqueAbgr() {
+    int[][] dimensions = {{2, 1, 1}, {8, 8, 1}, {8, 4, 2}, {16, 8, 4}};
+    for (int[] size : dimensions) {
+      for (long seed : new long[] {0, 1, -1, Long.MIN_VALUE, Long.MAX_VALUE}) {
+        int[] pixels = BlueNoise.generatePixels(size[0], size[1], size[2], seed);
+        assertEquals(size[0] * size[1] * size[2], pixels.length);
+        assertArrayEquals(pixels, BlueNoise.generatePixels(size[0], size[1], size[2], seed));
+        for (int pixel : pixels) assertEquals(255, pixel >>> 24);
+      }
+    }
+    assertFalse(
+        Arrays.equals(BlueNoise.generatePixels(8, 4, 2, 1), BlueNoise.generatePixels(8, 4, 2, 2)));
+  }
+
+  @Test
+  void colorNoiseKeepsUniformSphericalDistribution() {
+    for (long seed : new long[] {0, 1, 42}) {
+      int[] pixels = BlueNoise.generatePixels(32, 32, 16, seed);
+      for (int channel = 0; channel < 3; channel++) {
+        int[] histogram = new int[256];
+        for (int pixel : pixels) histogram[pixel >>> (8 * channel) & 255]++;
+        int cumulative = 0;
+        for (int value = 0; value < 256; value++) {
+          cumulative += histogram[value];
+          double expected = Math.min(1, (value + 0.5) / 255);
+          assertEquals(expected, (double) cumulative / pixels.length, 2.0 / pixels.length);
+        }
+      }
+      // A uniform unit sphere has E[xy] = 0 and E[x*x*y*y] = 1/15.
+      for (int[] pair : new int[][] {{0, 1}, {0, 2}, {1, 2}}) {
+        double product = 0;
+        double squaredProduct = 0;
+        for (int pixel : pixels) {
+          double x = 2 * (pixel >>> (8 * pair[0]) & 255) / 255.0 - 1;
+          double y = 2 * (pixel >>> (8 * pair[1]) & 255) / 255.0 - 1;
+          product += x * y;
+          squaredProduct += x * x * y * y;
+        }
+        assertEquals(0, product / pixels.length, 0.012);
+        assertEquals(1.0 / 15, squaredProduct / pixels.length, 0.008);
+      }
+      // Half-step quantization retains the sphere's brightness variance in
+      // both logical ABGR and cached PNG channel order.
+      for (double[] weights : new double[][] {{0.2126, 0.7152, 0.0722}, {0.0722, 0.7152, 0.2126}}) {
+        double squared = 0;
+        for (int pixel : pixels) {
+          double error = 0;
+          for (int channel = 0; channel < 3; channel++) {
+            double noise = (pixel >>> (8 * channel) & 255) / 255.0;
+            error += weights[channel] * (Math.floor(0.5 + noise) - 0.5);
+          }
+          squared += error * error;
+        }
+        double expected =
+            Math.sqrt(
+                0.25
+                    * (weights[0] * weights[0]
+                        + weights[1] * weights[1]
+                        + weights[2] * weights[2]));
+        assertEquals(expected, Math.sqrt(squared / pixels.length), 0.006);
+      }
+    }
+  }
+
+  @Test
+  void channelsSuppressNeighborPatternsWithoutAlternatingFrames() {
+    for (long seed : new long[] {0, 1, 42}) {
+      int[] pixels = BlueNoise.generatePixels(32, 32, 16, seed);
+      for (int channel = 0; channel < 3; channel++) {
+        assertTrue(
+            noiseCorrelation(pixels, channel, 1, 0, 0) < -0.15,
+            "Spatial X correlation for channel " + channel + ", seed " + seed);
+        assertTrue(
+            noiseCorrelation(pixels, channel, 0, 1, 0) < -0.15,
+            "Spatial Y correlation for channel " + channel + ", seed " + seed);
+        assertTrue(
+            noiseCorrelation(pixels, channel, 0, 0, 1) < -0.15,
+            "Temporal correlation for channel " + channel + ", seed " + seed);
+        assertTrue(
+            Math.abs(noiseCorrelation(pixels, channel, 0, 0, 2)) < 0.3,
+            "Alternating-frame correlation for channel " + channel + ", seed " + seed);
+      }
+    }
+  }
+
+  private static double noiseCorrelation(int[] pixels, int channel, int dx, int dy, int dt) {
+    double mean = 0;
+    for (int pixel : pixels) mean += (pixel >>> (8 * channel) & 255) / (double) pixels.length;
+    double variance = 0;
+    double covariance = 0;
+    for (int z = 0; z < 16; z++) {
+      for (int y = 0; y < 32; y++) {
+        for (int x = 0; x < 32; x++) {
+          int index = (z * 32 + y) * 32 + x;
+          int nextPlane = (z + dt) % 16;
+          int nextRow = (y + dy) % 32;
+          int next = (nextPlane * 32 + nextRow) * 32 + (x + dx) % 32;
+          double a = (pixels[index] >>> (8 * channel) & 255) - mean;
+          double b = (pixels[next] >>> (8 * channel) & 255) - mean;
+          variance += a * a;
+          covariance += a * b;
+        }
+      }
+    }
+    return covariance / variance;
+  }
+
+  @Test
+  void indexSortingMatchesJavaStableOrdering() {
+    Random random = new Random(87);
+    double[] special = {
+      Double.NaN,
+      Double.longBitsToDouble(0x7ff0000000000001L),
+      Double.longBitsToDouble(0xfff8000000000001L),
+      -0.0,
+      0.0,
+      Double.MIN_VALUE,
+      -Double.MIN_VALUE,
+      Double.MAX_VALUE,
+      -Double.MAX_VALUE,
+      Double.NEGATIVE_INFINITY,
+      Double.POSITIVE_INFINITY
+    };
+    for (int size : new int[] {0, 1, 2, 3, 4, 7, 8, 31, 63, 64, 65, 127, 1024}) {
+      double[] values = new double[size];
+      Integer[] expected = new Integer[size];
+      for (int i = 0; i < size; i++) expected[i] = i;
+      Collections.shuffle(Arrays.asList(expected), random);
+      int[] actual = Arrays.stream(expected).mapToInt(Integer::intValue).toArray();
+      int[] scratch = new int[size];
+      for (int round = 0; round < 3; round++) {
+        for (int i = 0; i < size; i++) {
+          double value = random.nextInt(7) - 3;
+          if (round == 1) value = Double.longBitsToDouble(random.nextLong());
+          values[i] = i % 4 == 0 ? special[i % special.length] : value;
+        }
+        Arrays.sort(expected, Comparator.comparingDouble(i -> values[i]));
+        BlueNoise.sortIndices(values, actual, scratch);
+        assertArrayEquals(Arrays.stream(expected).mapToInt(Integer::intValue).toArray(), actual);
+      }
+    }
+  }
+
   @Test
   void fieldsMatchThePrevious26_2Artifact() throws Exception {
     // Generated by STBNGenerator in the 21d11b5 release build before extraction.

@@ -27,6 +27,8 @@ public final class ReleaseWorldPixelsGameTest implements FabricClientGameTest {
   private static final int NOISE_SIZE = 16;
   private static final int NOISE_DEPTH = 8;
   private static final long NOISE_SEED = 0;
+  private static final String REFERENCE_NOISE_RESOURCE =
+      "/cbbg-world-goldens/26.3/reference-noise.png";
 
   @Override
   public void runTest(ClientGameTestContext context) {
@@ -343,20 +345,30 @@ public final class ReleaseWorldPixelsGameTest implements FabricClientGameTest {
     if (!translucent && goldenStream == null)
       throw new AssertionError("Missing world golden: " + goldenPath);
     try (goldenStream;
+        var referenceNoiseStream =
+            Objects.requireNonNull(
+                ReleaseWorldPixelsGameTest.class.getResourceAsStream(REFERENCE_NOISE_RESOURCE),
+                "Missing world reference noise");
+        NativeImage referenceNoise = NativeImage.read(referenceNoiseStream);
         @Nullable NativeImage golden =
             goldenStream == null ? null : NativeImage.read(goldenStream);
-        NativeImage expectedImage = new NativeImage(width, height, false)) {
+        NativeImage expectedImage = new NativeImage(width, height, false);
+        NativeImage sceneReference = new NativeImage(width, height, false)) {
+      if (referenceNoise.getWidth() != tileSize || referenceNoise.getHeight() != tileSize) {
+        throw new AssertionError("World reference noise dimensions changed");
+      }
       if (golden != null && (golden.getWidth() != width || golden.getHeight() != height)) {
         throw new AssertionError("World viewport differs from the golden");
       }
       for (int y = 0; y < height; y++) {
         int gpuY = height - 1 - y;
         for (int x = 0; x < width; x++) {
-          int noisePixel =
-              noise[
-                  DitherReference.noiseCoordinate(gpuY, 1, tileSize) * tileSize
-                      + DitherReference.noiseCoordinate(x, 1, tileSize)];
+          int noiseX = DitherReference.noiseCoordinate(x, 1, tileSize);
+          int noiseY = DitherReference.noiseCoordinate(gpuY, 1, tileSize);
+          int noisePixel = noise[noiseY * tileSize + noiseX];
+          int referenceNoisePixel = referenceNoise.getPixel(noiseX, noiseY);
           int expected = 0xff000000;
+          int reference = 0xff000000;
           for (int channel = 0; channel < 3; channel++) {
             int shift = 16 - channel * 8;
             int noiseByte = noisePixel >>> shift & 255;
@@ -369,6 +381,10 @@ public final class ReleaseWorldPixelsGameTest implements FabricClientGameTest {
             }
             int value = DitherReference.channel(input, noiseByte, 2, x, width, demo);
             expected |= value << shift;
+            reference |=
+                DitherReference.channel(
+                        input, referenceNoisePixel >>> shift & 255, 2, x, width, demo)
+                    << shift;
             int plain = DitherReference.channel(input, noiseByte, 0, x, width, demo);
             if (value != plain) changed++;
             // Only shader float arithmetic within 0.0001 of an integer rounding
@@ -390,10 +406,12 @@ public final class ReleaseWorldPixelsGameTest implements FabricClientGameTest {
             throw new AssertionError("World screenshot alpha was not opaque");
           }
           expectedImage.setPixel(x, y, expected);
-          if (golden != null && golden.getPixel(x, y) != expected) goldenMismatches++;
+          sceneReference.setPixel(x, y, reference);
+          if (golden != null && golden.getPixel(x, y) != reference) goldenMismatches++;
         }
       }
       expectedImage.writeToFile(directory.resolve("expected.png"));
+      sceneReference.writeToFile(directory.resolve("scene-reference.png"));
       Files.writeString(
           directory.resolve("comparison.json"),
           "{\"width\":"
@@ -414,6 +432,9 @@ public final class ReleaseWorldPixelsGameTest implements FabricClientGameTest {
               + goldenMismatches
               + ",\"goldenResource\":"
               + (translucent ? "null" : "\"" + goldenPath + "\"")
+              + ",\"goldenNoiseResource\":\""
+              + REFERENCE_NOISE_RESOURCE
+              + "\""
               + ",\"approvedGolden\":"
               + !translucent
               + ",\"fractionalChannels\":"

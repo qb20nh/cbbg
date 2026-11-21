@@ -10,6 +10,22 @@ import org.junit.jupiter.api.Test;
 @NullMarked
 public class STBNGeneratorTest {
   @Test
+  void releasingCompletedWorkPreservesItsResultAndNewerRequests() throws Exception {
+    var request = STBNGenerator.generateAsync(4, 4, 2, 117L, true);
+    var fields = Objects.requireNonNull(request.get(10, TimeUnit.SECONDS));
+    STBNGenerator.release(request);
+    Assertions.assertNull(STBNGenerator.get());
+    Assertions.assertSame(fields, request.join());
+    var replacement = STBNGenerator.generateAsync(4, 4, 2, 118L, true);
+    STBNGenerator.release(request);
+    Assertions.assertSame(replacement, STBNGenerator.get());
+    var nextFields = Objects.requireNonNull(replacement.get(10, TimeUnit.SECONDS));
+    Assertions.assertArrayEquals(
+        NoiseVolume.generate(4, 4, 2, 118L).frameRGBA(0), nextFields.volume().frameRGBA(0));
+    STBNGenerator.release(replacement);
+  }
+
+  @Test
   void fieldsPreserveImmutableVolume() {
     NoiseVolume volume = NoiseVolume.generate(2, 2, 1, 101L);
     var fields = new STBNGenerator.STBNFields(volume);

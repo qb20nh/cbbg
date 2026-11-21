@@ -33,6 +33,9 @@ public final class ReleaseDitherGameTest implements FabricClientGameTest {
 
   @Override
   public void runTest(ClientGameTestContext context) {
+    new ReleaseNoiseTexturesGameTest().run(context);
+    ReleaseWindowPixels.check(context);
+    ReleaseVulkanWindowPixels.check(context);
     try (var world = context.worldBuilder().create()) {
       world.getConnection().waitForChunksRender();
       String previousMode = ReleaseClient.settings().get("mode").getAsString();
@@ -51,6 +54,12 @@ public final class ReleaseDitherGameTest implements FabricClientGameTest {
           }
         }
         checkResize(context, fixture);
+        // Direct presentation need not keep a window-sized offscreen image. Create the
+        // screenshot output explicitly before checking that disabling releases it.
+        context.runOnClient(
+            client ->
+                Screenshot.takeScreenshot(
+                    client.gameRenderer.mainRenderTarget(), 1, image -> image.close()));
         context.waitFor(
             client -> {
               var output = ProcessedRenderObservations.lastDitherOutput();

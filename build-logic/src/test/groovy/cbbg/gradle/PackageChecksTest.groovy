@@ -50,6 +50,8 @@ class PackageChecksTest {
                        (path): library.bytes, 'com/qb20nh/cbbg/Cbbg.class': header(69)]
         archive(main, entries)
         PackageChecks.verifyNestedLibrary(main, library)
+        archive(main, entries + ['META-INF/jars/cbbg-lib-0.9.0+mc26.3-fabric.jar': library.bytes])
+        fails('Unexpected nested CBBG Lib') { PackageChecks.verifyNestedLibrary(main, library) }
         archive(main, entries + [(api): header(52)])
         fails('duplicate classes') { PackageChecks.verifyNestedLibrary(main, library) }
         archive(library, [(api): header(53)])

@@ -3,8 +3,12 @@ package com.qb20nh.cbbg.gametest;
 import com.mojang.renderpearl.api.pipeline.CompiledRenderPipeline;
 import com.mojang.renderpearl.api.pipeline.RenderPipeline;
 import com.mojang.renderpearl.api.textures.GpuTextureView;
+import com.mojang.renderpearl.backend.api.BackendRenderPipeline;
+import com.mojang.renderpearl.frontend.FrontendRenderPipeline;
+import it.unimi.dsi.fastutil.objects.Object2IntMap;
 import java.lang.management.ManagementFactory;
 import java.util.Collections;
+import java.util.Map;
 import java.util.Set;
 import java.util.WeakHashMap;
 import java.util.concurrent.atomic.AtomicLong;
@@ -17,6 +21,13 @@ import org.jspecify.annotations.Nullable;
 public final class ProcessedRenderObservations {
   private static final Set<CompiledRenderPipeline> PIPELINES =
       Collections.synchronizedSet(Collections.newSetFromMap(new WeakHashMap<>()));
+  private static final Set<CompiledRenderPipeline> WINDOW_PIPELINES =
+      Collections.synchronizedSet(Collections.newSetFromMap(new WeakHashMap<>()));
+  private static final Set<BackendRenderPipeline> WINDOW_BACKENDS =
+      Collections.synchronizedSet(Collections.newSetFromMap(new WeakHashMap<>()));
+  private static final Map<BackendRenderPipeline, Object2IntMap<String>> WINDOW_UNIFORMS =
+      Collections.synchronizedMap(new WeakHashMap<>());
+  private static final AtomicLong WINDOW_DRAWS = new AtomicLong();
   private static final AtomicLong DRAWS = new AtomicLong();
   private static final AtomicLong PRESENTATIONS = new AtomicLong();
   private static final AtomicLong FIRST_DRAW = new AtomicLong();
@@ -32,8 +43,18 @@ public final class ProcessedRenderObservations {
   public static void remember(RenderPipeline source, @Nullable CompiledRenderPipeline compiled) {
     String name = source.getLocation().toString();
     if (compiled != null
-        && (name.equals("cbbg:pipeline/dither") || name.equals("cbbg:pipeline/demo"))) {
+        && (name.equals("cbbg:pipeline/dither")
+            || name.equals("cbbg:pipeline/demo")
+            || name.equals("cbbg:pipeline/window_dither")
+            || name.equals("cbbg:pipeline/window_demo"))) {
       PIPELINES.add(compiled);
+      if (name.equals("cbbg:pipeline/window_dither") || name.equals("cbbg:pipeline/window_demo")) {
+        WINDOW_PIPELINES.add(compiled);
+        if (compiled instanceof FrontendRenderPipeline frontend) {
+          WINDOW_BACKENDS.add(frontend.backendRenderPipeline());
+          WINDOW_UNIFORMS.put(frontend.backendRenderPipeline(), frontend.uniformIndices());
+        }
+      }
     }
   }
 
@@ -88,10 +109,11 @@ public final class ProcessedRenderObservations {
     }
   }
 
-  // Only the exact dither output view counts as a presentation.
+  // Count the exact offscreen output, or a dither draw performed inside window presentation.
   @SuppressWarnings("ReferenceEquality")
-  public static void recordPresentation(@Nullable GpuTextureView texture) {
-    if (texture != null && texture == lastDitherOutput && !texture.texture().isClosed()) {
+  public static void recordPresentation(@Nullable GpuTextureView texture, long drawsBefore) {
+    if (DRAWS.get() > drawsBefore
+        || (texture != null && texture == lastDitherOutput && !texture.texture().isClosed())) {
       PRESENTATIONS.incrementAndGet();
     }
   }
@@ -100,7 +122,29 @@ public final class ProcessedRenderObservations {
     return PRESENTATIONS.get();
   }
 
+  public static long windowDraws() {
+    return WINDOW_DRAWS.get();
+  }
+
+  public static int windowUniformIndex(BackendRenderPipeline pipeline, String name) {
+    var indices = WINDOW_UNIFORMS.get(pipeline);
+    return indices == null || !indices.containsKey(name) ? -1 : indices.getInt(name);
+  }
+
+  public static boolean isWindowBackend(BackendRenderPipeline pipeline) {
+    return WINDOW_BACKENDS.contains(pipeline);
+  }
+
+  public static void recordWindowDraw() {
+    recordDraw(true);
+  }
+
   public static void recordDraw() {
+    recordDraw(WINDOW_PIPELINES.contains(selectedPipeline));
+  }
+
+  private static void recordDraw(boolean window) {
+    if (window) WINDOW_DRAWS.incrementAndGet();
     DRAWS.incrementAndGet();
     FIRST_DRAW.compareAndSet(0, ManagementFactory.getRuntimeMXBean().getUptime());
   }

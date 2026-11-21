@@ -20,4 +20,16 @@ public final class DitherReference {
     quantized = Math.max(0, Math.min(255, quantized));
     return demo && x == width / 2 ? 255 - quantized : quantized;
   }
+
+  /** Quantize with the shader's FP32 operations; source is the stored texture sample. */
+  public static int shaderChannel(
+      double source, int noiseByte, double strength, int x, int width, boolean demo) {
+    float amount = demo && x < width / 2 ? 0f : (float) strength;
+    float clamped = Math.max(0f, Math.min(1f, (float) source));
+    float noise = noiseByte / 255f;
+    float scaled = clamped * 255f + (noise - 0.5f) * amount;
+    int quantized = (int) Math.floor(scaled + 0.5f);
+    quantized = Math.max(0, Math.min(255, quantized));
+    return demo && x == width / 2 ? 255 - quantized : quantized;
+  }
 }

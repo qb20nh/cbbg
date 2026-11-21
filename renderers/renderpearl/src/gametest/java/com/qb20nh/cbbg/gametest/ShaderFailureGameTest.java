@@ -6,7 +6,7 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.renderpearl.api.GpuFormat;
 import com.mojang.renderpearl.api.pipeline.ShaderSource;
 import com.mojang.renderpearl.api.pipeline.ShaderType;
-import com.mojang.renderpearl.api.textures.GpuTexture;
+import com.mojang.renderpearl.api.textures.GpuTextureView;
 import com.qb20nh.cbbg.config.CbbgConfig;
 import com.qb20nh.cbbg.render.DitherController;
 import com.qb20nh.cbbg.render.DitherPresentation;
@@ -53,8 +53,10 @@ public final class ShaderFailureGameTest implements FabricClientGameTest {
                 throw new AssertionError("Healthy dither pipeline was unavailable");
               var oldOutput = healthy.getColorTexture();
               var oldNoise =
-                  (GpuTexture)
-                      Objects.requireNonNull(field(DitherPresentation.class, null, "noise"));
+                  ((GpuTextureView)
+                          Objects.requireNonNull(
+                              field(DitherPresentation.class, null, "noiseView")))
+                      .texture();
               var fallback =
                   (PipelineCache)
                       Objects.requireNonNull(

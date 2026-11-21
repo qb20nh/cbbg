@@ -57,13 +57,19 @@ public final class DitherController {
 
   private static void startLoading(NoiseKey requested, boolean force) {
     key = requested;
-    CompletableFuture<NativeImage @Nullable []> generation =
+    CompletableFuture<STBNGenerator.@Nullable STBNFields> request =
         STBNGenerator.generateAsync(
-                requested.size, requested.size, requested.depth, requested.seed, force)
-            .<NativeImage @Nullable []>thenApplyAsync(
-                fields ->
-                    STBNLoader.loadOrGenerate(
-                        requested.size, requested.size, requested.depth, requested.seed, fields));
+            requested.size, requested.size, requested.depth, requested.seed, force);
+    CompletableFuture<NativeImage @Nullable []> generation =
+        request.<NativeImage @Nullable []>thenApplyAsync(
+            fields -> {
+              try {
+                return STBNLoader.loadOrGenerate(
+                    requested.size, requested.size, requested.depth, requested.seed, fields);
+              } finally {
+                STBNGenerator.release(request);
+              }
+            });
     loading = generation;
     GenerationNotifications.follow(generation);
   }
@@ -95,6 +101,10 @@ public final class DitherController {
   }
 
   static @Nullable TextureTarget render(boolean advance, Supplier<TextureTarget> draw) {
+    return renderFrame(advance, draw);
+  }
+
+  static <T> @Nullable T renderFrame(boolean advance, Supplier<T> draw) {
     if (failed || !CbbgClient.isEnabled() || DitherPresentation.hasOverlay()) {
       return null;
     }
@@ -119,7 +129,7 @@ public final class DitherController {
         DitherPresentation.upload(frames[index]);
         uploadedFrame = index;
       }
-      TextureTarget output = draw.get();
+      T output = draw.get();
       if (advance) {
         shownFrame = index;
         nextFrame = (index + 1) % frames.length;

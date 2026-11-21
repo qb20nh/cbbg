@@ -4,7 +4,6 @@ import com.mojang.blaze3d.buffers.GpuBuffer;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.textures.GpuTexture;
-import java.lang.reflect.Field;
 import net.minecraft.client.Minecraft;
 import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
@@ -36,16 +35,7 @@ final class ReleaseWorldTarget {
   }
 
   static @Nullable GpuTexture noise() {
-    try {
-      String owner = "com.qb20nh.cbbg.render.DitherPresentation";
-      Class<?> type = Class.forName(ReleaseMapping.className(owner));
-      Field field =
-          type.getDeclaredField(
-              ReleaseMapping.memberName(owner, "com.mojang.blaze3d.textures.GpuTexture noise"));
-      field.setAccessible(true);
-      return (GpuTexture) field.get(null);
-    } catch (ReflectiveOperationException failure) {
-      throw new LinkageError("Packaged 26.1 noise texture changed", failure);
-    }
+    var view = ReleaseShutdownResources.noiseView();
+    return view == null ? null : view.texture();
   }
 }

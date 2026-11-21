@@ -3,6 +3,7 @@ package com.qb20nh.cbbg.gametest;
 import com.mojang.blaze3d.buffers.GpuBuffer;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.textures.GpuTexture;
+import com.mojang.blaze3d.textures.GpuTextureView;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.Objects;
@@ -46,13 +47,14 @@ final class ReleaseWorldTarget {
       field.setAccessible(true);
       Object manager = Objects.requireNonNull(field.get(null));
       String managerOwner = "com.qb20nh.cbbg.render.stbn.StbnTextureManager";
-      Method getTexture =
+      Method getView =
           manager
               .getClass()
               .getMethod(
                   ReleaseMapping.memberName(
-                      managerOwner, "com.mojang.blaze3d.textures.GpuTexture getTexture()"));
-      return (GpuTexture) getTexture.invoke(manager);
+                      managerOwner, "com.mojang.blaze3d.textures.GpuTextureView getView()"));
+      var view = (GpuTextureView) getView.invoke(manager);
+      return view == null ? null : view.texture();
     } catch (ReflectiveOperationException failure) {
       throw new LinkageError("Packaged 26.2 noise texture changed", failure);
     }

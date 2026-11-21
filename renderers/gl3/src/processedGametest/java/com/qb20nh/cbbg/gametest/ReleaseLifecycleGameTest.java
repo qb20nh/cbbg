@@ -1,6 +1,8 @@
 package com.qb20nh.cbbg.gametest;
 
 import com.mojang.blaze3d.platform.GlStateManager;
+import com.mojang.blaze3d.vertex.BufferUploader;
+import com.mojang.blaze3d.vertex.VertexBuffer;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -11,6 +13,8 @@ import net.minecraft.client.Screenshot;
 import org.jspecify.annotations.NullMarked;
 import org.lwjgl.glfw.GLFW;
 import org.lwjgl.opengl.GL11;
+import org.lwjgl.opengl.GL15;
+import org.lwjgl.opengl.GL20;
 import org.lwjgl.opengl.GL30;
 
 /** Ordinary packaged lifecycle checks; specialized release suites remain separate. */
@@ -33,6 +37,8 @@ public final class ReleaseLifecycleGameTest implements FabricClientGameTest {
       awaitFormat(context, GL30.GL_RGBA16F);
       awaitPresentation(context);
       ReleasePixels.check(context, false);
+      checkScreenQuadLifecycle(context);
+      ReleaseNoiseTextures.check(context);
       ReleaseFallbackScreenshots.check(context);
       screenshot(context, "enabled-rgba16f");
 
@@ -42,6 +48,7 @@ public final class ReleaseLifecycleGameTest implements FabricClientGameTest {
       awaitPresentation(context);
       ReleasePixels.check(context, true);
       screenshot(context, "demo-rgba32f");
+      ReleaseScreenPassResources.check(context);
 
       int[] original =
           context.computeOnClient(
@@ -71,6 +78,7 @@ public final class ReleaseLifecycleGameTest implements FabricClientGameTest {
       context.waitFor(client -> reload.isDone() && client.getOverlay() == null, 600);
       reload.join();
       awaitPresentation(context);
+      screenshot(context, "reloaded");
       var output =
           context.computeOnClient(client -> Objects.requireNonNull(ReleaseObservations.output()));
       command(context, "mode set disabled");
@@ -91,6 +99,77 @@ public final class ReleaseLifecycleGameTest implements FabricClientGameTest {
       awaitPresentation(context);
       screenshot(context, "world-transition");
     }
+  }
+
+  @SuppressWarnings("ReferenceEquality") // A replacement must own a new GPU buffer.
+  private static void checkScreenQuadLifecycle(ClientGameTestContext context) {
+    if (!"none".equals(System.getProperty("cbbg.test.compat", "none"))) return;
+    VertexBuffer previous =
+        context.computeOnClient(
+            client -> {
+              VertexBuffer quad = screenQuad();
+              int previousArray = GL11.glGetInteger(GL30.GL_VERTEX_ARRAY_BINDING);
+              int foreignArray = GL30.glGenVertexArrays();
+              try {
+                quad.bind();
+                int array = GL11.glGetInteger(GL30.GL_VERTEX_ARRAY_BINDING);
+                int vertices =
+                    GL20.glGetVertexAttribi(0, GL20.GL_VERTEX_ATTRIB_ARRAY_BUFFER_BINDING);
+                if (quad.isInvalid()
+                    || !GL30.glIsVertexArray(array)
+                    || !GL15.glIsBuffer(vertices)) {
+                  throw new AssertionError("Screen quad was not uploaded");
+                }
+                BufferUploader.invalidate();
+                GlStateManager._glBindVertexArray(foreignArray);
+                String owner = "com.qb20nh.cbbg.render.DitherController";
+                var close =
+                    Class.forName(ReleaseMapping.className(owner))
+                        .getDeclaredMethod(ReleaseMapping.memberName(owner, "void close()"));
+                close.setAccessible(true);
+                close.invoke(null);
+                if (GL11.glGetInteger(GL30.GL_VERTEX_ARRAY_BINDING) != foreignArray
+                    || !GL30.glIsVertexArray(foreignArray)) {
+                  throw new AssertionError("Screen quad close changed a foreign VAO");
+                }
+                if (!quad.isInvalid()
+                    || GL30.glIsVertexArray(array)
+                    || GL15.glIsBuffer(vertices)
+                    || ReleaseShutdownGameTest.field(
+                            "com.qb20nh.cbbg.render.DitherPresentation",
+                            null,
+                            "com.mojang.blaze3d.vertex.VertexBuffer screenQuad")
+                        != null) {
+                  throw new AssertionError("Screen quad close retained owned resources");
+                }
+                return quad;
+              } catch (ReflectiveOperationException error) {
+                throw new LinkageError("Cannot close packaged screen quad", error);
+              } finally {
+                BufferUploader.invalidate();
+                GlStateManager._glBindVertexArray(
+                    GL30.glIsVertexArray(previousArray) ? previousArray : 0);
+                GL30.glDeleteVertexArrays(foreignArray);
+              }
+            });
+    awaitPresentation(context);
+    context.runOnClient(
+        client -> {
+          VertexBuffer recreated = screenQuad();
+          if (recreated == previous || recreated.isInvalid()) {
+            throw new AssertionError("Screen quad was not recreated after close");
+          }
+          System.out.println("CBBG_SCREEN_QUAD_LIFECYCLE_OK");
+        });
+  }
+
+  private static VertexBuffer screenQuad() {
+    return (VertexBuffer)
+        Objects.requireNonNull(
+            ReleaseShutdownGameTest.field(
+                "com.qb20nh.cbbg.render.DitherPresentation",
+                null,
+                "com.mojang.blaze3d.vertex.VertexBuffer screenQuad"));
   }
 
   static void command(ClientGameTestContext context, String command) {

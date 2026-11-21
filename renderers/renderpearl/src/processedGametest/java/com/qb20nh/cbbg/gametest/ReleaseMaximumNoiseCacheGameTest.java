@@ -5,6 +5,7 @@ import com.mojang.blaze3d.pipeline.TextureTarget;
 import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.renderpearl.api.GpuFormat;
 import com.mojang.renderpearl.api.textures.GpuTextureView;
+import com.qb20nh.cbbg.api.NoiseVolume;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.FileTime;
@@ -33,7 +34,7 @@ public final class ReleaseMaximumNoiseCacheGameTest implements FabricClientGameT
   // Allow six minutes for the original fixture's 300-second generation plus PNG/upload work.
   private static final int GENERATION_WAIT_TICKS = 7200;
   private static final String PIXEL_HASH =
-      "f366482ef363e7dd2d10cf46ab72f17d9ae6d901362c13a0eb45f8b93621d9d9";
+      "8af87b0265c4c74ad21292eb9899e52ce7cedc76b1ebef9d1d941c79e69f7ef5";
   private static final Pattern FRAME = Pattern.compile("\\bstbn=(\\d+)/(\\d+)\\b");
   private static final String GENERATING = "Starting Async STBN Math Generation (256x256x128)";
   private static final String CACHE_HIT =
@@ -132,7 +133,9 @@ public final class ReleaseMaximumNoiseCacheGameTest implements FabricClientGameT
 
   private static int[][] readCache() throws Exception {
     var manifest = Files.readAllLines(path(-1));
-    if (manifest.size() != DEPTH + 1 || !manifest.getFirst().equals("# seed " + SEED)) {
+    if (manifest.size() != DEPTH + 2
+        || !manifest.getFirst().equals("# seed " + SEED)
+        || !manifest.get(1).equals("# algorithm " + NoiseVolume.algorithmVersion())) {
       throw new AssertionError("Incomplete maximum-size manifest or incorrect seed");
     }
     int[][] pixels = new int[DEPTH][];
@@ -140,7 +143,7 @@ public final class ReleaseMaximumNoiseCacheGameTest implements FabricClientGameT
     byte[] pixel = new byte[4];
     for (int z = 0; z < DEPTH; z++) {
       byte[] png = Files.readAllBytes(path(z));
-      String[] entry = manifest.get(z + 1).trim().split("\\s+", 0);
+      String[] entry = manifest.get(z + 2).trim().split("\\s+", 0);
       String hash = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(png));
       if (entry.length != 2
           || !entry[0].equals(hash)

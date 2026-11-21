@@ -6,12 +6,12 @@ import org.jspecify.annotations.Nullable;
 
 @NullMarked
 public final class ReleaseObservations {
-  private static long presentations;
   private static @Nullable GpuTextureView output;
   private static @Nullable GpuTextureView noise;
   private static long blurAllocations;
   private static int blurFormat;
   private static boolean observingBlur;
+  private static long windowPasses;
 
   private ReleaseObservations() {}
 
@@ -19,14 +19,16 @@ public final class ReleaseObservations {
   @SuppressWarnings("ReferenceEquality")
   public static void present(GpuTextureView texture) {
     var live = ReleaseShutdownResources.live();
-    if (live != null && texture.texture() == live.output().texture()) {
+    if (live != null && live.output() != null && texture.texture() == live.output().texture()) {
       output = texture;
-      presentations++;
     }
   }
 
   static long presentations() {
-    return presentations;
+    return (Long)
+        java.util.Objects.requireNonNull(
+            ReleaseShutdownGameTest.field(
+                "com.qb20nh.cbbg.render.DitherController", null, "long presentations"));
   }
 
   static @Nullable GpuTextureView output() {
@@ -34,7 +36,17 @@ public final class ReleaseObservations {
   }
 
   public static void bind(String name, GpuTextureView texture) {
-    if ("NoiseSampler".equals(name)) noise = texture;
+    if ("NoiseSampler".equals(name)) {
+      noise = texture;
+      if (org.lwjgl.opengl.GL11.glGetInteger(org.lwjgl.opengl.GL30.GL_DRAW_FRAMEBUFFER_BINDING)
+          == 0) {
+        windowPasses++;
+      }
+    }
+  }
+
+  static long windowPasses() {
+    return windowPasses;
   }
 
   static GpuTextureView noise() {

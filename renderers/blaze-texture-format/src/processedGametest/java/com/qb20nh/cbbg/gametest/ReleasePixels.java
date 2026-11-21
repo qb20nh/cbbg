@@ -2,12 +2,15 @@ package com.qb20nh.cbbg.gametest;
 
 import com.mojang.blaze3d.opengl.GlStateManager;
 import com.mojang.blaze3d.opengl.GlTexture;
+import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.blaze3d.textures.GpuTexture;
 import com.qb20nh.cbbg.reference.DitherReference;
 import java.nio.ByteBuffer;
 import java.nio.FloatBuffer;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Screenshot;
@@ -16,6 +19,7 @@ import org.jspecify.annotations.Nullable;
 import org.lwjgl.BufferUtils;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL13;
+import org.lwjgl.opengl.GL30;
 
 /** Compares the packaged presentation shader with the shared CPU reference. */
 @NullMarked
@@ -27,13 +31,22 @@ final class ReleasePixels {
   }
 
   static void check(ClientGameTestContext context, boolean demo, float coordScale) {
-    var capture = context.computeOnClient(client -> draw(client, demo, coordScale));
+    check(context, demo, coordScale, null);
+  }
+
+  static void checkReplacement(ClientGameTestContext context, boolean demo) {
+    check(context, demo, 1f, new int[] {32, 64, 191, 96});
+  }
+
+  private static void check(
+      ClientGameTestContext context, boolean demo, float coordScale, int @Nullable [] replacement) {
+    var capture = context.computeOnClient(client -> draw(client, demo, coordScale, replacement));
     context.waitFor(client -> capture.isDone(), 200);
     capture.join();
   }
 
   private static CompletableFuture<@Nullable Void> draw(
-      Minecraft client, boolean demo, float coordScale) {
+      Minecraft client, boolean demo, float coordScale, int @Nullable [] replacement) {
     client.setScreen(null);
     var main = client.getMainRenderTarget();
     int width = main.width;
@@ -42,7 +55,10 @@ final class ReleasePixels {
     FloatBuffer source = BufferUtils.createFloatBuffer(width * height * 4);
     for (int y = 0; y < height; y++) {
       for (int x = 0; x < width; x++) {
-        source.put(0.23f + 0.45f * x / width).put(0.13f + 0.67f * y / height).put(0.4f);
+        // Exact binary inputs keep quantization stable when the GPU combines multiply and add.
+        int red = x * 256 / width;
+        int green = y * 256 / height;
+        source.put(red / 256f).put(green / 256f).put(102 / 256f);
         // Keep fractional alpha away from halfway UNORM conversion ties.
         source.put(
             switch (y % 4) {
@@ -72,74 +88,88 @@ final class ReleasePixels {
       // Read back stored float values so half-float conversion is part of the input.
       GL11.glGetTexImage(GL11.GL_TEXTURE_2D, 0, GL11.GL_RGBA, GL11.GL_FLOAT, source);
       GlStateManager._bindTexture(previous);
-      long before = ReleaseObservations.presentations();
-      main.blitToScreen();
-      if (ReleaseObservations.presentations() != before + 1) {
-        throw new AssertionError("The synthetic image bypassed CBBG presentation");
-      }
-      var noise = ReleaseObservations.noise();
-      int noiseWidth = noise.getWidth(0);
-      int noiseHeight = noise.getHeight(0);
-      ByteBuffer noiseBytes = read(noise.texture(), noiseWidth * noiseHeight * 4);
-      ByteBuffer actual =
-          read(Objects.requireNonNull(ReleaseObservations.output()).texture(), width * height * 4);
-      for (int y = 0; y < height; y++) {
-        for (int x = 0; x < width; x++) {
-          int offset = (y * width + x) * 4;
-          int tile =
-              (DitherReference.noiseCoordinate(y, coordScale, noiseHeight) * noiseWidth
-                      + DitherReference.noiseCoordinate(x, coordScale, noiseWidth))
-                  * 4;
-          for (int channel = 0; channel < 3; channel++) {
-            int expected =
-                DitherReference.channel(
-                    source.get(offset + channel),
-                    Byte.toUnsignedInt(noiseBytes.get(tile + channel)),
-                    2,
-                    x,
-                    width,
-                    demo);
-            int value = Byte.toUnsignedInt(actual.get(offset + channel));
-            if (value != expected) {
+      ByteBuffer actual = BufferUtils.createByteBuffer(width * height * 4);
+      int frameCount =
+          java.lang.reflect.Array.getLength(
+              Objects.requireNonNull(
+                  ReleaseShutdownGameTest.field(
+                      "com.qb20nh.cbbg.render.DitherController",
+                      null,
+                      "com.mojang.blaze3d.platform.NativeImage[] frames")));
+      if (frameCount <= 0) throw new AssertionError("No noise frames available for pixel checks");
+      for (int frame = 0; frame < frameCount; frame++) {
+        long before = ReleaseObservations.presentations();
+        main.blitToScreen();
+        if (ReleaseObservations.presentations() != before + 1) {
+          throw new AssertionError("The synthetic image bypassed CBBG presentation");
+        }
+        var noise = ReleaseObservations.noise();
+        int noiseWidth = noise.getWidth(0);
+        int noiseHeight = noise.getHeight(0);
+        ByteBuffer noiseBytes = read(noise.texture(), noiseWidth * noiseHeight * 4);
+        readWindow(width, height, actual);
+        for (int y = 0; y < height; y++) {
+          for (int x = 0; x < width; x++) {
+            int offset = (y * width + x) * 4;
+            int tile =
+                (DitherReference.noiseCoordinate(y, coordScale, noiseHeight) * noiseWidth
+                        + DitherReference.noiseCoordinate(x, coordScale, noiseWidth))
+                    * 4;
+            for (int channel = 0; channel < 3; channel++) {
+              int expected =
+                  replacement != null
+                      ? replacement[channel]
+                      : DitherReference.shaderChannel(
+                          source.get(offset + channel),
+                          Byte.toUnsignedInt(noiseBytes.get(tile + channel)),
+                          2,
+                          x,
+                          width,
+                          demo);
+              int value = Byte.toUnsignedInt(actual.get(offset + channel));
+              if (value != expected) {
+                throw new AssertionError(
+                    "Dither pixel "
+                        + x
+                        + ","
+                        + y
+                        + " channel "
+                        + channel
+                        + ": expected "
+                        + expected
+                        + ", got "
+                        + value
+                        + ", frame="
+                        + frame
+                        + ", demo="
+                        + demo
+                        + ", source="
+                        + source.get(offset + channel)
+                        + ", noise="
+                        + Byte.toUnsignedInt(noiseBytes.get(tile + channel)));
+              }
+            }
+            int alpha =
+                replacement != null ? replacement[3] : Math.round(source.get(offset + 3) * 255);
+            if (Byte.toUnsignedInt(actual.get(offset + 3)) != alpha) {
               throw new AssertionError(
-                  "Dither pixel "
+                  "Dithering changed alpha at "
                       + x
                       + ","
                       + y
-                      + " channel "
-                      + channel
-                      + ": expected "
-                      + expected
-                      + ", got "
-                      + value
-                      + ", demo="
-                      + demo
-                      + ", source="
-                      + source.get(offset + channel)
-                      + ", noise="
-                      + Byte.toUnsignedInt(noiseBytes.get(tile + channel)));
+                      + ": source="
+                      + source.get(offset + 3)
+                      + ", expected="
+                      + alpha
+                      + ", got="
+                      + Byte.toUnsignedInt(actual.get(offset + 3)));
             }
-          }
-          int alpha = Math.round(source.get(offset + 3) * 255);
-          if (Byte.toUnsignedInt(actual.get(offset + 3)) != alpha) {
-            throw new AssertionError(
-                "Dithering changed alpha at "
-                    + x
-                    + ","
-                    + y
-                    + ": source="
-                    + source.get(offset + 3)
-                    + ", expected="
-                    + alpha
-                    + ", got="
-                    + Byte.toUnsignedInt(actual.get(offset + 3)));
           }
         }
       }
       CompletableFuture<@Nullable Void> capture = new CompletableFuture<>();
-      Screenshot.takeScreenshot(
-          main,
-          1,
+      AtomicInteger completed = new AtomicInteger();
+      Consumer<NativeImage> check =
           image -> {
             try (image) {
               if (image.getWidth() != width || image.getHeight() != height) {
@@ -163,18 +193,49 @@ final class ReleasePixels {
                   java.nio.file.Path.of(
                       Objects.requireNonNull(System.getProperty("cbbg.test.evidence")));
               String name = demo ? "pixels-demo" : "pixels-enabled";
-              image.writeToFile(
-                  evidence.resolve(name + (coordScale == 1f ? "" : "-scaled") + ".png"));
-              capture.complete(null);
+              if (completed.incrementAndGet() == 2) {
+                image.writeToFile(
+                    evidence.resolve(name + (coordScale == 1f ? "" : "-scaled") + ".png"));
+                capture.complete(null);
+              }
             } catch (Throwable failure) {
               capture.completeExceptionally(failure);
             }
-          });
+          };
+      Screenshot.takeScreenshot(main, 1, check);
+      Screenshot.takeScreenshot(main, 1, check);
+      if (completed.get() != 0) throw new AssertionError("Screenshot readbacks did not overlap");
+      var temporary = Objects.requireNonNull(ReleaseShutdownResources.live()).output();
+      if (temporary == null) throw new AssertionError("No screenshot output to check");
+      long direct = ReleaseObservations.windowPasses();
+      main.blitToScreen();
+      if (completed.get() != 0) throw new AssertionError("Readbacks completed before presentation");
+      var current = Objects.requireNonNull(ReleaseShutdownResources.live()).output();
+      if (ReleaseObservations.windowPasses() > direct) {
+        if (!temporary.isClosed() || !temporary.texture().isClosed() || current != null) {
+          throw new AssertionError("Direct presentation retained the screenshot output");
+        }
+      } else if (temporary.isClosed() || current == null) {
+        throw new AssertionError("Fallback presentation lost its reusable output");
+      }
       return capture;
     } finally {
       GlStateManager._activeTexture(active);
       GlStateManager._bindTexture(previous);
       for (int i = 0; i < packing.length; i++) GL11.glPixelStorei(packing[i], saved[i]);
+    }
+  }
+
+  private static void readWindow(int width, int height, ByteBuffer pixels) {
+    int framebuffer = GL11.glGetInteger(GL30.GL_READ_FRAMEBUFFER_BINDING);
+    int buffer = GL11.glGetInteger(GL11.GL_READ_BUFFER);
+    try {
+      GL30.glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, 0);
+      GL11.glReadBuffer(GL11.GL_BACK);
+      GL11.glReadPixels(0, 0, width, height, GL11.GL_RGBA, GL11.GL_UNSIGNED_BYTE, pixels);
+    } finally {
+      GL30.glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, framebuffer);
+      GL11.glReadBuffer(buffer);
     }
   }
 

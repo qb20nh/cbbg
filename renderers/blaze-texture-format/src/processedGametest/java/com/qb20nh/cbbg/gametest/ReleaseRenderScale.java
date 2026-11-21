@@ -77,7 +77,14 @@ final class ReleaseRenderScale {
   }
 
   private static void assertOutputSize(RenderTarget main) {
-    var output = Objects.requireNonNull(ReleaseObservations.output());
+    var output = ReleaseObservations.output();
+    if (output == null) {
+      var window = net.minecraft.client.Minecraft.getInstance().getWindow();
+      if (main.width != window.getWidth() || main.height != window.getHeight()) {
+        throw new AssertionError("Window presentation dimensions differ from the main target");
+      }
+      return;
+    }
     if (output.getWidth(0) != main.width || output.getHeight(0) != main.height) {
       throw new AssertionError("Dither output dimensions differ from the main target");
     }

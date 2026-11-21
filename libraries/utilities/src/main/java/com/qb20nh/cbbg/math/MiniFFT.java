@@ -5,8 +5,22 @@ import org.jspecify.annotations.NullMarked;
 /** Minimal Cooley-Tukey FFT implementation for power-of-two sizes. */
 @NullMarked
 public class MiniFFT {
+  private static final double[] FORWARD_ROOTS = roots(false);
+  private static final double[] INVERSE_ROOTS = roots(true);
 
   private MiniFFT() {}
+
+  private static double[] roots(boolean inverse) {
+    // Positive power-of-two array lengths use at most 30 FFT stages.
+    int stages = Integer.SIZE - 2;
+    double[] roots = new double[stages * 2];
+    for (int stage = 0, step = 1; stage < stages; stage++, step <<= 1) {
+      double theta = (inverse ? 1.0 : -1.0) * Math.PI / step;
+      roots[stage * 2] = Math.cos(theta);
+      roots[stage * 2 + 1] = Math.sin(theta);
+    }
+    return roots;
+  }
 
   /**
    * Computes 1D FFT in-place.
@@ -55,26 +69,29 @@ public class MiniFFT {
   }
 
   private static void butterflyUpdates(double[] real, double[] imag, int n, boolean inverse) {
-    for (int step = 1; step < n; step <<= 1) {
-      double theta = (inverse ? 1.0 : -1.0) * Math.PI / step;
-      double wReal = Math.cos(theta);
-      double wImag = Math.sin(theta);
+    double[] roots = inverse ? INVERSE_ROOTS : FORWARD_ROOTS;
+    for (int step = 1, stage = 0; step < n; step <<= 1, stage += 2) {
+      double wReal = roots[stage];
+      double wImag = roots[stage + 1];
 
-      for (int group = 0; group < n; group += (step << 1)) {
+      int blockSize = Math.max(256, step << 1);
+      for (int block = 0; block < n; block += blockSize) {
+        int end = Math.min(n, block + blockSize);
         double wr = 1.0;
         double wi = 0.0;
         for (int k = 0; k < step; k++) {
-          int even = group + k;
-          int odd = even + step;
+          for (int group = block; group < end; group += (step << 1)) {
+            int even = group + k;
+            int odd = even + step;
 
-          double tr = wr * real[odd] - wi * imag[odd];
-          double ti = wr * imag[odd] + wi * real[odd];
+            double tr = wr * real[odd] - wi * imag[odd];
+            double ti = wr * imag[odd] + wi * real[odd];
 
-          real[odd] = real[even] - tr;
-          imag[odd] = imag[even] - ti;
-          real[even] += tr;
-          imag[even] += ti;
-
+            real[odd] = real[even] - tr;
+            imag[odd] = imag[even] - ti;
+            real[even] += tr;
+            imag[even] += ti;
+          }
           double nextWr = wr * wReal - wi * wImag;
           double nextWi = wr * wImag + wi * wReal;
           wr = nextWr;

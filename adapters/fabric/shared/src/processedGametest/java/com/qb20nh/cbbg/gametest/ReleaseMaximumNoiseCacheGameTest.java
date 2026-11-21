@@ -4,6 +4,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
+import com.qb20nh.cbbg.api.NoiseVolume;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -31,7 +32,7 @@ public final class ReleaseMaximumNoiseCacheGameTest implements FabricClientGameT
   private static final int WARM_WAIT_TICKS = 600;
   private static final int COLD_WAIT_TICKS = 6000;
   private static final String CPU_RGBA_HASH =
-      "f366482ef363e7dd2d10cf46ab72f17d9ae6d901362c13a0eb45f8b93621d9d9";
+      "8af87b0265c4c74ad21292eb9899e52ce7cedc76b1ebef9d1d941c79e69f7ef5";
   private static final String GENERATING = "Starting Async STBN Math Generation (256x256x128)";
   private static final String GENERATED = "STBN Images generated from math fields.";
   private static final String CACHE_HIT =
@@ -188,10 +189,10 @@ public final class ReleaseMaximumNoiseCacheGameTest implements FabricClientGameT
   private static CacheEvidence verifyCache() {
     try {
       List<String> manifest = Files.readAllLines(path(-1));
-      boolean hasSeedHeader = manifest.getFirst().startsWith("# seed ");
-      int firstEntry = hasSeedHeader ? 1 : 0;
+      int firstEntry = 2;
       if (manifest.size() != DEPTH + firstEntry
-          || (hasSeedHeader && !manifest.getFirst().equals("# seed " + SEED))) {
+          || !manifest.getFirst().equals("# seed " + SEED)
+          || !manifest.get(1).equals("# algorithm " + NoiseVolume.algorithmVersion())) {
         throw new AssertionError("Maximum cache manifest is incomplete or has the wrong seed");
       }
       MessageDigest decodedDigest = MessageDigest.getInstance("SHA-256");

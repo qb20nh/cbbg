@@ -74,27 +74,26 @@ public final class CbbgDither {
         advance,
         () -> {
           var mc = Minecraft.getInstance();
-          float strength =
-              DitherStrength.effective(
-                  CbbgConfig.get().strength(),
-                  isMenuScreen(mc.screen),
-                  mc.options.getMenuBackgroundBlurriness());
-          double scale = RenderScaleCompat.getDitherScale();
           TextureTarget output =
-              PASS.render(
-                  input,
-                  DitherPresentation.texture(),
-                  new DitherOptions(
-                      strength,
-                      coordinateScale(scale, input.width),
-                      coordinateScale(scale, input.height),
-                      demo));
+              PASS.render(input, DitherPresentation.texture(), options(input, demo));
           if (present) {
             var window = mc.getWindow();
             output.blitToScreen(window.getWidth(), window.getHeight());
           }
           return output;
         });
+  }
+
+  private static DitherOptions options(RenderTarget input, boolean demo) {
+    var mc = Minecraft.getInstance();
+    float strength =
+        DitherStrength.effective(
+            CbbgConfig.get().strength(),
+            isMenuScreen(mc.screen),
+            mc.options.getMenuBackgroundBlurriness());
+    double scale = RenderScaleCompat.getDitherScale();
+    return new DitherOptions(
+        strength, coordinateScale(scale, input.width), coordinateScale(scale, input.height), demo);
   }
 
   // RenderScale 1.21.1 rounds its internal viewport dimensions up.
@@ -125,6 +124,21 @@ public final class CbbgDither {
 
   private static boolean present(RenderTarget input, CbbgConfig.Mode mode) {
     if (CbbgClient.getEffectiveMode() != mode) return false;
+    var window = Minecraft.getInstance().getWindow();
+    boolean demo = mode == CbbgConfig.Mode.DEMO;
+    if (input.width > 0
+        && input.height > 0
+        && input.width == window.getWidth()
+        && input.height == window.getHeight()
+        && DitherPresentation.supportsScreenPass(demo)) {
+      return Boolean.TRUE.equals(
+          DitherController.renderFrame(
+              true,
+              () -> {
+                DitherPresentation.present(input, options(input, demo));
+                return true;
+              }));
+    }
     // Keep the blit inside the controller's failure boundary and lifecycle reset handling.
     return render(input, mode == CbbgConfig.Mode.DEMO, true, true) != null;
   }

@@ -58,4 +58,12 @@ class DitherReferenceTest {
       assertEquals(expected[pixel], DitherReference.noiseCoordinate(pixel, 319.0 / 960, 16));
     }
   }
+
+  @Test
+  void shaderReferenceUsesFloatPrecisionAtQuantizationBoundaries() {
+    double storedHalfFloat = 0.374755859375;
+    assertEquals(96, DitherReference.channel(storedHalfFloat, 247, 2, 0, 960, false));
+    assertEquals(97, DitherReference.shaderChannel(storedHalfFloat, 247, 2, 0, 960, false));
+    assertEquals(158, DitherReference.shaderChannel(storedHalfFloat, 247, 2, 480, 960, true));
+  }
 }

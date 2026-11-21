@@ -2,6 +2,28 @@
   "required": true,
   "package": "com.qb20nh.cbbg.mixin",
   "compatibilityLevel": "JAVA_25",
-  "client": ["PipelineCacheMixin", "FrontendRenderPassMixin", "MainTargetMixin", "RenderTargetMixin", "ScreenshotMixin", "MinecraftMixin", "PostChainMixin", "IrisPipelineManagerMixin", "DebugScreenEntriesMixin"],
-  "injectors": {"defaultRequire": 1}
+  "client": [
+    "PipelineCacheMixin",
+    "RenderSystemPipelineCacheAccessor",
+    "FrontendGpuDeviceAccessor",
+    "HudVignetteMixin",
+    "FrontendPipelineSourceMixin",
+    "FrontendRenderPassMixin",
+    "MainTargetMixin",
+    "RenderTargetMixin",
+    "ScreenshotMixin",
+    "MinecraftMixin",
+    "PostChainMixin",
+    "IrisPipelineManagerMixin",
+    "DebugScreenEntriesMixin",
+    "GlCommandEncoderMixin",
+    "FrontendGpuSurfaceAccessor",
+    "VulkanCommandEncoderAccessor",
+    "VulkanGpuSurfaceMixin",
+    "VulkanRenderPipelineMixin",
+    "FrontendGpuSurfaceMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
 }

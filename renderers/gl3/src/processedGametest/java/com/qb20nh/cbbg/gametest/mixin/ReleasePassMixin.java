@@ -21,7 +21,7 @@ public abstract class ReleasePassMixin {
       DitherOptions options,
       Operation<TextureTarget> original) {
     TextureTarget result = original.call(input, width, height, noise, options);
-    ReleaseObservations.drawn(result, noise);
+    ReleaseObservations.drawn(result);
     return result;
   }
 }

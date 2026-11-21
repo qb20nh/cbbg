@@ -41,6 +41,7 @@ tasks.withType(Jar).configureEach { preserveFileTimestamps = false; reproducible
 sourceSets.main.java.srcDirs = ["src/${target.renderer}/java"]
 if (target.renderer == 'blaze-texture-format') sourceSets.main.java.srcDir "src/${target.minecraft}/java"
 sourceSets.main.resources.srcDirs = ['src/main/resources', "src/${target.renderer}/resources"]
+if (target.renderer in ['blaze-gpu-format', 'renderpearl']) sourceSets.main.resources.srcDir 'src/vulkan/resources'
 tasks.named('processResources') {
     inputs.property('target', target)
     inputs.property('version', project.version)

@@ -1,6 +1,11 @@
 package com.qb20nh.cbbg.mixin;
 
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
+import com.mojang.renderpearl.api.commands.CommandEncoder;
+import com.mojang.renderpearl.api.device.GpuSurface;
 import com.mojang.renderpearl.api.textures.GpuTextureView;
+import com.mojang.renderpearl.frontend.FrontendCommandEncoder;
 import com.qb20nh.cbbg.compat.renderscale.RenderScaleTargets;
 import com.qb20nh.cbbg.render.DitherController;
 import com.qb20nh.cbbg.render.DitherPresentation;
@@ -10,7 +15,6 @@ import org.jspecify.annotations.NullMarked;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.ModifyArg;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(Minecraft.class)
@@ -21,16 +25,28 @@ public abstract class MinecraftMixin {
     DitherController.beginFrame();
   }
 
-  @ModifyArg(
+  @WrapOperation(
       method = "renderFrame",
       at =
           @At(
               value = "INVOKE",
               target =
                   "Lcom/mojang/renderpearl/api/device/GpuSurface;blitFromTexture(Lcom/mojang/renderpearl/api/commands/CommandEncoder;Lcom/mojang/renderpearl/api/textures/GpuTextureView;)V"),
-      index = 1)
-  private GpuTextureView cbbg$present(GpuTextureView input) {
-    return DitherPresentation.present(input);
+      require = 1)
+  @SuppressWarnings("UnusedMethod") // Invoked by MixinExtras at the presentation call.
+  private void cbbg$present(
+      GpuSurface surface, CommandEncoder encoder, GpuTextureView input, Operation<Void> original) {
+    boolean handledByEncoder =
+        encoder instanceof FrontendCommandEncoder frontend
+            && frontend.backend() instanceof DitherPresentation.WindowEncoder;
+    boolean vulkan = DitherPresentation.canPresentToVulkanWindow(surface, input);
+    if (vulkan) DitherPresentation.setVulkanSurface(surface);
+    try {
+      original.call(
+          surface, encoder, handledByEncoder || vulkan ? input : DitherPresentation.present(input));
+    } finally {
+      DitherPresentation.setVulkanSurface(null);
+    }
   }
 
   @Inject(method = "close", at = @At("HEAD"))

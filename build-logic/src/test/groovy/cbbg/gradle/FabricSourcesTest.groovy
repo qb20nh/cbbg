@@ -14,6 +14,25 @@ class FabricSourcesTest {
 
     @ParameterizedTest
     @ValueSource(strings = ['1.21.1-fabric', '1.21.11-fabric', '26.1-fabric', '26.2-fabric', '26.3-fabric'])
+    void selectsBlazeNoiseCacheAndFixturesOnlyForCompatibleRenderers(String id) {
+        File root = new File(System.getProperty('cbbg.repository'))
+        Map target = new JsonSlurper().parse(new File(root, 'targets.json')).targets.find { it.id == id }
+        Map layout = FabricSources.layout(target, target)
+        boolean blaze = id in ['1.21.11-fabric', '26.1-fabric', '26.2-fabric']
+        String manager = 'renderers/blaze-shared/src/main/java/com/qb20nh/cbbg/render/stbn/StbnTextureManager.java'
+        String fixture = 'renderers/blaze-shared/src/processedGametest/java/com/qb20nh/cbbg/gametest/ReleaseNoiseTexturesGameTest.java'
+        assertEquals(blaze, layout.main.java.any { FabricSources.contains(it, manager) }, id)
+        assertEquals(blaze, layout.processedGametest.java.any { FabricSources.contains(it, fixture) }, id)
+        String write = 'renderers/blaze-shared/src/processedGametest/java/com/qb20nh/cbbg/gametest/mixin/ReleaseNoiseWriteMixin.java'
+        assertEquals(blaze && id != '1.21.11-fabric',
+                layout.processedGametest.java.any { FabricSources.contains(it, write) }, id)
+        String legacy = 'adapters/minecraft/1.21.11/src/processedGametest/java/com/qb20nh/cbbg/gametest/mixin/ReleaseNoiseDeviceMixin.java'
+        assertEquals(id == '1.21.11-fabric',
+                layout.processedGametest.java.any { FabricSources.contains(it, legacy) }, id)
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = ['1.21.1-fabric', '1.21.11-fabric', '26.1-fabric', '26.2-fabric', '26.3-fabric'])
     void packagesGuiInteractionsForEveryArtifact(String id) {
         File root = new File(System.getProperty('cbbg.repository'))
         Map target = new JsonSlurper().parse(new File(root, 'targets.json')).targets.find { it.id == id }
@@ -46,6 +65,20 @@ class FabricSourcesTest {
         assertFalse(previous.any { new File(root, it).isFile() }, id)
         assertTrue(new File(root, 'libraries/utilities/src/main/java/com/qb20nh/cbbg/api/Dithering.java').isFile())
         assertFalse(new File(root, 'core/src/main/java/com/qb20nh/cbbg/api/Dithering.java').exists())
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = ['1.21.1-fabric', '1.21.11-fabric', '26.1-fabric', '26.2-fabric', '26.3-fabric'])
+    void selectsWindowVulkanCodeOnlyForNativeVulkanTargets(String id) {
+        File root = new File(System.getProperty('cbbg.repository'))
+        Map target = new JsonSlurper().parse(new File(root, 'targets.json')).targets.find { it.id == id }
+        Map layout = FabricSources.layout(target, target)
+        boolean nativeVulkan = id in ['26.2-fabric', '26.3-fabric']
+        String window = 'renderers/vulkan/src/main/java/com/qb20nh/cbbg/render/VulkanWindowTarget.java'
+        String shader = 'libraries/fabric/src/vulkan/resources/assets/cbbg/shaders/core/cbbg_window_dither.fsh'
+        assertEquals(nativeVulkan, layout.main.java.any { FabricSources.contains(it, window) }, id)
+        assertEquals(nativeVulkan, layout.libraryInputs.any { FabricSources.contains(it, shader) }, id)
+        assertFalse(layout.main.resources.any { FabricSources.contains(it, shader) }, id)
     }
 
     @Test void selectsTheGuiGraphicsCanvasOnlyForItsMinecraftVersions() {

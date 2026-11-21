@@ -9,6 +9,7 @@ import com.mojang.renderpearl.api.GpuFormat;
 import com.mojang.renderpearl.api.commands.RenderPass;
 import com.mojang.renderpearl.api.textures.FilterMode;
 import com.mojang.renderpearl.api.textures.GpuTextureView;
+import com.qb20nh.cbbg.api.NoiseVolume;
 import java.io.IOException;
 import java.lang.reflect.Proxy;
 import java.nio.file.Files;
@@ -278,12 +279,14 @@ final class ReleaseClient {
   static boolean cacheValid(int size, int depth, long seed) {
     try {
       List<String> lines = Files.readAllLines(manifest(size, depth));
-      if (lines.size() != depth + 1 || !lines.getFirst().equals("# seed " + seed)) {
+      if (lines.size() != depth + 2
+          || !lines.getFirst().equals("# seed " + seed)
+          || !lines.get(1).equals("# algorithm " + NoiseVolume.algorithmVersion())) {
         return false;
       }
       MessageDigest digest = MessageDigest.getInstance("SHA-256");
       for (int frame = 0; frame < depth; frame++) {
-        String[] parts = lines.get(frame + 1).trim().split("\\s+", 0);
+        String[] parts = lines.get(frame + 2).trim().split("\\s+", 0);
         String name = "stbn_" + size + "x" + size + "x" + depth + "_" + frame + ".png";
         if (parts.length != 2 || !parts[1].equals(name)) return false;
         Path image = cache().resolve(name);

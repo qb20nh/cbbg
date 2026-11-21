@@ -6,6 +6,7 @@ import tempfile
 import unittest
 
 from fabric_dependency_lock import locked_dependencies, verify_dependencies, verify_gametest_api
+from runtime_catalog import select_targets
 
 
 class DependencyLockTests(unittest.TestCase):
@@ -96,6 +97,17 @@ class DependencyLockTests(unittest.TestCase):
                     entries = locked_dependencies(target, profile, lock)
                     for entry in entries.values():
                         self.assertRegex(entry['sha256'], r'^[0-9a-f]{64}$')
+
+    def test_sodium_immediatelyfast_profiles_resolve_both_mods_without_iris(self):
+        root = Path(__file__).resolve().parents[2]
+        catalog = json.loads((root / 'targets.json').read_text())
+        for target_id in ('26.1-fabric', '26.1.1-fabric', '26.1.2-fabric', '1.21.11-fabric'):
+            with self.subTest(target=target_id):
+                target, = select_targets(catalog, target_id)
+                lock = json.loads((root / 'runtime-locks' / (target_id + '-mods.json')).read_text())
+                entries = locked_dependencies(target, 'sodium+immediatelyfast', lock)
+                self.assertEqual(set(entries), {'fabricApi', 'sodium', 'immediatelyFast'})
+                self.assertEqual(target['compatibilityProfiles']['sodium+immediatelyfast'], ['opengl'])
 
     def test_chatpatches_requires_yacl(self):
         self.target['dependencies'].update(chatPatches='pin', yacl='pin')
