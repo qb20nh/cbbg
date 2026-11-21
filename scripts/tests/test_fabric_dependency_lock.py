@@ -84,12 +84,14 @@ class DependencyLockTests(unittest.TestCase):
             verify_dependencies(self.target, 'sodium', paths, self.lock)
         verify_dependencies(self.target, 'iris+renderscale', self.paths, self.lock)
 
-    def test_committed_release_locks_cover_every_declared_profile(self):
+    def test_committed_dependency_locks_cover_every_declared_profile(self):
         root = Path(__file__).resolve().parents[2]
         catalog = json.loads((root / 'targets.json').read_text())
         for target in catalog['targets']:
             path = root / 'runtime-locks' / (target['id'] + '-mods.json')
-            if not target.get('implemented') or target['loader'] != 'fabric':
+            if target['loader'] != 'fabric':
+                continue
+            if not target.get('implemented') and target['id'] != '1.20.1-fabric':
                 continue
             lock = json.loads(path.read_text())
             for profile in target['compatibilityProfiles']:
