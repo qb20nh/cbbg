@@ -317,6 +317,8 @@ public final class ReleaseMenuBlurGameTest implements FabricClientGameTest {
     result.join();
   }
 
+  // Check identity because Throwable.addSuppressed forbids self-suppression.
+  @SuppressWarnings("ReferenceEquality")
   private static void finishReadback(
       CompletableFuture<@Nullable Void> result, @Nullable Throwable failure, Runnable cleanup) {
     try {
