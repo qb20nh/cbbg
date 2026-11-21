@@ -101,7 +101,8 @@ def classic_jvm_arguments(candidate, scenario, backend, profile, restart_phase=N
             mode = VULKAN_VMA_CASES[scenario]
             arguments.append('-Dcbbg.test.vulkanAllocation=' + mode)
             if mode == 'resize':
-                arguments += ['-Dcbbg.test.vulkanLifecycle=true', '-Dcbbg.test.vulkanResizedFormat=37']
+                arguments += ['-Dcbbg.test.vulkanLifecycle=true', '-Dcbbg.test.vulkanResizedFormat=37',
+                              '-Dcbbg.test.vulkanReloadedFormat=97']
             else:
                 expected = {'depth': 97, 'float': 37, 'all': 44}[mode]
                 arguments.append('-Dcbbg.test.vulkanSceneFormat=' + str(expected))
@@ -285,7 +286,7 @@ def vulkan_lifecycle_captures(log, scenes, width, height, resized_format='97'):
     resized = (width - 64, height - 48)
     actual_size = tuple(map(int, one_reading(log, r'CBBG_CLASSIC_VULKAN_LIFECYCLE width=(\d+) height=(\d+)')))
     expected = ([('97', 'false'), (swap, 'true'), ('109', 'false'), ('97', 'false')]
-                + [(resized_format, 'false')] * 2 for swap in ('37', '44'))
+                + [(resized_format, 'false'), ('97', 'false')] for swap in ('37', '44'))
     if (actual_size != resized or scenes not in expected
             or 'CBBG_CLASSIC_VULKAN_NOISE sampled=32 pending-edit=16' not in log):
         raise ValueError('Incomplete Vulkan lifecycle evidence')

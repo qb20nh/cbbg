@@ -341,6 +341,32 @@ class ClassicScenarioTests(unittest.TestCase):
         self.assertIn('-Dcbbg.test.vulkanOriginalTarget=true',
                       classic_jvm_arguments('candidate.jar', scenario, 'vulkan', 'vulkanmod'))
 
+    def test_vma_resize_requires_fallback_then_recovery_on_reload(self):
+        scenario = 'vulkan-vma-resize'
+        config = classic_config('vulkan', scenario)
+        (self.evidence / 'initial-cbbg.json').write_text(json.dumps(config))
+        (self.evidence / 'final-cbbg.json').write_text(json.dumps({**config, 'stbnSize': 32}))
+        self.write_capture(self.capture, 736, 552)
+        self.write_capture(self.evidence / 'vulkan-resized.png', 736, 552)
+        for file in ('vulkan-demo-before.png', 'vulkan-disabled.png', 'vulkan-rgba32f.png'):
+            self.write_capture(self.evidence / file, 800, 600)
+        log = (self.log + 'CBBG_ALLOC_AGENT allocationSites=1 freeSites=1\n'
+               'CBBG_CLASSIC_VULKAN_REJECT depth format=129\n'
+               'CBBG_CLASSIC_VULKAN_PARTIAL_FREE count=1\n'
+               'VulkanMod scene allocation failed for RGBA16F at 736x552: '
+               'Failed to create image: VK_ERROR_OUT_OF_DEVICE_MEMORY\n'
+               'CBBG_CLASSIC_VULKAN_NOISE sampled=32 pending-edit=16\n'
+               'CBBG_CLASSIC_VULKAN_LIFECYCLE width=736 height=552\n'
+               'CBBG_CLASSIC_VULKAN_SCENE format=44 disabled=true\n'
+               'CBBG_CLASSIC_VULKAN_SCENE format=109 disabled=false\n'
+               'CBBG_CLASSIC_VULKAN_SCENE format=97 disabled=false\n'
+               'CBBG_CLASSIC_VULKAN_SCENE format=37 disabled=false\n')
+        restored = 'CBBG_CLASSIC_VULKAN_SCENE format=97 disabled=false\n'
+        classic_result(scenario, 'vulkanmod', 'vulkan', log + restored, self.evidence, 0)
+        with self.assertRaisesRegex(ValueError, 'Vulkan lifecycle evidence'):
+            classic_result(scenario, 'vulkanmod', 'vulkan', log + restored.replace('97', '37'),
+                           self.evidence, 0)
+
     def test_pixel_oracle_requires_all_three_comparisons_and_frozen_tile(self):
         tile = self.evidence / 'pixel-input'
         tile.mkdir()

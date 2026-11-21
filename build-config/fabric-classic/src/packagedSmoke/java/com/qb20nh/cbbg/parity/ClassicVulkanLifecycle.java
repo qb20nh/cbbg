@@ -85,7 +85,10 @@ final class ClassicVulkanLifecycle {
       case RELOADED -> {
         if (!reload.isDone() || client.getOverlay() != null) return false;
         reload.join();
-        checkSceneFormat(Integer.getInteger("cbbg.test.vulkanResizedFormat", 97));
+        checkSceneFormat(
+            Integer.getInteger(
+                "cbbg.test.vulkanReloadedFormat",
+                Integer.getInteger("cbbg.test.vulkanResizedFormat", 97)));
         if (ClassicVulkanSmoke.noiseWidth != 32) {
           throw new AssertionError("Resource reload lost the 32-pixel noise texture");
         }
