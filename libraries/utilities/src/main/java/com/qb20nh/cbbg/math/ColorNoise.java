@@ -33,8 +33,9 @@ final class ColorNoise {
     double[] z = gaussian(n, seed == 0 ? 9012 : seed * 31 + 13);
     double[] temp = new double[n], xy = new double[w * h], time = new double[d];
     fillSpatialWeights(xy, w, h);
+    int halfDepth = d / 2;
     for (int k = 0; k < d; k++) {
-      double kz = (k <= d / 2 ? (double) k : k - d) / d;
+      double kz = (k <= halfDepth ? (double) k : k - d) / d;
       time[k] = Math.exp(-kz * kz / .08);
     }
     // The same filter on all components preserves rotational symmetry.
@@ -54,10 +55,12 @@ final class ColorNoise {
   }
 
   private static void fillSpatialWeights(double[] xy, int w, int h) {
+    int halfWidth = w / 2;
+    int halfHeight = h / 2;
     for (int j = 0; j < h; j++)
       for (int i = 0; i < w; i++) {
-        double kx = (i <= w / 2 ? (double) i : i - w) / w;
-        double ky = (j <= h / 2 ? (double) j : j - h) / h;
+        double kx = (i <= halfWidth ? (double) i : i - w) / w;
+        double ky = (j <= halfHeight ? (double) j : j - h) / h;
         xy[j * w + i] = Math.exp(-(kx * kx + ky * ky) / .08);
       }
   }
