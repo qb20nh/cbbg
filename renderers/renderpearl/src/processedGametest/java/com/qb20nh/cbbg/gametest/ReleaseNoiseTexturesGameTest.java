@@ -36,7 +36,7 @@ final class ReleaseNoiseTexturesGameTest {
   // Distinct frames must keep distinct GPU resources, and a reused frame must keep its view.
   @SuppressWarnings("ReferenceEquality")
   private static void checkReuse(ClientGameTestContext context) {
-    Fixture fixture = context.computeOnClient(client -> new Fixture(new Tracker()));
+    Fixture fixture = context.computeOnClient(client -> new Fixture(new Tracker("none")));
     try {
       GpuTextureView first =
           context.computeOnClient(client -> fixture.cache.upload(fixture.images[0]));
@@ -62,8 +62,7 @@ final class ReleaseNoiseTexturesGameTest {
   // Streaming must retain the last working texture after additional allocations fail.
   @SuppressWarnings("ReferenceEquality")
   private static void checkFallback(ClientGameTestContext context, String failure) {
-    Tracker tracker = new Tracker();
-    tracker.failure = failure;
+    Tracker tracker = new Tracker(failure);
     Fixture fixture = context.computeOnClient(client -> new Fixture(tracker));
     try {
       GpuTextureView retained =
@@ -97,8 +96,7 @@ final class ReleaseNoiseTexturesGameTest {
   }
 
   private static void checkInitialViewFailure() {
-    Tracker tracker = new Tracker();
-    tracker.failInitialView = true;
+    Tracker tracker = new Tracker("initialView");
     try {
       Cache unexpected = new Cache(tracker.device());
       unexpected.close();
@@ -109,8 +107,7 @@ final class ReleaseNoiseTexturesGameTest {
   }
 
   private static void checkCloseFailure() {
-    Tracker tracker = new Tracker();
-    tracker.failClose = true;
+    Tracker tracker = new Tracker("close");
     try (NativeImage first = pixels(0);
         NativeImage second = pixels(255)) {
       Cache cache = new Cache(tracker.device());
@@ -230,6 +227,7 @@ final class ReleaseNoiseTexturesGameTest {
     private final Tracker tracker;
     private final Cache cache;
     private final NativeImage[] images = {pixels(0), pixels(255), pixels(127)};
+    // skipcq: JAVA-W1025
     private final DitherPass pass = new DitherPass();
     private final TextureTarget source =
         new TextureTarget("CBBG cache fixture", 2, 2, GpuFormat.RGBA32_FLOAT, null);
@@ -258,13 +256,15 @@ final class ReleaseNoiseTexturesGameTest {
   private static final class Tracker {
     private final List<GpuTexture> textures = new ArrayList<>();
     private final List<GpuTextureView> views = new ArrayList<>();
-    private String failure = "none";
-    private boolean failInitialView;
-    private boolean failClose;
+    private final String failure;
     private int allocations;
     private int viewCalls;
     private int writes;
     private int closes;
+
+    Tracker(String failure) {
+      this.failure = failure;
+    }
 
     GpuDevice device() {
       GpuDevice actual = RenderSystem.getDevice();
@@ -278,13 +278,14 @@ final class ReleaseNoiseTexturesGameTest {
                     && failure.equals("texture"))
                   throw new GpuOutOfMemoryException("Injected texture allocation failure");
                 if (method.getName().equals("createTextureView")
-                    && ((++viewCalls == 3 && failure.equals("view")) || failInitialView))
+                    && ((++viewCalls == 3 && failure.equals("view"))
+                        || failure.equals("initialView")))
                   throw new GpuOutOfMemoryException("Injected view allocation failure");
                 Object result = forward(actual, method, arguments);
                 if (result instanceof GpuTexture texture) textures.add(texture);
                 if (result instanceof GpuTextureView view) {
                   views.add(view);
-                  if (failClose)
+                  if (failure.equals("close"))
                     return Proxy.newProxyInstance(
                         GpuTextureView.class.getClassLoader(),
                         new Class<?>[] {GpuTextureView.class},

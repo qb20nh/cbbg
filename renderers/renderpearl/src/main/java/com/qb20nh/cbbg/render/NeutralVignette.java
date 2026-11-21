@@ -11,6 +11,7 @@ import com.mojang.renderpearl.api.pipeline.PrimitiveTopology;
 import com.mojang.renderpearl.api.pipeline.RenderPipeline;
 import com.mojang.renderpearl.api.pipeline.ShaderSource;
 import com.mojang.renderpearl.api.pipeline.ShaderType;
+import com.mojang.renderpearl.api.textures.GpuTexture;
 import com.mojang.renderpearl.backend.opengl.GlDevice;
 import com.mojang.renderpearl.frontend.FrontendGpuDevice;
 import com.qb20nh.cbbg.CbbgClient;
@@ -62,21 +63,33 @@ public final class NeutralVignette {
   public static boolean shouldSkip(RenderPipeline pipeline, Identifier texture, int color) {
     if (!isNeutral(color)) return false;
     if (pipeline != RenderPipelines.VIGNETTE || !TEXTURE.equals(texture)) return false;
-    if (Compatibility.UNQUALIFIED_COMPILER) return false;
-    var device = RenderSystem.getDevice();
-    if (device.getClass() != FrontendGpuDevice.class) return false;
-    var backend = ((FrontendGpuDeviceAccessor) device).cbbg$backend();
-    if (backend == null || backend.getClass() != GlDevice.class) return false;
+    if (!usesQualifiedOpenGlBackend()) return false;
     var client = Minecraft.getInstance();
     var main = client.gameRenderer.mainRenderTarget();
     var colorTexture = main == null ? null : main.getColorTexture();
-    if (colorTexture == null
-        || colorTexture.isClosed()
-        || !supportsState(CbbgClient.isEnabled(), colorTexture.getFormat())) return false;
+    if (!supportsTarget(colorTexture)) return false;
     PipelineCache cache = RenderSystemPipelineCacheAccessor.cbbg$currentPipelineCache();
     if (cache == null
         || !CHECKED.matchesGeneration(cache, pipeline, ((SourceHolder) cache).cbbg$shaderSource()))
       return false;
+    return usesRgba8Vignette(client, texture);
+  }
+
+  private static boolean usesQualifiedOpenGlBackend() {
+    if (Compatibility.UNQUALIFIED_COMPILER) return false;
+    var device = RenderSystem.getDevice();
+    if (device.getClass() != FrontendGpuDevice.class) return false;
+    var backend = ((FrontendGpuDeviceAccessor) device).cbbg$backend();
+    return backend != null && backend.getClass() == GlDevice.class;
+  }
+
+  private static boolean supportsTarget(@Nullable GpuTexture colorTexture) {
+    return colorTexture != null
+        && !colorTexture.isClosed()
+        && supportsState(CbbgClient.isEnabled(), colorTexture.getFormat());
+  }
+
+  private static boolean usesRgba8Vignette(Minecraft client, Identifier texture) {
     try {
       // Texture reloads can replace a GPU texture without replacing the shader cache.
       var actual = client.getTextureManager().getTexture(texture);
@@ -131,22 +144,10 @@ public final class NeutralVignette {
     }
   }
 
-  // The qualified vertex layout is Minecraft's singleton, not an arbitrary equal layout.
-  @SuppressWarnings("ReferenceEquality")
   static boolean descriptorMatches(RenderPipeline pipeline) {
-    if (pipeline.getClass() != RenderPipeline.class
-        || pipeline.getShaders().size() != 2
-        || !SHADER.equals(pipeline.getShaders().get(ShaderType.VERTEX))
-        || !SHADER.equals(pipeline.getShaders().get(ShaderType.FRAGMENT))
-        || !pipeline.getShaderDefines().isEmpty()
-        || pipeline.getDepthStencilState() != null
-        || pipeline.getVertexFormatBindings().size() != 16
-        || pipeline.getVertexFormatBinding(0) != DefaultVertexFormat.POSITION_TEX_COLOR
-        || pipeline.getPrimitiveTopology() != PrimitiveTopology.QUADS
-        || pipeline.getPolygonMode() != PolygonMode.FILL
-        || pipeline.pushConstantSize() != 0
-        || pipeline.wantsDepthTexture()
-        || pipeline.getColorTargetStates().size() != 1) return false;
+    if (!matchesShaderState(pipeline)
+        || !usesExpectedVertexLayout(pipeline)
+        || !matchesRasterState(pipeline)) return false;
     for (int slot = 1; slot < 16; slot++) {
       if (pipeline.getVertexFormatBinding(slot) != null) return false;
     }
@@ -155,6 +156,29 @@ public final class NeutralVignette {
         && target.writeMask() == 15
         && target.format() == GpuFormat.RGBA8_UNORM
         && target.blendFunction().filter(BLEND::equals).isPresent();
+  }
+
+  private static boolean matchesShaderState(RenderPipeline pipeline) {
+    return pipeline.getClass() == RenderPipeline.class
+        && pipeline.getShaders().size() == 2
+        && SHADER.equals(pipeline.getShaders().get(ShaderType.VERTEX))
+        && SHADER.equals(pipeline.getShaders().get(ShaderType.FRAGMENT))
+        && pipeline.getShaderDefines().isEmpty()
+        && pipeline.getDepthStencilState() == null;
+  }
+
+  private static boolean matchesRasterState(RenderPipeline pipeline) {
+    return pipeline.getPrimitiveTopology() == PrimitiveTopology.QUADS
+        && pipeline.getPolygonMode() == PolygonMode.FILL
+        && pipeline.pushConstantSize() == 0
+        && !pipeline.wantsDepthTexture()
+        && pipeline.getColorTargetStates().size() == 1;
+  }
+
+  @SuppressWarnings("ReferenceEquality") // Only the vanilla singleton layout is qualified.
+  private static boolean usesExpectedVertexLayout(RenderPipeline pipeline) {
+    return pipeline.getVertexFormatBindings().size() == 16
+        && pipeline.getVertexFormatBinding(0) == DefaultVertexFormat.POSITION_TEX_COLOR;
   }
 
   private static final class Compatibility {

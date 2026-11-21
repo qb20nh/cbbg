@@ -18,6 +18,7 @@ public final class ReleaseNoiseTextures {
   private ReleaseNoiseTextures() {}
 
   public static boolean skipAllocation(int width, int height) {
+    // skipcq: JAVA-W1060
     if (width != 16 || height != 16 || skipAfter <= 0) return false;
     return --skipAfter == 0;
   }

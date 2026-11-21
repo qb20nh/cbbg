@@ -24,6 +24,7 @@ public abstract class GpuSurfaceMixin {
               target =
                   "Lcom/mojang/blaze3d/systems/GpuSurfaceBackend;blitFromTexture(Lcom/mojang/blaze3d/systems/CommandEncoderBackend;Lcom/mojang/blaze3d/textures/GpuTextureView;)V"))
   @SuppressWarnings("UnusedMethod") // Invoked by MixinExtras at the backend presentation call.
+  // skipcq: JAVA-W0324
   private void cbbg$present(
       GpuSurfaceBackend backend,
       CommandEncoderBackend encoder,

@@ -47,22 +47,26 @@ final class DitherPresentation {
     ShaderInstance shader = CbbgShaders.get(demo);
     ShaderInstance blit = mc.gameRenderer.blitShader;
     if (shader == null || blit == null) return false;
+    // skipcq: JAVA-E1053
     if (shader != checkedShader || blit != checkedBlit) {
       checkedShader = shader;
       checkedBlit = blit;
-      ResourceProvider resources = mc.getResourceManager();
-      screenPassSupported =
-          shader.getClass() == ShaderInstance.class
-              && blit.getClass() == ShaderInstance.class
-              && blit.getName().equals("blit_screen")
-              && builtIn(resources, "shaders/core/blit_screen.json", "vanilla")
-              && builtIn(resources, "shaders/core/blit_screen.vsh", "vanilla")
-              && builtIn(resources, "shaders/core/blit_screen.fsh", "vanilla")
-              && builtIn(resources, "shaders/core/" + shader.getName() + ".json", "cbbg_lib")
-              && builtIn(resources, "shaders/core/" + shader.getName() + ".fsh", "cbbg_lib")
-              && builtIn(resources, "shaders/include/cbbg_dither.glsl", "cbbg_lib");
+      screenPassSupported = usesBuiltInShaders(mc.getResourceManager(), shader, blit);
     }
     return screenPassSupported;
+  }
+
+  private static boolean usesBuiltInShaders(
+      ResourceProvider resources, ShaderInstance shader, ShaderInstance blit) {
+    return shader.getClass() == ShaderInstance.class
+        && blit.getClass() == ShaderInstance.class
+        && blit.getName().equals("blit_screen")
+        && builtIn(resources, "shaders/core/blit_screen.json", "vanilla")
+        && builtIn(resources, "shaders/core/blit_screen.vsh", "vanilla")
+        && builtIn(resources, "shaders/core/blit_screen.fsh", "vanilla")
+        && builtIn(resources, "shaders/core/" + shader.getName() + ".json", "cbbg_lib")
+        && builtIn(resources, "shaders/core/" + shader.getName() + ".fsh", "cbbg_lib")
+        && builtIn(resources, "shaders/include/cbbg_dither.glsl", "cbbg_lib");
   }
 
   private static boolean builtIn(ResourceProvider resources, String path, String pack) {
@@ -112,6 +116,7 @@ final class DitherPresentation {
       GlStateManager._viewport(0, 0, input.width, input.height);
       GlStateManager._disableBlend();
       shader.setSampler("InSampler", input.getColorTextureId());
+      // skipcq: JAVA-W1060
       shader.setSampler("NoiseSampler", texture);
       shader.safeGetUniform("Strength").set(options.strength());
       shader.safeGetUniform("CoordScale").set(options.scaleX(), options.scaleY());
@@ -136,6 +141,7 @@ final class DitherPresentation {
       BufferUploader.draw(screenQuadVertices());
       return;
     }
+    // skipcq: JAVA-W1060
     VertexBuffer buffer = screenQuad;
     if (buffer == null) {
       buffer = new VertexBuffer(VertexBuffer.Usage.STATIC);
@@ -197,6 +203,7 @@ final class DitherPresentation {
     int created = 0;
     try {
       int destination = texture;
+      // skipcq: JAVA-W1060
       if (!streaming && !textures.isEmpty()) {
         created = createTexture(image.getWidth(), image.getHeight());
         if (created > 0) {
@@ -246,6 +253,7 @@ final class DitherPresentation {
 
   static void close() {
     CbbgDither.closeGpu();
+    // skipcq: JAVA-E1053
     if (screenQuad != null) {
       screenQuad.close();
       screenQuad = null;

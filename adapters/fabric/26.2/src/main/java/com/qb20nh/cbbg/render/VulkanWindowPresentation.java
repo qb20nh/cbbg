@@ -15,8 +15,7 @@ import com.mojang.blaze3d.vulkan.*;
 import com.qb20nh.cbbg.mixin.CommandEncoderAccessor;
 import com.qb20nh.cbbg.mixin.VulkanCommandEncoderAccessor;
 import it.unimi.dsi.fastutil.longs.LongList;
-import java.nio.ByteOrder;
-import java.util.Objects;
+import java.nio.ByteBuffer;
 import java.util.Optional;
 import net.minecraft.resources.Identifier;
 import org.jspecify.annotations.NullMarked;
@@ -41,17 +40,18 @@ public final class VulkanWindowPresentation {
 
   private static final RenderPipeline ENABLED = pipeline(false);
   private static final RenderPipeline DEMO = pipeline(true);
+  private static final VulkanWindowUniform<CommandEncoder, GpuBuffer> UNIFORM =
+      new VulkanWindowUniform<>(
+          commands -> commands.transientMemory().allocateCpu(32, 4),
+          VulkanWindowPresentation::uploadUniform,
+          GpuBuffer::close);
+  // Pipeline compilation reads this only within the render-thread draw scope.
   private static int compilingFormat;
-  private static @Nullable GpuBuffer uniform;
-  private static float previousStrength;
-  private static float previousScaleX;
-  private static float previousScaleY;
-  private static int previousNoiseSize;
-  private static int previousWidth;
-  private static int previousHeight;
-  private final VulkanWindowTarget target = new VulkanWindowTarget();
+
+  private VulkanWindowPresentation() {}
 
   public static int compilingFormat() {
+    // skipcq: JAVA-W1060
     return compilingFormat;
   }
 
@@ -77,17 +77,25 @@ public final class VulkanWindowPresentation {
     return builder.build();
   }
 
-  public void closeViews(VulkanDevice device) {
-    target.close(device.vkDevice());
-  }
-
   public static void closeUniform() {
-    GpuBuffer previous = uniform;
-    uniform = null;
-    if (previous != null) previous.close();
+    UNIFORM.close();
   }
 
-  public void draw(
+  private static GpuBuffer uploadUniform(
+      CommandEncoder commands, @Nullable GpuBuffer current, ByteBuffer data) {
+    if (current == null) {
+      return RenderSystem.getDevice()
+          .createBuffer(
+              () -> "CBBG window parameters",
+              GpuBuffer.USAGE_UNIFORM | GpuBuffer.USAGE_COPY_DST,
+              data);
+    }
+    commands.writeToBuffer(current.slice(), data);
+    return current;
+  }
+
+  public static void draw(
+      VulkanWindowTarget target,
       VulkanDevice device,
       CommandEncoder commands,
       LongList images,
@@ -109,42 +117,11 @@ public final class VulkanWindowPresentation {
     } finally {
       compilingFormat = 0;
     }
-    int noiseSize = noise.getWidth(0);
-    int inputWidth = input.getWidth(0);
-    int inputHeight = input.getHeight(0);
-    if (uniform == null
-        || Float.floatToRawIntBits(strength) != Float.floatToRawIntBits(previousStrength)
-        || Float.floatToRawIntBits(scaleX) != Float.floatToRawIntBits(previousScaleX)
-        || Float.floatToRawIntBits(scaleY) != Float.floatToRawIntBits(previousScaleY)
-        || noiseSize != previousNoiseSize
-        || inputWidth != previousWidth
-        || inputHeight != previousHeight) {
-      var data = commands.transientMemory().allocateCpu(32, 4).order(ByteOrder.nativeOrder());
-      data.putFloat(0, strength)
-          .putFloat(4, 1.0f / noiseSize)
-          .putFloat(8, scaleX)
-          .putFloat(12, scaleY)
-          .putFloat(16, inputWidth)
-          .putFloat(20, inputHeight)
-          .putFloat(24, 0)
-          .putFloat(28, 0);
-      if (uniform == null)
-        uniform =
-            RenderSystem.getDevice()
-                .createBuffer(
-                    () -> "CBBG window parameters",
-                    GpuBuffer.USAGE_UNIFORM | GpuBuffer.USAGE_COPY_DST,
-                    data);
-      else commands.writeToBuffer(uniform.slice(), data);
-      previousStrength = strength;
-      previousScaleX = scaleX;
-      previousScaleY = scaleY;
-      previousNoiseSize = noiseSize;
-      previousWidth = inputWidth;
-      previousHeight = inputHeight;
-    }
+    int width = input.getWidth(0);
+    int height = input.getHeight(0);
+    GpuBuffer uniform =
+        UNIFORM.get(commands, strength, scaleX, scaleY, noise.getWidth(0), width, height);
     var encoder = (VulkanCommandEncoder) ((CommandEncoderAccessor) commands).cbbg$backend();
-    int width = input.getWidth(0), height = input.getHeight(0);
     try (var stack = MemoryStack.stackPush()) {
       var command = encoder.allocateAndBeginTransientCommandBuffer();
       target.begin(device.vkDevice(), command, images, index, format, width, height, stack);
@@ -166,7 +143,7 @@ public final class VulkanWindowPresentation {
             "InSampler", input, RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST));
         backend.bindTexture(
             "NoiseSampler", noise, RenderSystem.getSamplerCache().getRepeat(FilterMode.NEAREST));
-        backend.setUniform("CbbgDitherInfo", Objects.requireNonNull(uniform).slice());
+        backend.setUniform("CbbgDitherInfo", uniform.slice());
         backend.draw(3, 1, 0, 0);
       } finally {
         target.end(command, images.getLong(index), stack);

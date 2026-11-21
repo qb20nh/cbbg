@@ -19,10 +19,12 @@ final class WindowFramebuffer {
   @SuppressWarnings("ReferenceEquality") // Each device owns a distinct window framebuffer.
   static boolean supportsDirectDrawing() {
     Object current = RenderSystem.getDevice();
+    // skipcq: JAVA-E1053
     if (device != current) {
       inspect();
       device = current;
     }
+    // skipcq: JAVA-W1060
     return rgba8 && (!srgb || !GL11.glIsEnabled(GL30.GL_FRAMEBUFFER_SRGB));
   }
 

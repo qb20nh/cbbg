@@ -13,6 +13,7 @@ public abstract class GlClearMixin {
   @WrapOperation(
       method = "_clear",
       at = @At(value = "INVOKE", target = "Lorg/lwjgl/opengl/GL11;glClear(I)V"))
+  // skipcq: JAVA-W0324
   private static void cbbg$clear(int mask, Operation<Void> original) {
     if (!WorldClearScope.skip(mask)) original.call(mask);
   }

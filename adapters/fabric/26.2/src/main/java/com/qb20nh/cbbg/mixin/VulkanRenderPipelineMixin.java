@@ -18,6 +18,7 @@ public abstract class VulkanRenderPipelineMixin {
               value = "INVOKE",
               target =
                   "Lorg/lwjgl/vulkan/VkPipelineRenderingCreateInfoKHR;pColorAttachmentFormats(Ljava/nio/IntBuffer;)Lorg/lwjgl/vulkan/VkPipelineRenderingCreateInfoKHR;"))
+  // skipcq: JAVA-W0324
   private static IntBuffer cbbg$windowFormat(IntBuffer formats) {
     int format = VulkanWindowPresentation.compilingFormat();
     if (format != 0) formats.put(formats.position(), format);

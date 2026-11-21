@@ -130,7 +130,9 @@ class BlueNoiseTest {
       for (int y = 0; y < 32; y++) {
         for (int x = 0; x < 32; x++) {
           int index = (z * 32 + y) * 32 + x;
-          int next = (((z + dt) % 16 * 32 + (y + dy) % 32) * 32 + (x + dx) % 32);
+          int nextPlane = (z + dt) % 16;
+          int nextRow = (y + dy) % 32;
+          int next = (nextPlane * 32 + nextRow) * 32 + (x + dx) % 32;
           double a = (pixels[index] >>> (8 * channel) & 255) - mean;
           double b = (pixels[next] >>> (8 * channel) & 255) - mean;
           variance += a * a;

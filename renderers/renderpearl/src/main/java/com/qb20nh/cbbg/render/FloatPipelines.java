@@ -4,6 +4,7 @@ import com.google.common.collect.MapMaker;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.renderpearl.api.GpuFormat;
 import com.mojang.renderpearl.api.commands.RenderPassDescriptor;
+import com.mojang.renderpearl.api.pipeline.ColorTargetState;
 import com.mojang.renderpearl.api.pipeline.CompiledRenderPipeline;
 import com.mojang.renderpearl.api.pipeline.RenderPipeline;
 import java.util.HashMap;
@@ -55,30 +56,8 @@ public final class FloatPipelines {
     if (source == null || source.pipeline.getColorTargetStates().size() != attachments.size()) {
       return compiled;
     }
-    Map<Integer, GpuFormat> changes;
-    if (attachments.size() == 1) {
-      var attachment = attachments.getFirst();
-      var state = source.pipeline.getColorTargetStates().getFirst();
-      if (attachment == null || state == null || state.format() != GpuFormat.RGBA8_UNORM)
-        return compiled;
-      GpuFormat actual = attachment.textureView().texture().getFormat();
-      if (actual == GpuFormat.RGBA16_FLOAT) changes = SINGLE_RGBA16;
-      else if (actual == GpuFormat.RGBA32_FLOAT) changes = SINGLE_RGBA32;
-      else return compiled;
-    } else {
-      Map<Integer, GpuFormat> selected = new HashMap<>();
-      for (int i = 0; i < attachments.size(); i++) {
-        var attachment = attachments.get(i);
-        var state = source.pipeline.getColorTargetStates().get(i);
-        if (attachment == null || state == null || state.format() != GpuFormat.RGBA8_UNORM)
-          continue;
-        GpuFormat actual = attachment.textureView().texture().getFormat();
-        if (actual == GpuFormat.RGBA16_FLOAT || actual == GpuFormat.RGBA32_FLOAT)
-          selected.put(i, actual);
-      }
-      if (selected.isEmpty()) return compiled;
-      changes = Map.copyOf(selected);
-    }
+    Map<Integer, GpuFormat> changes = colorOverrides(source.pipeline, attachments);
+    if (changes.isEmpty()) return compiled;
     RenderPipeline variant = source.variants.get(changes);
     if (variant == null) {
       variant = source.pipeline;
@@ -90,6 +69,32 @@ public final class FloatPipelines {
       source.variants.put(changes, variant);
     }
     return RenderSystem.getCompiledPipeline(variant);
+  }
+
+  private static Map<Integer, GpuFormat> colorOverrides(
+      RenderPipeline pipeline,
+      List<RenderPassDescriptor.Attachment<Optional<Vector4fc>>> attachments) {
+    var states = pipeline.getColorTargetStates();
+    if (attachments.size() == 1) {
+      GpuFormat override = floatOverride(attachments.getFirst(), states.getFirst());
+      if (override == GpuFormat.RGBA16_FLOAT) return SINGLE_RGBA16;
+      if (override == GpuFormat.RGBA32_FLOAT) return SINGLE_RGBA32;
+      return Map.of();
+    }
+    Map<Integer, GpuFormat> selected = new HashMap<>();
+    for (int i = 0; i < attachments.size(); i++) {
+      GpuFormat override = floatOverride(attachments.get(i), states.get(i));
+      if (override != null) selected.put(i, override);
+    }
+    return Map.copyOf(selected);
+  }
+
+  private static @Nullable GpuFormat floatOverride(
+      RenderPassDescriptor.@Nullable Attachment<Optional<Vector4fc>> attachment,
+      @Nullable ColorTargetState state) {
+    if (attachment == null || state == null || state.format() != GpuFormat.RGBA8_UNORM) return null;
+    GpuFormat format = attachment.textureView().texture().getFormat();
+    return format == GpuFormat.RGBA16_FLOAT || format == GpuFormat.RGBA32_FLOAT ? format : null;
   }
 
   public record Source(

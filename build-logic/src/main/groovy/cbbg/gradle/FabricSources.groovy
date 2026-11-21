@@ -182,12 +182,12 @@ class FabricSources {
                                                'cbbg.release-startup.mixins.json',
                                                'cbbg.release-shutdown.mixins.json'] : [])
         }
-        if (owner.buildProfile == 'fabric-upstream' || owner.renderer == 'blaze-texture-format') {
+        if (owner.buildProfile == FABRIC_UPSTREAM || owner.renderer == TEXTURE_FORMAT_RENDERER) {
             result.main.java << tree('renderers/blaze-shared/src/main/java')
             processed << tree('renderers/blaze-shared/src/processedGametest/java', [],
-                    owner.minecraft == '1.21.11' ? classes('gametest/mixin/ReleaseNoiseWriteMixin') : [])
+                    owner.minecraft == MC_1_21_11 ? classes('gametest/mixin/ReleaseNoiseWriteMixin') : [])
         }
-        if (owner.buildProfile == 'fabric-upstream' || owner.renderer == 'renderpearl') {
+        if (owner.buildProfile == FABRIC_UPSTREAM || owner.renderer == 'renderpearl') {
             result.main.java << tree('renderers/vulkan/src/main/java')
             result.libraryInputs << tree('libraries/fabric/src/vulkan/resources')
             result.main.java << tree('renderers/blaze-texture-format/src/main/java',

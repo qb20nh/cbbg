@@ -61,6 +61,7 @@ public abstract class MinecraftMixin {
               target =
                   "Lcom/mojang/blaze3d/systems/GpuSurface;blitFromTexture(Lcom/mojang/blaze3d/systems/CommandEncoder;Lcom/mojang/blaze3d/textures/GpuTextureView;)V"))
   @SuppressWarnings("UnusedMethod") // Invoked by MixinExtras at the main presentation call.
+  // skipcq: JAVA-W0324
   private void cbbg$present(
       GpuSurface surface, CommandEncoder encoder, GpuTextureView input, Operation<Void> original) {
     GpuTextureView output = cbbg$presentVulkan(surface, input);

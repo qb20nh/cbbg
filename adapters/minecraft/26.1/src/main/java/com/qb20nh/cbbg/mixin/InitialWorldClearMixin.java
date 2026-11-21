@@ -20,6 +20,7 @@ public abstract class InitialWorldClearMixin {
               value = "INVOKE",
               target =
                   "Lcom/mojang/blaze3d/systems/CommandEncoder;clearColorAndDepthTextures(Lcom/mojang/blaze3d/textures/GpuTexture;ILcom/mojang/blaze3d/textures/GpuTexture;D)V"))
+  // skipcq: JAVA-W0324
   private void cbbg$clear(
       CommandEncoder encoder,
       GpuTexture color,

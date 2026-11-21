@@ -25,6 +25,7 @@ public abstract class HudVignetteMixin {
                   "Lnet/minecraft/client/gui/GuiGraphicsExtractor;blit(Lcom/mojang/renderpearl/api/pipeline/RenderPipeline;Lnet/minecraft/resources/Identifier;IIFFIIIII)V"),
       require = 1,
       allow = 1)
+  // skipcq: JAVA-W0324
   private void cbbg$neutralVignette(
       GuiGraphicsExtractor graphics,
       RenderPipeline pipeline,

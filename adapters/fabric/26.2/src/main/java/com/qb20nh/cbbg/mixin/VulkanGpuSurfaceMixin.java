@@ -1,13 +1,12 @@
 package com.qb20nh.cbbg.mixin;
 
-import static org.lwjgl.vulkan.VK10.*;
-
 import com.llamalad7.mixinextras.sugar.Local;
 import com.mojang.blaze3d.systems.CommandEncoder;
 import com.mojang.blaze3d.textures.GpuTextureView;
 import com.mojang.blaze3d.vulkan.VulkanDevice;
 import com.mojang.blaze3d.vulkan.VulkanGpuSurface;
 import com.qb20nh.cbbg.render.VulkanWindowPresentation;
+import com.qb20nh.cbbg.render.VulkanWindowTarget;
 import it.unimi.dsi.fastutil.longs.LongList;
 import org.jspecify.annotations.NullMarked;
 import org.lwjgl.vulkan.VkSurfaceCapabilitiesKHR;
@@ -28,8 +27,7 @@ public abstract class VulkanGpuSurfaceMixin implements VulkanWindowPresentation.
   @Shadow @Final private long[] acquireSemaphores;
   @Shadow private long[] presentSemaphores;
   @Shadow private boolean swapchainOutOfDate;
-  @Unique private boolean cbbg$colorAttachment;
-  @Unique private final VulkanWindowPresentation cbbg$window = new VulkanWindowPresentation();
+  @Unique private final VulkanWindowTarget cbbg$window = new VulkanWindowTarget();
 
   @ModifyArg(
       method = "configure",
@@ -38,10 +36,9 @@ public abstract class VulkanGpuSurfaceMixin implements VulkanWindowPresentation.
               value = "INVOKE",
               target =
                   "Lorg/lwjgl/vulkan/VkSwapchainCreateInfoKHR;imageUsage(I)Lorg/lwjgl/vulkan/VkSwapchainCreateInfoKHR;"))
+  // skipcq: JAVA-W0324
   private int cbbg$imageUsage(int usage, @Local VkSurfaceCapabilitiesKHR capabilities) {
-    cbbg$colorAttachment =
-        (capabilities.supportedUsageFlags() & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT) != 0;
-    return cbbg$colorAttachment ? usage | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT : usage;
+    return cbbg$window.configureImageUsage(usage, capabilities);
   }
 
   @Inject(
@@ -52,16 +49,12 @@ public abstract class VulkanGpuSurfaceMixin implements VulkanWindowPresentation.
               target =
                   "Lorg/lwjgl/vulkan/KHRSwapchain;vkDestroySwapchainKHR(Lorg/lwjgl/vulkan/VkDevice;JLorg/lwjgl/vulkan/VkAllocationCallbacks;)V"))
   private void cbbg$closeViews(CallbackInfo ci) {
-    cbbg$window.closeViews(device);
+    cbbg$window.close(device.vkDevice());
   }
 
   @Override
   public boolean cbbg$canDraw(GpuTextureView input) {
-    return cbbg$colorAttachment
-        && !swapchainOutOfDate
-        && currentImageIndex >= 0
-        && (swapchainImageFormat == VK_FORMAT_R8G8B8A8_UNORM
-            || swapchainImageFormat == VK_FORMAT_B8G8R8A8_UNORM)
+    return cbbg$window.canDraw(swapchainOutOfDate, currentImageIndex, swapchainImageFormat)
         && input.getWidth(0) == swapchainWidth
         && input.getHeight(0) == swapchainHeight;
   }
@@ -75,7 +68,8 @@ public abstract class VulkanGpuSurfaceMixin implements VulkanWindowPresentation.
       float scaleX,
       float scaleY,
       boolean demo) {
-    cbbg$window.draw(
+    VulkanWindowPresentation.draw(
+        cbbg$window,
         device,
         encoder,
         swapchainImages,

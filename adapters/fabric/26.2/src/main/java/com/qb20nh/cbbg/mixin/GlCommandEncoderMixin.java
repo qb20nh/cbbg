@@ -46,6 +46,7 @@ public abstract class GlCommandEncoderMixin implements WindowPassEncoder {
       method = "trySetup",
       at = @At(value = "INVOKE", target = "Lorg/lwjgl/opengl/GL33C;glDrawBuffers([I)V"),
       index = 0)
+  // skipcq: JAVA-W0324
   private int[] cbbg$windowDrawBuffer(int[] buffers) {
     if (cbbg$windowPass
         && buffers.length == 1

@@ -14,6 +14,21 @@ import org.lwjgl.vulkan.*;
 public final class VulkanWindowTarget {
   private long[] views = new long[0];
 
+  private boolean colorAttachment;
+
+  public int configureImageUsage(int usage, VkSurfaceCapabilitiesKHR capabilities) {
+    colorAttachment =
+        (capabilities.supportedUsageFlags() & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT) != 0;
+    return colorAttachment ? usage | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT : usage;
+  }
+
+  public boolean canDraw(boolean outOfDate, int index, int format) {
+    return colorAttachment
+        && !outOfDate
+        && index >= 0
+        && (format == VK_FORMAT_R8G8B8A8_UNORM || format == VK_FORMAT_B8G8R8A8_UNORM);
+  }
+
   public void close(VkDevice device) {
     for (long view : views) if (view != 0) vkDestroyImageView(device, view, null);
     views = new long[0];
