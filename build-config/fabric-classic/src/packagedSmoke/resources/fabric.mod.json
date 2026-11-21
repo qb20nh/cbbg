@@ -7,7 +7,7 @@
     "client": ["com.qb20nh.cbbg.parity.ClassicPackagedSmoke"]
   },
   "custom": {
-    "cbbg:scenarios": ["world", "forcegl2-mesa-3", "satin", "renderscale", "iris", "vulkan-lifecycle", "vulkan-pixels"]
+    "cbbg:scenarios": ["world", "forcegl2-mesa-3", "satin", "renderscale", "iris", "vulkan-lifecycle", "vulkan-pixels", "vulkan-settings"]
   },
   "mixins": ["cbbg.classic-smoke.mixins.json"]
 }

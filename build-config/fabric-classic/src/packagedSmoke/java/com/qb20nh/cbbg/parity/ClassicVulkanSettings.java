@@ -1,9 +1,11 @@
 package com.qb20nh.cbbg.parity;
 
+import com.qb20nh.cbbg.gametest.ReleaseMapping;
 import com.qb20nh.cbbg.parity.mixin.ClassicChatObservation;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Screenshot;
@@ -41,16 +43,28 @@ public final class ClassicVulkanSettings {
     settings = open(client);
     manifest = client.gameDirectory.toPath().resolve(".cbbg/stbn_64x64x8.sha256");
     warmManifest = Files.readString(manifest);
+    Files.writeString(
+        client.gameDirectory.toPath().resolve("vulkan-settings-warm.sha256"), warmManifest);
   }
 
   static Screen open(Minecraft client) throws ReflectiveOperationException {
-    Screen screen =
-        (Screen)
-            Class.forName("com.terraformersmc.modmenu.ModMenu")
-                .getMethod("getConfigScreen", String.class, Screen.class)
-                .invoke(null, "cbbg", null);
+    Screen screen;
+    if (FabricLoader.getInstance().isModLoaded("modmenu")) {
+      screen =
+          (Screen)
+              Class.forName("com.terraformersmc.modmenu.ModMenu")
+                  .getMethod("getConfigScreen", String.class, Screen.class)
+                  .invoke(null, "cbbg", null);
+    } else {
+      String mapped = ReleaseMapping.className("com.qb20nh.cbbg.config.gui.CbbgConfigScreen");
+      screen =
+          Class.forName(mapped)
+              .asSubclass(Screen.class)
+              .getConstructor(Screen.class)
+              .newInstance((Screen) null);
+    }
     if (screen == null || !titleIs(screen, "cbbg.config.title")) {
-      throw new AssertionError("Mod Menu did not open the packaged CBBG settings");
+      throw new AssertionError("Could not open the packaged CBBG settings");
     }
     client.setScreen(screen);
     return screen;

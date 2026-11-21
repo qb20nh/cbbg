@@ -1,11 +1,13 @@
 import copy
+import hashlib
 import json
 from pathlib import Path
 import struct
 import tempfile
 import unittest
 
-from fabric_classic_scenarios import (CLASSIC_ENTRYPOINT, CLASSIC_IRIS_OPTIONS, CLASSIC_OPTIONS, REDUCED_GL_SCENARIO,
+from fabric_classic_scenarios import (CLASSIC_ENTRYPOINT, CLASSIC_IRIS_OPTIONS, CLASSIC_OPTIONS,
+                                      REDUCED_GL_SCENARIO, SETTINGS_MANIFEST, SETTINGS_NOISE_FRAMES,
                                       classic_config, classic_jvm_arguments, classic_result,
                                       pixel_cache_files, validate_classic_choice)
 from runtime_catalog import load_catalog, select_targets
@@ -18,7 +20,8 @@ class ClassicScenarioTests(unittest.TestCase):
         self.evidence = Path(temp.name)
         self.metadata = {'id': 'cbbg_classic_smoke', 'entrypoints': {'client': [CLASSIC_ENTRYPOINT]},
                          'custom': {'cbbg:scenarios': ['world', 'satin', REDUCED_GL_SCENARIO,
-                                                       'renderscale', 'iris', 'vulkan-lifecycle', 'vulkan-pixels']}}
+                                                       'renderscale', 'iris', 'vulkan-lifecycle',
+                                                       'vulkan-pixels', 'vulkan-settings']}}
         self.log = ('CBBG_CLASSIC_VULKAN_DEVICE mod=0.5.2 device=Test GPU api=1.3.0 glfw=no-api reference=false\n'
                     'CBBG_CLASSIC_VULKAN_SCENE format=97 disabled=false\n'
                     'CBBG_CLASSIC_VULKAN_WORLD presentations=12\n')
@@ -233,6 +236,42 @@ class ClassicScenarioTests(unittest.TestCase):
                       classic_jvm_arguments('candidate.jar', 'iris', 'opengl', 'iris', 'verify'))
         self.assertNotIn('-Dcbbg.test.irisCycle=true',
                          classic_jvm_arguments('candidate.jar', 'iris', 'opengl', 'iris', 'prepare'))
+
+    def test_vulkan_settings_requires_real_outputs_and_one_regeneration(self):
+        scenario = 'vulkan-settings'
+        validate_classic_choice(self.metadata, scenario, 'vulkanmod', 'vulkan')
+        self.assertIn('-Dcbbg.test.vulkanSettings=true',
+                      classic_jvm_arguments('candidate.jar', scenario, 'vulkan', 'vulkanmod'))
+        initial = classic_config('vulkan', scenario)
+        self.assertEqual(64, initial['stbnSize'])
+        self.assertTrue(initial['notifyChat'] and initial['notifyToast'])
+        (self.evidence / 'initial-cbbg.json').write_text(json.dumps(initial))
+        for name in ('vulkan-settings', 'vulkan-confirmation', 'vulkan-generation-complete'):
+            self.write_capture(self.evidence / (name + '.png'), 800, 600)
+        cache = self.evidence / 'settings-cache'
+        cache.mkdir()
+        rows = ['# seed 0', '# algorithm 3']
+        for name in SETTINGS_NOISE_FRAMES:
+            frame = cache / name
+            self.write_capture(frame, 64, 64)
+            rows.append(f'{hashlib.sha256(frame.read_bytes()).hexdigest()}  {name}')
+        manifest = '\n'.join(rows) + '\n'
+        for name in ('warm.sha256', SETTINGS_MANIFEST):
+            (cache / name).write_text(manifest)
+        generation = 'Starting Async STBN Math Generation (64x64x8)\nSTBN Math Complete in 80 ms\n'
+        log = (self.log + generation + 'CBBG_CLASSIC_VULKAN_CONFIRMATION cancelled=unchanged\n'
+               + generation + 'CBBG_CLASSIC_VULKAN_TOAST rendered=generating\n'
+               'CBBG_CLASSIC_VULKAN_TOAST rendered=complete\n'
+               'CBBG_CLASSIC_VULKAN_SETTINGS confirmations=2 chat=2 toasts=2\n')
+        classic_result(scenario, 'vulkanmod', 'vulkan', log, self.evidence, 0)
+        with self.assertRaisesRegex(ValueError, 'confirmed regeneration'):
+            classic_result(scenario, 'vulkanmod', 'vulkan', log + generation, self.evidence, 0)
+        with self.assertRaisesRegex(ValueError, 'confirmation or notifications'):
+            classic_result(scenario, 'vulkanmod', 'vulkan', log.replace('rendered=complete', 'rendered=generating'),
+                           self.evidence, 0)
+        (cache / SETTINGS_NOISE_FRAMES[0]).write_bytes(b'changed')
+        with self.assertRaisesRegex(ValueError, 'noise frame differs'):
+            classic_result(scenario, 'vulkanmod', 'vulkan', log, self.evidence, 0)
 
     def test_pixel_oracle_requires_all_three_comparisons_and_frozen_tile(self):
         tile = self.evidence / 'pixel-input'

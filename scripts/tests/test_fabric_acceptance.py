@@ -34,7 +34,8 @@ class FabricAcceptanceTests(unittest.TestCase):
         self.assertEqual(
             [('ordinary', 'vulkanmod', ['world']),
              ('vulkan-lifecycle', 'vulkanmod', ['vulkan-lifecycle']),
-             ('vulkan-pixels', 'vulkanmod', ['vulkan-pixels'])],
+             ('vulkan-pixels', 'vulkanmod', ['vulkan-pixels']),
+             ('vulkan-settings', 'vulkanmod', ['vulkan-settings'])],
             [(run['suite'], run['profile'], run['entrypoints'])
              for run in runs if run['backend'] == 'vulkan'],
         )

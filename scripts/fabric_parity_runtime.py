@@ -12,7 +12,8 @@ import subprocess
 import zipfile
 
 from fabric_classic_scenarios import (CLASSIC_IRIS_OPTIONS, CLASSIC_OPTIONS, CLASSIC_RESTART_FILES,
-                                      REDUCED_GL_SCENARIO, classic_config, classic_jvm_arguments,
+                                      REDUCED_GL_SCENARIO, SETTINGS_MANIFEST, SETTINGS_NOISE_FRAMES,
+                                      classic_config, classic_jvm_arguments,
                                       classic_result, classic_viewport, pixel_cache_files,
                                       validate_classic_choice)
 from fabric_dependency_lock import verify_dependencies, verify_gametest_api
@@ -390,6 +391,12 @@ def main():
         if classic:
             for capture in game.glob('*.png'):
                 capture.replace(evidence / capture.name)
+            if args.classic_scenario == 'vulkan-settings':
+                saved = evidence / 'settings-cache'
+                saved.mkdir()
+                shutil.copyfile(game / 'vulkan-settings-warm.sha256', saved / 'warm.sha256')
+                for name in (SETTINGS_MANIFEST, *SETTINGS_NOISE_FRAMES):
+                    shutil.copyfile(game / '.cbbg' / name, saved / name)
             if args.classic_scenario == 'iris':
                 shutil.copyfile(game / 'config/cbbg.json', evidence / 'final-cbbg.json')
                 if args.restart_phase:

@@ -188,12 +188,17 @@ sourceSets.create('packagedSmoke') {
 }
 tasks.named('compilePackagedSmokeJava', JavaCompile) {
     source(new File(repositoryRoot, 'renderers/modern/src/gametest/java/com/qb20nh/cbbg/gametest/IrisFixture.java'),
-            new File(repositoryRoot, 'renderers/gl3/src/gametest/java/com/qb20nh/cbbg/gametest/IrisImagePixels.java'))
+            new File(repositoryRoot, 'renderers/gl3/src/gametest/java/com/qb20nh/cbbg/gametest/IrisImagePixels.java'),
+            new File(repositoryRoot, 'adapters/fabric/shared/src/processedGametest/java/com/qb20nh/cbbg/gametest/ReleaseMapping.java'))
     if (target.dependencies.vulkanMod) {
         source(new File(repositoryRoot, 'core/src/testSupport/java/com/qb20nh/cbbg/reference/DitherReference.java'))
     }
 }
 tasks.named('processPackagedSmokeResources') {
+    dependsOn tasks.named('optimizeReleaseJar')
+    from(releaseOptimization.mappingFile) {
+        rename { 'cbbg-test.map' }
+    }
     from(new File(repositoryRoot, 'renderers/modern/src/gametest/resources')) {
         include 'cbbg-iris-fixture/**'
     }

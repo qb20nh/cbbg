@@ -8,7 +8,10 @@ import zlib
 
 CLASSIC_DRIVER = 'cbbg_classic_smoke'
 CLASSIC_ENTRYPOINT = 'com.qb20nh.cbbg.parity.ClassicPackagedSmoke'
-VULKAN_SCENARIOS = {'vulkan-lifecycle': 'vulkanLifecycle', 'vulkan-pixels': 'vulkanPixels'}
+VULKAN_SCENARIOS = {'vulkan-lifecycle': 'vulkanLifecycle', 'vulkan-pixels': 'vulkanPixels',
+                    'vulkan-settings': 'vulkanSettings'}
+SETTINGS_MANIFEST = 'stbn_64x64x8.sha256'
+SETTINGS_NOISE_FRAMES = tuple(f'stbn_64x64x8_{index}.png' for index in range(8))
 CONTEXT_MODS = {'forcegl2': 'forcegl20', 'threatengl': 'threatengl'}
 REDUCED_GL_SCENARIO = 'forcegl2-mesa-3'
 GLFW_CORE_PROFILE = 0x00032001
@@ -48,9 +51,10 @@ def validate_classic_choice(metadata, scenario, profile, backend):
 
 
 def classic_config(backend, scenario='world'):
+    settings = scenario == 'vulkan-settings'
     return {'mode': 'DEMO' if backend == 'vulkan' or scenario == 'iris' else 'ENABLED',
-            'pixelFormat': 'RGBA16F', 'stbnSize': 16, 'stbnDepth': 8, 'stbnSeed': 0,
-            'strength': 2, 'notifyChat': False, 'notifyToast': False}
+            'pixelFormat': 'RGBA16F', 'stbnSize': 64 if settings else 16, 'stbnDepth': 8,
+            'stbnSeed': 0, 'strength': 2, 'notifyChat': settings, 'notifyToast': settings}
 
 
 def classic_viewport(scenario):
@@ -198,6 +202,32 @@ def iris_captures(log, evidence, width, height, restart_phase):
     return {name: (width, height) for name in shader_captures + other_captures}
 
 
+def vulkan_settings_captures(log, evidence, width, height):
+    events = re.findall(r'CBBG_CLASSIC_VULKAN_((?:CONFIRMATION|TOAST|SETTINGS) [^\r\n]+)', log)
+    if events != ['CONFIRMATION cancelled=unchanged', 'TOAST rendered=generating',
+                  'TOAST rendered=complete', 'SETTINGS confirmations=2 chat=2 toasts=2']:
+        raise ValueError('Incomplete Vulkan settings confirmation or notifications')
+    if (log.count('Starting Async STBN Math Generation (64x64x8)') != 2
+            or log.count('STBN Math Complete in ') != 2):
+        raise ValueError('Expected one cold generation and one confirmed regeneration')
+    cache = evidence / 'settings-cache'
+    manifest = (cache / SETTINGS_MANIFEST).read_bytes()
+    if manifest != (cache / 'warm.sha256').read_bytes():
+        raise ValueError('Vulkan settings regeneration changed the frozen noise manifest')
+    lines = manifest.decode('utf-8').splitlines()
+    if lines[:2] != ['# seed 0', '# algorithm 3'] or len(lines) != 2 + len(SETTINGS_NOISE_FRAMES):
+        raise ValueError('Unexpected Vulkan settings noise manifest')
+    for name, line in zip(SETTINGS_NOISE_FRAMES, lines[2:]):
+        checksum = hashlib.sha256((cache / name).read_bytes()).hexdigest()
+        if line != f'{checksum}  {name}':
+            raise ValueError('Vulkan settings noise frame differs: ' + name)
+    captures = {name: (width, height) for name in (
+        'vulkan-world.png', 'vulkan-settings.png', 'vulkan-confirmation.png',
+        'vulkan-generation-complete.png')}
+    captures.update({f'settings-cache/{name}': (64, 64) for name in SETTINGS_NOISE_FRAMES})
+    return captures
+
+
 def classic_result(scenario, profile, backend, log, evidence, exit_code, restart_phase=None):
     if (type(exit_code) is not int or exit_code != 0
             or re.search(r'VUID-|Validation Error|VK_ERROR_DEVICE_LOST|AssertionError|Game crashed!'
@@ -229,9 +259,11 @@ def classic_result(scenario, profile, backend, log, evidence, exit_code, restart
                     'apiVersion': api, 'providerVersion': mod, 'glfwClientApi': 'none'}
         captures = {'vulkan-world.png': (width, height)}
         scenes = re.findall(r'CBBG_CLASSIC_VULKAN_SCENE format=(\d+) disabled=(true|false)', log)
-        if scenario == 'world':
+        if scenario in ('world', 'vulkan-settings'):
             if scenes != [('97', 'false')]:
                 raise ValueError('Vulkan world did not use the expected RGBA16F scene')
+            if scenario == 'vulkan-settings':
+                captures = vulkan_settings_captures(log, evidence, width, height)
         elif scenario == 'vulkan-lifecycle':
             resized = (width - 64, height - 48)
             if (tuple(map(int, one_reading(log, r'CBBG_CLASSIC_VULKAN_LIFECYCLE width=(\d+) height=(\d+)'))) != resized

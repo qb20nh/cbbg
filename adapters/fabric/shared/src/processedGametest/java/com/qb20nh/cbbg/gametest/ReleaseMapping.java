@@ -10,12 +10,12 @@ import org.jspecify.annotations.NullMarked;
 
 /** Resolves source names against the mapping packaged with the optimized test driver. */
 @NullMarked
-final class ReleaseMapping {
+public final class ReleaseMapping {
   private static final List<String> LINES = read();
 
   private ReleaseMapping() {}
 
-  static String className(String original) {
+  public static String className(String original) {
     for (String line : LINES) {
       if (line.startsWith(original + " -> ")) {
         return line.substring(original.length() + 4, line.length() - 1);

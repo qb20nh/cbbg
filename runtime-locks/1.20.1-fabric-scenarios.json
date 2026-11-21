@@ -51,6 +51,13 @@
       "backends": ["vulkan"],
       "restart": false,
       "entrypoints": ["vulkan-pixels"]
+    },
+    {
+      "suite": "vulkan-settings",
+      "profiles": ["vulkanmod"],
+      "backends": ["vulkan"],
+      "restart": false,
+      "entrypoints": ["vulkan-settings"]
     }
   ]
 }
