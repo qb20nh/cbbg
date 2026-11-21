@@ -63,7 +63,11 @@ public final class ClassicPackagedSmoke implements ClientModInitializer {
 
   @Override
   public void onInitializeClient() {
-    ClientTickEvents.END_CLIENT_TICK.register(this::tick);
+    if (Boolean.getBoolean("cbbg.test.vulkanMod")) {
+      ClientTickEvents.END_CLIENT_TICK.register(new ClassicVulkanSmoke()::tick);
+    } else {
+      ClientTickEvents.END_CLIENT_TICK.register(this::tick);
+    }
   }
 
   public static void observePresentation() {
@@ -188,7 +192,7 @@ public final class ClassicPackagedSmoke implements ClientModInitializer {
     }
   }
 
-  private static void createWorld(Minecraft client) {
+  static void createWorld(Minecraft client) {
     client
         .createWorldOpenFlows()
         .createFreshLevel(
