@@ -68,6 +68,29 @@ class BundleCandidateTest {
         assertThrows(Exception) { fixture.task.bundle() }
     }
 
+    @Test void severalSuitesCanReferenceTheSamePackagedDriver() {
+        def fixture = setup()
+        File contractFile = fixture.task.contract.get().asFile
+        Map contract = CandidateFiles.read(contractFile) as Map
+        contract.additionalRuns = [[suite: 'lifecycle', profiles: ['none'], backends: ['vulkan'],
+                                    restart: false, entrypoints: ['LifecycleTest']]]
+        contractFile.text = JsonOutput.toJson(contract)
+        Map driver = fixture.outputs.drivers.ordinary
+        fixture.outputs.drivers.lifecycle = driver + [sha256: '0' * 64]
+        fixture.outputsFile.text = JsonOutput.toJson(fixture.outputs)
+        assertThrows(Exception) { fixture.task.bundle() }
+
+        fixture.outputs.drivers.lifecycle = driver
+        fixture.outputsFile.text = JsonOutput.toJson(fixture.outputs)
+        fixture.task.bundle()
+        File output = fixture.task.destination.get().asFile
+        Map tests = new CandidateManifest(new File(output, 'candidate.json')).records[fixture.target.id].client_tests
+        assertEquals(tests.drivers.ordinary, tests.drivers.lifecycle)
+        assertEquals(1, output.listFiles().count { it.name == driver.filename })
+        Map dependencies = CandidateFiles.read(CandidateFiles.checked(output, tests.test_dependencies)) as Map
+        assertEquals(dependencies.ordinary, dependencies.lifecycle)
+    }
+
     private void utilityInputs(Map fixture) {
         CandidateFixture.utilities(fixture)
         ['utilities', 'utilities_sources'].each { kind ->

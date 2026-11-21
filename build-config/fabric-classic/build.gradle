@@ -203,10 +203,18 @@ def smokeJar = tasks.register('packagedSmokeJar', Jar) {
     destinationDirectory = layout.buildDirectory.dir('intermediates/smoke')
     from(sourceSets.packagedSmoke.output)
 }
-tasks.register('remapPackagedSmokeJar', net.fabricmc.loom.task.RemapJarTask) {
+def remappedSmoke = tasks.register('remapPackagedSmokeJar', net.fabricmc.loom.task.RemapJarTask) {
     dependsOn smokeJar
     inputFile.set(smokeJar.flatMap { it.archiveFile })
     archiveClassifier = 'smoke'
     destinationDirectory = layout.buildDirectory.dir('smoke')
     addNestedDependencies = false
 }
+tasks.register('ciCheck') {
+    group = 'verification'
+    description = 'Check the classic mod and build its packaged test driver.'
+    dependsOn tasks.named('check'), remappedSmoke
+}
+ext.candidateTargetId = targetId
+ext.classicCandidateDriver = remappedSmoke
+apply from: new File(repositoryRoot, 'build-config/candidate-build-outputs.gradle')
