@@ -170,7 +170,7 @@ final class VulkanModDither {
   }
 
   private GraphicsPipeline createPipeline() {
-    var builder = new Pipeline.Builder(DefaultVertexFormat.POSITION, "cbbg_vulkanmod_dither");
+    var builder = new Pipeline.Builder(DefaultVertexFormat.POSITION, VulkanPipelineBuild.NAME);
     builder.setUniforms(
         List.of(settings),
         List.of(
@@ -178,16 +178,19 @@ final class VulkanModDither {
             new ImageDescriptor(1, "sampler2D", "NoiseSampler", 1)));
     String fragment =
         shader("vulkanmod/dither.fsh").replace("// DITHER_MATH", shader("include/dither.glsl"));
-    try (var vertex =
+    try (var build = VulkanPipelineBuild.begin();
+        var vertex =
             SPIRVUtils.compileShader(
-                "cbbg_vulkanmod_dither.vsh",
+                VulkanPipelineBuild.NAME + ".vsh",
                 shader("vulkanmod/dither.vsh"),
                 ShaderKind.VERTEX_SHADER);
         var fragmentCode =
             SPIRVUtils.compileShader(
-                "cbbg_vulkanmod_dither.fsh", fragment, ShaderKind.FRAGMENT_SHADER)) {
+                VulkanPipelineBuild.NAME + ".fsh", fragment, ShaderKind.FRAGMENT_SHADER)) {
       builder.setSPIRVs(vertex, fragmentCode);
-      return builder.createGraphicsPipeline();
+      var created = builder.createGraphicsPipeline();
+      build.commit();
+      return created;
     }
   }
 

@@ -9,6 +9,7 @@ import net.minecraft.client.Minecraft;
 public final class ClassicVulkanPipelineFailure {
   private static final String FAULT_PROPERTY = "cbbg.test.vulkanPipelineFault";
   private static int attempts;
+  private static int descriptorCalls;
   private static int cleanedPipelines;
   private static Method createPipeline;
   private final String fault = System.getProperty(FAULT_PROPERTY);
@@ -24,6 +25,16 @@ public final class ClassicVulkanPipelineFailure {
       return "#version 450\n#error CBBG test shader failure\n";
     }
     return source;
+  }
+
+  static boolean rejectDescriptorSets() {
+    if ("constructor".equals(System.getProperty(FAULT_PROPERTY))
+        && ClassicVulkanAllocation.hasCbbgCaller()
+        && ++descriptorCalls % 2 == 0) {
+      attempts++;
+      return true;
+    }
+    return false;
   }
 
   public static int createGraphicsPipelines(
@@ -102,6 +113,9 @@ public final class ClassicVulkanPipelineFailure {
               + cleanedPipelines
               + ", draws="
               + ClassicVulkanSmoke.ditherDraws);
+    }
+    if (Boolean.getBoolean("cbbg.test.vulkanTrackConstruction")) {
+      ClassicVulkanPipelineConstruction.verifyReleased(attempts, "constructor".equals(fault));
     }
   }
 }

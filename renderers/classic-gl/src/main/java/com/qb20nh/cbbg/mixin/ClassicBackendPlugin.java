@@ -26,13 +26,17 @@ public final class ClassicBackendPlugin implements IMixinConfigPlugin {
         ? List.of(
             "vulkanmod.FloatImageMixin",
             "vulkanmod.DefaultMainPassAccess",
+            "vulkanmod.DescriptorAllocationMixin",
             "vulkanmod.FramebufferAllocationMixin",
             "vulkanmod.ImageAllocationMixin",
             "vulkanmod.MemoryManagerMixin",
+            "vulkanmod.PipelineAllocationMixin",
             "vulkanmod.RenderPassAllocationMixin",
             "vulkanmod.RendererMixin",
             "vulkanmod.SamplerAllocationMixin",
-            "vulkanmod.ScreenshotMixin")
+            "vulkanmod.ScreenshotMixin",
+            "vulkanmod.ShaderResultMixin",
+            "vulkanmod.VertexDescriptionAllocationMixin")
         : null;
   }
 

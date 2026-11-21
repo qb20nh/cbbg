@@ -55,6 +55,7 @@ dependencies {
     if (target.dependencies.vulkanMod) {
         modCompileOnly("maven.modrinth:vulkanmod:${target.dependencies.vulkanMod}") { transitive = false }
         compileOnly 'org.lwjgl:lwjgl-vulkan:3.3.2'
+        compileOnly 'org.lwjgl:lwjgl-shaderc:3.3.2'
     }
     if (compatibility != 'none') {
         modLocalRuntime(compatibilityDependencies[compatibility]) { transitive = false }
