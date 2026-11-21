@@ -35,6 +35,7 @@ public final class ClassicPackagedSmoke implements ClientModInitializer {
     RESTARTED_DISABLED,
     IRIS,
     SATIN,
+    RENDER_SCALE,
     DONE
   }
 
@@ -42,8 +43,10 @@ public final class ClassicPackagedSmoke implements ClientModInitializer {
   private final boolean restart = Boolean.getBoolean("cbbg.test.restart");
   private final boolean iris = Boolean.getBoolean("cbbg.test.iris");
   private final boolean satin = Boolean.getBoolean("cbbg.test.satin");
+  private final boolean renderScale = Boolean.getBoolean("cbbg.test.renderScale");
   private ClassicIrisSmoke irisSmoke;
   private ClassicSatinSmoke satinSmoke;
+  private ClassicRenderScaleSmoke renderScaleSmoke;
   private int ticks;
   private Phase phase = Phase.TITLE;
   private long enabledStart;
@@ -90,6 +93,9 @@ public final class ClassicPackagedSmoke implements ClientModInitializer {
         } else if (satin) {
           satinSmoke = new ClassicSatinSmoke(client);
           phase = Phase.SATIN;
+        } else if (renderScale) {
+          renderScaleSmoke = new ClassicRenderScaleSmoke(client, ticks);
+          phase = Phase.RENDER_SCALE;
         } else {
           phase = restart ? Phase.RESTARTED_DISABLED : Phase.DITHERED;
         }
@@ -100,6 +106,11 @@ public final class ClassicPackagedSmoke implements ClientModInitializer {
         }
       } else if (phase == Phase.SATIN) {
         if (satinSmoke.tick(client)) {
+          phase = Phase.DONE;
+          client.stop();
+        }
+      } else if (phase == Phase.RENDER_SCALE) {
+        if (renderScaleSmoke.tick(client, ticks)) {
           phase = Phase.DONE;
           client.stop();
         }
@@ -194,6 +205,9 @@ public final class ClassicPackagedSmoke implements ClientModInitializer {
     }
     if (loader.isModLoaded("satin") != Boolean.getBoolean("cbbg.test.satin")) {
       throw new AssertionError("Unexpected Satin presence");
+    }
+    if (loader.isModLoaded("renderscale") != Boolean.getBoolean("cbbg.test.renderScale")) {
+      throw new AssertionError("Unexpected RenderScale presence");
     }
     System.out.println(
         "CBBG_CLASSIC_OPENGL "
