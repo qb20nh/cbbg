@@ -58,6 +58,18 @@ class TestCacheTests(unittest.TestCase):
         with self.assertRaisesRegex(EvidenceError, 'Custom execution environment'):
             execution_inputs(changed, self.target)
 
+    def test_classic_receipts_track_java17_and_the_classic_scenario_script(self):
+        classic = {'id': '1.20.1-fabric', 'java': 17, 'buildProfile': 'fabric-classic'}
+        self.inputs['executables']['java17'] = 'classic java'
+        self.inputs['scripts']['files']['fabric_classic_scenarios.py'] = 'classic runner fingerprint'
+        expected = execution_inputs(self.inputs, classic)
+        self.assertEqual('classic java', expected['executables']['java17'])
+        for section, key in [('executables', 'java17'), ('scripts', 'fabric_classic_scenarios.py')]:
+            changed = copy.deepcopy(self.inputs)
+            values = changed[section]['files'] if section == 'scripts' else changed[section]
+            values[key] = 'different fingerprint'
+            self.assertNotEqual(expected, execution_inputs(changed, classic))
+
     def test_only_required_class_contents_affect_reuse(self):
         old = self.driver('old.jar', b'helper', b'other')
         current = self.driver('current.jar', b'helper', b'changed other')

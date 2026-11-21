@@ -179,9 +179,20 @@ class FabricCandidateAcceptanceTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = ['main', 'external', 'lib'])
+    @ValueSource(strings = ['main', 'external', 'lib', 'classic'])
     void resumesOnlyMatchingInputsAndRevalidatesRecordedReceipts(String product) {
-        Map fixture = CandidateFixture.create(directory)
+        boolean classic = product == 'classic'
+        Map fixture = CandidateFixture.create(directory, true, false, classic ? '1.20.1' : '26.3')
+        if (classic) {
+            fixture.target.putAll([java: 17, renderer: 'classic-gl', projectionApi: 'joml',
+                                   buildProfile: 'fabric-classic', backends: ['opengl'],
+                                   compatibilityProfiles: [none: ['opengl'], vulkanmod: ['vulkan']]])
+            fixture.target.dependencies.putAll([vulkanMod: 'test', vulkanModSha512: 'a' * 128])
+            File catalog = new File(fixture.bundle, 'catalog.json')
+            catalog.text = JsonOutput.toJson(fixture.catalog)
+            fixture.record.client_tests.catalog = CandidateFiles.reference(fixture.bundle, catalog.name)
+            fixture.manifest.catalog_sha256 = CandidateFiles.canonicalHash(fixture.catalog)
+        }
         if (product == 'external') {
             fixture.record.library = fixture.record.artifact
             fixture.record.library_sources = fixture.record.sources
@@ -198,6 +209,9 @@ class FabricCandidateAcceptanceTest {
         new File(fixture.root, 'targets.json').bytes = new File(fixture.bundle, 'catalog.json').bytes
         Map lock = [schemaVersion: 1, target: fixture.target.id, dependencies: [:],
                     gametestApi: [sha256: CandidateFiles.sha256(new File(fixture.bundle, 'ordinary-driver.jar'))]]
+        if (classic) {
+            lock.remove('gametestApi')
+        }
         File lockFile = new File(fixture.bundle, 'dependency-lock.json')
         lockFile.text = JsonOutput.toJson(lock)
         fixture.record.client_tests.dependency_lock = CandidateFiles.reference(fixture.bundle, lockFile.name)
@@ -229,17 +243,24 @@ class FabricCandidateAcceptanceTest {
         File runtime = new File(directory, 'runtime')
         runtime.mkdirs()
         new File(runtime, 'cbbg-install-receipt.json').text = JsonOutput.toJson([target: fixture.target.id,
-                profile: 'fabric-loader-0.19.5-26.3', installed: true])
-        Map requirement = [suite: 'ordinary', profile: 'none', backend: 'opengl', restart: false,
-                           startupMode: null, entrypoints: ['example.Test'], externalLibrary: product == 'external']
+                profile: 'fabric-loader-0.19.5-' + fixture.target.minecraft, installed: true])
+        String profile = classic ? 'vulkanmod' : 'none'
+        String backend = classic ? 'vulkan' : 'opengl'
+        List entrypoints = classic ? ['world'] : ['example.Test']
+        Map requirement = [suite: 'ordinary', profile: profile, backend: backend, restart: false,
+                           startupMode: null, entrypoints: entrypoints, externalLibrary: product == 'external']
         if (product != 'external') {
             requirement.remove('externalLibrary')
         }
         Map options = [root: fixture.root, candidate: fixture.file, output: new File(directory, 'acceptance'),
                        hostLibraryDirectories: [],
-                       python: python, java21: python, java25: python, weston: python,
-                       runtimes: [(fixture.target.id): runtime],
-                       gametestApis: [(fixture.target.id): new File(fixture.bundle, 'ordinary-driver.jar')]]
+                       python: python, weston: python, runtimes: [(fixture.target.id): runtime]]
+        if (classic) {
+            options.java17 = python
+        } else {
+            options.putAll([java21: python, java25: python,
+                            gametestApis: [(fixture.target.id): new File(fixture.bundle, 'ordinary-driver.jar')]])
+        }
         // A content-addressed dependency is already local: no network or client is used.
         File dependency = new File(options.output as File, 'dependencies/' + CandidateFiles.sha256(python) + '.jar')
         Map entry = [pin: 'api', sha256: CandidateFiles.sha256(python)]
@@ -254,7 +275,7 @@ class FabricCandidateAcceptanceTest {
                     driver_sha256: fixture.record.client_tests.drivers.ordinary.sha256])
             }
             if (args.contains('-c')) { return args[args.indexOf('-c') + 1].contains('client_candidate') ?
-                    JsonOutput.toJson([runs: [requirement], dependencies: [none: [fabricApi: entry]]]) :
+                    JsonOutput.toJson([runs: [requirement], dependencies: [(profile): [fabricApi: entry]]]) :
                     JsonOutput.toJson([pythonVersion: 'test', launcherVersion: '8.0']) }
             if (args[1].toString().endsWith('fabric_run_evidence.py')) {
                 verifications++
@@ -273,18 +294,27 @@ class FabricCandidateAcceptanceTest {
             launches++
             assertTrue(spec.strict)
             assertEquals(lockFile, spec.dependencyLock)
-            if (product == 'lib') {
+            if (classic || product == 'lib') {
                 assertNull(spec.config)
-            }
-            else {
+            } else {
                 assertEquals(FabricCandidateAcceptance.INITIAL_CONFIG, CandidateFiles.read(spec.config as File))
+            }
+            if (classic) {
+                assertEquals('world', spec.classicScenario)
+                assertEquals(python, spec.java)
+                assertNull(spec.gametest)
+                List launch = FabricCompatibilityProbe.launcherCommand(spec, new File(directory, 'game'),
+                        lockFile, directory, ':99', true)
+                assertEquals('world', launch[launch.indexOf('--classic-scenario') + 1])
+                assertFalse(launch.contains('--gametest-api'))
+                assertFalse(launch.contains('--loader-version'))
             }
             assertEquals(product == 'external' ? new File(fixture.bundle, fixture.record.library.path) : null, spec.externalLibrary)
             File game = new File(spec.output as File, 'runs/client/game')
             game.mkdirs()
             ['.fabric', 'saves', 'natives'].each { new File(game, it).mkdirs() }
             File receipt = new File(game, 'probe.json')
-            receipt.text = JsonOutput.toJson([profile: 'none', backend: 'opengl', scenarios: ['example.Test'],
+            receipt.text = JsonOutput.toJson([profile: profile, backend: backend, scenarios: entrypoints,
                                              startupMode: null, externalLibrary: product == 'external'])
             [status: 'passed', receipt: receipt.absolutePath]
         }
@@ -296,6 +326,16 @@ class FabricCandidateAcceptanceTest {
                 dependency.parentFile.mkdirs(); dependency.bytes = python.bytes
             }
             result
+        }
+        if (classic) {
+            options.remove('java17')
+            GradleException missing = assertThrows(GradleException) {
+                FabricCandidateAcceptance.execute(options, prepareCommand, probe)
+            }
+            assertTrue(missing.message.contains('acceptanceJava17'))
+            assertEquals(0, launches)
+            assertFalse((options.output as File).exists())
+            options.java17 = python
         }
         FabricCandidateAcceptance.execute(options, prepareCommand, probe)
         assertEquals(1, launches)
@@ -333,7 +373,7 @@ class FabricCandidateAcceptanceTest {
         FabricCandidateAcceptance.execute(options, prepareCommand, probe)
         assertEquals(2, launches, 'The replacement result must be reusable on retry')
         wrongCachedLibrary = false
-        (product == 'lib' ? ['inputs.json'] : ['initial-cbbg.json', 'inputs.json']).each { name ->
+        (classic || product == 'lib' ? ['inputs.json'] : ['initial-cbbg.json', 'inputs.json']).each { name ->
             File saved = name == 'inputs.json' ? new File(priorOutput, name) : new File(index.parentFile, name)
             byte[] contents = saved.bytes
             assertTrue(saved.delete())

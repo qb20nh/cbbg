@@ -1,11 +1,11 @@
 package cbbg.gradle
 
 import groovy.io.FileType
-import groovy.json.JsonOutput
 import groovy.json.JsonSlurper
 import org.gradle.api.GradleException
 
 import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import java.nio.file.attribute.PosixFilePermissions
 import java.util.concurrent.TimeUnit
 
@@ -108,6 +108,7 @@ class FabricCompatibilityProbe {
     static Map cacheInputs(Map reportInputs, Map spec, File coordinator, File search) {
         Map environment = graphicsEnvironmentSnapshot(spec)
         File gametest = spec.gametest as File
+        String gametestSha = gametest == null ? null : CandidateFiles.sha256(gametest)
         File api = spec.api as File
         File python = spec.python as File
         File java = spec.java as File
@@ -130,8 +131,8 @@ class FabricCompatibilityProbe {
                         spec.backend as String),
                 target: spec.target.id, candidate: CandidateFiles.sha256(spec.candidate as File),
                 driver: CandidateFiles.sha256(spec.driver as File),
-                gametestApiPin: spec.target.dependencies.fabricApi,
-                gametestApiSha256: CandidateFiles.sha256(gametest),
+                gametestApiPin: gametest == null ? null : spec.target.dependencies.fabricApi,
+                gametestApiSha256: gametestSha,
                 profile: spec.profile, optionalDependencies: mods,
                 initialConfig: spec.config == null ? null : CandidateFiles.sha256(spec.config as File),
                 externalLibrary: spec.externalLibrary == null ? null : CandidateFiles.sha256(spec.externalLibrary as File),
@@ -139,7 +140,7 @@ class FabricCompatibilityProbe {
                         [directory: (spec.displayDirectory as File).canonicalPath, wayland: spec.display],
                 minimumOverrides: !spec.strict,
                 loader: spec.loaderVersion, fabricApi: spec.apiVersion,
-                apiSha256: CandidateFiles.sha256(api), gametest: CandidateFiles.sha256(gametest),
+                apiSha256: CandidateFiles.sha256(api), gametest: gametestSha,
                 runtime: CandidateFiles.sha256(spec.runtime.lock as File),
                 runtimeDirectory: (spec.runtime.directory as File).canonicalPath,
                 backend: spec.backend, graphicsEnvironment: environment,
@@ -150,7 +151,49 @@ class FabricCompatibilityProbe {
                         sha256: CandidateFiles.sha256(spec.weston as File)] : null,
                 eglVendor: spec.eglVendor == null ? null :
                         [path: (spec.eglVendor as File).canonicalPath,
-                         sha256: CandidateFiles.sha256(spec.eglVendor as File)]]
+                         sha256: CandidateFiles.sha256(spec.eglVendor as File)]] +
+                (spec.classicScenario == null ? [:] : [classicScenario: spec.classicScenario])
+    }
+
+    static List launcherCommand(Map spec, File game, File lock, File displayDirectory,
+                                String display, boolean x11) {
+        boolean classic = spec.target.buildProfile == 'fabric-classic'
+        List command = [spec.python, new File(spec.root as File, 'scripts/fabric_parity_runtime.py'),
+                '--target', spec.target.id, '--runtime', spec.runtime.directory,
+                '--java', spec.java, '--game-dir', game, '--candidate', spec.candidate,
+                '--driver', spec.driver, '--runtime-lock', spec.runtime.lock,
+                '--dependency-lock', lock, '--dependency', 'fabricApi=' + (spec.api as File).absolutePath,
+                '--compat', spec.profile, '--backend', spec.backend, '--xdg-runtime-dir', displayDirectory,
+                x11 ? '--x-display' : '--wayland-display', display, '--timeout', '600']
+        if (classic) {
+            if (!spec.classicScenario || !x11 || !spec.strict || spec.gametest != null) {
+                throw new GradleException('Classic acceptance requires its packaged scenario and a locked X11 launch')
+            }
+            command.addAll(['--classic-scenario', spec.classicScenario])
+        } else {
+            command.addAll(['--gametest-api', spec.gametest,
+                    '--loader-version', spec.loaderVersion, '--fabric-api-version', spec.apiVersion,
+                    '--gametest-api-version', spec.target.dependencies.fabricApi])
+        }
+        if (!spec.restart && spec.config != null) {
+            command.addAll(['--cbbg-config', spec.config])
+        }
+        if (spec.externalLibrary != null) {
+            command.addAll(['--external-library', spec.externalLibrary])
+        }
+        (spec.optionalMods as Map).each { name, mod ->
+            command.addAll(['--dependency', name + '=' + mod.file.absolutePath])
+        }
+        if (spec.startupMode != null) {
+            command.addAll(['--startup-mode', spec.startupMode])
+        }
+        if (spec.startupCache != null) {
+            command.addAll(['--startup-cache', spec.startupCache])
+        }
+        if (!spec.strict && !spec.restart) {
+            command.add('--test-dependency-minimums')
+        }
+        command
     }
 
     static Map execute(Map spec, def providers) {
@@ -213,39 +256,16 @@ class FabricCompatibilityProbe {
             (spec.optionalMods as Map).each { name, mod ->
                 locked[name] = [pin: mod.pin, sha256: mod.sha256]
             }
-            if (spec.dependencyLock == null) { lock.text = JsonOutput.toJson([schemaVersion: 1, target: spec.target.id,
-                    dependencies: locked,
-                    gametestApi: [fabricApiPin: spec.target.dependencies.fabricApi,
-                            sha256: CandidateFiles.sha256(spec.gametest as File)]]) }
-            List command = [spec.python, new File(spec.root as File, 'scripts/fabric_parity_runtime.py'),
-                    '--target', spec.target.id, '--runtime', spec.runtime.directory,
-                    '--java', spec.java, '--game-dir', new File(cell, 'game'),
-                    '--candidate', spec.candidate, '--driver', spec.driver,
-                    '--gametest-api', spec.gametest, '--runtime-lock', spec.runtime.lock,
-                    '--dependency-lock', lock, '--dependency', 'fabricApi=' + (spec.api as File).absolutePath,
-                    '--compat', spec.profile, '--backend', spec.backend,
-                    '--xdg-runtime-dir', displayDirectory, x11 ? '--x-display' : '--wayland-display', x11 ? xDisplay : display,
-                    '--timeout', '600',
-                    '--loader-version', spec.loaderVersion, '--fabric-api-version', spec.apiVersion,
-                    '--gametest-api-version', spec.target.dependencies.fabricApi]
-            if (!spec.restart && spec.config != null) {
-                command.addAll(['--cbbg-config', spec.config])
+            if (spec.dependencyLock == null) {
+                Map lockData = [schemaVersion: 1, target: spec.target.id, dependencies: locked]
+                if (spec.gametest != null) {
+                    lockData.gametestApi = [fabricApiPin: spec.target.dependencies.fabricApi,
+                                            sha256: CandidateFiles.sha256(spec.gametest as File)]
+                }
+                CandidateFiles.writeNew(lock, lockData)
             }
-            if (spec.externalLibrary != null) {
-                command.addAll(['--external-library', spec.externalLibrary])
-            }
-            (spec.optionalMods as Map).each { name, mod ->
-                command.addAll(['--dependency', name + '=' + mod.file.absolutePath])
-            }
-            if (spec.startupMode != null) {
-                command.addAll(['--startup-mode', spec.startupMode])
-            }
-            if (spec.startupCache != null) {
-                command.addAll(['--startup-cache', spec.startupCache])
-            }
-            if (!spec.strict && !spec.restart) {
-                command.add('--test-dependency-minimums')
-            }
+            List command = launcherCommand(spec, new File(cell, 'game'), lock, displayDirectory,
+                    x11 ? xDisplay : display, x11)
             Map result
             List<String> phases = spec.restart ? ['control', 'prepare', 'verify'] : [null]
             for (String phase : phases) {
@@ -261,7 +281,10 @@ class FabricCompatibilityProbe {
                 Map recorded = receipt.isFile() ? (Map) CandidateFiles.read(receipt) : [:]
                 if (receipt.isFile()) {
                     recorded.graphicsEnvironment = environment
-                    receipt.text = JsonOutput.toJson(recorded)
+                    File staged = new File(receipt.parentFile, receipt.name + '.probe.tmp')
+                    CandidateFiles.writeNew(staged, recorded)
+                    Files.move(staged.toPath(), receipt.toPath(), StandardCopyOption.REPLACE_EXISTING,
+                            StandardCopyOption.ATOMIC_MOVE)
                 }
                 boolean passed = exit == 0 && recorded.exitCode == 0 && !recorded.failure && recorded.scenarios
                 String status = passed ? 'passed' : 'failed'

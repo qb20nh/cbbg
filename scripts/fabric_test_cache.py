@@ -65,7 +65,8 @@ def reuse_arguments(row, receipt, target, *, current_driver, dependencies, curre
             or not reuse.get('execution_sources')):
         raise EvidenceError('Cached Gradle client runner changed')
     report = read_json(receipt)
-    if report.get('restartPhase') is None and current['initialConfig'] is not None:
+    if (target.get('buildProfile') != 'fabric-classic' and report.get('restartPhase') is None
+            and current['initialConfig'] is not None):
         config = checked_file(base, reuse['config'])
         if (read_json(config) != current.get('initialConfig')
                 or report.get('initialConfigSha256') != digest(config)):

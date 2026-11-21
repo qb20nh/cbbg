@@ -47,6 +47,11 @@ print(json.dumps({'runs':runs,'dependencies':{p:locked_dependencies(spec,p,lock)
                 targets.any { !candidate.records.containsKey(it) || candidate.specifications[it].loader != 'fabric' }) {
             throw new GradleException('Acceptance requires distinct Fabric targets present in the candidate')
         }
+        targets.collect { candidate.specifications[it].java }.toSet().each { version ->
+            if (!(options['java' + version] as File)?.isFile()) {
+                throw new GradleException("Provide -PacceptanceJava${version}=<Java executable> for the selected targets")
+            }
+        }
         File output = (options.output as File).canonicalFile
         output.mkdirs()
         Map inputs = [manifest: CandidateFiles.sha256(candidate.file), source: candidate.data.commit,
@@ -55,7 +60,7 @@ print(json.dumps({'runs':runs,'dependencies':{p:locked_dependencies(spec,p,lock)
                       executables: [:], seedCaches: [:], gametestApis: [:],
                       runtimes: (options.runtimes ?: [:]).collectEntries { id, path -> [(id): (path as File).canonicalPath] },
                       sharedRuntime: options.sharedRuntime == null ? null : (options.sharedRuntime as File).canonicalPath]
-        ['python', 'java21', 'java25', 'weston', 'eglVendor'].each { name ->
+        ['python', 'java17', 'java21', 'java25', 'weston', 'eglVendor'].each { name ->
             File file = options[name] as File
             if (file != null) { inputs.executables[name] = [path: file.absolutePath,
                     resolvedPath: file.canonicalPath, sha256: CandidateFiles.sha256(file)] }
@@ -72,7 +77,8 @@ print(json.dumps({'runs':runs,'dependencies':{p:locked_dependencies(spec,p,lock)
         }
         inputs.scripts = inventory(new File(root, 'scripts'))
         inputs.executionSources = executionSources(root)
-        inputs.initialConfig = candidate.identity.product == 'lib' ? null : INITIAL_CONFIG
+        inputs.initialConfig = candidate.identity.product != 'lib' &&
+                targets.any { candidate.specifications[it].buildProfile != 'fabric-classic' } ? INITIAL_CONFIG : null
         inputs.executionEnvironment = ['VK_DRIVER_FILES', 'VK_ICD_FILENAMES', 'VK_ADD_DRIVER_FILES',
                 'VK_LOADER_DRIVERS_SELECT', 'VK_LOADER_DRIVERS_DISABLE',
                 'VK_LAYER_PATH', 'VK_ADD_LAYER_PATH', 'VK_INSTANCE_LAYERS', 'VK_LOADER_LAYERS_ENABLE',
@@ -153,16 +159,20 @@ print(json.dumps({'pythonVersion':sys.version,'launcherVersion':version('minecra
             }
             command.call([options.python, new File(root, 'scripts/fabric_runtime_lock.py'), '--runtime', runtime,
                           '--profile', profile, '--lock', files.runtime_lock, '--verify'].collect { it.toString() }, root)
-            Map lock = CandidateFiles.read(files.dependency_lock as File) as Map
-            File gametest = options.gametestApis?.get(id) as File
-            if (gametest == null) {
-                String version = gametestApiVersion(lock.gametestApi.coordinate as String, id)
-                gametest = download(new File(output, DEPENDENCIES_DIRECTORY), lock.gametestApi.sha256 as String,
-                        'https://maven.fabricmc.net/net/fabricmc/fabric-api/fabric-client-gametest-api-v1/' +
-                                version + '/fabric-client-gametest-api-v1-' + version + '.jar')
-            }
-            if (CandidateFiles.sha256(gametest) != lock.gametestApi.sha256) {
-                throw new GradleException('Gametest API checksum differs for ' + id)
+            boolean classic = target.buildProfile == 'fabric-classic'
+            File gametest = null
+            if (!classic) {
+                Map lock = CandidateFiles.read(files.dependency_lock as File) as Map
+                gametest = options.gametestApis?.get(id) as File
+                if (gametest == null) {
+                    String version = gametestApiVersion(lock.gametestApi.coordinate as String, id)
+                    gametest = download(new File(output, DEPENDENCIES_DIRECTORY), lock.gametestApi.sha256 as String,
+                            'https://maven.fabricmc.net/net/fabricmc/fabric-api/fabric-client-gametest-api-v1/' +
+                                    version + '/fabric-client-gametest-api-v1-' + version + '.jar')
+                }
+                if (CandidateFiles.sha256(gametest) != lock.gametestApi.sha256) {
+                    throw new GradleException('Gametest API checksum differs for ' + id)
+                }
             }
             Map<String, File> coldCaches = [:]
             rows.each { Map row ->
@@ -173,7 +183,7 @@ print(json.dumps({'pythonVersion':sys.version,'launcherVersion':version('minecra
                 }
             }
             File config = null
-            if (candidate.identity.product != 'lib') {
+            if (!classic && candidate.identity.product != 'lib') {
                 config = new File(targetOutput, 'initial-cbbg.json')
                 if (!config.exists()) {
                     CandidateFiles.writeNew(config, INITIAL_CONFIG)
@@ -184,7 +194,7 @@ print(json.dumps({'pythonVersion':sys.version,'launcherVersion':version('minecra
             }
             contexts.add([id: id, record: record, target: target, tests: tests, base: base,
                           files: files, plan: plan, runs: runs, rows: rows, output: targetOutput,
-                          index: index, runtime: runtime, gametest: gametest, config: config,
+                          index: index, runtime: runtime, gametest: gametest, config: config, classic: classic,
                           coldCaches: coldCaches])
         }
         List<Map> pending = contexts.collectMany { Map context ->
@@ -218,6 +228,7 @@ print(json.dumps({'pythonVersion':sys.version,'launcherVersion':version('minecra
              apiVersion: target.dependencies.fabricApi, loaderVersion: target.dependencies.loader,
              optionalMods: dependencies.findAll { name, entry -> name != 'fabricApi' },
              runtime: [directory: context.runtime, lock: context.files.runtime_lock], dependencyLock: context.files.dependency_lock,
+             classicScenario: context.classic ? requirement.entrypoints.first() : null,
              profile: requirement.profile, backend: requirement.backend, restart: requirement.restart,
              config: context.config, startupMode: requirement.startupMode, startupCache: startupCache]
         }, probe, { Map job, Map result ->
@@ -344,10 +355,12 @@ print(json.dumps({'pythonVersion':sys.version,'launcherVersion':version('minecra
 
     private static Map hostInputs(Map options) {
         List<File> files = []
-        ['java21', 'java25'].each { name ->
+        ['java17', 'java21', 'java25'].each { name ->
             File executable = options[name] as File
-            File home = executable.canonicalFile.parentFile.parentFile
-            files.addAll(['release', 'lib/modules', 'lib/server/libjvm.so'].collect { new File(home, it) })
+            if (executable != null) {
+                File home = executable.canonicalFile.parentFile.parentFile
+                files.addAll(['release', 'lib/modules', 'lib/server/libjvm.so'].collect { new File(home, it) })
+            }
         }
         File machine = new File('/etc/machine-id')
         if (machine.isFile()) {
@@ -490,7 +503,7 @@ print(json.dumps(reuse_arguments(json.loads(sys.argv[1]),Path(sys.argv[2]),json.
                 Map row = old + [receipt: old.receipt + [path: prefix + '/' + old.receipt.path],
                                  reuse: [inputs: CandidateFiles.reference(output, prefix + '/inputs.json'),
                                          execution_sources: sources]]
-                if (candidate.identity.product != 'lib') {
+                if (candidate.identity.product != 'lib' && target.buildProfile != 'fabric-classic') {
                     row.reuse.config = CandidateFiles.reference(output, prefix + '/initial-cbbg.json')
                 }
                 if (old.reuse != null) {
