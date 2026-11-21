@@ -32,11 +32,14 @@ public final class ClassicPackagedSmoke implements ClientModInitializer {
     DITHERED,
     DISABLED,
     RESTARTED_DISABLED,
+    IRIS,
     DONE
   }
 
   private static long presentations;
   private final boolean restart = Boolean.getBoolean("cbbg.test.restart");
+  private final boolean iris = Boolean.getBoolean("cbbg.test.iris");
+  private ClassicIrisSmoke irisSmoke;
   private int ticks;
   private Phase phase = Phase.TITLE;
   private long enabledStart;
@@ -52,6 +55,10 @@ public final class ClassicPackagedSmoke implements ClientModInitializer {
     presentations++;
   }
 
+  static long presentationCount() {
+    return presentations;
+  }
+
   private void tick(Minecraft client) {
     try {
       if (++ticks > 1200) throw new AssertionError("Timed out at smoke phase " + phase);
@@ -60,9 +67,11 @@ public final class ClassicPackagedSmoke implements ClientModInitializer {
           && client.screen instanceof TitleScreen title) {
         checkInstallation();
         if (restart) {
-          requireFormat(client, GL11.GL_RGBA8);
-          if (presentations != 0)
-            throw new AssertionError("Dither applied before opening the saved world");
+          if (!iris) {
+            requireFormat(client, GL11.GL_RGBA8);
+            if (presentations != 0)
+              throw new AssertionError("Dither applied before opening the saved world");
+          }
           client.createWorldOpenFlows().loadLevel(title, WORLD);
         } else {
           createWorld(client);
@@ -71,7 +80,17 @@ public final class ClassicPackagedSmoke implements ClientModInitializer {
       } else if (phase == Phase.OPENING_WORLD && client.player != null && client.screen == null) {
         enabledStart = presentations;
         disabledSince = ticks;
-        phase = restart ? Phase.RESTARTED_DISABLED : Phase.DITHERED;
+        if (iris) {
+          irisSmoke = new ClassicIrisSmoke(restart, ticks, presentations);
+          phase = Phase.IRIS;
+        } else {
+          phase = restart ? Phase.RESTARTED_DISABLED : Phase.DITHERED;
+        }
+      } else if (phase == Phase.IRIS) {
+        if (irisSmoke.tick(client, ticks, presentations)) {
+          phase = Phase.DONE;
+          client.stop();
+        }
       } else if (phase == Phase.RESTARTED_DISABLED && ticks >= disabledSince + 6) {
         requireFormat(client, GL11.GL_RGBA8);
         if (presentations != 0)
@@ -155,6 +174,9 @@ public final class ClassicPackagedSmoke implements ClientModInitializer {
     if (sodium != Boolean.getBoolean("cbbg.test.sodium")) {
       throw new AssertionError("Unexpected Sodium presence");
     }
+    if (loader.isModLoaded("iris") != Boolean.getBoolean("cbbg.test.iris")) {
+      throw new AssertionError("Unexpected Iris presence");
+    }
     System.out.println(
         "CBBG_CLASSIC_OPENGL "
             + GL11.glGetString(GL11.GL_RENDERER)
@@ -164,7 +186,7 @@ public final class ClassicPackagedSmoke implements ClientModInitializer {
             + sodium);
   }
 
-  private static void requireFormat(Minecraft client, int expected) {
+  static void requireFormat(Minecraft client, int expected) {
     int old = GL11.glGetInteger(GL11.GL_TEXTURE_BINDING_2D);
     GlStateManager._bindTexture(client.getMainRenderTarget().getColorTextureId());
     try {
