@@ -229,7 +229,8 @@ public abstract class GlCommandEncoderMixin implements WindowPassEncoder {
 
       if (Cbbg.LOGGER.isInfoEnabled()) {
         Cbbg.LOGGER.info(
-            "cbbg verify: MainTarget internalFormat={} Lightmap internalFormat={} DefaultFB encoding={} FRAMEBUFFER_SRGB={}",
+            "cbbg verify: MainTarget internalFormat={} Lightmap internalFormat={} DefaultFB"
+                + " encoding={} FRAMEBUFFER_SRGB={}",
             CbbgGlNames.glInternalName(mainInternal),
             lightmapInternal == null ? "unknown" : CbbgGlNames.glInternalName(lightmapInternal),
             CbbgGlNames.glEncodingName(encoding),

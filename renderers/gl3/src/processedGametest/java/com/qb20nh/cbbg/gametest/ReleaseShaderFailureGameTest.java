@@ -85,7 +85,8 @@ public final class ReleaseShaderFailureGameTest implements FabricClientGameTest 
                 Objects.requireNonNull(
                     invoke(
                         "com.qb20nh.cbbg.render.Rgba8Readback",
-                        "com.mojang.blaze3d.platform.NativeImage capture(com.mojang.blaze3d.pipeline.RenderTarget)",
+                        "com.mojang.blaze3d.platform.NativeImage"
+                            + " capture(com.mojang.blaze3d.pipeline.RenderTarget)",
                         new Class<?>[] {RenderTarget.class},
                         new Object[] {target}));
         NativeImage actual = Screenshot.takeScreenshot(target)) {
@@ -114,7 +115,8 @@ public final class ReleaseShaderFailureGameTest implements FabricClientGameTest 
     return (TextureTarget)
         invoke(
             DITHER,
-            "com.mojang.blaze3d.pipeline.TextureTarget renderScreenshotTarget(com.mojang.blaze3d.pipeline.RenderTarget)",
+            "com.mojang.blaze3d.pipeline.TextureTarget"
+                + " renderScreenshotTarget(com.mojang.blaze3d.pipeline.RenderTarget)",
             new Class<?>[] {RenderTarget.class},
             new Object[] {client.getMainRenderTarget()});
   }

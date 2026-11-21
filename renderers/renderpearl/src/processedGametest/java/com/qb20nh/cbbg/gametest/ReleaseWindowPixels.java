@@ -59,7 +59,8 @@ public final class ReleaseWindowPixels implements FabricClientGameTest {
     Object output =
         invoke(
             method(
-                "com.mojang.blaze3d.pipeline.TextureTarget screenshot(com.mojang.renderpearl.api.textures.GpuTextureView)",
+                "com.mojang.blaze3d.pipeline.TextureTarget"
+                    + " screenshot(com.mojang.renderpearl.api.textures.GpuTextureView)",
                 GpuTextureView.class),
             input);
     if (!(output instanceof TextureTarget target))
@@ -87,7 +88,8 @@ public final class ReleaseWindowPixels implements FabricClientGameTest {
               int.class);
       Method screenshot =
           method(
-              "com.mojang.blaze3d.pipeline.TextureTarget screenshot(com.mojang.renderpearl.api.textures.GpuTextureView)",
+              "com.mojang.blaze3d.pipeline.TextureTarget"
+                  + " screenshot(com.mojang.renderpearl.api.textures.GpuTextureView)",
               GpuTextureView.class);
       int originalDraw = GL11.glGetInteger(GL30.GL_DRAW_FRAMEBUFFER_BINDING);
       int originalRead = GL11.glGetInteger(GL30.GL_READ_FRAMEBUFFER_BINDING);

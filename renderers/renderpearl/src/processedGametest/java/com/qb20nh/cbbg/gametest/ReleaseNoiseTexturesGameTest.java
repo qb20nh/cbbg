@@ -186,7 +186,8 @@ final class ReleaseNoiseTexturesGameTest {
             type.getDeclaredMethod(
                 ReleaseMapping.memberName(
                     OWNER,
-                    "com.mojang.renderpearl.api.textures.GpuTextureView upload(com.mojang.blaze3d.platform.NativeImage)"),
+                    "com.mojang.renderpearl.api.textures.GpuTextureView"
+                        + " upload(com.mojang.blaze3d.platform.NativeImage)"),
                 NativeImage.class);
         upload.setAccessible(true);
         close = type.getDeclaredMethod("close");
