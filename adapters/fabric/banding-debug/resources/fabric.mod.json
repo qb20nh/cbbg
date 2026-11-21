@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "id": "cbbg_banding_debug",
+  "version": "1",
+  "name": "CBBG Banding Visualizer",
+  "environment": "client",
+  "mixins": ["cbbg_banding_debug.mixins.json"],
+  "depends": { "cbbg": "*" }
+}

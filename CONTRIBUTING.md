@@ -22,6 +22,12 @@ Keep changes focused and readable. Run checks for the affected code; run local
 game tests when rendering or game behavior changes. CI compiles, runs unit
 tests and checks packages. It never launches Minecraft clients.
 
+To inspect banding, launch `runClient` or install the mod from the **Build Dev
+JAR** workflow. Open CBBG settings and cycle **Banding visualizer** from **Off**
+to **Split**, **Before**, or **After** while CBBG dithering is active. The
+adjacent button selects the image, channel LSBs, or contour candidates.
+Contour candidates highlight small, coherent steps as a diagnostic heuristic.
+
 For incremental packaged acceptance, add `-PacceptanceReuse=<previous acceptance
 directory>` to `runCandidateAcceptance`. Add `-PacceptanceReuse.<name>=<directory>`
 for other saved campaigns. The task rechecks receipts and reuses passing cases

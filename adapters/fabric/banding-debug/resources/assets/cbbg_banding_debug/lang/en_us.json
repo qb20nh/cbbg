@@ -1,0 +1,15 @@
+{
+  "cbbg.banding.layout": "Banding visualizer: %s",
+  "cbbg.banding.off": "Off",
+  "cbbg.banding.split": "Split",
+  "cbbg.banding.before": "Before",
+  "cbbg.banding.after": "After",
+  "cbbg.banding.image": "Image",
+  "cbbg.banding.red": "LSB · Red",
+  "cbbg.banding.green": "LSB · Green",
+  "cbbg.banding.blue": "LSB · Blue",
+  "cbbg.banding.rgb": "LSB · RGB",
+  "cbbg.banding.contours": "Contour candidates",
+  "cbbg.banding.layout.tooltip": "Compare undithered (left) and dithered (right) output. Requires CBBG dithering to be active.",
+  "cbbg.banding.view.tooltip": "Cycle through the image, least significant bits, and contour candidates. Contours are a heuristic for small, coherent color steps."
+}
