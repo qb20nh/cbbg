@@ -9,10 +9,36 @@ import unittest
 import zipfile
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from fabric_run_evidence import verify_run, verify_restart
+from fabric_run_evidence import verify_classic_restart_snapshots, verify_run, verify_restart
 from fabric_parity_runtime import restart_state
 from fabric_scenario_evidence import graphics_identity, validate_scenarios
 from parity_evidence import digest
+
+
+class ClassicRestartSnapshotsTest(unittest.TestCase):
+    def test_restart_requires_untouched_world_settings_and_pack(self):
+        before = {'config/cbbg.json': 'demo', 'config/iris.properties': 'on',
+                  'shaderpacks/cbbg-parity/shaders/final.fsh': 'pack'}
+        after = {**before, 'config/iris.properties': 'off'}
+        prepare = {'evidence': {'evidence-prepare/prepared-world.dat': 'world',
+                                'evidence-prepare/prepared-options.txt': 'options',
+                                'evidence-prepare/final-cbbg.json': 'demo',
+                                'evidence-prepare/final-iris.properties': 'on'}}
+        verify = {'evidence': {'evidence-verify/initial-world.dat': 'world',
+                               'evidence-verify/initial-options.txt': 'options',
+                               'evidence-verify/initial-cbbg.json': 'demo',
+                               'evidence-verify/initial-iris.properties': 'on',
+                               'evidence-verify/final-cbbg.json': 'demo',
+                               'evidence-verify/final-iris.properties': 'off'}}
+        verify_classic_restart_snapshots(prepare, verify, before, after)
+        for key in ('initial-world.dat', 'initial-options.txt', 'initial-iris.properties'):
+            changed = copy.deepcopy(verify)
+            changed['evidence']['evidence-verify/' + key] = 'changed'
+            with self.assertRaisesRegex(ValueError, 'snapshot differs'):
+                verify_classic_restart_snapshots(prepare, changed, before, after)
+        with self.assertRaisesRegex(ValueError, 'changed saved CBBG settings or shader pack'):
+            verify_classic_restart_snapshots(prepare, verify, before,
+                {**after, 'shaderpacks/cbbg-parity/shaders/final.fsh': 'changed'})
 
 
 class FabricRunEvidenceTest(unittest.TestCase):

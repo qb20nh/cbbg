@@ -15,6 +15,7 @@ GLFW_CORE_PROFILE = 0x00032001
 GLFW_COMPAT_PROFILE = 0x00032002
 CLASSIC_OPTIONS = 'renderDistance:4\nsimulationDistance:5\nmaxFps:60\nguiScale:2\npauseOnLostFocus:false\n'
 CLASSIC_IRIS_OPTIONS = 'enableShaders=false\n'
+CLASSIC_RESTART_FILES = {'options.txt': 'options.txt', 'saves/cbbg-smoke/level.dat': 'world.dat'}
 
 
 def classic_scenarios(metadata):
@@ -60,7 +61,7 @@ def includes_sodium(profile):
     return bool({'sodium', 'iris'} & set(profile.split('+')))
 
 
-def classic_jvm_arguments(candidate, scenario, backend, profile):
+def classic_jvm_arguments(candidate, scenario, backend, profile, restart_phase=None):
     arguments = ['-Xmx1200m', '-XX:ActiveProcessorCount=4',
                  '-Dcbbg.test.jar=' + str(candidate),
                  '-Dcbbg.test.sodium=' + str(includes_sodium(profile)).lower()]
@@ -77,7 +78,10 @@ def classic_jvm_arguments(candidate, scenario, backend, profile):
         elif scenario == 'renderscale':
             arguments.append('-Dcbbg.test.renderScale=true')
         elif scenario == 'iris':
-            arguments += ['-Dcbbg.test.iris=true', '-Dcbbg.test.irisCycle=true']
+            arguments.append('-Dcbbg.test.iris=true')
+            iris_flags = {None: 'irisCycle', 'control': 'irisControl', 'verify': 'restart'}
+            if restart_phase in iris_flags:
+                arguments.append('-Dcbbg.test.' + iris_flags[restart_phase] + '=true')
     return arguments
 
 
@@ -154,33 +158,63 @@ def renderscale_captures(log, width, height):
     return captures
 
 
-def iris_captures(log, evidence, width, height):
-    events = re.findall(r'CBBG_CLASSIC_IRIS_(SUPPRESSED [^\r\n]+|RELOAD_PASS|'
-                        r'CYCLE_PASS presentations=\d+)(?=\r?\n|\Z)', log)
-    if len(events) != 4 or events[:3] != ['SUPPRESSED iris-active.png format=RGBA8 draws=0',
-                                        'SUPPRESSED iris-reloaded.png format=RGBA8 draws=0',
-                                        'RELOAD_PASS']:
-        raise ValueError('Incomplete Iris activation or reload evidence')
-    recovered = re.fullmatch(r'CYCLE_PASS presentations=(\d+)', events[3])
-    if not recovered or int(recovered[1]) < 10:
-        raise ValueError('Iris deactivation did not restore CBBG presentation')
+def iris_shader_state(path, enabled):
+    lines = path.read_text().splitlines()
+    if ([line for line in lines if line.startswith('enableShaders=')]
+            != ['enableShaders=' + str(enabled).lower()]
+            or enabled and 'shaderPack=cbbg-parity' not in lines):
+        raise ValueError('Classic Iris persisted shader state differs')
+
+
+def iris_captures(log, evidence, width, height, restart_phase):
+    events = re.findall(r'CBBG_CLASSIC_IRIS_([^\r\n]+)', log)
+    shader_captures = {
+        None: ['iris-active.png', 'iris-reloaded.png'],
+        'prepare': ['iris-active.png', 'iris-reloaded.png'],
+        'verify': ['iris-restart-active.png'],
+        'control': [],
+    }[restart_phase]
+    expected = ['SUPPRESSED ' + name + ' format=RGBA8 draws=0' for name in shader_captures]
+    if restart_phase in (None, 'prepare'):
+        expected.append('RELOAD_PASS')
+    marker = {None: 'CYCLE', 'verify': 'RESTART', 'control': 'CONTROL'}.get(restart_phase)
+    if marker:
+        presentations = re.fullmatch(marker + r'_PASS presentations=(\d+)', events[-1]) if events else None
+        if not presentations or int(presentations[1]) < 10:
+            raise ValueError('Iris shader check did not show resumed or control presentations')
+        events = events[:-1]
+    if events != expected:
+        raise ValueError('Incomplete Iris activation, reload or restart evidence')
+    if restart_phase:
+        iris_shader_state(evidence / 'final-iris.properties', restart_phase == 'prepare')
     if (evidence / 'final-cbbg.json').read_bytes() != (evidence / 'initial-cbbg.json').read_bytes():
         raise ValueError('Iris changed the saved CBBG configuration')
-    return {name: (width, height) for name in
-            ('iris-inactive.png', 'iris-active.png', 'iris-reloaded.png', 'iris-restored.png')}
+    other_captures = {
+        None: ['iris-inactive.png', 'iris-restored.png'],
+        'prepare': ['iris-inactive.png'],
+        'verify': ['iris-restored.png'],
+        'control': ['iris-control.png'],
+    }[restart_phase]
+    return {name: (width, height) for name in shader_captures + other_captures}
 
 
-def classic_result(scenario, profile, backend, log, evidence, exit_code):
+def classic_result(scenario, profile, backend, log, evidence, exit_code, restart_phase=None):
     if (type(exit_code) is not int or exit_code != 0
             or re.search(r'VUID-|Validation Error|VK_ERROR_DEVICE_LOST|AssertionError|Game crashed!'
                          r'|GL_INVALID_(?:ENUM|VALUE|OPERATION|FRAMEBUFFER_OPERATION)|GL_OUT_OF_MEMORY', log)):
         raise ValueError('Classic client or graphics validation failed')
-    if (json.loads((evidence / 'initial-cbbg.json').read_text()) != classic_config(backend, scenario)
-            or (evidence / 'initial-options.txt').read_text() != CLASSIC_OPTIONS):
+    if restart_phase and (scenario != 'iris' or 'iris' not in profile.split('+')):
+        raise ValueError('Classic restart phases require the Iris scenario')
+    if json.loads((evidence / 'initial-cbbg.json').read_text()) != classic_config(backend, scenario):
         raise ValueError('Classic initial config or options differ')
-    if ('iris' in profile.split('+')
-            and (evidence / 'initial-iris.properties').read_text() != CLASSIC_IRIS_OPTIONS):
-        raise ValueError('Classic Iris initial config differs')
+    if restart_phase == 'verify':
+        iris_shader_state(evidence / 'initial-iris.properties', True)
+    else:
+        if (evidence / 'initial-options.txt').read_text() != CLASSIC_OPTIONS:
+            raise ValueError('Classic initial config or options differ')
+        if ('iris' in profile.split('+')
+                and (evidence / 'initial-iris.properties').read_text() != CLASSIC_IRIS_OPTIONS):
+            raise ValueError('Classic Iris initial config differs')
     width, height = classic_viewport(scenario)
     captures = {'enabled.png': (width, height), 'disabled.png': (width, height)}
     if backend == 'vulkan':
@@ -240,7 +274,7 @@ def classic_result(scenario, profile, backend, log, evidence, exit_code):
         elif scenario == 'renderscale':
             captures = renderscale_captures(log, width, height)
         elif scenario == 'iris':
-            captures = iris_captures(log, evidence, width, height)
+            captures = iris_captures(log, evidence, width, height, restart_phase)
         elif int(one_reading(log, r'CBBG_CLASSIC_SMOKE_PASS presentations=(\d+)')) < 10:
             raise ValueError('OpenGL world did not present enough frames')
         graphics = {'backend': 'opengl', 'provider': 'minecraft', 'gpu': gpu, 'driver': driver}

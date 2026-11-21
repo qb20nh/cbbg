@@ -7,7 +7,7 @@ from pathlib import Path
 import re
 import zipfile
 
-from fabric_classic_scenarios import classic_result, validate_classic_choice
+from fabric_classic_scenarios import CLASSIC_RESTART_FILES, classic_result, validate_classic_choice
 from fabric_dependency_lock import verify_dependencies, verify_gametest_api
 from fabric_parity_runtime import RESTART_DRIVERS, restart_state, verify_external_library
 from fabric_scenario_evidence import graphics_identity, validate_scenarios, validate_shutdown, validate_startup
@@ -68,7 +68,7 @@ def _verify_run(receipt_path, target, *, source_commit, candidate_sha256,
         metadata = json.loads(jar.read('fabric.mod.json'))
     classic = target.get('buildProfile') == 'fabric-classic'
     if classic:
-        if (restart_phase or report.get('startupMode') is not None or report.get('gametestApiVersion') is not None
+        if (report.get('startupMode') is not None or report.get('gametestApiVersion') is not None
                 or report.get('dependencyMinimumTest') is not False
                 or {'fabric-gametest-api.jar', 'external-library.jar'} & installed.keys()):
             raise EvidenceError('Unexpected non-classic fixtures in classic run')
@@ -105,7 +105,8 @@ def _verify_run(receipt_path, target, *, source_commit, candidate_sha256,
     if classic:
         if report.get('initialConfigSha256') != evidence[directory + '/initial-cbbg.json']:
             raise EvidenceError('Classic initial config hash differs')
-        results, graphics = classic_result(scenario, profile, backend, log, game / directory, report['exitCode'])
+        results, graphics = classic_result(scenario, profile, backend, log, game / directory,
+                                           report['exitCode'], restart_phase)
     else:
         results = validate_scenarios(expected, paths[trace_name].read_text(),
                                      log, report['exitCode'], backend)
@@ -130,6 +131,22 @@ def _verify_run(receipt_path, target, *, source_commit, candidate_sha256,
 
 def verify_run(receipt_path, target, **inputs):
     return _verify_run(receipt_path, target, **inputs)
+
+
+def verify_classic_restart_snapshots(prepare, verified, before, after):
+    prepared = prepare['evidence']
+    reopened = verified['evidence']
+    for name in CLASSIC_RESTART_FILES.values():
+        expected = prepared.get('evidence-prepare/prepared-' + name)
+        if not expected or expected != reopened.get('evidence-verify/initial-' + name):
+            raise EvidenceError('Classic restart input snapshot differs: ' + name)
+    for path, name in (('config/cbbg.json', 'cbbg.json'), ('config/iris.properties', 'iris.properties')):
+        if (path not in before or before[path] != prepared.get('evidence-prepare/final-' + name)
+                or before[path] != reopened.get('evidence-verify/initial-' + name)
+                or after[path] != reopened.get('evidence-verify/final-' + name)):
+            raise EvidenceError('Classic restart settings snapshot differs: ' + path)
+    if any(after[path] != checksum for path, checksum in before.items() if path != 'config/iris.properties'):
+        raise EvidenceError('Classic restart changed saved CBBG settings or shader pack')
 
 
 def verify_restart(receipt_path, target, *, control_receipt_path, **inputs):
@@ -173,6 +190,8 @@ def verify_restart(receipt_path, target, *, control_receipt_path, **inputs):
         checked_file(game, {'path': name, 'sha256': checksum})
     if restart_state(game) != after:
         raise EvidenceError('Restart saved state inventory differs')
+    if target.get('buildProfile') == 'fabric-classic':
+        verify_classic_restart_snapshots(prepare, verified, before, after)
     second.update(prepare_receipt_sha256=first['receipt_sha256'],
                   control_receipt_sha256=control_result['receipt_sha256'], restart=True,
                   evidence_files=(first['evidence_files'] + second['evidence_files']

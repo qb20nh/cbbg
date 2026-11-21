@@ -55,6 +55,12 @@ class FabricAcceptanceTests(unittest.TestCase):
             {(run['profile'], run['backend'], tuple(run['entrypoints'])) for run in runs
              if run['suite'] == 'iris'},
         )
+        self.assertEqual(
+            {(profile, 'opengl', ('iris',), True) for profile in target['compatibilityProfiles']
+             if 'iris' in profile.split('+')},
+            {(run['profile'], run['backend'], tuple(run['entrypoints']), run['restart']) for run in runs
+             if run['suite'] == 'iris-restart'},
+        )
 
     def test_classic_rejects_undeclared_scenarios_and_gametest_metadata(self):
         target = select_targets(load_catalog(), '1.20.1-fabric')[0]

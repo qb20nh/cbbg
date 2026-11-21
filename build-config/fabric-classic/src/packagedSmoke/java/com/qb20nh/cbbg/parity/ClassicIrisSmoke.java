@@ -20,6 +20,7 @@ final class ClassicIrisSmoke {
   }
 
   private final boolean restart;
+  private final boolean control = Boolean.getBoolean("cbbg.test.irisControl");
   private final boolean restoreAfterReload = Boolean.getBoolean("cbbg.test.irisCycle");
   private Phase phase;
   private int phaseStarted;
@@ -47,6 +48,13 @@ final class ClassicIrisSmoke {
         if (presentations < baseline + 10) return false;
         requireActive(false);
         ClassicPackagedSmoke.requireFormat(client, GL30.GL_RGBA16F);
+        if (control) {
+          IrisFixture.installPack();
+          capture(client, "iris-control.png");
+          System.out.println(
+              "CBBG_CLASSIC_IRIS_CONTROL_PASS presentations=" + (presentations - baseline));
+          return true;
+        }
         capture(client, "iris-inactive.png");
         if (restoreAfterReload) savedConfig = Files.readAllBytes(config);
         // The screenshot also invokes the dither shader while Iris is inactive.

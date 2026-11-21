@@ -198,6 +198,42 @@ class ClassicScenarioTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'saved CBBG configuration'):
             classic_result('iris', 'iris', 'opengl', log, self.evidence, 0)
 
+    def test_iris_restart_requires_the_phase_specific_shader_state(self):
+        config = json.dumps(classic_config('opengl', 'iris'))
+        for name in ('initial-cbbg.json', 'final-cbbg.json'):
+            (self.evidence / name).write_text(config)
+        for name in ('control', 'inactive', 'active', 'reloaded', 'restart-active', 'restored'):
+            self.write_capture(self.evidence / f'iris-{name}.png', 800, 600)
+        off = CLASSIC_IRIS_OPTIONS
+        on = 'shaderPack=cbbg-parity\nenableShaders=true\n'
+        initial = self.evidence / 'initial-iris.properties'
+        final = self.evidence / 'final-iris.properties'
+        gpu = 'CBBG_CLASSIC_OPENGL Test GPU / 3.2 sodium=true\n'
+        initial.write_text(off)
+        final.write_text(off)
+        classic_result('iris', 'iris', 'opengl',
+                       gpu + 'CBBG_CLASSIC_IRIS_CONTROL_PASS presentations=10\n',
+                       self.evidence, 0, 'control')
+        final.write_text(on)
+        classic_result('iris', 'iris', 'opengl',
+                       gpu + 'CBBG_CLASSIC_IRIS_SUPPRESSED iris-active.png format=RGBA8 draws=0\n'
+                       'CBBG_CLASSIC_IRIS_SUPPRESSED iris-reloaded.png format=RGBA8 draws=0\n'
+                       'CBBG_CLASSIC_IRIS_RELOAD_PASS\n', self.evidence, 0, 'prepare')
+        verify_log = (gpu + 'CBBG_CLASSIC_IRIS_SUPPRESSED iris-restart-active.png format=RGBA8 draws=0\n'
+                      'CBBG_CLASSIC_IRIS_RESTART_PASS presentations=10\n')
+        final.write_text(off)
+        with self.assertRaisesRegex(ValueError, 'persisted shader state'):
+            classic_result('iris', 'iris', 'opengl', verify_log, self.evidence, 0, 'verify')
+        initial.write_text(on)
+        classic_result('iris', 'iris', 'opengl', verify_log, self.evidence, 0, 'verify')
+        final.write_text(on)
+        with self.assertRaisesRegex(ValueError, 'persisted shader state'):
+            classic_result('iris', 'iris', 'opengl', verify_log, self.evidence, 0, 'verify')
+        self.assertIn('-Dcbbg.test.restart=true',
+                      classic_jvm_arguments('candidate.jar', 'iris', 'opengl', 'iris', 'verify'))
+        self.assertNotIn('-Dcbbg.test.irisCycle=true',
+                         classic_jvm_arguments('candidate.jar', 'iris', 'opengl', 'iris', 'prepare'))
+
     def test_pixel_oracle_requires_all_three_comparisons_and_frozen_tile(self):
         tile = self.evidence / 'pixel-input'
         tile.mkdir()

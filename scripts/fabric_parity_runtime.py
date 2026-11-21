@@ -11,9 +11,10 @@ import shutil
 import subprocess
 import zipfile
 
-from fabric_classic_scenarios import (CLASSIC_IRIS_OPTIONS, CLASSIC_OPTIONS, REDUCED_GL_SCENARIO,
-                                      classic_config, classic_jvm_arguments, classic_result,
-                                      classic_viewport, pixel_cache_files, validate_classic_choice)
+from fabric_classic_scenarios import (CLASSIC_IRIS_OPTIONS, CLASSIC_OPTIONS, CLASSIC_RESTART_FILES,
+                                      REDUCED_GL_SCENARIO, classic_config, classic_jvm_arguments,
+                                      classic_result, classic_viewport, pixel_cache_files,
+                                      validate_classic_choice)
 from fabric_dependency_lock import verify_dependencies, verify_gametest_api
 from fabric_runtime_lock import verify_runtime
 from fabric_scenario_evidence import (STARTUP_CACHE_FILES, STARTUP_DRIVER, graphics_identity,
@@ -23,6 +24,7 @@ from runtime_catalog import load_catalog, select_targets
 ROOT = Path(__file__).resolve().parents[1]
 
 RESTART_DRIVERS = {
+    ('opengl', 'iris'): 'iris',
     ('opengl', 'com.qb20nh.cbbg.gametest.IrisRestartGameTest'): 'iris',
     ('opengl', 'com.qb20nh.cbbg.gametest.ReleaseIrisRestartGameTest'): 'iris',
 }
@@ -144,7 +146,7 @@ def main():
     if classic:
         if (not args.classic_scenario or not args.x_display
                 or any((args.gametest_api, args.gametest_api_version, args.dsa_mode,
-                        args.restart_phase, args.startup_mode, args.startup_cache,
+                        args.startup_mode, args.startup_cache,
                         args.test_dependency_minimums, args.external_library,
                         args.loader_version, args.fabric_api_version))):
             parser.error('Classic runs require a packaged scenario and X display without GameTest options')
@@ -206,6 +208,8 @@ def main():
         restart_shader = RESTART_DRIVERS.get((args.backend, expected[0])) if len(expected) == 1 else None
         if restart_shader is None:
             parser.error('Restart phases require the dedicated Iris/OpenGL driver')
+        if classic and restart_shader not in args.compat.split('+'):
+            parser.error('Classic restart requires a profile with Iris')
 
     runtime = args.runtime.resolve()
     game = args.game_dir.resolve()
@@ -219,7 +223,8 @@ def main():
     jvm_arguments = ['-XX:-CreateCoredumpOnCrash', '-Djava.awt.headless=true']
     if classic:
         jvm_arguments += classic_jvm_arguments(game / 'mods/candidate.jar',
-                                               args.classic_scenario, args.backend, args.compat)
+                                               args.classic_scenario, args.backend, args.compat,
+                                               args.restart_phase)
     else:
         jvm_arguments += [
             '-Xmx2G', *display_jvm_arguments, '-Dfabric.client.gametest',
@@ -320,16 +325,27 @@ def main():
         state = restart_state(game)
         if state != previous['persistedState']:
             raise ValueError('Restart persisted state changed')
+        if classic:
+            for name, filename in CLASSIC_RESTART_FILES.items():
+                if digest(game / name) != previous['evidence'].get('evidence-prepare/prepared-' + filename):
+                    raise ValueError('Classic restart input changed: ' + name)
         receipt['prepareReceiptSha256'] = digest(previous_path)
         receipt['inputState'] = state
     try:
-        if initial_config is not None:
+        if classic and args.restart_phase == 'verify':
+            evidence.mkdir()
+            shutil.copyfile(game / 'config/cbbg.json', evidence / 'initial-cbbg.json')
+            shutil.copyfile(game / 'config/iris.properties', evidence / 'initial-iris.properties')
+            for name, filename in CLASSIC_RESTART_FILES.items():
+                shutil.copyfile(game / name, evidence / ('initial-' + filename))
+            receipt['initialConfigSha256'] = digest(evidence / 'initial-cbbg.json')
+        elif initial_config is not None:
             (game / 'config').mkdir()
             (game / 'config/cbbg.json').write_bytes(initial_config)
             evidence.mkdir(parents=True)
             (evidence / 'initial-cbbg.json').write_bytes(initial_config)
             receipt['initialConfigSha256'] = hashlib.sha256(initial_config).hexdigest()
-        if classic:
+        if classic and args.restart_phase != 'verify':
             (game / 'options.txt').write_text(CLASSIC_OPTIONS)
             shutil.copyfile(game / 'options.txt', evidence / 'initial-options.txt')
             if 'iris' in args.compat.split('+'):
@@ -376,8 +392,14 @@ def main():
                 capture.replace(evidence / capture.name)
             if args.classic_scenario == 'iris':
                 shutil.copyfile(game / 'config/cbbg.json', evidence / 'final-cbbg.json')
+                if args.restart_phase:
+                    shutil.copyfile(game / 'config/iris.properties', evidence / 'final-iris.properties')
+                if args.restart_phase == 'prepare':
+                    for name, filename in CLASSIC_RESTART_FILES.items():
+                        shutil.copyfile(game / name, evidence / ('prepared-' + filename))
             scenarios, receipt['graphics'] = classic_result(
-                args.classic_scenario, args.compat, args.backend, log_text, evidence, result.returncode)
+                args.classic_scenario, args.compat, args.backend, log_text, evidence, result.returncode,
+                args.restart_phase)
         else:
             scenarios = validate_scenarios(expected,
                 (evidence / 'scenarios.tsv').read_text(), log_text,
