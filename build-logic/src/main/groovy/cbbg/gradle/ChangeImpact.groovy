@@ -96,6 +96,7 @@ class ChangeImpact {
                 path.startsWith('build-logic/src/test/') || path.startsWith('.github/scripts/') ||
                 path.startsWith('.github/tests/') || path.startsWith('.github/ISSUE_TEMPLATE/') ||
                 path in ['scripts/candidate_manifest.py', 'scripts/fabric_acceptance.py',
+                         'scripts/fabric_classic_scenarios.py',
                          'scripts/fabric_dependency_lock.py', 'scripts/fabric_parity_runtime.py',
                          'scripts/fabric_run_evidence.py', 'scripts/fabric_runtime_lock.py',
                          'scripts/fabric_scenario_evidence.py', 'scripts/install_fabric_parity_runtime.py',

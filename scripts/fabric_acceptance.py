@@ -6,6 +6,7 @@ from pathlib import Path
 import re
 import zipfile
 
+from fabric_classic_scenarios import classic_scenarios
 from fabric_run_evidence import verify_run, verify_restart
 from fabric_scenario_evidence import STARTUP_DRIVER
 from candidate_manifest import client_candidate
@@ -27,15 +28,9 @@ def required_runs(target, contract, root=ROOT, metadata_path=None):
     library = contract.get('product') == 'lib'
     classic = target.get('buildProfile') == 'fabric-classic'
     if classic:
-        if (library or metadata.get('id') != 'cbbg_classic_smoke'
-                or metadata.get('entrypoints', {}).get('client')
-                != ['com.qb20nh.cbbg.parity.ClassicPackagedSmoke']):
+        if library:
             raise EvidenceError('Unexpected classic test driver metadata')
-        supported_scenarios = metadata.get('custom', {}).get('cbbg:scenarios', [])
-        if (not isinstance(supported_scenarios, list) or 'world' not in supported_scenarios
-                or any(not isinstance(name, str) or not name for name in supported_scenarios)
-                or len(set(supported_scenarios)) != len(supported_scenarios)):
-            raise EvidenceError('Classic test driver must declare its world scenario')
+        supported_scenarios = classic_scenarios(metadata)
         ordinary = ['world']
     else:
         if metadata.get('id') != ('cbbg-library-test' if library else 'cbbg-renderer-test'):

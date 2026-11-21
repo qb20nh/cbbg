@@ -55,3 +55,8 @@ def verify_dependencies(target, profile, paths, lock):
             digest = hashlib.file_digest(stream, 'sha256').hexdigest()
         if digest != entry['sha256']:
             raise ValueError('Dependency checksum mismatch: ' + name)
+        if name == 'vulkanMod':
+            with Path(paths[name]).open('rb') as stream:
+                pinned = hashlib.file_digest(stream, 'sha512').hexdigest()
+            if pinned != target['dependencies'].get('vulkanModSha512'):
+                raise ValueError('VulkanMod differs from the catalog pin')

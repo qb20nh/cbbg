@@ -7,6 +7,7 @@ from pathlib import Path
 import re
 import zipfile
 
+from fabric_classic_scenarios import classic_result, validate_classic_choice
 from fabric_dependency_lock import verify_dependencies, verify_gametest_api
 from fabric_parity_runtime import RESTART_DRIVERS, restart_state, verify_external_library
 from fabric_scenario_evidence import graphics_identity, validate_scenarios, validate_shutdown, validate_startup
@@ -63,14 +64,24 @@ def _verify_run(receipt_path, target, *, source_commit, candidate_sha256,
     if 'external-library.jar' in installed:
         verify_external_library(installed['candidate.jar'], installed['external-library.jar'])
     verify_dependencies(target, profile, dependencies, lock)
-    if 'fabric-gametest-api.jar' not in installed:
-        raise EvidenceError('Missing gametest API')
-    verify_gametest_api(target, installed['fabric-gametest-api.jar'], lock)
     with zipfile.ZipFile(installed['driver.jar']) as jar:
         metadata = json.loads(jar.read('fabric.mod.json'))
-    if metadata.get('id') not in ('cbbg-renderer-test', 'cbbg-library-test'):
-        raise EvidenceError('Unexpected test driver')
-    expected = metadata['entrypoints']['fabric-client-gametest']
+    classic = target.get('buildProfile') == 'fabric-classic'
+    if classic:
+        if (restart_phase or report.get('startupMode') is not None or report.get('gametestApiVersion') is not None
+                or report.get('dependencyMinimumTest') is not False
+                or {'fabric-gametest-api.jar', 'external-library.jar'} & installed.keys()):
+            raise EvidenceError('Unexpected non-classic fixtures in classic run')
+        scenario = report.get('classicScenario')
+        validate_classic_choice(metadata, scenario, profile, backend)
+        expected = [scenario]
+    else:
+        if 'fabric-gametest-api.jar' not in installed:
+            raise EvidenceError('Missing gametest API')
+        verify_gametest_api(target, installed['fabric-gametest-api.jar'], lock)
+        if metadata.get('id') not in ('cbbg-renderer-test', 'cbbg-library-test') or 'classicScenario' in report:
+            raise EvidenceError('Unexpected test driver')
+        expected = metadata['entrypoints']['fabric-client-gametest']
     expected_hash = hashlib.sha256(json.dumps(expected, separators=(',', ':')).encode()).hexdigest()
     if report.get('scenarioSha256') != expected_hash:
         raise EvidenceError('Scenario contract differs from test driver')
@@ -80,7 +91,8 @@ def _verify_run(receipt_path, target, *, source_commit, candidate_sha256,
     directory = 'evidence-' + restart_phase if restart_phase else 'evidence'
     trace_name = directory + '/scenarios.tsv'
     context_name = directory + '/graphics-context.json'
-    required = {log_name, trace_name, context_name}
+    required = ({log_name, directory + '/initial-cbbg.json', directory + '/initial-options.txt'}
+                if classic else {log_name, trace_name, context_name})
     if not required <= evidence.keys():
         raise EvidenceError('Missing log, scenario trace or graphics context')
     actual_files = {log_name} | {
@@ -90,20 +102,26 @@ def _verify_run(receipt_path, target, *, source_commit, candidate_sha256,
     paths = {name: checked_file(game, {'path': name, 'sha256': checksum})
              for name, checksum in evidence.items()}
     log = paths[log_name].read_text()
-    results = validate_scenarios(expected, paths[trace_name].read_text(),
-                                 log, report['exitCode'], backend)
-    validate_shutdown(expected, game / directory / 'shutdown.json')
-    validate_startup(expected, report.get('startupMode'), game / directory, game / '.cbbg', log, backend, target['id'])
+    if classic:
+        if report.get('initialConfigSha256') != evidence[directory + '/initial-cbbg.json']:
+            raise EvidenceError('Classic initial config hash differs')
+        results, graphics = classic_result(scenario, profile, backend, log, game / directory, report['exitCode'])
+    else:
+        results = validate_scenarios(expected, paths[trace_name].read_text(),
+                                     log, report['exitCode'], backend)
+        validate_shutdown(expected, game / directory / 'shutdown.json')
+        validate_startup(expected, report.get('startupMode'), game / directory, game / '.cbbg', log, backend, target['id'])
+        graphics = graphics_identity(log, backend)
+        context = read_json(paths[context_name])
+        if context.get('backend') != backend:
+            raise EvidenceError('Graphics context backend differs')
+        graphics.update(context=context, contextProfile=context.get('profile'))
     if report.get('scenarios') != results:
-        raise EvidenceError('Scenario summary differs from trace')
-    graphics = graphics_identity(log, backend)
-    context = read_json(paths[context_name])
-    if context.get('backend') != backend:
-        raise EvidenceError('Graphics context backend differs')
-    graphics.update(context=context, contextProfile=context.get('profile'))
+        raise EvidenceError('Scenario summary differs from saved evidence')
     if report.get('graphics') != graphics:
         raise EvidenceError('Graphics summary differs from saved files')
     return {'target': target['id'], 'profile': profile, 'backend': backend,
+            **({'rendererProvider': graphics['provider']} if classic else {}),
             'startupMode': report.get('startupMode'),
             'source_commit': source_commit, 'receipt_sha256': digest(receipt_path),
             'externalLibrary': 'external-library.jar' in installed,
