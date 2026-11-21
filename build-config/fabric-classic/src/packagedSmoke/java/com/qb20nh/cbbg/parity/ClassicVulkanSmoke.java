@@ -13,6 +13,7 @@ import org.lwjgl.glfw.GLFW;
 public final class ClassicVulkanSmoke {
   private static long presentations;
   private static final boolean CHECK_LIFECYCLE = Boolean.getBoolean("cbbg.test.vulkanLifecycle");
+  private static final boolean CHECK_SETTINGS = Boolean.getBoolean("cbbg.test.vulkanSettings");
   static long ditherDraws;
   static int noiseWidth;
   private static Object ditherPipeline;
@@ -22,13 +23,14 @@ public final class ClassicVulkanSmoke {
   private boolean finished;
   private long joinedAt = -1;
   private ClassicVulkanLifecycle lifecycle;
+  private ClassicVulkanSettings settings;
 
   public static void observePresent() {
     presentations++;
   }
 
   public static void observeDither(Object pipeline) {
-    if (!CHECK_LIFECYCLE) return;
+    if (!CHECK_LIFECYCLE && !CHECK_SETTINGS) return;
     try {
       if (ditherPipeline == null) {
         if (!"cbbg_vulkanmod_dither".equals(pipeline.getClass().getField("name").get(pipeline))) {
@@ -56,10 +58,16 @@ public final class ClassicVulkanSmoke {
         checkInstallation(client);
         opened = true;
         ClassicPackagedSmoke.createWorld(client);
-      } else if (opened && client.player != null && client.screen == null) {
+      } else if (opened && client.player != null && (client.screen == null || settings != null)) {
         if (joinedAt < 0) joinedAt = presentations;
         if (presentations < joinedAt + 12) return;
-        if (CHECK_LIFECYCLE) {
+        if (CHECK_SETTINGS) {
+          if (settings == null) {
+            if (noiseWidth != 64) return;
+            settings = new ClassicVulkanSettings(client);
+          }
+          if (!settings.tick(client, presentations)) return;
+        } else if (CHECK_LIFECYCLE) {
           if (lifecycle == null) lifecycle = new ClassicVulkanLifecycle();
           if (!lifecycle.tick(client, presentations)) return;
         } else {
