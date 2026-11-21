@@ -7,6 +7,7 @@ import com.qb20nh.cbbg.config.CbbgConfig;
 import com.qb20nh.cbbg.mixin.ClassicBackendPlugin;
 import com.qb20nh.cbbg.render.ClassicDither;
 import com.qb20nh.cbbg.render.ClassicFramebuffers;
+import com.qb20nh.cbbg.render.ClassicNoise;
 import com.qb20nh.cbbg.render.GenerationNotifications;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
@@ -26,22 +27,28 @@ public final class CbbgClient implements ClientModInitializer {
 
   @Override
   public void onInitializeClient() {
-    if (ClassicBackendPlugin.usesVulkanMod()) return;
-    CbbgClientCommands.register(ClassicFramebuffers::tick, ClassicDither::reload);
+    boolean vulkanMod = ClassicBackendPlugin.usesVulkanMod();
+    // VulkanMod selects target precision when it begins its next frame.
+    CbbgClientCommands.register(
+        vulkanMod ? () -> {} : ClassicFramebuffers::tick, ClassicNoise::reload);
+    ClientTickEvents.END_CLIENT_TICK.register(
+        client -> {
+          if (!vulkanMod) {
+            ClassicFramebuffers.tick();
+            ClassicDither.tick();
+          }
+          GenerationNotifications.tick();
+        });
+    ClientPlayConnectionEvents.JOIN.register(
+        (handler, sender, client) -> GenerationNotifications.onWorldJoin());
+    ClientLifecycleEvents.CLIENT_STOPPING.register(client -> ClassicNoise.close());
+    if (vulkanMod) return;
     CoreShaderRegistrationCallback.EVENT.register(
         context ->
             context.register(
                 new ResourceLocation("cbbg", "classic_dither"),
                 DefaultVertexFormat.POSITION_TEX_COLOR,
                 ClassicDither::setShader));
-    ClientTickEvents.END_CLIENT_TICK.register(
-        client -> {
-          ClassicFramebuffers.tick();
-          ClassicDither.tick();
-          GenerationNotifications.tick();
-        });
-    ClientPlayConnectionEvents.JOIN.register(
-        (handler, sender, client) -> GenerationNotifications.onWorldJoin());
     ClientLifecycleEvents.CLIENT_STOPPING.register(client -> ClassicDither.close());
   }
 }

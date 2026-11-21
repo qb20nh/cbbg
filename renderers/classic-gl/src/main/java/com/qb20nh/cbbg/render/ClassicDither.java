@@ -4,34 +4,20 @@ import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.platform.GlStateManager;
 import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.blaze3d.platform.TextureUtil;
-import com.mojang.blaze3d.systems.RenderSystem;
-import com.qb20nh.cbbg.Cbbg;
 import com.qb20nh.cbbg.CbbgClient;
 import com.qb20nh.cbbg.compat.renderscale.RenderScaleCompat;
 import com.qb20nh.cbbg.config.CbbgConfig;
-import com.qb20nh.cbbg.render.stbn.STBNCache;
-import com.qb20nh.cbbg.render.stbn.STBNGenerator;
-import com.qb20nh.cbbg.render.stbn.STBNLoader;
-import java.io.IOException;
-import java.nio.file.Files;
-import java.util.concurrent.CompletableFuture;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.ShaderInstance;
 import org.lwjgl.opengl.GL11;
 
 public final class ClassicDither {
-  private record NoiseSpec(int size, int depth, long seed) {}
-
   private static ShaderInstance shader;
-  private static NoiseSpec requested;
-  private static CompletableFuture<STBNGenerator.STBNFields> pending;
   private static NativeImage[] images;
   private static int[] textures;
   private static int nextFrame;
   private static int lastFrame;
   private static long presentations;
-  private static boolean failed;
-  private static CompletableFuture<Void> notification;
 
   private ClassicDither() {}
 
@@ -39,67 +25,8 @@ public final class ClassicDither {
     shader = loaded;
   }
 
-  public static void reload(boolean force) {
-    RenderSystem.assertOnRenderThread();
-    if (!force && pending != null && !pending.isDone()) return;
-    if (force) {
-      CbbgConfig config = CbbgConfig.get();
-      try {
-        Files.deleteIfExists(
-            STBNCache.CACHE_DIR.resolve(
-                String.format(
-                    STBNCache.HASH_FILE_FMT,
-                    config.stbnSize(),
-                    config.stbnSize(),
-                    config.stbnDepth())));
-      } catch (IOException failure) {
-        Cbbg.LOGGER.error("Could not invalidate STBN cache for regeneration", failure);
-        return;
-      }
-    }
-    if (force) {
-      notification = new CompletableFuture<>();
-      GenerationNotifications.started(notification);
-    }
-    requested = null;
-  }
-
   public static void tick() {
-    // Settings edits take effect on the next explicit reload, not while confirming them.
-    if (requested == null) {
-      CbbgConfig config = CbbgConfig.get();
-      requested = new NoiseSpec(config.stbnSize(), config.stbnDepth(), config.stbnSeed());
-      failed = false;
-      pending =
-          STBNGenerator.generateAsync(
-              requested.size(), requested.size(), requested.depth(), requested.seed());
-    }
-    NoiseSpec spec = requested;
-    if (pending == null || !pending.isDone()) return;
-    try {
-      var request = pending;
-      NativeImage[] loaded;
-      try {
-        loaded =
-            STBNLoader.loadOrGenerate(
-                spec.size(), spec.size(), spec.depth(), spec.seed(), request.join());
-      } finally {
-        STBNGenerator.release(request);
-      }
-      if (loaded == null) {
-        // A cache may disappear between the worker's validation and image decoding.
-        pending = STBNGenerator.generateAsync(spec.size(), spec.size(), spec.depth(), spec.seed());
-        return;
-      }
-      upload(loaded);
-      pending = null;
-      if (notification != null) notification.complete(null);
-    } catch (Exception failure) {
-      pending = null;
-      failed = true;
-      if (notification != null) notification.completeExceptionally(failure);
-      Cbbg.LOGGER.error("Could not prepare classic STBN textures", failure);
-    }
+    ClassicNoise.tick(ClassicDither::upload);
   }
 
   private static void upload(NativeImage[] loaded) {
@@ -135,7 +62,7 @@ public final class ClassicDither {
         && CbbgClient.isEnabled()
         && shader != null
         && textures != null
-        && !failed;
+        && !ClassicNoise.hasFailed();
   }
 
   public static ShaderInstance forPresentation(RenderTarget target, ShaderInstance vanilla) {
@@ -150,14 +77,6 @@ public final class ClassicDither {
     shader.safeGetUniform("Demo").set(config.mode() == CbbgConfig.Mode.DEMO ? 1f : 0f);
     presentations++;
     return shader;
-  }
-
-  public static boolean isReady() {
-    return requested != null && shader != null && textures != null && pending == null && !failed;
-  }
-
-  public static boolean hasFailed() {
-    return failed;
   }
 
   static void blitForScreenshot(RenderTarget target) {
@@ -179,12 +98,7 @@ public final class ClassicDither {
   }
 
   public static void close() {
-    GenerationNotifications.close();
-    notification = null;
-    if (pending != null) pending.cancel(true);
-    pending = null;
     closeFrames();
     shader = null; // Minecraft owns and closes registered shader programs.
-    requested = null;
   }
 }

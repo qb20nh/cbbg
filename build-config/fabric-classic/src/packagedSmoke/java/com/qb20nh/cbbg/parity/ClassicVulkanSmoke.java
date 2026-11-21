@@ -1,5 +1,6 @@
 package com.qb20nh.cbbg.parity;
 
+import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import net.fabricmc.loader.api.FabricLoader;
@@ -11,13 +12,40 @@ import org.lwjgl.glfw.GLFW;
 /** Observes VulkanMod on a GLFW no-API window without using OpenGL for the test. */
 public final class ClassicVulkanSmoke {
   private static long presentations;
+  private static final boolean CHECK_LIFECYCLE = Boolean.getBoolean("cbbg.test.vulkanLifecycle");
+  static long ditherDraws;
+  static int noiseWidth;
+  private static Object ditherPipeline;
+  private static Method boundTexture;
   private int ticks;
   private boolean opened;
   private boolean finished;
   private long joinedAt = -1;
+  private ClassicVulkanLifecycle lifecycle;
 
   public static void observePresent() {
     presentations++;
+  }
+
+  public static void observeDither(Object pipeline) {
+    if (!CHECK_LIFECYCLE) return;
+    try {
+      if (ditherPipeline == null) {
+        if (!"cbbg_vulkanmod_dither".equals(pipeline.getClass().getField("name").get(pipeline))) {
+          return;
+        }
+        ditherPipeline = pipeline;
+        boundTexture =
+            Class.forName("net.vulkanmod.vulkan.texture.VTextureSelector")
+                .getMethod("getBoundTexture", int.class);
+      }
+      if (pipeline != ditherPipeline) return;
+      Object noise = boundTexture.invoke(null, 1);
+      noiseWidth = noise.getClass().getField("width").getInt(noise);
+      ditherDraws++;
+    } catch (ReflectiveOperationException failure) {
+      throw new AssertionError("Could not observe the bound Vulkan noise texture", failure);
+    }
   }
 
   void tick(Minecraft client) {
@@ -31,16 +59,14 @@ public final class ClassicVulkanSmoke {
       } else if (opened && client.player != null && client.screen == null) {
         if (joinedAt < 0) joinedAt = presentations;
         if (presentations < joinedAt + 12) return;
-        boolean reference = Boolean.getBoolean("cbbg.test.reference");
-        boolean disabled = Boolean.getBoolean("cbbg.test.disabled");
-        if (!reference) checkSceneFormat(disabled);
-        try (var image = Screenshot.takeScreenshot(client.getMainRenderTarget())) {
-          if (image.getWidth() != client.getWindow().getWidth()
-              || image.getHeight() != client.getWindow().getHeight()) {
-            throw new AssertionError("Vulkan screenshot dimensions differ from the window");
-          }
-          checkDivider(image, !reference && !disabled);
-          image.writeToFile(client.gameDirectory.toPath().resolve("vulkan-world.png"));
+        if (CHECK_LIFECYCLE) {
+          if (lifecycle == null) lifecycle = new ClassicVulkanLifecycle();
+          if (!lifecycle.tick(client, presentations)) return;
+        } else {
+          boolean reference = Boolean.getBoolean("cbbg.test.reference");
+          boolean disabled = Boolean.getBoolean("cbbg.test.disabled");
+          if (!reference) checkSceneFormat(disabled ? 44 : 97);
+          capture(client, "vulkan-world.png", !reference && !disabled);
         }
         System.out.println("CBBG_CLASSIC_VULKAN_WORLD presentations=" + (presentations - joinedAt));
         finished = true;
@@ -51,7 +77,18 @@ public final class ClassicVulkanSmoke {
     }
   }
 
-  private static void checkSceneFormat(boolean disabled) throws ReflectiveOperationException {
+  static void capture(Minecraft client, String name, boolean divider) throws Exception {
+    try (var image = Screenshot.takeScreenshot(client.getMainRenderTarget())) {
+      if (image.getWidth() != client.getWindow().getWidth()
+          || image.getHeight() != client.getWindow().getHeight()) {
+        throw new AssertionError("Vulkan screenshot dimensions differ from the window");
+      }
+      checkDivider(image, divider);
+      image.writeToFile(client.gameDirectory.toPath().resolve(name));
+    }
+  }
+
+  static void checkSceneFormat(int expected) throws ReflectiveOperationException {
     var renderer = Class.forName("net.vulkanmod.vulkan.Renderer");
     var instance = renderer.getMethod("getInstance").invoke(null);
     var mainPass = renderer.getMethod("getMainPass").invoke(instance);
@@ -61,11 +98,12 @@ public final class ClassicVulkanSmoke {
     var texture = textureClass.getMethod("getTexture", int.class).invoke(null, id);
     var image = textureClass.getMethod("getVulkanImage").invoke(texture);
     int format = image.getClass().getField("format").getInt(image);
-    if (disabled ? format != 37 && format != 44 : format != 97) {
+    if (format != expected && !(expected == 44 && format == 37)) {
       throw new AssertionError(
-          "Unexpected Vulkan scene format " + format + " disabled=" + disabled);
+          "Unexpected Vulkan scene format " + format + ", expected " + expected);
     }
-    System.out.println("CBBG_CLASSIC_VULKAN_SCENE format=" + format + " disabled=" + disabled);
+    System.out.println(
+        "CBBG_CLASSIC_VULKAN_SCENE format=" + format + " disabled=" + (expected == 44));
   }
 
   private static void checkDivider(

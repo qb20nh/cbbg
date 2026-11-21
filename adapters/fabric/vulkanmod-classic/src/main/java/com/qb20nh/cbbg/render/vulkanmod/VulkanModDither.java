@@ -5,15 +5,12 @@ import static org.lwjgl.vulkan.VK10.*;
 
 import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
-import com.qb20nh.cbbg.Cbbg;
 import com.qb20nh.cbbg.config.CbbgConfig;
-import com.qb20nh.cbbg.render.stbn.STBNGenerator;
-import com.qb20nh.cbbg.render.stbn.STBNLoader;
+import com.qb20nh.cbbg.render.ClassicNoise;
 import java.io.IOException;
 import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
-import java.util.concurrent.CompletableFuture;
 import net.vulkanmod.vulkan.Renderer;
 import net.vulkanmod.vulkan.shader.GraphicsPipeline;
 import net.vulkanmod.vulkan.shader.Pipeline;
@@ -28,43 +25,21 @@ import org.lwjgl.system.MemoryStack;
 import org.lwjgl.vulkan.VkCommandBuffer;
 
 final class VulkanModDither {
-  private record NoiseSpec(int size, int depth, long seed) {}
-
   private final ManualUBO settings = new ManualUBO(2, VK_SHADER_STAGE_FRAGMENT_BIT, 4);
   private GraphicsPipeline pipeline;
-  private NoiseSpec requested;
-  private CompletableFuture<STBNGenerator.STBNFields> pending;
   private VulkanImage[] noise;
   private int frame;
 
-  void prepare() {
-    if (pipeline == null) pipeline = createPipeline();
-    CbbgConfig config = CbbgConfig.get();
-    var spec = new NoiseSpec(config.stbnSize(), config.stbnDepth(), config.stbnSeed());
-    if (!spec.equals(requested)) {
-      requested = spec;
-      pending = STBNGenerator.generateAsync(spec.size(), spec.size(), spec.depth(), spec.seed());
-    }
-    if (pending == null || !pending.isDone()) return;
-    var finished = pending;
-    pending = null;
-    try {
-      var images =
-          STBNLoader.loadOrGenerate(
-              spec.size(), spec.size(), spec.depth(), spec.seed(), finished.join());
-      STBNGenerator.release(finished);
-      if (images == null) {
-        pending = STBNGenerator.generateAsync(spec.size(), spec.size(), spec.depth(), spec.seed());
-        return;
-      }
-      var replacement = upload(images);
-      freeImages(noise);
-      noise = replacement;
-      frame = 0;
-    } catch (Exception failure) {
-      STBNGenerator.release(finished);
-      Cbbg.LOGGER.error("Could not prepare VulkanMod STBN textures", failure);
-    }
+  void prepare(boolean active) {
+    if (active && pipeline == null) pipeline = createPipeline();
+    if (active || ClassicNoise.isPreparing()) ClassicNoise.tick(this::replaceNoise);
+  }
+
+  private void replaceNoise(NativeImage[] images) {
+    var replacement = upload(images);
+    freeImages(noise);
+    noise = replacement;
+    frame = 0;
   }
 
   private static VulkanImage[] upload(NativeImage[] images) {
@@ -119,7 +94,7 @@ final class VulkanModDither {
     try {
       CbbgConfig config = CbbgConfig.get();
       var parameters = stack.calloc(16);
-      parameters.putFloat(0, noise == null ? 0f : config.strength());
+      parameters.putFloat(0, noise == null || ClassicNoise.hasFailed() ? 0f : config.strength());
       parameters.putFloat(4, config.mode() == CbbgConfig.Mode.DEMO ? 1f : 0f);
       settings.setSrc(memAddress(parameters), parameters.capacity());
       var state =
@@ -182,7 +157,6 @@ final class VulkanModDither {
 
   void close() {
     freeImages(noise);
-    if (pending != null) pending.cancel(false);
     if (pipeline != null) pipeline.cleanUp();
   }
 }

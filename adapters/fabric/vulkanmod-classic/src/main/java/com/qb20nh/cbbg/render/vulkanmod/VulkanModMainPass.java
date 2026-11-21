@@ -33,6 +33,7 @@ public final class VulkanModMainPass implements MainPass {
   @Override
   public void begin(VkCommandBuffer commands, MemoryStack stack) {
     active = CbbgClient.isEnabled();
+    dither.prepare(active);
     if (!active) {
       if (scene != null) {
         Vulkan.waitIdle();
@@ -59,7 +60,6 @@ public final class VulkanModMainPass implements MainPass {
       scene.framebuffer.resize(width, height);
       GlTexture.bindIdToImage(scene.textureId, scene.framebuffer.getColorAttachment());
     }
-    dither.prepare();
     scene.begin(commands, scene.initialPass, stack);
   }
 

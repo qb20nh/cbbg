@@ -2,8 +2,8 @@ package com.qb20nh.cbbg.config.gui;
 
 import com.qb20nh.cbbg.compat.iris.IrisCompat;
 import com.qb20nh.cbbg.config.CbbgConfig;
-import com.qb20nh.cbbg.render.ClassicDither;
 import com.qb20nh.cbbg.render.ClassicFramebuffers;
+import com.qb20nh.cbbg.render.ClassicNoise;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.ConfirmScreen;
 import net.minecraft.client.gui.screens.Screen;
@@ -24,7 +24,7 @@ public final class CbbgConfigScreen extends Screen {
             font,
             width,
             height,
-            ClassicDither.hasFailed(),
+            ClassicNoise.hasFailed(),
             this::confirmGeneration,
             this::onClose)
         .init();
@@ -35,7 +35,7 @@ public final class CbbgConfigScreen extends Screen {
     minecraft.setScreen(
         new ConfirmScreen(
             confirmed -> {
-              if (confirmed) ClassicDither.reload(true);
+              if (confirmed) ClassicNoise.reload(true);
               minecraft.setScreen(this);
             },
             Component.translatable("cbbg.config.confirm.regenerate_stbn.title"),
@@ -85,7 +85,7 @@ public final class CbbgConfigScreen extends Screen {
           cx,
           top + CbbgConfigWidgets.CARD_HEIGHT - 36,
           0xFFFFAA00);
-    } else if (ClassicDither.hasFailed()) {
+    } else if (ClassicNoise.hasFailed()) {
       graphics.drawCenteredString(
           font,
           Component.translatable("cbbg.config.status.disabled_render_error"),

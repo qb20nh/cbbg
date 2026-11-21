@@ -5,6 +5,9 @@ import com.qb20nh.cbbg.parity.ClassicVulkanSmoke;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Pseudo;
 import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Coerce;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Pseudo
 @Mixin(targets = "net.vulkanmod.vulkan.Renderer", remap = false)
@@ -19,5 +22,10 @@ abstract class ClassicVulkanObservation {
   private int cbbg$observePresent(int result) {
     if (result == 0) ClassicVulkanSmoke.observePresent(); // VK_SUCCESS
     return result;
+  }
+
+  @Inject(method = "uploadAndBindUBOs", at = @At("HEAD"))
+  private void cbbg$observeDither(@Coerce Object pipeline, CallbackInfo ci) {
+    ClassicVulkanSmoke.observeDither(pipeline);
   }
 }
