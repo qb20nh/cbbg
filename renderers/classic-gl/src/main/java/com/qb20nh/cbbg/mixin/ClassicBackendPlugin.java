@@ -24,7 +24,11 @@ public final class ClassicBackendPlugin implements IMixinConfigPlugin {
   public List<String> getMixins() {
     return usesVulkanMod()
         ? List.of(
-            "vulkanmod.FloatImageMixin", "vulkanmod.RendererMixin", "vulkanmod.ScreenshotMixin")
+            "vulkanmod.FloatImageMixin",
+            "vulkanmod.FramebufferAllocationMixin",
+            "vulkanmod.MemoryManagerMixin",
+            "vulkanmod.RendererMixin",
+            "vulkanmod.ScreenshotMixin")
         : null;
   }
 

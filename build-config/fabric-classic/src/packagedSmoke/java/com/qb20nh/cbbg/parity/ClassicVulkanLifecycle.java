@@ -77,7 +77,7 @@ final class ClassicVulkanLifecycle {
         if (client.getWindow().getWidth() != width || client.getWindow().getHeight() != height) {
           return false;
         }
-        checkSceneFormat(97);
+        checkSceneFormat(Integer.getInteger("cbbg.test.vulkanResizedFormat", 97));
         capture(client, "vulkan-resized.png", true);
         reload = client.reloadResourcePacks();
         phase = Phase.RELOADED;
@@ -85,7 +85,7 @@ final class ClassicVulkanLifecycle {
       case RELOADED -> {
         if (!reload.isDone() || client.getOverlay() != null) return false;
         reload.join();
-        checkSceneFormat(97);
+        checkSceneFormat(Integer.getInteger("cbbg.test.vulkanResizedFormat", 97));
         if (ClassicVulkanSmoke.noiseWidth != 32) {
           throw new AssertionError("Resource reload lost the 32-pixel noise texture");
         }

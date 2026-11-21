@@ -2,10 +2,13 @@ package com.qb20nh.cbbg.render.vulkanmod;
 
 import static org.lwjgl.vulkan.VK10.*;
 
+import com.qb20nh.cbbg.Cbbg;
 import com.qb20nh.cbbg.CbbgClient;
 import com.qb20nh.cbbg.config.CbbgConfig;
+import com.qb20nh.cbbg.config.CbbgConfig.PixelFormat;
 import com.qb20nh.cbbg.render.ClassicFramebuffers;
 import com.qb20nh.cbbg.render.FormatPolicy;
+import java.util.EnumSet;
 import net.vulkanmod.gl.GlTexture;
 import net.vulkanmod.vulkan.Renderer;
 import net.vulkanmod.vulkan.Vulkan;
@@ -19,13 +22,16 @@ import org.lwjgl.vulkan.VkFormatProperties;
 
 /** Renders the main scene offscreen when the effect is active. */
 public final class VulkanModMainPass implements MainPass {
+  private static final ThreadLocal<Boolean> ALLOCATING_SCENE = new ThreadLocal<>();
+
   private final Renderer renderer;
   private final MainPass original;
   private final VulkanModDither dither = new VulkanModDither();
   private Scene scene;
   private boolean active;
-  private CbbgConfig.PixelFormat requested;
-  private int format;
+  private PixelFormat requested;
+  private int sceneWidth;
+  private int sceneHeight;
   private boolean checkedFormats;
   private boolean halfFloatSupported;
   private boolean fullFloatSupported;
@@ -37,50 +43,84 @@ public final class VulkanModMainPass implements MainPass {
         () -> checkedFormats && !halfFloatSupported && !fullFloatSupported);
   }
 
+  public static boolean isAllocatingScene() {
+    return ALLOCATING_SCENE.get() != null;
+  }
+
   @Override
   public void begin(VkCommandBuffer commands, MemoryStack stack) {
     active = CbbgClient.isEnabled();
-    dither.prepare(active);
     if (!active) {
+      requested = null;
       if (scene != null) {
         Vulkan.waitIdle();
         releaseScene();
       }
-      original.begin(commands, stack);
-      return;
-    }
-    if (requested != CbbgConfig.get().pixelFormat()) {
-      requested = CbbgConfig.get().pixelFormat();
+    } else {
       if (!checkedFormats) {
         VkFormatProperties properties = VkFormatProperties.malloc(stack);
         halfFloatSupported = supportsFormat(VK_FORMAT_R16G16B16A16_SFLOAT, properties);
         fullFloatSupported = supportsFormat(VK_FORMAT_R32G32B32A32_SFLOAT, properties);
         checkedFormats = true;
       }
-      format =
-          toVkFormat(
-              FormatPolicy.effective(
-                  requested,
-                  candidate ->
-                      candidate == CbbgConfig.PixelFormat.RGBA16F
-                          ? halfFloatSupported
-                          : fullFloatSupported));
+      resizeScene();
     }
+    active = active && scene != null;
+    dither.prepare(active);
+    if (active) scene.begin(commands, scene.initialPass, stack);
+    else original.begin(commands, stack);
+  }
+
+  private void resizeScene() {
     var swapchain = renderer.getSwapChain();
     int width = swapchain.getWidth();
     int height = swapchain.getHeight();
-    if (scene == null || scene.framebuffer.getFormat() != format) {
-      if (scene != null) {
-        Vulkan.waitIdle();
+    PixelFormat preference = CbbgConfig.get().pixelFormat();
+    if (requested == preference && sceneWidth == width && sceneHeight == height) return;
+    requested = preference;
+    sceneWidth = width;
+    sceneHeight = height;
+
+    var failed = EnumSet.noneOf(PixelFormat.class);
+    while (true) {
+      PixelFormat selected =
+          FormatPolicy.effective(
+              requested,
+              candidate ->
+                  !failed.contains(candidate)
+                      && (candidate == PixelFormat.RGBA16F
+                          ? halfFloatSupported
+                          : fullFloatSupported));
+      int format = toVkFormat(selected);
+      ALLOCATING_SCENE.set(true);
+      try {
+        if (scene == null || scene.framebuffer.getFormat() != format) {
+          if (scene != null) {
+            Vulkan.waitIdle();
+            releaseScene();
+          }
+          scene = new Scene(width, height, format);
+        } else if (scene.framebuffer.getWidth() != width
+            || scene.framebuffer.getHeight() != height) {
+          // VulkanMod waits for the device before updating the swapchain extent.
+          scene.framebuffer.resize(width, height);
+          GlTexture.bindIdToImage(scene.textureId, scene.framebuffer.getColorAttachment());
+        }
+        return;
+      } catch (VulkanImageAllocationFailure failure) {
         releaseScene();
+        Cbbg.LOGGER.warn(
+            "VulkanMod scene allocation failed for {} at {}x{}: {}",
+            selected,
+            width,
+            height,
+            failure.getMessage());
+        if (selected == PixelFormat.RGBA8) return;
+        failed.add(selected);
+      } finally {
+        ALLOCATING_SCENE.remove();
       }
-      scene = new Scene(width, height, format);
-    } else if (scene.framebuffer.getWidth() != width || scene.framebuffer.getHeight() != height) {
-      // VulkanMod waits for the device before updating the swapchain extent.
-      scene.framebuffer.resize(width, height);
-      GlTexture.bindIdToImage(scene.textureId, scene.framebuffer.getColorAttachment());
     }
-    scene.begin(commands, scene.initialPass, stack);
   }
 
   @Override

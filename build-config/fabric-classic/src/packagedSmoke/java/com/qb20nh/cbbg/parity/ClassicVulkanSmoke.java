@@ -99,7 +99,10 @@ public final class ClassicVulkanSmoke {
           if (!reference) {
             checkSceneFormat(Integer.getInteger("cbbg.test.vulkanSceneFormat", disabled ? 44 : 97));
           }
-          capture(client, "vulkan-world.png", !reference && !disabled);
+          capture(
+              client,
+              "vulkan-world.png",
+              !reference && !disabled && !Boolean.getBoolean("cbbg.test.vulkanOriginalTarget"));
         }
         System.out.println("CBBG_CLASSIC_VULKAN_WORLD presentations=" + (presentations - joinedAt));
         finished = true;
