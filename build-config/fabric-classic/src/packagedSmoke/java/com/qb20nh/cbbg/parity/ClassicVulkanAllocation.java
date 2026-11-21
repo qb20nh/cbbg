@@ -49,17 +49,7 @@ public final class ClassicVulkanAllocation {
     boolean isColor =
         flags == 0x14 && (colorFormat == RGBA8 || colorFormat == RGBA16F || colorFormat == RGBA32F);
     boolean isDepth = flags == 0x24;
-    boolean scene =
-        (isColor || isDepth)
-            && STACK.walk(
-                stack ->
-                    stack
-                        .map(StackWalker.StackFrame::getDeclaringClass)
-                        .map(type -> type.getProtectionDomain().getCodeSource())
-                        .anyMatch(
-                            source ->
-                                source != null
-                                    && source.getLocation().getPath().endsWith("-fabric.jar")));
+    boolean scene = (isColor || isDepth) && hasCbbgCaller();
     if (scene
         && isColor
         && (PROFILE.equals("all") || (PROFILE.equals("float") && colorFormat != RGBA8))) {
@@ -71,11 +61,23 @@ public final class ClassicVulkanAllocation {
     }
     int result =
         (int) nativeAllocate.invoke(null, allocator, info, options, image, allocation, details);
+    if (scene && result == 0) ClassicVulkanNativeAllocation.observeImage(image.get(0));
     if (depthRejected && result == 0 && image.get(0) == partialColor) partialColor = 0;
     if (scene && isColor && result == 0 && !depthRejected && isPartialColor(colorFormat, info)) {
       partialColor = image.get(0);
     }
     return result;
+  }
+
+  static boolean hasCbbgCaller() {
+    return STACK.walk(
+        stack ->
+            stack
+                .map(StackWalker.StackFrame::getDeclaringClass)
+                .map(type -> type.getProtectionDomain().getCodeSource())
+                .anyMatch(
+                    source ->
+                        source != null && source.getLocation().getPath().endsWith("-fabric.jar")));
   }
 
   private static boolean isPartialColor(int colorFormat, Object info)
@@ -94,6 +96,7 @@ public final class ClassicVulkanAllocation {
   }
 
   public static void observeFree(long image) {
+    ClassicVulkanNativeAllocation.observeImageFree(image);
     if (image != 0 && image == partialColor && depthRejected) {
       partialFrees++;
       System.out.println("CBBG_CLASSIC_VULKAN_PARTIAL_FREE count=" + partialFrees);

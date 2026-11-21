@@ -103,11 +103,10 @@ public final class VulkanModMainPass implements MainPass {
         } else if (scene.framebuffer.getWidth() != width
             || scene.framebuffer.getHeight() != height) {
           // VulkanMod waits for the device before updating the swapchain extent.
-          scene.framebuffer.resize(width, height);
-          GlTexture.bindIdToImage(scene.textureId, scene.framebuffer.getColorAttachment());
+          scene.resize(width, height);
         }
         return;
-      } catch (VulkanImageAllocationFailure failure) {
+      } catch (VulkanSceneAllocationFailure failure) {
         releaseScene();
         Cbbg.LOGGER.warn(
             "VulkanMod scene allocation failed for {} at {}x{}: {}",
@@ -218,9 +217,36 @@ public final class VulkanModMainPass implements MainPass {
 
     Scene(int width, int height, int format) {
       framebuffer = Framebuffer.builder(width, height, 1, true).setFormat(format).build();
-      initialPass = createPass(VK_ATTACHMENT_LOAD_OP_DONT_CARE);
-      reloadPass = createPass(VK_ATTACHMENT_LOAD_OP_LOAD);
+      RenderPass initial = null;
+      RenderPass reload = null;
+      try {
+        initial = createPass(VK_ATTACHMENT_LOAD_OP_DONT_CARE);
+        reload = createPass(VK_ATTACHMENT_LOAD_OP_LOAD);
+        access().cbbg$prepareHandles(initial, reload);
+      } catch (RuntimeException failure) {
+        access().cbbg$discardUnsubmitted();
+        if (reload != null) vkDestroyRenderPass(Vulkan.getVkDevice(), reload.getId(), null);
+        if (initial != null) vkDestroyRenderPass(Vulkan.getVkDevice(), initial.getId(), null);
+        throw failure;
+      }
+      initialPass = initial;
+      reloadPass = reload;
       textureId = GlTexture.genTextureId();
+      GlTexture.bindIdToImage(textureId, framebuffer.getColorAttachment());
+    }
+
+    private SceneFramebufferAccess access() {
+      return (SceneFramebufferAccess) framebuffer;
+    }
+
+    void resize(int width, int height) {
+      framebuffer.resize(width, height);
+      try {
+        access().cbbg$prepareHandles(initialPass, reloadPass);
+      } catch (RuntimeException failure) {
+        access().cbbg$discardUnsubmitted();
+        throw failure;
+      }
       GlTexture.bindIdToImage(textureId, framebuffer.getColorAttachment());
     }
 
