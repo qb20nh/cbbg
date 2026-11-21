@@ -33,6 +33,7 @@ final class VulkanModDither {
   private RenderPass preparedPass;
   private long pipelineHandle;
   private boolean failed;
+  private boolean noiseUploadFailed;
   private VulkanImage[] noise;
   private int frame;
 
@@ -78,12 +79,26 @@ final class VulkanModDither {
     return failed;
   }
 
-  void allowRetry() {
+  void allowPipelineRetry() {
     failed = false;
   }
 
+  void retryNoiseUpload() {
+    if (noiseUploadFailed) ClassicNoise.reload(false);
+  }
+
   private void replaceNoise(NativeImage[] images) {
-    var replacement = upload(images);
+    VulkanImage[] replacement;
+    VulkanAllocationFailure.begin();
+    try {
+      replacement = upload(images);
+      noiseUploadFailed = false;
+    } catch (VulkanAllocationFailure failure) {
+      noiseUploadFailed = true;
+      throw failure;
+    } finally {
+      VulkanAllocationFailure.end();
+    }
     freeImages(noise);
     noise = replacement;
     frame = 0;

@@ -27,8 +27,6 @@ import org.lwjgl.vulkan.VkFormatProperties;
 
 /** Renders the main scene offscreen when the effect is active. */
 public final class VulkanModMainPass implements MainPass, SimpleSynchronousResourceReloadListener {
-  private static final ThreadLocal<Boolean> ALLOCATING_SCENE = new ThreadLocal<>();
-
   private final Renderer renderer;
   private final MainPass original;
   private final VulkanModDither dither = new VulkanModDither();
@@ -40,6 +38,7 @@ public final class VulkanModMainPass implements MainPass, SimpleSynchronousResou
   private boolean checkedFormats;
   private boolean halfFloatSupported;
   private boolean fullFloatSupported;
+  private boolean initialReloadDone;
 
   public VulkanModMainPass(Renderer renderer, MainPass original) {
     this.renderer = renderer;
@@ -49,10 +48,6 @@ public final class VulkanModMainPass implements MainPass, SimpleSynchronousResou
         () -> checkedFormats && !halfFloatSupported && !fullFloatSupported);
   }
 
-  public static boolean isAllocatingScene() {
-    return ALLOCATING_SCENE.get() != null;
-  }
-
   @Override
   public ResourceLocation getFabricId() {
     return new ResourceLocation("cbbg", "vulkanmod_dither");
@@ -60,7 +55,13 @@ public final class VulkanModMainPass implements MainPass, SimpleSynchronousResou
 
   @Override
   public void onResourceManagerReload(ResourceManager resources) {
-    dither.allowRetry();
+    dither.allowPipelineRetry();
+    // Keep the startup fallback until the first reload after initialization.
+    if (initialReloadDone) {
+      requested = null;
+      dither.retryNoiseUpload();
+    }
+    initialReloadDone = true;
   }
 
   @Override
@@ -112,7 +113,7 @@ public final class VulkanModMainPass implements MainPass, SimpleSynchronousResou
                           ? halfFloatSupported
                           : fullFloatSupported));
       int format = toVkFormat(selected);
-      ALLOCATING_SCENE.set(true);
+      VulkanAllocationFailure.begin();
       try {
         if (scene == null || scene.framebuffer.getFormat() != format) {
           if (scene != null) {
@@ -126,7 +127,7 @@ public final class VulkanModMainPass implements MainPass, SimpleSynchronousResou
           scene.resize(width, height);
         }
         return;
-      } catch (VulkanSceneAllocationFailure failure) {
+      } catch (VulkanAllocationFailure failure) {
         releaseScene();
         Cbbg.LOGGER.warn(
             "VulkanMod scene allocation failed for {} at {}x{}: {}",
@@ -137,7 +138,7 @@ public final class VulkanModMainPass implements MainPass, SimpleSynchronousResou
         if (selected == PixelFormat.RGBA8) return;
         failed.add(selected);
       } finally {
-        ALLOCATING_SCENE.remove();
+        VulkanAllocationFailure.end();
       }
     }
   }

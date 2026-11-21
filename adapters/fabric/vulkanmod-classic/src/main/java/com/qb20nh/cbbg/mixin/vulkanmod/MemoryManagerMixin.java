@@ -1,7 +1,7 @@
 package com.qb20nh.cbbg.mixin.vulkanmod;
 
 import com.llamalad7.mixinextras.injector.ModifyExpressionValue;
-import com.qb20nh.cbbg.render.vulkanmod.VulkanSceneAllocationFailure;
+import com.qb20nh.cbbg.render.vulkanmod.VulkanAllocationFailure;
 import net.vulkanmod.vulkan.memory.MemoryManager;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -16,6 +16,6 @@ abstract class MemoryManagerMixin {
               target =
                   "Lorg/lwjgl/util/vma/Vma;vmaCreateImage(JLorg/lwjgl/vulkan/VkImageCreateInfo;Lorg/lwjgl/util/vma/VmaAllocationCreateInfo;Ljava/nio/LongBuffer;Lorg/lwjgl/PointerBuffer;Lorg/lwjgl/util/vma/VmaAllocationInfo;)I"))
   private int cbbg$classifyImageAllocation(int result) {
-    return VulkanSceneAllocationFailure.check(result, "image");
+    return VulkanAllocationFailure.check(result, "image");
   }
 }
