@@ -121,6 +121,20 @@
       "backends": ["vulkan"],
       "restart": false,
       "entrypoints": ["vulkan-native-framebuffer"]
+    },
+    {
+      "suite": "vulkan-sampler-scene",
+      "profiles": ["vulkanmod"],
+      "backends": ["vulkan"],
+      "restart": false,
+      "entrypoints": ["vulkan-sampler-scene"]
+    },
+    {
+      "suite": "vulkan-sampler-noise",
+      "profiles": ["vulkanmod"],
+      "backends": ["vulkan"],
+      "restart": false,
+      "entrypoints": ["vulkan-sampler-noise"]
     }
   ]
 }

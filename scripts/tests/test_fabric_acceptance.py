@@ -44,7 +44,9 @@ class FabricAcceptanceTests(unittest.TestCase):
              ('vulkan-vma-resize', 'vulkanmod', ['vulkan-vma-resize']),
              ('vulkan-native-view', 'vulkanmod', ['vulkan-native-view']),
              ('vulkan-native-pass', 'vulkanmod', ['vulkan-native-pass']),
-             ('vulkan-native-framebuffer', 'vulkanmod', ['vulkan-native-framebuffer'])],
+             ('vulkan-native-framebuffer', 'vulkanmod', ['vulkan-native-framebuffer']),
+             ('vulkan-sampler-scene', 'vulkanmod', ['vulkan-sampler-scene']),
+             ('vulkan-sampler-noise', 'vulkanmod', ['vulkan-sampler-noise'])],
             [(run['suite'], run['profile'], run['entrypoints'])
              for run in runs if run['backend'] == 'vulkan'],
         )

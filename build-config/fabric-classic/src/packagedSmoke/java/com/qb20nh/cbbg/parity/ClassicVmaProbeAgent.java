@@ -36,6 +36,7 @@ public final class ClassicVmaProbeAgent {
   public static void premain(String modPath, Instrumentation instrumentation)
       throws MalformedURLException {
     URL mod = Path.of(modPath).toUri().toURL();
+    boolean samplerProbe = System.getProperty("cbbg.test.vulkanSamplerFault") != null;
     URL candidate = Path.of(System.getProperty("cbbg.test.jar")).toUri().toURL();
     boolean nativeProbe = System.getProperty("cbbg.test.vulkanNativeFailure") != null;
     String scene =
@@ -54,6 +55,9 @@ public final class ClassicVmaProbeAgent {
               byte[] bytes) {
             if (name == null || domain == null || domain.getCodeSource() == null) return null;
             URL source = domain.getCodeSource().getLocation();
+            if (samplerProbe) {
+              return mod.equals(source) ? ClassicSamplerProbe.attach(name, bytes) : null;
+            }
             if (MEMORY_MANAGER.equals(name) && mod.equals(source)) {
               return attachProbe(bytes, name, true);
             }

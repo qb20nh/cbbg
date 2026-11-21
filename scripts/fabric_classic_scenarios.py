@@ -28,6 +28,7 @@ VULKAN_NATIVE_CASES = {
                                   ('Image', 'Image', 'ImageView', 'ImageView',
                                    'RenderPass', 'RenderPass', 'Framebuffer')),
 }
+VULKAN_SAMPLER_CASES = {'vulkan-sampler-scene': 'scene', 'vulkan-sampler-noise': 'noise'}
 SETTINGS_MANIFEST = 'stbn_64x64x8.sha256'
 SETTINGS_NOISE_FRAMES = tuple(f'stbn_64x64x8_{index}.png' for index in range(8))
 CONTEXT_MODS = {'forcegl2': 'forcegl20', 'threatengl': 'threatengl'}
@@ -89,7 +90,7 @@ def includes_sodium(profile):
 def vulkan_probe_agent(scenario):
     if scenario in VULKAN_FORMAT_CASES:
         return FORMAT_PROBE_AGENT
-    if scenario in VULKAN_VMA_CASES or scenario in VULKAN_NATIVE_CASES:
+    if scenario in VULKAN_VMA_CASES or scenario in VULKAN_NATIVE_CASES or scenario in VULKAN_SAMPLER_CASES:
         return VMA_PROBE_AGENT
     return None
 
@@ -120,6 +121,9 @@ def classic_jvm_arguments(candidate, scenario, backend, profile, restart_phase=N
         if scenario in VULKAN_NATIVE_CASES:
             resource, _, _ = VULKAN_NATIVE_CASES[scenario]
             arguments += ['-Dcbbg.test.vulkanNativeFailure=' + resource, '-Dcbbg.test.vulkanSceneFormat=97']
+        if scenario in VULKAN_SAMPLER_CASES:
+            arguments += ['-Dcbbg.test.vulkanSamplerRecovery=true',
+                          '-Dcbbg.test.vulkanSamplerFault=' + VULKAN_SAMPLER_CASES[scenario]]
     else:
         arguments.append('-Dcbbg.test.compatProfile=' + profile)
         if profile in CONTEXT_MODS:
@@ -374,6 +378,25 @@ def vulkan_native_captures(log, evidence, scenario, scenes, width, height):
     return {'vulkan-world.png': (width, height)}
 
 
+def vulkan_sampler_captures(log, evidence, scenario, scenes, width, height):
+    scene = VULKAN_SAMPLER_CASES[scenario] == 'scene'
+    hooks = re.findall(r'CBBG_SAMPLER_AGENT class=(\S+) hooks=(\d+)(?=\r?\n|\Z)', log)
+    if sorted(hooks) != [('net/vulkanmod/vulkan/texture/SamplerManager', '2'),
+                         ('net/vulkanmod/vulkan/texture/VulkanImage', '1')]:
+        raise ValueError('Vulkan sampler probe call sites differ')
+    events = re.findall(r'CBBG_CLASSIC_VULKAN_SAMPLER_([^\r\n]+)', log)
+    if events != ['REJECTED count=1',
+                  f'RECOVERED scene={str(scene).lower()} failures=1 freedImages={1 if scene else 2}']:
+        raise ValueError('Vulkan sampler failure, cleanup or recovery differs')
+    if log.count('Failed to create texture sampler: VK_ERROR_OUT_OF_DEVICE_MEMORY') != 1:
+        raise ValueError('Vulkan sampler failure result differs')
+    if scenes != [('37' if scene else '97', 'false'), ('97', 'false')]:
+        raise ValueError('Vulkan sampler fallback or reloaded framebuffer differs')
+    if (evidence / 'final-cbbg.json').read_bytes() != (evidence / 'initial-cbbg.json').read_bytes():
+        raise ValueError('Vulkan sampler failure changed the saved configuration')
+    return {name: (width, height) for name in ('vulkan-sampler-fallback.png', 'vulkan-world.png')}
+
+
 def classic_result(scenario, profile, backend, log, evidence, exit_code, restart_phase=None):
     if (type(exit_code) is not int or exit_code != 0
             or re.search(r'VUID-|Validation Error|VK_ERROR_DEVICE_LOST|AssertionError|Game crashed!'
@@ -418,6 +441,8 @@ def classic_result(scenario, profile, backend, log, evidence, exit_code, restart
             captures = vulkan_vma_captures(log, evidence, scenario, scenes, width, height)
         elif scenario in VULKAN_NATIVE_CASES:
             captures = vulkan_native_captures(log, evidence, scenario, scenes, width, height)
+        elif scenario in VULKAN_SAMPLER_CASES:
+            captures = vulkan_sampler_captures(log, evidence, scenario, scenes, width, height)
         else:
             comparisons = re.findall(r'CBBG_CLASSIC_VULKAN_PIXELS mode=(\w+) channels=(\d+) mismatches=(\d+) '
                                      r'topOriginMismatches=\d+ alphaMismatches=(\d+) changedChannels=(\d+)', log)
