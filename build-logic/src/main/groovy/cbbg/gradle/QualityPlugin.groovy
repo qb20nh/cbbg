@@ -15,6 +15,7 @@ import org.gradle.process.CommandLineArgumentProvider
 class QualityPlugin implements Plugin<Project> {
     static final String PMD_VERSION = '7.28.0'
     static final String ERROR_PRONE_VERSION = '2.50.0'
+    static final String GUAVA_VERSION = '33.8.0-jre'
     static final String NULLAWAY_VERSION = '0.14.2'
     static final String JSPECIFY_VERSION = '1.0.0'
     static final String MIXIN_METHOD_ANNOTATIONS = [
@@ -58,6 +59,7 @@ class QualityPlugin implements Plugin<Project> {
         project.tasks.named('check') { dependsOn quality }
         project.tasks.matching { it.name == 'ciCheck' }.configureEach { dependsOn quality }
         project.dependencies.add('errorprone', "com.google.errorprone:error_prone_core:${ERROR_PRONE_VERSION}")
+        project.dependencies.add('errorprone', "com.google.guava:guava:${GUAVA_VERSION}")
         project.dependencies.add('errorprone', "com.uber.nullaway:nullaway:${NULLAWAY_VERSION}")
         project.dependencies.add('errorprone', project.files(modelClasspath()))
         def cpd = project.configurations.create('cpdTool') {

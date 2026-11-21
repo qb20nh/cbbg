@@ -63,6 +63,25 @@ tasks.named('compileJava') {
         assertTrue(result.output.contains('[IdentityBinaryExpression]'), result.output)
     }
 
+    @Test void patchedAnalyzerGuavaDoesNotOverrideApplicationDependencies() {
+        new File(directory, 'build.gradle').append('''
+dependencies { implementation 'com.google.guava:guava:33.5.0-jre' }
+tasks.register('verifyGuavaScopes') {
+    doLast {
+        def guavaVersion = { configuration ->
+            configuration.incoming.resolutionResult.allComponents.find {
+                it.moduleVersion?.group == 'com.google.guava' && it.moduleVersion?.name == 'guava'
+            }.moduleVersion.version
+        }
+        assert guavaVersion(configurations.annotationProcessor) == '33.8.0-jre'
+        assert guavaVersion(configurations.runtimeClasspath) == '33.5.0-jre'
+        println 'GUAVA_SCOPES_VERIFIED'
+    }
+}
+''')
+        assertTrue(runner('verifyGuavaScopes').build().output.contains('GUAVA_SCOPES_VERIFIED'))
+    }
+
     @Test void nullAwayRejectsNullableValuesAndNullableGenericElements() {
         writeClass('Broken', '''
 public int length(@org.jspecify.annotations.Nullable String value) { return value.length(); }
