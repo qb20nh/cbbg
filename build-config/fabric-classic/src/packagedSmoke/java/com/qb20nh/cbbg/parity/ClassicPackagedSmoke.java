@@ -24,11 +24,24 @@ import org.lwjgl.opengl.GL30;
 
 /** Tests the packaged mod through its public behavior and the live OpenGL pipeline. */
 public final class ClassicPackagedSmoke implements ClientModInitializer {
+  private static final String WORLD = "cbbg-smoke";
+
+  private enum Phase {
+    TITLE,
+    OPENING_WORLD,
+    DITHERED,
+    DISABLED,
+    RESTARTED_DISABLED,
+    DONE
+  }
+
   private static long presentations;
+  private final boolean restart = Boolean.getBoolean("cbbg.test.restart");
   private int ticks;
-  private int stage;
-  private long worldStart;
+  private Phase phase = Phase.TITLE;
+  private long enabledStart;
   private long disabledStart;
+  private int disabledSince;
 
   @Override
   public void onInitializeClient() {
@@ -41,59 +54,92 @@ public final class ClassicPackagedSmoke implements ClientModInitializer {
 
   private void tick(Minecraft client) {
     try {
-      if (++ticks > 1200) throw new AssertionError("Timed out at smoke stage " + stage);
-      if (stage == 0 && client.getOverlay() == null && client.screen instanceof TitleScreen) {
+      if (++ticks > 1200) throw new AssertionError("Timed out at smoke phase " + phase);
+      if (phase == Phase.TITLE
+          && client.getOverlay() == null
+          && client.screen instanceof TitleScreen title) {
         checkInstallation();
-        client
-            .createWorldOpenFlows()
-            .createFreshLevel(
-                "cbbg-smoke",
-                new LevelSettings(
-                    "CBBG smoke",
-                    GameType.CREATIVE,
-                    false,
-                    Difficulty.PEACEFUL,
-                    true,
-                    new GameRules(),
-                    WorldDataConfiguration.DEFAULT),
-                new WorldOptions(1234L, false, false),
-                access ->
-                    access
-                        .registryOrThrow(Registries.WORLD_PRESET)
-                        .getHolderOrThrow(WorldPresets.FLAT)
-                        .value()
-                        .createWorldDimensions());
-        stage = 1;
-      } else if (stage == 1 && client.player != null && client.screen == null) {
-        worldStart = presentations;
-        stage = 2;
-      } else if (stage == 2 && presentations >= worldStart + 10) {
-        requireFormat(client, GL30.GL_RGBA16F);
-        capture(client, "enabled.png");
-        var commands = ClientCommandManager.getActiveDispatcher();
-        var connection = client.getConnection();
-        if (commands == null
-            || connection == null
-            || commands.execute(
-                    "cbbg mode set disabled",
-                    (FabricClientCommandSource) connection.getSuggestionsProvider())
-                != 1) {
-          throw new AssertionError("Could not turn CBBG off through the client command");
+        if (restart) {
+          requireFormat(client, GL11.GL_RGBA8);
+          if (presentations != 0)
+            throw new AssertionError("Dither applied before opening the saved world");
+          client.createWorldOpenFlows().loadLevel(title, WORLD);
+        } else {
+          createWorld(client);
         }
-        stage = 3;
-      } else if (stage == 3) {
+        phase = Phase.OPENING_WORLD;
+      } else if (phase == Phase.OPENING_WORLD && client.player != null && client.screen == null) {
+        enabledStart = presentations;
+        disabledSince = ticks;
+        phase = restart ? Phase.RESTARTED_DISABLED : Phase.DITHERED;
+      } else if (phase == Phase.RESTARTED_DISABLED && ticks >= disabledSince + 6) {
         requireFormat(client, GL11.GL_RGBA8);
-        disabledStart = presentations;
-        stage = 4;
-      } else if (stage >= 4 && ++stage == 10) {
+        if (presentations != 0)
+          throw new AssertionError("Dither applied after restarting disabled");
+        capture(client, "restart-disabled.png");
+        System.out.println("CBBG_CLASSIC_RESTORED_DISABLED format=RGBA8 presentations=0");
+        setMode(client, "enabled");
+        phase = Phase.DITHERED;
+      } else if (phase == Phase.DITHERED && presentations >= enabledStart + 10) {
+        requireFormat(client, GL30.GL_RGBA16F);
+        if (restart) {
+          capture(client, "restart-enabled.png");
+          System.out.println("CBBG_CLASSIC_RESTART_PASS presentations=" + presentations);
+          phase = Phase.DONE;
+          client.stop();
+        } else {
+          capture(client, "enabled.png");
+          setMode(client, "disabled");
+          disabledStart = presentations;
+          disabledSince = ticks;
+          phase = Phase.DISABLED;
+        }
+      } else if (phase == Phase.DISABLED && ticks >= disabledSince + 6) {
+        requireFormat(client, GL11.GL_RGBA8);
         if (presentations != disabledStart)
           throw new AssertionError("Dither applied while disabled");
         capture(client, "disabled.png");
         System.out.println("CBBG_CLASSIC_SMOKE_PASS presentations=" + presentations);
+        phase = Phase.DONE;
         client.stop();
       }
     } catch (Exception | AssertionError failure) {
       throw new IllegalStateException("CBBG packaged smoke failed", failure);
+    }
+  }
+
+  private static void createWorld(Minecraft client) {
+    client
+        .createWorldOpenFlows()
+        .createFreshLevel(
+            WORLD,
+            new LevelSettings(
+                "CBBG smoke",
+                GameType.CREATIVE,
+                false,
+                Difficulty.PEACEFUL,
+                true,
+                new GameRules(),
+                WorldDataConfiguration.DEFAULT),
+            new WorldOptions(1234L, false, false),
+            access ->
+                access
+                    .registryOrThrow(Registries.WORLD_PRESET)
+                    .getHolderOrThrow(WorldPresets.FLAT)
+                    .value()
+                    .createWorldDimensions());
+  }
+
+  private static void setMode(Minecraft client, String mode) throws Exception {
+    var commands = ClientCommandManager.getActiveDispatcher();
+    var connection = client.getConnection();
+    if (commands == null
+        || connection == null
+        || commands.execute(
+                "cbbg mode set " + mode,
+                (FabricClientCommandSource) connection.getSuggestionsProvider())
+            != 1) {
+      throw new AssertionError("Could not set CBBG mode through the client command: " + mode);
     }
   }
 
