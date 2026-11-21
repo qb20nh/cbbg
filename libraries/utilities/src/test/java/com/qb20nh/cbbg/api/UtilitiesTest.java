@@ -92,6 +92,7 @@ class UtilitiesTest {
       Arrays.fill(source, value);
       Arrays.fill(clamped, value < 0 ? 0 : 1);
       for (int i = 3; i < source.length; i += 4) {
+        // skipcq: JAVA-E1063
         source[i] = clamped[i] = 0.5f;
       }
       byte[] expected = Dithering.rgba8(clamped, 2, 2, noise, 0, options);

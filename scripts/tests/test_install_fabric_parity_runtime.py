@@ -33,18 +33,23 @@ class FabricProfileTests(unittest.TestCase):
                 identity = 'fabric-loader-0.19.5-' + target['minecraft']
                 profile = dict(self.profile, id=identity, inheritsFrom=target['minecraft'])
                 content = json.dumps(profile).encode()
+                # skipcq: PYL-W0640
                 response = types.SimpleNamespace(content=content, json=lambda: profile,
                                                  raise_for_status=lambda: None)
                 requests = types.ModuleType('requests')
                 urls = []
+                # skipcq: PYL-W0640
                 requests.get = lambda url, timeout: (urls.append(url), response)[1]
                 install = types.ModuleType('minecraft_launcher_lib.install')
                 runtime = Path(temp) / 'runtime'
 
+                # skipcq: PYL-W0613
                 def install_version(selected, location, callback):
+                    # skipcq: PYL-W0640
                     self.assertEqual(selected, identity)
                     pending = json.loads((location / 'cbbg-install-receipt.json').read_text())
                     self.assertEqual((pending['target'], pending['profile'], pending['installed']),
+                                     # skipcq: PYL-W0640
                                      (target_id, identity, False))
                     jar = location / 'libraries/net/fabricmc/fabric-loader/0.19.5/fabric-loader-0.19.5.jar'
                     jar.parent.mkdir(parents=True)

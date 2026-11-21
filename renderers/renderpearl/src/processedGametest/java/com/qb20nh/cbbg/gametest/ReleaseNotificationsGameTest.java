@@ -419,6 +419,7 @@ public final class ReleaseNotificationsGameTest implements FabricClientGameTest 
   private static final class Gate {
     private final CountDownLatch release = new CountDownLatch(1);
     private final boolean fail;
+    // skipcq: JAVA-E1065
     private volatile @Nullable Thread worker;
     private volatile boolean interrupted;
 

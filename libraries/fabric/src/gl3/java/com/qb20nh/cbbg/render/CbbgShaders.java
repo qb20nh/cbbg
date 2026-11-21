@@ -18,6 +18,7 @@ public final class CbbgShaders {
   private CbbgShaders() {}
 
   public static @Nullable ShaderInstance get(boolean demoMode) {
+    // skipcq: JAVA-W1060
     return demoMode ? demo : dither;
   }
 

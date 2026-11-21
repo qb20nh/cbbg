@@ -86,7 +86,9 @@ public final class RenderScaleCompat {
     }
 
     try {
+      // skipcq: JAVA-W1060
       Object cfg = Objects.requireNonNull(commonGetConfig).invoke(null);
+      // skipcq: JAVA-W1060
       Object scale = Objects.requireNonNull(configGetScale).invoke(cfg);
       if (scale instanceof Number n) {
         return n.doubleValue();

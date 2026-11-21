@@ -14,11 +14,13 @@ public final class MenuBlurScope {
   private MenuBlurScope() {}
 
   public static @Nullable GpuFormat format() {
+    // skipcq: JAVA-W1060
     return format;
   }
 
   public static void run(@Nullable GpuFormat requested, Runnable action) {
     RenderSystem.assertOnRenderThread();
+    // skipcq: JAVA-W1060
     GpuFormat previous = format;
     format = requested;
     try {

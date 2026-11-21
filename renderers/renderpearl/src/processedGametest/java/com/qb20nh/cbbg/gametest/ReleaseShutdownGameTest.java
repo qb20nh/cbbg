@@ -119,7 +119,7 @@ public final class ReleaseShutdownGameTest implements FabricClientGameTest {
         }
         ReleaseGeneratingShutdownGameTest.assertNoJobOutput();
       }
-    } catch (Throwable error) {
+    } catch (Throwable error) { // skipcq: JAVA-W1076
       failure = error;
       if (error instanceof InterruptedException) Thread.currentThread().interrupt();
     } finally {

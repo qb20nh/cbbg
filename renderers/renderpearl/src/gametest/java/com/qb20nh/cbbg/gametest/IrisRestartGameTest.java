@@ -100,7 +100,7 @@ public final class IrisRestartGameTest implements FabricClientGameTest {
                     Files.createDirectories(evidence);
                     image.writeToFile(evidence.resolve("iris-restart-" + phase + ".png"));
                     capture.complete(null);
-                  } catch (Throwable failure) {
+                  } catch (Throwable failure) { // skipcq: JAVA-W1076
                     capture.completeExceptionally(failure);
                   }
                 });

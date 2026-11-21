@@ -229,6 +229,7 @@ class ParityEvidenceTest(unittest.TestCase):
                            ("loader_version", "0.19.4"), ("loader_version", "")):
             with self.subTest(key=key, value=value):
                 self.paths[0].write_bytes(original)
+                # skipcq: PYL-W0640
                 self.change_report(lambda report: report["runtime"].update({key: value}))
                 with self.assertRaises(EvidenceError):
                     self.check()
@@ -301,6 +302,7 @@ class ParityEvidenceTest(unittest.TestCase):
                              ("status", "skipped")):
             with self.subTest(field=field):
                 self.paths[0].write_bytes(original)
+                # skipcq: PYL-W0640
                 self.change_report(lambda report: report.update({field: value}))
                 with self.assertRaises(EvidenceError):
                     self.check()

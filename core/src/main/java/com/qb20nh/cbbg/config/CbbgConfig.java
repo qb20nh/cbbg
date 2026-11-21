@@ -70,7 +70,9 @@ public final class CbbgConfig {
   public static synchronized void configure(Path configFile, BiConsumer<String, Throwable> logger) {
     Path normalized = Objects.requireNonNull(configFile, "configFile").toAbsolutePath().normalize();
     Objects.requireNonNull(logger, "logger");
+    // skipcq: JAVA-W1060
     if (path != null && !path.equals(normalized)) {
+      // skipcq: JAVA-W1060
       throw new IllegalStateException("CBBG configuration already initialized at " + path);
     }
     path = normalized;
@@ -78,11 +80,13 @@ public final class CbbgConfig {
   }
 
   public static CbbgConfig get() {
+    // skipcq: JAVA-W1060
     CbbgConfig cfg = instance;
     if (cfg != null) {
       return cfg;
     }
     synchronized (CbbgConfig.class) {
+      // skipcq: JAVA-W1060
       cfg = instance;
       if (cfg != null) {
         return cfg;

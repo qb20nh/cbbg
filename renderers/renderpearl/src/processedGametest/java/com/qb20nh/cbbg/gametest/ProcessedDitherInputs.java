@@ -24,6 +24,7 @@ public final class ProcessedDitherInputs {
       @Nullable GpuTextureView input,
       @Nullable GpuTextureView noise,
       @Nullable GpuBufferSlice info) {
+    // skipcq: JAVA-W1060
     Scope scope = new Scope(current, input, noise, info);
     current = scope;
     return scope;

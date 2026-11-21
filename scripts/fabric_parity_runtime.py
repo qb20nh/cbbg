@@ -233,8 +233,8 @@ def main():
         mods.mkdir()
     (game / 'natives').mkdir(exist_ok=True)
     sources = {'candidate.jar': args.candidate, 'driver.jar': args.driver,
-               'fabric-gametest-api.jar': args.gametest_api}
-    sources.update({name + '.jar': path for name, path in dependencies.items()})
+               'fabric-gametest-api.jar': args.gametest_api,
+               **{name + '.jar': path for name, path in dependencies.items()}}
     if args.external_library:
         sources['external-library.jar'] = args.external_library
     receipt = {'target': args.target, 'backendRequested': args.backend, 'profile': args.compat,

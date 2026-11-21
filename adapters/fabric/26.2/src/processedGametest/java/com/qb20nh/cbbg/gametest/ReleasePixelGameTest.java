@@ -223,6 +223,7 @@ public final class ReleasePixelGameTest implements FabricClientGameTest {
                                   if (readFailure != null) throw new AssertionError(readFailure);
                                   byte[] rgb = actual.join();
                                   byte[] pattern = noiseBytes.join();
+                                  // skipcq: JAVA-E1109
                                   verify(rgb, pattern, noise.getWidth(0), noise.getHeight(0), demo);
                                   if (image.getWidth() != WIDTH || image.getHeight() != HEIGHT) {
                                     throw new AssertionError(

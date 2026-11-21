@@ -302,27 +302,38 @@ public final class ReleaseMenuBlurGameTest implements FabricClientGameTest {
                         } catch (Throwable problem) {
                           failure = problem;
                         } finally {
-                          try {
-                            cleanup.run();
-                          } catch (Throwable problem) {
-                            if (failure == null) failure = problem;
-                            else failure.addSuppressed(problem);
-                          }
+                          finishReadback(result, failure, cleanup);
                         }
-                        if (failure == null) result.complete(null);
-                        else result.completeExceptionally(failure);
                       },
                       0);
-            } catch (Throwable failure) {
-              cleanup.run();
-              result.completeExceptionally(failure);
+            } catch (Throwable failure) { // skipcq: JAVA-W1076
+              finishReadback(result, failure, cleanup);
             }
-          } catch (Throwable failure) {
-            closeTarget.run();
-            result.completeExceptionally(failure);
+          } catch (Throwable failure) { // skipcq: JAVA-W1076
+            finishReadback(result, failure, closeTarget);
           }
         });
     context.waitFor(client -> result.isDone(), 200);
     result.join();
+  }
+
+  // Check identity because Throwable.addSuppressed forbids self-suppression.
+  @SuppressWarnings("ReferenceEquality")
+  private static void finishReadback(
+      CompletableFuture<@Nullable Void> result, @Nullable Throwable failure, Runnable cleanup) {
+    try {
+      cleanup.run();
+    } catch (Throwable cleanupFailure) {
+      if (failure == null) {
+        failure = cleanupFailure;
+      } else if (failure != cleanupFailure) {
+        failure.addSuppressed(cleanupFailure);
+      }
+    }
+    if (failure == null) {
+      result.complete(null);
+    } else {
+      result.completeExceptionally(failure);
+    }
   }
 }

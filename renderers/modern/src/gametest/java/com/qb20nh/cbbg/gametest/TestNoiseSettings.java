@@ -8,6 +8,7 @@ import org.slf4j.LoggerFactory;
 
 /** Bounds noise-generation work in the isolated test directory. */
 @NullMarked
+// skipcq: JAVA-W1088
 public final class TestNoiseSettings implements PreLaunchEntrypoint {
   @Override
   public void onPreLaunch() {

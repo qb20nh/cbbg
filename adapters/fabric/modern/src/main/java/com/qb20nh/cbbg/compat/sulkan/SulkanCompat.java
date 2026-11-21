@@ -22,6 +22,7 @@ public final class SulkanCompat {
       if (state instanceof Boolean active) return active;
       throw new ReflectiveOperationException("Unexpected Sulkan shader state result");
     } catch (ReflectiveOperationException | LinkageError | ClassCastException failure) {
+      // skipcq: JAVA-W1060
       if (!loggedFailure) {
         loggedFailure = true;
         Cbbg.LOGGER.warn("Could not read Sulkan shader state; suspending cbbg.", failure);
