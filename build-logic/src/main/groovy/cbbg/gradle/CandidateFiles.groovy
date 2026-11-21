@@ -18,7 +18,9 @@ class CandidateFiles {
         def reader = new JsonReader(input)
         reader.setLenient(false)
         Object value = readValue(reader)
-        if (reader.peek() != JsonToken.END_DOCUMENT) throw new GradleException('Trailing JSON content')
+        if (reader.peek() != JsonToken.END_DOCUMENT) {
+            throw new GradleException('Trailing JSON content')
+        }
         value
     }
 
@@ -29,7 +31,9 @@ class CandidateFiles {
                 reader.beginObject()
                 while (reader.hasNext()) {
                     String key = reader.nextName()
-                    if (result.containsKey(key)) throw new GradleException('Duplicate JSON key: ' + key)
+                    if (result.containsKey(key)) {
+                        throw new GradleException('Duplicate JSON key: ' + key)
+                    }
                     result[key] = readValue(reader)
                 }
                 reader.endObject()
@@ -37,7 +41,9 @@ class CandidateFiles {
             case JsonToken.BEGIN_ARRAY:
                 List result = []
                 reader.beginArray()
-                while (reader.hasNext()) result.add(readValue(reader))
+                while (reader.hasNext()) {
+                    result.add(readValue(reader))
+                }
                 reader.endArray()
                 return result
             case JsonToken.STRING: return reader.nextString()
@@ -47,8 +53,12 @@ class CandidateFiles {
                 String value = reader.nextString()
                 if (value ==~ /-?(0|[1-9][0-9]*)/) {
                     BigInteger integer = new BigInteger(value)
-                    if (integer.bitLength() < 32) return integer.intValue()
-                    if (integer.bitLength() < 64) return integer.longValue()
+                    if (integer.bitLength() < 32) {
+                        return integer.intValue()
+                    }
+                    if (integer.bitLength() < 64) {
+                        return integer.longValue()
+                    }
                     return integer
                 }
                 return new BigDecimal(value)
@@ -61,14 +71,20 @@ class CandidateFiles {
         file.withInputStream { input ->
             byte[] buffer = new byte[65536]
             int size
-            while ((size = input.read(buffer)) != -1) digest.update(buffer, 0, size)
+            while ((size = input.read(buffer)) != -1) {
+                digest.update(buffer, 0, size)
+            }
         }
         digest.digest().encodeHex().toString()
     }
 
     static Object sorted(Object value) {
-        if (value instanceof Map) return new TreeMap(value.collectEntries { key, child -> [(key): sorted(child)] })
-        if (value instanceof List) return value.collect { sorted(it) }
+        if (value instanceof Map) {
+            return new TreeMap(value.collectEntries { key, child -> [(key): sorted(child)] })
+        }
+        if (value instanceof List) {
+            return value.collect { sorted(it) }
+        }
         value
     }
 
@@ -108,7 +124,9 @@ class CandidateFiles {
 
     static void releaseIdentity(String tag, String commit) {
         ReleaseIdentity.parse(tag)
-        if (!(commit ==~ /[0-9a-f]{40}/)) throw new GradleException('Invalid source commit')
+        if (!(commit ==~ /[0-9a-f]{40}/)) {
+            throw new GradleException('Invalid source commit')
+        }
     }
 
     static String releaseVersion(String tag) {

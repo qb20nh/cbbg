@@ -6,6 +6,8 @@ import org.gradle.api.tasks.bundling.Jar
 import proguard.gradle.ProGuardTask
 
 class PackagingPlugin implements Plugin<Project> {
+    private static final String BUILD_GROUP = 'build'
+
     void apply(Project project) {
         ReproducibleText.configureResources(project)
         project.pluginManager.apply('cbbg.release-sbom')
@@ -13,7 +15,7 @@ class PackagingPlugin implements Plugin<Project> {
         optimization.usageFile.convention(project.layout.buildDirectory.file('reports/proguard/usage.txt'))
         optimization.configurationFile.convention(project.layout.buildDirectory.file('reports/proguard/configuration.txt'))
         def minified = project.tasks.register('minifyReleaseJar', ProGuardTask) {
-            group = 'build'
+            group = BUILD_GROUP
             description = 'Shrink, optimize, and obfuscate the release jar with ProGuard.'
             inputs.file(optimization.inputJar)
             inputs.file(optimization.rulesFile)
@@ -56,7 +58,7 @@ class PackagingPlugin implements Plugin<Project> {
             }
         }
         project.tasks.register('optimizeReleaseJar') {
-            group = 'build'
+            group = BUILD_GROUP
             description = 'Build the optimized release jar in its runtime namespace.'
             dependsOn minified
             inputs.file(optimization.outputJar)
@@ -74,7 +76,7 @@ class PackagingPlugin implements Plugin<Project> {
                 def sources = project.tasks.named('sourcesJar', Jar)
                 sources.configure { destinationDirectory = project.layout.buildDirectory.dir('intermediates/source-jar') }
                 def releaseSources = project.tasks.register('releaseSourcesJar', Jar) {
-                    group = 'build'
+                    group = BUILD_GROUP
                     description = 'Package release sources with their exact ProGuard mapping.'
                     dependsOn sources, project.tasks.named('optimizeReleaseJar'), project.tasks.named('releaseSbom')
                     archiveFileName.set(sources.flatMap { it.archiveFileName })

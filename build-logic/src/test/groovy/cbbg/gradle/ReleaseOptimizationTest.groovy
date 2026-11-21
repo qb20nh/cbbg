@@ -141,7 +141,7 @@ public class SampleMixin { public void shadow() {} }
                     assertArrayEquals(objectClass, zip.getInputStream(zip.getEntry('java/lang/Object.class')).bytes)
                     assertNotNull(zip.getEntry('java/sql/DriverManager.class'))
                     def names = zip.entries().toList().collect { it.name }
-                    assertEquals(names.sort(false), names)
+                    assertEquals(names.toSorted(), names)
                     assertFalse(names.any { it.endsWith('module-info.class') || it.startsWith('modules/') })
                     def targetClasses = Files.walk(image.getPath('/modules')).withCloseable { paths ->
                         paths.filter { Files.isRegularFile(it) && it.toString().endsWith('.class') &&
@@ -220,11 +220,15 @@ public class SampleMixin { public void shadow() {} }
         byte[] runtimeBytes = runtimeImage ? runtimeLibrary.bytes : null
         def unchanged = runner('optimizeReleaseJar').build()
         assertEquals(TaskOutcome.UP_TO_DATE, unchanged.task(':minifyReleaseJar').outcome)
-        if (runtimeImage) assertEquals(TaskOutcome.UP_TO_DATE, unchanged.task(':exportReleaseJdkLibraries').outcome)
+        if (runtimeImage) {
+            assertEquals(TaskOutcome.UP_TO_DATE, unchanged.task(':exportReleaseJdkLibraries').outcome)
+        }
         runner('clean', 'optimizeReleaseJar').build()
         assertArrayEquals(outputBytes, output.bytes)
         assertArrayEquals(mappingBytes, mapping.bytes)
-        if (runtimeImage) assertArrayEquals(runtimeBytes, runtimeLibrary.bytes)
+        if (runtimeImage) {
+            assertArrayEquals(runtimeBytes, runtimeLibrary.bytes)
+        }
         write('release.pro', new File(directory, 'release.pro').text + '\n# changed input\n')
         assertEquals(TaskOutcome.SUCCESS,
                 runner('optimizeReleaseJar').build().task(':optimizeReleaseJar').outcome)

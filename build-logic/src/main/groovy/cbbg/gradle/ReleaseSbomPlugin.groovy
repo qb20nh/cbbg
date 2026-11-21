@@ -7,15 +7,18 @@ import org.gradle.api.Plugin
 import org.gradle.api.Project
 
 class ReleaseSbomPlugin implements Plugin<Project> {
+    private static final String BOM_REF = 'bom-ref'
+    private static final String PRIVATE_GSON_CONFIGURATION = 'releasePrivateGsonInput'
+
     void apply(Project project) {
-        def gsonInput = project.configurations.create('releasePrivateGsonInput') {
+        def gsonInput = project.configurations.create(PRIVATE_GSON_CONFIGURATION) {
             canBeConsumed = false
             transitive = false
         }
         def sbom = project.tasks.register('releaseSbom', CyclonedxDirectTask) {
             group = 'build'
             description = 'Describe the third-party dependencies embedded in the release jar.'
-            includeConfigs = ['releasePrivateGsonInput', 'include']
+            includeConfigs = [PRIVATE_GSON_CONFIGURATION, 'include']
             includeBuildEnvironment = false
             includeBuildSystem = false
             includeBomSerialNumber = false
@@ -44,14 +47,14 @@ class ReleaseSbomPlugin implements Plugin<Project> {
                     String hash = java.security.MessageDigest.getInstance('SHA-256').digest(library.bytes).encodeHex().toString()
                     String reference = 'cbbg-lib:' + hash
                     List components = bom.components ?: []
-                    components.add([type: 'library', 'bom-ref': reference, group: 'com.qb20nh', name: 'cbbg-lib',
+                    components.add([type: 'library', (BOM_REF): reference, group: 'com.qb20nh', name: 'cbbg-lib',
                                     version: project.libraryPackageVersion,
                                     hashes: [[alg: 'SHA-256', content: hash]]])
                     bom.components = components
                     List dependencies = bom.dependencies ?: []
-                    Map root = dependencies.find { it.ref == bom.metadata.component['bom-ref'] }
+                    Map root = dependencies.find { it.ref == bom.metadata.component[BOM_REF] }
                     if (root == null) {
-                        root = [ref: bom.metadata.component['bom-ref'], dependsOn: []]
+                        root = [ref: bom.metadata.component[BOM_REF], dependsOn: []]
                         dependencies.add(root)
                     }
                     root.dependsOn = (root.dependsOn ?: []) + reference
@@ -84,7 +87,7 @@ class ReleaseSbomPlugin implements Plugin<Project> {
                 componentVersion = project.version.toString()
                 def archiveName = project.extensions.findByName('base')?.archivesName?.get() ?: project.name
                 componentName = archiveName
-                includeConfigs.set(['releasePrivateGsonInput', 'include', 'utilitiesRaw'].findAll {
+                includeConfigs.set([PRIVATE_GSON_CONFIGURATION, 'include', 'utilitiesRaw'].findAll {
                     project.configurations.findByName(it) != null
                 })
                 jsonOutput = project.layout.buildDirectory.file("libs/${archiveName}-${project.version}.cdx.json")

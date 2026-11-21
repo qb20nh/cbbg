@@ -4,13 +4,17 @@ import org.gradle.api.GradleException
 import java.util.regex.Pattern
 
 class ChangelogNotes {
+    private static final String MISSING_TARGETS_MESSAGE = 'Release notes require selected targets'
+    private static final String QUILT = 'quilt'
+    private static final String FABRIC = 'fabric'
+
     static String select(File changelog, String version, Map target) {
         select(changelog, version, [target])
     }
 
     static String select(File changelog, String version, List<Map> targets) {
         if (!targets) {
-            throw new GradleException('Release notes require selected targets')
+            throw new GradleException(MISSING_TARGETS_MESSAGE)
         }
         List<String> lines = changelog.readLines('UTF-8')
         List<Integer> levels = headingLevels(lines)
@@ -18,8 +22,8 @@ class ChangelogNotes {
         Set<Integer> selected = []
         targets.each { target ->
             Map owner = target.artifactOf ? targets.find { it.id == target.artifactOf } : null
-            Map identity = owner && (target.loader == 'fabric' ||
-                    (target.loader == 'quilt' && target.minecraft != owner.minecraft)) ? owner : target
+            Map identity = owner && (target.loader == FABRIC ||
+                    (target.loader == QUILT && target.minecraft != owner.minecraft)) ? owner : target
             String identifier = version + '-mc' + identity.minecraft + '-' + identity.loader
             List<Integer> matches = headings.findAll { identifiers(lines[it]).contains(identifier) }
             if (matches.isEmpty()) {
@@ -43,7 +47,7 @@ class ChangelogNotes {
 
     static String forTargets(String notes, List<Map> targets) {
         if (!targets) {
-            throw new GradleException('Release notes require selected targets')
+            throw new GradleException(MISSING_TARGETS_MESSAGE)
         }
         List<String> lines = notes.readLines()
         List<Integer> levels = headingLevels(lines)
@@ -82,7 +86,7 @@ class ChangelogNotes {
 
     static String forPublication(String notes, List<Map> targets) {
         if (!targets) {
-            throw new GradleException('Release notes require selected targets')
+            throw new GradleException(MISSING_TARGETS_MESSAGE)
         }
         Map<String, List<Map>> versions = targets.groupBy { it.minecraft }
         String publicNotes = notes.replaceFirst(/\s*<!-- cbbg-candidate-run: [1-9][0-9]* -->\s*$/, '')
@@ -123,7 +127,7 @@ class ChangelogNotes {
     }
 
     private static Map scope(String title) {
-        Map loaders = ['fabric': 'fabric', 'quilt': 'quilt', 'forge': 'forge',
+        Map loaders = [(FABRIC): FABRIC, (QUILT): QUILT, 'forge': 'forge',
                        'neoforge': 'neoforge', 'legacy fabric': 'legacy-fabric']
         def version = title =~ /(?i)^Minecraft ([0-9][0-9A-Za-z._-]*(?:,\s*[0-9][0-9A-Za-z._-]*)*)(?:\s+[—–-]\s+(.+))?$/
         if (version.matches()) {

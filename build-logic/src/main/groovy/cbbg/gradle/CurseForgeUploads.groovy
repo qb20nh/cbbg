@@ -4,6 +4,8 @@ import org.gradle.api.GradleException
 
 /** Select a complete upload family, or resume a previously submitted family. */
 class CurseForgeUploads {
+    private static final String ACTION_RECEIPT_FILE = 'curseforge-action-receipt.json'
+
     static final List<String> LEGACY_ATTACHMENTS = ['sources', 'utilities', 'utilities_sources',
                                                   'library', 'library_sources', 'evidence']
 
@@ -29,17 +31,14 @@ class CurseForgeUploads {
                 mainPlans.add(file)
             }
             if (file.name == 'curseforge-plan.json' && CandidateFiles.read(file).target == target) {
-                if (!new File(file.parentFile, 'curseforge-action-receipt.json').isFile()) {
-                    if (!confirmedUnattempted || !uploaderWasSkipped(resumeEvidence, target)) {
-                        throw new GradleException('CurseForge plan for ' + target +
-                                ' is missing its action receipt; recovery requires confirmation and a recorded skipped upload')
-                    }
-                    unattemptedPlans.add(file)
-                } else {
+                if (new File(file.parentFile, ACTION_RECEIPT_FILE).isFile()) {
                     plans.add(file)
+                } else {
+                    requireSkippedUpload(confirmedUnattempted, resumeEvidence, target)
+                    unattemptedPlans.add(file)
                 }
             }
-            if (file.name == 'curseforge-action-receipt.json' &&
+            if (file.name == ACTION_RECEIPT_FILE &&
                     !new File(file.parentFile, 'curseforge-plan.json').isFile()) {
                 throw new GradleException('CurseForge action receipt is missing its plan; reconcile the upload before retrying')
             }
@@ -94,7 +93,7 @@ class CurseForgeUploads {
                 throw new GradleException('Invalid CurseForge parent ID')
             }
             if (plans) {
-                receipt = new File(plans[0].parentFile, 'curseforge-action-receipt.json').absolutePath
+                receipt = new File(plans[0].parentFile, ACTION_RECEIPT_FILE).absolutePath
             }
         }
         if (legacy && !plans) {
@@ -134,6 +133,13 @@ class CurseForgeUploads {
             throw new GradleException('CurseForge upload file selection changed')
         }
         result
+    }
+
+    private static void requireSkippedUpload(boolean confirmedUnattempted, Map evidence, String target) {
+        if (!confirmedUnattempted || !uploaderWasSkipped(evidence, target)) {
+            throw new GradleException('CurseForge plan for ' + target +
+                    ' is missing its action receipt; recovery requires confirmation and a recorded skipped upload')
+        }
     }
 
     private static boolean sameRecord(Object previous, Map record, Map metadata, File sourceRoot) {

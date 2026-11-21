@@ -13,9 +13,24 @@ public final class LegacyLanguage {
       char c = value.charAt(i);
       if (c == '\\' && i + 1 < value.length()) {
         char next = value.charAt(i + 1);
-        if (next == 'n' || next == 'r' || next == 't' || next == '\\') {
-          c = next == 'n' ? '\n' : next == 'r' ? '\r' : next == 't' ? '\t' : '\\';
-          i++;
+        switch (next) {
+          case 'n':
+            c = '\n';
+            i++;
+            break;
+          case 'r':
+            c = '\r';
+            i++;
+            break;
+          case 't':
+            c = '\t';
+            i++;
+            break;
+          case '\\':
+            i++;
+            break;
+          default:
+            break;
         }
       }
       result.append(c);

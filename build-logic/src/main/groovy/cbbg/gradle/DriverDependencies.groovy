@@ -18,6 +18,8 @@ import java.util.zip.ZipException
 
 /** Contents needed by the entrypoints of one packaged test suite. */
 class DriverDependencies {
+    private static final String CLASS_SUFFIX = '.class'
+
     static Map inventory(File driver) {
         Map<String, byte[]> entries = new TreeMap<>()
         ZipFile archive
@@ -41,7 +43,7 @@ class DriverDependencies {
             it instanceof Map && it.adapter != null && it.adapter != 'default'
         }
         ClassPool pool = new ClassPool()
-        entries.findAll { name, bytes -> name.endsWith('.class') }.each { name, bytes ->
+        entries.findAll { name, bytes -> name.endsWith(CLASS_SUFFIX) }.each { name, bytes ->
             ProgramClass type = new ProgramClass()
             type.accept(new ProgramClassReader(new DataInputStream(new ByteArrayInputStream(bytes))))
             pool.addClass(type)
@@ -106,14 +108,14 @@ class DriverDependencies {
                 pending.add(it.name)
             } }
             // Inner classes may also be reached through reflection.
-            entries.keySet().findAll { it.startsWith(name + '$') && it.endsWith('.class') }.each {
+            entries.keySet().findAll { it.startsWith(name + '$') && it.endsWith(CLASS_SUFFIX) }.each {
                 String inner = it.substring(0, it.length() - 6)
                 if (!visited.contains(inner)) {
                     pending.add(inner)
                 }
             }
         }
-        Map files = entries.findAll { name, bytes -> fullArchive || !name.endsWith('.class') || visited.contains(name.substring(0, name.length() - 6)) }
+        Map files = entries.findAll { name, bytes -> fullArchive || !name.endsWith(CLASS_SUFFIX) || visited.contains(name.substring(0, name.length() - 6)) }
                 .collectEntries { name, bytes -> [(name): MessageDigest.getInstance('SHA-256').digest(bytes).encodeHex().toString()] }
         [schema: 1, driver_sha256: CandidateFiles.sha256(driver), complete: true, full_archive: fullArchive, files: files]
     }

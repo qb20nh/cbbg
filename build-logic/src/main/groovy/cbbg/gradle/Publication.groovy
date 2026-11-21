@@ -13,11 +13,23 @@ import java.security.MessageDigest
 import java.time.Duration
 
 class Publication {
+    private static final String SOURCES = 'sources'
+    private static final String UTILITIES_SOURCES = 'utilities_sources'
+    private static final String LIBRARY_SOURCES = 'library_sources'
+    private static final String LIBRARY = 'library'
+    private static final String UTILITIES = 'utilities'
+    private static final String EVIDENCE = 'evidence'
+    private static final String ARTIFACT = 'artifact'
+    private static final String MODRINTH = 'modrinth'
+    private static final String PROJECT_PATH = '/project/'
+    private static final String GAME_VERSIONS = 'game_versions'
+    private static final String CURSEFORGE = 'curseforge'
+
     private static final String MODRINTH_API = 'https://api.modrinth.com/v2'
     private static final String CURSEFORGE_API = 'https://minecraft.curseforge.com/api/game'
 
     static List<String> uploadKinds(Map record) {
-        ['artifact', 'sources'] + (record.containsKey('evidence') ? ['evidence'] : [])
+        [ARTIFACT, SOURCES] + (record.containsKey(EVIDENCE) ? [EVIDENCE] : [])
     }
 
     static void requireUploadAllowed(Map metadata) {
@@ -30,7 +42,9 @@ class Publication {
     }
 
     static Map metadata(File candidate, File sourceRoot, String notes) {
-        if (!(notes instanceof String) || !notes.trim()) throw new GradleException('Release notes are empty')
+        if (!(notes instanceof String) || !notes.trim()) {
+            throw new GradleException('Release notes are empty')
+        }
         String before = CandidateFiles.sha256(candidate)
         CandidateManifest manifest = new CandidateManifest(candidate)
         manifest.identity.requireProduct('cbbg')
@@ -79,12 +93,12 @@ class Publication {
             if (target.containsKey('sbom')) {
                 records.last().evidence = ReleaseEvidence.reference(manifest, id)
             }
-            if (target.containsKey('library')) {
+            if (target.containsKey(LIBRARY)) {
                 records.last().library = target.library
                 records.last().library_sources = target.library_sources
                 records.last().library_release = target.library_release
             }
-            if (target.containsKey('utilities')) {
+            if (target.containsKey(UTILITIES)) {
                 records.last().utilities = target.utilities
                 records.last().utilities_sources = target.utilities_sources
             }
@@ -104,18 +118,20 @@ class Publication {
         }
         Map published = (Map) value
         List<Map> matches = published.records.findAll { it instanceof Map && it.targets instanceof List && it.targets[0] == target }
-        if (matches.size() != 1) throw new GradleException('Expected one publishing record for the selected target')
+        if (matches.size() != 1) {
+            throw new GradleException('Expected one publishing record for the selected target')
+        }
         Map record = matches[0]
         Map expected = metadata(candidate, sourceRoot, published.release_notes ?: record.modrinth?.changelog)
         List<Map> expectedRecords = expected.records.findAll { it.targets[0] == target }
         if (expectedRecords.size() != 1 ||
                 ['schema', 'release', 'source_commit', 'manifest_sha256'].any { published[it] != expected[it] } ||
                 published.records.size() != expected.records.size() ||
-                ['targets', 'artifact', 'sources', 'utilities', 'utilities_sources', 'library', 'library_sources', 'library_release', 'evidence', 'modrinth'].any { record[it] != expectedRecords[0][it] }) {
+                ['targets', ARTIFACT, SOURCES, UTILITIES, UTILITIES_SOURCES, LIBRARY, LIBRARY_SOURCES, 'library_release', EVIDENCE, MODRINTH].any { record[it] != expectedRecords[0][it] }) {
             throw new GradleException('Publishing metadata differs from the checked candidate')
         }
         Map curseforge = record.curseforge instanceof Map ? new LinkedHashMap(record.curseforge) : [:]
-        curseforge.remove('game_versions')
+        curseforge.remove(GAME_VERSIONS)
         if (curseforge != expectedRecords[0].curseforge) {
             throw new GradleException('CurseForge metadata differs from the checked candidate')
         }
@@ -129,7 +145,7 @@ class Publication {
                 throw new GradleException('Invalid CurseForge metadata')
             }
             normalized.curseforge = new LinkedHashMap(normalized.curseforge)
-            normalized.curseforge.remove('game_versions')
+            normalized.curseforge.remove(GAME_VERSIONS)
             if (normalized != expected.records[index]) {
                 throw new GradleException('Publishing metadata differs from the checked candidate')
             }
@@ -142,7 +158,7 @@ class Publication {
 
     static Map resolve(Map metadata, String services = 'both', Closure fetch = null,
                        String cfToken = System.getenv('CF_API_TOKEN')) {
-        if (!(services in ['both', 'modrinth', 'curseforge'])) {
+        if (!(services in ['both', MODRINTH, CURSEFORGE])) {
             throw new GradleException('Invalid publishing service selection')
         }
         if (metadata.legacy != true) {
@@ -153,19 +169,21 @@ class Publication {
         List modrinthLoaders = []
         List curseforgeVersions = []
         List curseforgeTypes = []
-        if (services in ['both', 'modrinth']) {
+        if (services in ['both', MODRINTH]) {
             modrinthVersions = request(fetch, MODRINTH_API + '/tag/game_version', [:]) as List
             modrinthLoaders = request(fetch, MODRINTH_API + '/tag/loader', [:]) as List
         }
-        if (services in ['both', 'curseforge']) {
-            if (!cfToken) throw new GradleException('CF_API_TOKEN is required for CurseForge lookup')
+        if (services in ['both', CURSEFORGE]) {
+            if (!cfToken) {
+                throw new GradleException('CF_API_TOKEN is required for CurseForge lookup')
+            }
             Map headers = ['X-Api-Token': cfToken]
             curseforgeVersions = request(fetch, CURSEFORGE_API + '/versions', headers) as List
             curseforgeTypes = request(fetch, CURSEFORGE_API + '/version-types', headers) as List
         }
         for (Map record : (List<Map>) resolved.records) {
             Map modrinth = record.modrinth
-            if (services in ['both', 'modrinth']) {
+            if (services in ['both', MODRINTH]) {
                 if (!modrinthVersions.collect { it.version }.containsAll(modrinth.game_versions)) {
                     throw new GradleException('Modrinth does not recognize the selected Minecraft versions')
                 }
@@ -173,7 +191,7 @@ class Publication {
                     throw new GradleException('Modrinth does not recognize the selected loaders')
                 }
             }
-            if (services in ['both', 'curseforge']) {
+            if (services in ['both', CURSEFORGE]) {
                 record.curseforge.game_versions = curseforgeVersionIds(
                         modrinth.game_versions, record.curseforge.version_labels,
                         curseforgeVersions, curseforgeTypes)
@@ -231,7 +249,7 @@ class Publication {
         File assets = candidate != null ? candidate.parentFile : legacyAssets
         Map upload = record.modrinth
         List<String> kinds = uploadKinds(record)
-        Map project = request(fetch, MODRINTH_API + '/project/' + segment(upload.project_id), [:]) as Map
+        Map project = request(fetch, MODRINTH_API + PROJECT_PATH + segment(upload.project_id), [:]) as Map
         if (project.id != upload.project_id || !(project.slug instanceof String) ||
                 !(project.slug ==~ /[\w-]+/)) {
             throw new GradleException('Unexpected Modrinth project')
@@ -245,22 +263,26 @@ class Publication {
             }
             versionResponse = [uploaded]
         } else {
-            versionResponse = request(fetch, MODRINTH_API + '/project/' + segment(project.id) + '/version', [:])
+            versionResponse = request(fetch, MODRINTH_API + PROJECT_PATH + segment(project.id) + '/version', [:])
         }
         if (!(versionResponse instanceof List) ||
                 versionResponse.any { !(it instanceof Map) || !(it.version_number instanceof String) }) {
             throw new GradleException('Invalid Modrinth version list')
         }
         List matches = versionResponse.findAll { it.version_number == upload.version_number }
-        if (matches.size() > 1) throw new GradleException('Multiple Modrinth versions use the requested version number')
-        Map result = [schema: 1, service: 'modrinth', target: target,
+        if (matches.size() > 1) {
+            throw new GradleException('Multiple Modrinth versions use the requested version number')
+        }
+        Map result = [schema: 1, service: MODRINTH, target: target,
                       metadata_sha256: metadataHash,
                       project_id: project.id, version_number: upload.version_number,
                       artifact: record.artifact, sources: record.sources, action: 'upload']
-        if (record.containsKey('evidence')) {
+        if (record.containsKey(EVIDENCE)) {
             result.evidence = record.evidence
         }
-        if (candidate != null) result.manifest_sha256 = expected.manifest_sha256
+        if (candidate != null) {
+            result.manifest_sha256 = expected.manifest_sha256
+        }
         if (!matches.isEmpty()) {
             Map existing = matches[0]
             Map fields = [project_id: project.id, name: upload.version_name,
@@ -275,14 +297,14 @@ class Publication {
             if (fields.any { key, value -> existing[key] != value } || !changelogs.contains(existing.changelog)) {
                 throw new GradleException('Existing Modrinth version has different metadata')
             }
-            for (String key : ['loaders', 'game_versions']) {
+            for (String key : ['loaders', GAME_VERSIONS]) {
                 if (!(existing[key] instanceof List) || existing[key].toSorted() != upload[key].toSorted()) {
                     throw new GradleException('Existing Modrinth version has different ' + key)
                 }
             }
             List<List> dependencies = []
             for (String id : upload.required_projects) {
-                Map dependency = request(fetch, MODRINTH_API + '/project/' + segment(id), [:]) as Map
+                Map dependency = request(fetch, MODRINTH_API + PROJECT_PATH + segment(id), [:]) as Map
                 if (!(dependency.id instanceof String) || !(dependency.id ==~ /[A-Za-z0-9]+/)) {
                     throw new GradleException('Invalid Modrinth dependency project')
                 }
@@ -299,10 +321,10 @@ class Publication {
             }
             List<String> checkedKinds = kinds
             if (uploadedVersionId == null && existing.files instanceof List && existing.files.size() != kinds.size()) {
-                checkedKinds = ['artifact', 'sources'] +
-                        (record.containsKey('utilities') ? ['utilities', 'utilities_sources'] : []) +
-                        (record.containsKey('library') ? ['library', 'library_sources'] : []) +
-                        (record.containsKey('evidence') ? ['evidence'] : [])
+                checkedKinds = [ARTIFACT, SOURCES] +
+                        (record.containsKey(UTILITIES) ? [UTILITIES, UTILITIES_SOURCES] : []) +
+                        (record.containsKey(LIBRARY) ? [LIBRARY, LIBRARY_SOURCES] : []) +
+                        (record.containsKey(EVIDENCE) ? [EVIDENCE] : [])
             }
             if (!(existing.files instanceof List) || existing.files.size() != checkedKinds.size()) {
                 throw new GradleException('Existing Modrinth version has different files')
@@ -316,19 +338,19 @@ class Publication {
                 Map item = fileMatches[0]
                 String sha512 = digest(file, 'SHA-512')
                 List fileTypes = [null]
-                if (kind == 'sources') {
+                if (kind == SOURCES) {
                     fileTypes = ['sources-jar']
                 }
-                else if (kind in ['utilities_sources', 'library_sources']) {
+                else if (kind in [UTILITIES_SOURCES, LIBRARY_SOURCES]) {
                     fileTypes = [null, 'sources-jar']
                 }
-                else if (kind in ['utilities', 'library']) {
+                else if (kind in [UTILITIES, LIBRARY]) {
                     fileTypes = [null, 'other']
                 }
-                else if (kind == 'evidence' && uploadedVersionId == null) {
+                else if (kind == EVIDENCE && uploadedVersionId == null) {
                     fileTypes = [null, 'signature']
                 }
-                if (item.hashes?.sha512 != sha512 || item.primary != (kind == 'artifact') ||
+                if (item.hashes?.sha512 != sha512 || item.primary != (kind == ARTIFACT) ||
                         !fileTypes.contains(item.file_type)) {
                     throw new GradleException('Existing Modrinth file differs from candidate: ' + kind)
                 }
@@ -351,8 +373,8 @@ class Publication {
     private static Map projectIds(File properties) {
         List<String> lines = properties.readLines('UTF-8')
         Map result = [:]
-        [[key: 'modrinth_project_id', pattern: /[A-Za-z0-9]+/, name: 'modrinth'],
-         [key: 'curseforge_project_id', pattern: /[1-9][0-9]*/, name: 'curseforge']].each { item ->
+        [[key: 'modrinth_project_id', pattern: /[A-Za-z0-9]+/, name: MODRINTH],
+         [key: 'curseforge_project_id', pattern: /[1-9][0-9]*/, name: CURSEFORGE]].each { item ->
             List<String> matches = lines.findAll { it.startsWith(item.key + '=') }
                     .collect { it.substring(item.key.length() + 1) }
             if (matches.size() != 1 || !(matches[0] ==~ item.pattern)) {
@@ -397,7 +419,9 @@ class Publication {
         file.withInputStream { stream ->
             byte[] buffer = new byte[65536]
             int size
-            while ((size = stream.read(buffer)) != -1) hash.update(buffer, 0, size)
+            while ((size = stream.read(buffer)) != -1) {
+                hash.update(buffer, 0, size)
+            }
         }
         hash.digest().encodeHex().toString()
     }

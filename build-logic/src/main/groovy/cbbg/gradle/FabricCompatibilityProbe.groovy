@@ -11,6 +11,8 @@ import java.util.concurrent.TimeUnit
 
 /** Runs one packaged-client dependency probe and classifies its recorded result. */
 class FabricCompatibilityProbe {
+    private static final String BLOCKED = 'blocked'
+
     static Map dependencyFailure(String gameText, boolean strict) {
         List<Map> records = (gameText =~ /HARD_DEP(?:_NO_CANDIDATE)? ([^\s{}]+) [^\s{}]+ \{depends ([^\s{}]+) @ [^{}]*\}/)
                 .collect { [text: it[0], owner: it[1], dependency: it[2]] }
@@ -18,13 +20,13 @@ class FabricCompatibilityProbe {
         List<Map> production = records.findAll { it.owner == 'cbbg' }
         String details = records*.text.join('; ')
         if (!strict && production.any { it.dependency in ['fabricloader', 'fabric-api'] }) {
-            return [status: 'blocked', reason: 'Minimum dependency overrides were not applied: ' + details]
+            return [status: BLOCKED, reason: 'Minimum dependency overrides were not applied: ' + details]
         }
         if (production) {
             return [status: 'failed', reason: 'Incompatible CBBG dependencies: ' + details]
         }
         if (records.any { it.owner in ['cbbg-renderer-test', 'fabric-client-gametest-api-v1'] }) {
-            return [status: 'blocked', reason: 'Incompatible test dependencies: ' + details]
+            return [status: BLOCKED, reason: 'Incompatible test dependencies: ' + details]
         }
         [:]
     }
@@ -284,7 +286,7 @@ class FabricCompatibilityProbe {
                 Map dependencyError = passed ? [:] : dependencyFailure(gameText, spec.strict as boolean)
                 if (!receipt.isFile() || recorded.failure?.type == 'TimeoutExpired' ||
                         reason =~ /Runtime inputs differ|checksum mismatch|Failed to create window|Failed to initialize Vulkan|GPU timeout|VK_ERROR_DEVICE_LOST/) {
-                    status = 'blocked'
+                    status = BLOCKED
                 } else if (dependencyError) {
                     status = dependencyError.status
                     reason = dependencyError.reason

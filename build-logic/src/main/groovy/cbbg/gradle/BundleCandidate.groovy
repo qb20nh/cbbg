@@ -6,12 +6,21 @@ import org.gradle.api.file.DirectoryProperty
 import org.gradle.api.file.RegularFileProperty
 import org.gradle.api.provider.Property
 import org.gradle.api.provider.ListProperty
-import org.gradle.api.tasks.*
+import org.gradle.api.tasks.Input
+import org.gradle.api.tasks.InputFile
+import org.gradle.api.tasks.Internal
+import org.gradle.api.tasks.Optional
+import org.gradle.api.tasks.OutputDirectory
+import org.gradle.api.tasks.TaskAction
 import org.gradle.process.ExecOperations
 import javax.inject.Inject
 import java.nio.file.Files
 
 abstract class BundleCandidate extends DefaultTask {
+    private static final String RUNTIME_LOCKS_PATH = 'runtime-locks/'
+    private static final String LIBRARY = 'library'
+    private static final String UTILITIES = 'utilities'
+
     @Internal abstract DirectoryProperty getSourceRoot()
     @Optional @InputFile abstract RegularFileProperty getBuildOutputs()
     @Optional @InputFile abstract RegularFileProperty getContract()
@@ -97,9 +106,9 @@ abstract class BundleCandidate extends DefaultTask {
         selected.values().sort { it.artifactOf ? 1 : 0 }.each { Map target ->
         Map owner = target.artifactOf ? selected[target.artifactOf] : target
         File outputsFile = multipleInputs ? CandidateFiles.relativeFile(root, (identity.product == 'lib' ? 'build/libraries/' : 'build/targets/') + owner.id + '/candidate-build-outputs.json') : buildOutputs.get().asFile
-        File contractFile = multipleInputs ? CandidateFiles.relativeFile(root, 'runtime-locks/' + (identity.product == 'lib' ? 'lib/' : '') + target.id + '-scenarios.json') : contract.get().asFile
-        File runtimeFile = multipleInputs ? CandidateFiles.relativeFile(root, 'runtime-locks/' + target.id + '-linux-x86_64.json') : runtimeLock.get().asFile
-        File dependencyFile = multipleInputs ? CandidateFiles.relativeFile(root, 'runtime-locks/' + target.id + '-mods.json') : dependencyLock.get().asFile
+        File contractFile = multipleInputs ? CandidateFiles.relativeFile(root, RUNTIME_LOCKS_PATH + (identity.product == 'lib' ? 'lib/' : '') + target.id + '-scenarios.json') : contract.get().asFile
+        File runtimeFile = multipleInputs ? CandidateFiles.relativeFile(root, RUNTIME_LOCKS_PATH + target.id + '-linux-x86_64.json') : runtimeLock.get().asFile
+        File dependencyFile = multipleInputs ? CandidateFiles.relativeFile(root, RUNTIME_LOCKS_PATH + target.id + '-mods.json') : dependencyLock.get().asFile
         Map built = CandidateFiles.read(outputsFile)
         if (!(built.schema instanceof Integer) || built.schema != 2 || built.source_commit != commit || built.source_dirty != false) {
             throw new GradleException("Build outputs do not identify the current clean source: ${outputsFile} records commit ${built.source_commit}, dirty=${built.source_dirty}, schema=${built.schema}; expected commit ${commit}, dirty=false, schema=2. Rerun candidateBuildOutputs with -Ptarget=${owner.id} from the committed source.")
@@ -129,20 +138,20 @@ abstract class BundleCandidate extends DefaultTask {
             throw new GradleException('Build outputs require ProGuard processing and mapping')
         }
         Map record = [id: target.id, processing: built.processing]
-        if (built.containsKey('utilities') != built.containsKey('utilities_sources')) {
+        if (built.containsKey(UTILITIES) != built.containsKey('utilities_sources')) {
             throw new GradleException('Build outputs require utilities and utilities_sources together')
         }
-        if (built.containsKey('utilities')) {
-            ['utilities', 'utilities_sources'].each { kind ->
+        if (built.containsKey(UTILITIES)) {
+            [UTILITIES, 'utilities_sources'].each { kind ->
                 record[kind] = target.artifactOf ? records[owner.id][kind] :
                         addUtilities(built[kind].filename, CandidateFiles.checked(root, built[kind]))
             }
         }
-        if (built.containsKey('library') != built.containsKey('library_sources')) {
+        if (built.containsKey(LIBRARY) != built.containsKey('library_sources')) {
             throw new GradleException('Build outputs require library and library_sources together')
         }
-        if (built.containsKey('library')) {
-            ['library', 'library_sources'].each { kind ->
+        if (built.containsKey(LIBRARY)) {
+            [LIBRARY, 'library_sources'].each { kind ->
                 record[kind] = target.artifactOf ? records[owner.id][kind] :
                         addUtilities(built[kind].filename, CandidateFiles.checked(root, built[kind]))
             }
@@ -195,7 +204,9 @@ abstract class BundleCandidate extends DefaultTask {
             CandidateFiles.writeNew(manifest, [schema: 3, product: identity.product, release: release, commit: commit,
                     catalog_sha256: CandidateFiles.canonicalHash(catalog.data), targets: records.values().toList(), selected_targets: ids])
             new CandidateManifest(manifest).verifyPackages(root)
-            if (sourceState() != state) throw new GradleException('Source changed while bundling candidate')
+            if (sourceState() != state) {
+                throw new GradleException('Source changed while bundling candidate')
+            }
             def sums = output.listFiles().sort { it.name }.collect { CandidateFiles.sha256(it) + '  ' + it.name }
             Files.writeString(new File(output, 'SHA256SUMS').toPath(), sums.join('\n') + '\n')
         } catch (Exception error) {

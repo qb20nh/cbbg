@@ -45,15 +45,23 @@ class ReleaseChecksTest {
             }
             if (command.take(2) == ['gh', 'api']) {
                 String endpoint = command[2]
-                if (endpoint.endsWith('/immutable-releases')) return JsonOutput.toJson([enabled: true])
-                if (endpoint.contains('/commits/')) return JsonOutput.toJson([sha: fixture.manifest.commit])
-                if (endpoint.contains('/releases/tags/')) return JsonOutput.toJson(release)
+                if (endpoint.endsWith('/immutable-releases')) {
+                    return JsonOutput.toJson([enabled: true])
+                }
+                if (endpoint.contains('/commits/')) {
+                    return JsonOutput.toJson([sha: fixture.manifest.commit])
+                }
+                if (endpoint.contains('/releases/tags/')) {
+                    return JsonOutput.toJson(release)
+                }
             }
             if (command.take(3) == ['git', 'rev-parse', 'HEAD'] ||
                     command.take(3) == ['git', 'rev-parse', '--verify']) {
                 return fixture.manifest.commit + '\n'
             }
-            if (command.take(2) == ['git', 'status']) return ''
+            if (command.take(2) == ['git', 'status']) {
+                return ''
+            }
             throw new AssertionError('Unexpected command: ' + command)
         }
     }
@@ -228,7 +236,9 @@ class ReleaseChecksTest {
         File bundle = new File(fixture.bundle, 'provenance.jsonl')
         Closure fake = runFor(fixture, [])
         Closure changing = { List<String> command, File cwd ->
-            if (command.take(3) == ['gh', 'attestation', 'verify']) bundle.append('changed\n')
+            if (command.take(3) == ['gh', 'attestation', 'verify']) {
+                bundle.append('changed\n')
+            }
             fake(command, cwd)
         }
         assertTrue(assertThrows(IllegalArgumentException) {
@@ -386,7 +396,9 @@ class ReleaseChecksTest {
         File output = new File(directory, 'uncertain.json')
         Closure fake = runFor(fixture, [])
         Closure failing = { List<String> command, File cwd ->
-            if (command.contains('PATCH')) throw new IllegalStateException('simulated failure')
+            if (command.contains('PATCH')) {
+                throw new IllegalStateException('simulated failure')
+            }
             fake(command, cwd)
         }
         assertTrue(assertThrows(IllegalStateException) {
@@ -502,8 +514,12 @@ class ReleaseChecksTest {
         File github = new File(directory, 'github-output.txt')
         List<List<String>> commands = []
         Closure fetch = { String url, Map headers ->
-            if (url.endsWith('/tag/game_version')) return [[version: '26.3']]
-            if (url.endsWith('/tag/loader')) return [[name: 'fabric']]
+            if (url.endsWith('/tag/game_version')) {
+                return [[version: '26.3']]
+            }
+            if (url.endsWith('/tag/loader')) {
+                return [[name: 'fabric']]
+            }
             throw new AssertionError('Unexpected lookup: ' + url)
         }
         Map metadata = ReleaseChecks.preparePublication(fixture.manifest.release, 'owner/repo',
@@ -837,9 +853,15 @@ class ReleaseChecksTest {
         assertFalse(output.exists())
         Closure fetch = { String url, Map headers ->
             File artifact = new File(directory, 'changed-assets/' + fixture.record.artifact.path)
-            if (artifact.isFile()) artifact.append('changed')
-            if (url.endsWith('/tag/game_version')) return [[version: '26.3']]
-            if (url.endsWith('/tag/loader')) return [[name: 'fabric']]
+            if (artifact.isFile()) {
+                artifact.append('changed')
+            }
+            if (url.endsWith('/tag/game_version')) {
+                return [[version: '26.3']]
+            }
+            if (url.endsWith('/tag/loader')) {
+                return [[name: 'fabric']]
+            }
             throw new AssertionError('Unexpected lookup: ' + url)
         }
         assertThrows(IllegalArgumentException) {
@@ -887,11 +909,19 @@ class ReleaseChecksTest {
         return { List<String> command, File cwd ->
             commands << command
             if (command.take(3) == ['git', 'rev-parse', 'HEAD'] ||
-                    command.take(3) == ['git', 'rev-parse', '--verify']) return fixture.commit + '\n'
-            if (command.take(2) == ['git', 'status']) return ''
+                    command.take(3) == ['git', 'rev-parse', '--verify']) {
+                return fixture.commit + '\n'
+            }
+            if (command.take(2) == ['git', 'status']) {
+                return ''
+            }
             if (command.take(2) == ['gh', 'api']) {
-                if (command[2].contains('/commits/')) return JsonOutput.toJson([sha: fixture.commit])
-                if (command[2].contains('/releases/tags/')) return JsonOutput.toJson(release)
+                if (command[2].contains('/commits/')) {
+                    return JsonOutput.toJson([sha: fixture.commit])
+                }
+                if (command[2].contains('/releases/tags/')) {
+                    return JsonOutput.toJson(release)
+                }
             }
             if (command.take(3) == ['gh', 'release', 'download']) {
                 File destination = new File(command[command.indexOf('--dir') + 1])
@@ -909,8 +939,12 @@ class ReleaseChecksTest {
         Map fixture = legacyFixture('1.4.0-beta')
         List<List<String>> commands = []
         Closure fetch = { String url, Map headers ->
-            if (url.endsWith('/tag/game_version')) return [[version: '26.3']]
-            if (url.endsWith('/tag/loader')) return [[name: 'fabric']]
+            if (url.endsWith('/tag/game_version')) {
+                return [[version: '26.3']]
+            }
+            if (url.endsWith('/tag/loader')) {
+                return [[name: 'fabric']]
+            }
             throw new AssertionError('Unexpected lookup: ' + url)
         }
         File assets = new File(directory, 'legacy-download')

@@ -35,7 +35,9 @@ abstract class ExportJdkLibraries extends DefaultTask {
                     paths.filter { Files.isRegularFile(it) && it.toString().endsWith('.class') &&
                             it.fileName.toString() != 'module-info.class' }.toList()
                 })
-                if (classes.isEmpty()) throw new GradleException('Target runtime image contains no classes')
+                if (classes.isEmpty()) {
+                    throw new GradleException('Target runtime image contains no classes')
+                }
                 classes.sort { path ->
                     def relative = root.relativize(path)
                     relative.subpath(1, relative.nameCount).toString()
@@ -45,7 +47,9 @@ abstract class ExportJdkLibraries extends DefaultTask {
                     classes.each { path ->
                         def relative = root.relativize(path)
                         String name = relative.subpath(1, relative.nameCount).toString().replace('\\', '/')
-                        if (!names.add(name)) throw new GradleException('Duplicate runtime class: ' + name)
+                        if (!names.add(name)) {
+                            throw new GradleException('Duplicate runtime class: ' + name)
+                        }
                         ZipEntry entry = new ZipEntry(name)
                         entry.time = 0L
                         jar.putNextEntry(entry)

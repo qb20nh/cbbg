@@ -291,10 +291,18 @@ class PublicationTest {
         List<String> urls = []
         Closure fetch = { String url, Map headers ->
             urls.add(url)
-            if (url.endsWith('/game_version')) return [[version: '26.3']]
-            if (url.endsWith('/loader')) return [[name: 'fabric']]
-            if (url.endsWith('/versions')) return versions
-            if (url.endsWith('/version-types')) return types
+            if (url.endsWith('/game_version')) {
+                return [[version: '26.3']]
+            }
+            if (url.endsWith('/loader')) {
+                return [[name: 'fabric']]
+            }
+            if (url.endsWith('/versions')) {
+                return versions
+            }
+            if (url.endsWith('/version-types')) {
+                return types
+            }
             throw new AssertionError(url)
         }
         Map resolved = Publication.resolve(value, 'both', fetch, 'fixture')
@@ -381,8 +389,12 @@ class PublicationTest {
     private Closure fetch(List versions, List<String> urls) {
         { String url ->
             urls.add(url)
-            if (url.endsWith('/version')) return versions
-            if (url.endsWith('/fabric-api')) return [id: 'P7dR8mSH']
+            if (url.endsWith('/version')) {
+                return versions
+            }
+            if (url.endsWith('/fabric-api')) {
+                return [id: 'P7dR8mSH']
+            }
             return [id: 'UBlXUQbC', slug: 'cbbg']
         }
     }
