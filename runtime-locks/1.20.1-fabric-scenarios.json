@@ -100,6 +100,27 @@
       "backends": ["vulkan"],
       "restart": false,
       "entrypoints": ["vulkan-vma-resize"]
+    },
+    {
+      "suite": "vulkan-native-view",
+      "profiles": ["vulkanmod"],
+      "backends": ["vulkan"],
+      "restart": false,
+      "entrypoints": ["vulkan-native-view"]
+    },
+    {
+      "suite": "vulkan-native-pass",
+      "profiles": ["vulkanmod"],
+      "backends": ["vulkan"],
+      "restart": false,
+      "entrypoints": ["vulkan-native-pass"]
+    },
+    {
+      "suite": "vulkan-native-framebuffer",
+      "profiles": ["vulkanmod"],
+      "backends": ["vulkan"],
+      "restart": false,
+      "entrypoints": ["vulkan-native-framebuffer"]
     }
   ]
 }

@@ -20,6 +20,14 @@ VULKAN_VMA_CASES = {
     'vulkan-vma-all': 'all',
     'vulkan-vma-resize': 'resize',
 }
+VULKAN_NATIVE_CASES = {
+    'vulkan-native-view': ('ImageView', 'image view', ('Image', 'Image', 'ImageView')),
+    'vulkan-native-pass': ('RenderPass', 'render pass',
+                           ('Image', 'Image', 'ImageView', 'ImageView', 'RenderPass')),
+    'vulkan-native-framebuffer': ('Framebuffer', 'framebuffer',
+                                  ('Image', 'Image', 'ImageView', 'ImageView',
+                                   'RenderPass', 'RenderPass', 'Framebuffer')),
+}
 SETTINGS_MANIFEST = 'stbn_64x64x8.sha256'
 SETTINGS_NOISE_FRAMES = tuple(f'stbn_64x64x8_{index}.png' for index in range(8))
 CONTEXT_MODS = {'forcegl2': 'forcegl20', 'threatengl': 'threatengl'}
@@ -62,7 +70,8 @@ def validate_classic_choice(metadata, scenario, profile, backend):
 
 def classic_config(backend, scenario='world'):
     settings = scenario == 'vulkan-settings'
-    full_precision = scenario in VULKAN_FORMAT_CASES or VULKAN_VMA_CASES.get(scenario) in ('depth', 'float', 'all')
+    full_precision = (scenario in VULKAN_FORMAT_CASES or scenario in VULKAN_NATIVE_CASES
+                      or VULKAN_VMA_CASES.get(scenario) in ('depth', 'float', 'all'))
     return {'mode': 'DEMO' if backend == 'vulkan' or scenario == 'iris' else 'ENABLED',
             'pixelFormat': 'RGBA32F' if full_precision else 'RGBA16F',
             'stbnSize': 64 if settings else 16, 'stbnDepth': 8,
@@ -80,7 +89,7 @@ def includes_sodium(profile):
 def vulkan_probe_agent(scenario):
     if scenario in VULKAN_FORMAT_CASES:
         return FORMAT_PROBE_AGENT
-    if scenario in VULKAN_VMA_CASES:
+    if scenario in VULKAN_VMA_CASES or scenario in VULKAN_NATIVE_CASES:
         return VMA_PROBE_AGENT
     return None
 
@@ -108,6 +117,9 @@ def classic_jvm_arguments(candidate, scenario, backend, profile, restart_phase=N
                 arguments.append('-Dcbbg.test.vulkanSceneFormat=' + str(expected))
                 if mode == 'all':
                     arguments.append('-Dcbbg.test.vulkanOriginalTarget=true')
+        if scenario in VULKAN_NATIVE_CASES:
+            resource, _, _ = VULKAN_NATIVE_CASES[scenario]
+            arguments += ['-Dcbbg.test.vulkanNativeFailure=' + resource, '-Dcbbg.test.vulkanSceneFormat=97']
     else:
         arguments.append('-Dcbbg.test.compatProfile=' + profile)
         if profile in CONTEXT_MODS:
@@ -328,6 +340,40 @@ def vulkan_vma_captures(log, evidence, scenario, scenes, width, height):
     return {'vulkan-world.png': (width, height)}
 
 
+def vulkan_native_captures(log, evidence, scenario, scenes, width, height):
+    resource, error_kind, resources = VULKAN_NATIVE_CASES[scenario]
+    if log.count('CBBG_ALLOC_AGENT allocationSites=1 freeSites=1') != 1:
+        raise ValueError('Vulkan native case did not observe image allocations and releases')
+    hooks = re.findall(r'CBBG_NATIVE_AGENT class=(\S+) calls=(\d+)(?=\r?\n|\Z)', log)
+    mod_hooks = [(name, calls) for name, calls in hooks if name.startswith('net/vulkanmod/')]
+    candidate_hooks = [(name, calls) for name, calls in hooks if name.startswith('com/qb20nh/cbbg/')]
+    if (len(hooks) != 4 or len(candidate_hooks) != 1 or candidate_hooks[0][1] != '2'
+            or sorted(mod_hooks) != [
+                ('net/vulkanmod/vulkan/framebuffer/Framebuffer', '3'),
+                ('net/vulkanmod/vulkan/framebuffer/RenderPass', '2'),
+                ('net/vulkanmod/vulkan/texture/VulkanImage', '3')]):
+        raise ValueError('Vulkan native probe call sites differ')
+    failure = 'CBBG_CLASSIC_VULKAN_NATIVE_FAIL resource=' + resource
+    error = (f'VulkanMod scene allocation failed for RGBA32F at {width}x{height}: '
+             f'Failed to create {error_kind}: VK_ERROR_OUT_OF_DEVICE_MEMORY')
+    if (log.count(failure) != 1 or log.count('VulkanMod scene allocation failed for ') != 1
+            or error not in log or log.index(error) < log.index(failure)):
+        raise ValueError('Vulkan native allocation failure differs')
+    before, _, remaining = log.partition(failure)
+    rollback, _, recovered = remaining.partition(error)
+    created = re.findall(r'CBBG_CLASSIC_VULKAN_NATIVE_CREATED resource=(\w+)', before)
+    released = re.findall(r'CBBG_CLASSIC_VULKAN_NATIVE_RELEASED resource=(\w+)', rollback)
+    if (sorted(created) != sorted(resources) or sorted(released) != sorted(resources)
+            or 'CBBG_CLASSIC_VULKAN_NATIVE_RELEASED' in before + recovered
+            or 'CBBG_CLASSIC_VULKAN_NATIVE_CREATED' in remaining):
+        raise ValueError('Vulkan native rollback did not release every handle before retry')
+    if scenes != [('97', 'false')] or 'CBBG_CLASSIC_VULKAN_SCENE format=97 disabled=false' not in recovered:
+        raise ValueError('Vulkan native rollback did not restore the expected framebuffer')
+    if (evidence / 'final-cbbg.json').read_bytes() != (evidence / 'initial-cbbg.json').read_bytes():
+        raise ValueError('Vulkan native rollback changed the saved precision preference')
+    return {'vulkan-world.png': (width, height)}
+
+
 def classic_result(scenario, profile, backend, log, evidence, exit_code, restart_phase=None):
     if (type(exit_code) is not int or exit_code != 0
             or re.search(r'VUID-|Validation Error|VK_ERROR_DEVICE_LOST|AssertionError|Game crashed!'
@@ -370,6 +416,8 @@ def classic_result(scenario, profile, backend, log, evidence, exit_code, restart
             captures = vulkan_fallback_captures(log, evidence, scenario, scenes, width, height)
         elif scenario in VULKAN_VMA_CASES:
             captures = vulkan_vma_captures(log, evidence, scenario, scenes, width, height)
+        elif scenario in VULKAN_NATIVE_CASES:
+            captures = vulkan_native_captures(log, evidence, scenario, scenes, width, height)
         else:
             comparisons = re.findall(r'CBBG_CLASSIC_VULKAN_PIXELS mode=(\w+) channels=(\d+) mismatches=(\d+) '
                                      r'topOriginMismatches=\d+ alphaMismatches=(\d+) changedChannels=(\d+)', log)

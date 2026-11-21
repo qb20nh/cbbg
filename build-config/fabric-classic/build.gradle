@@ -216,7 +216,8 @@ def vmaProbeAgent = tasks.register('classicVmaProbeAgentJar', Jar) {
     archiveClassifier = 'vma-probe-agent'
     destinationDirectory = layout.buildDirectory.dir('intermediates/smoke')
     from(sourceSets.packagedSmoke.output) {
-        include 'com/qb20nh/cbbg/parity/ClassicVmaProbeAgent*.class'
+        include 'com/qb20nh/cbbg/parity/ClassicVmaProbeAgent*.class',
+                'com/qb20nh/cbbg/gametest/ReleaseMapping.class', 'cbbg-test.map'
     }
     manifest.attributes('Premain-Class': 'com.qb20nh.cbbg.parity.ClassicVmaProbeAgent')
 }

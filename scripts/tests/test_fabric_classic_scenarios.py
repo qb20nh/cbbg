@@ -8,7 +8,8 @@ import unittest
 
 from fabric_classic_scenarios import (CLASSIC_ENTRYPOINT, CLASSIC_IRIS_OPTIONS, CLASSIC_OPTIONS,
                                       REDUCED_GL_SCENARIO, SETTINGS_MANIFEST, SETTINGS_NOISE_FRAMES,
-                                      VMA_PROBE_AGENT, VULKAN_FORMAT_CASES, VULKAN_VMA_CASES,
+                                      VMA_PROBE_AGENT, VULKAN_FORMAT_CASES, VULKAN_NATIVE_CASES,
+                                      VULKAN_VMA_CASES,
                                       classic_config, classic_jvm_arguments, classic_result,
                                       pixel_cache_files, validate_classic_choice, vulkan_probe_agent)
 from runtime_catalog import load_catalog, select_targets
@@ -23,7 +24,8 @@ class ClassicScenarioTests(unittest.TestCase):
                          'custom': {'cbbg:scenarios': ['world', 'satin', REDUCED_GL_SCENARIO,
                                                        'renderscale', 'iris', 'vulkan-lifecycle',
                                                        'vulkan-pixels', 'vulkan-settings',
-                                                       *VULKAN_FORMAT_CASES, *VULKAN_VMA_CASES]}}
+                                                       *VULKAN_FORMAT_CASES, *VULKAN_VMA_CASES,
+                                                       *VULKAN_NATIVE_CASES]}}
         self.log = ('CBBG_CLASSIC_VULKAN_DEVICE mod=0.5.2 device=Test GPU api=1.3.0 glfw=no-api reference=false\n'
                     'CBBG_CLASSIC_VULKAN_SCENE format=97 disabled=false\n'
                     'CBBG_CLASSIC_VULKAN_WORLD presentations=12\n')
@@ -366,6 +368,36 @@ class ClassicScenarioTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'Vulkan lifecycle evidence'):
             classic_result(scenario, 'vulkanmod', 'vulkan', log + restored.replace('97', '37'),
                            self.evidence, 0)
+
+    def test_native_allocation_retry_requires_each_created_handle_released(self):
+        scenario = 'vulkan-native-framebuffer'
+        validate_classic_choice(self.metadata, scenario, 'vulkanmod', 'vulkan')
+        self.assertEqual(VMA_PROBE_AGENT, vulkan_probe_agent(scenario))
+        self.assertIn('-Dcbbg.test.vulkanNativeFailure=Framebuffer',
+                      classic_jvm_arguments('candidate.jar', scenario, 'vulkan', 'vulkanmod'))
+        config = json.dumps(classic_config('vulkan', scenario))
+        for name in ('initial-cbbg.json', 'final-cbbg.json'):
+            (self.evidence / name).write_text(config)
+        hooks = ('CBBG_ALLOC_AGENT allocationSites=1 freeSites=1\n'
+                 'CBBG_NATIVE_AGENT class=net/vulkanmod/vulkan/framebuffer/Framebuffer calls=3\n'
+                 'CBBG_NATIVE_AGENT class=net/vulkanmod/vulkan/framebuffer/RenderPass calls=2\n'
+                 'CBBG_NATIVE_AGENT class=net/vulkanmod/vulkan/texture/VulkanImage calls=3\n'
+                 'CBBG_NATIVE_AGENT class=com/qb20nh/cbbg/mapped$scene calls=2\n')
+        handles = ('Image', 'ImageView', 'Image', 'ImageView', 'RenderPass', 'RenderPass', 'Framebuffer')
+        created = ''.join(f'CBBG_CLASSIC_VULKAN_NATIVE_CREATED resource={name}\n' for name in handles)
+        released = ''.join(f'CBBG_CLASSIC_VULKAN_NATIVE_RELEASED resource={name}\n' for name in handles)
+        reject = 'CBBG_CLASSIC_VULKAN_NATIVE_FAIL resource=Framebuffer\n'
+        retry = ('VulkanMod scene allocation failed for RGBA32F at 800x600: '
+                 'Failed to create framebuffer: VK_ERROR_OUT_OF_DEVICE_MEMORY\n')
+        prefix = hooks + created + reject
+        classic_result(scenario, 'vulkanmod', 'vulkan', prefix + released + retry + self.log, self.evidence, 0)
+        for bad in (released.replace('resource=ImageView\n', 'resource=Image\n', 1) + retry,
+                    retry + released, released + released + retry):
+            with self.assertRaisesRegex(ValueError, 'release every handle before retry'):
+                classic_result(scenario, 'vulkanmod', 'vulkan', prefix + bad + self.log, self.evidence, 0)
+        with self.assertRaisesRegex(ValueError, 'expected framebuffer'):
+            classic_result(scenario, 'vulkanmod', 'vulkan',
+                           self.log + prefix + released + retry, self.evidence, 0)
 
     def test_pixel_oracle_requires_all_three_comparisons_and_frozen_tile(self):
         tile = self.evidence / 'pixel-input'
