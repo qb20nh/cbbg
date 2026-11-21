@@ -33,6 +33,7 @@ public final class ClassicPackagedSmoke implements ClientModInitializer {
     DITHERED,
     DISABLED,
     RESTARTED_DISABLED,
+    STACK,
     IRIS,
     SATIN,
     RENDER_SCALE,
@@ -44,6 +45,8 @@ public final class ClassicPackagedSmoke implements ClientModInitializer {
   private final boolean iris = Boolean.getBoolean("cbbg.test.iris");
   private final boolean satin = Boolean.getBoolean("cbbg.test.satin");
   private final boolean renderScale = Boolean.getBoolean("cbbg.test.renderScale");
+  private final boolean stack = Boolean.getBoolean("cbbg.test.stack");
+  private ClassicStackSmoke stackSmoke;
   private ClassicIrisSmoke irisSmoke;
   private ClassicSatinSmoke satinSmoke;
   private ClassicRenderScaleSmoke renderScaleSmoke;
@@ -87,7 +90,10 @@ public final class ClassicPackagedSmoke implements ClientModInitializer {
       } else if (phase == Phase.OPENING_WORLD && client.player != null && client.screen == null) {
         enabledStart = presentations;
         disabledSince = ticks;
-        if (iris) {
+        if (stack && !restart) {
+          stackSmoke = new ClassicStackSmoke(client);
+          phase = Phase.STACK;
+        } else if (iris) {
           irisSmoke = new ClassicIrisSmoke(restart, ticks, presentations);
           phase = Phase.IRIS;
         } else if (satin) {
@@ -99,6 +105,11 @@ public final class ClassicPackagedSmoke implements ClientModInitializer {
         } else {
           phase = restart ? Phase.RESTARTED_DISABLED : Phase.DITHERED;
         }
+      } else if (phase == Phase.STACK) {
+        if (stackSmoke.tick(client)) {
+          satinSmoke = new ClassicSatinSmoke(client);
+          phase = Phase.SATIN;
+        }
       } else if (phase == Phase.IRIS) {
         if (irisSmoke.tick(client, ticks, presentations)) {
           phase = Phase.DONE;
@@ -106,13 +117,26 @@ public final class ClassicPackagedSmoke implements ClientModInitializer {
         }
       } else if (phase == Phase.SATIN) {
         if (satinSmoke.tick(client)) {
-          phase = Phase.DONE;
-          client.stop();
+          if (stack) {
+            renderScaleSmoke = new ClassicRenderScaleSmoke(client, ticks);
+            phase = Phase.RENDER_SCALE;
+          } else {
+            phase = Phase.DONE;
+            client.stop();
+          }
         }
       } else if (phase == Phase.RENDER_SCALE) {
         if (renderScaleSmoke.tick(client, ticks)) {
-          phase = Phase.DONE;
-          client.stop();
+          if (stack && iris) {
+            setMode(client, "demo");
+            // The preceding command matrix fills the chat overlay over the shader oracle.
+            client.gui.getChat().clearMessages(false);
+            irisSmoke = new ClassicIrisSmoke(false, ticks, presentations);
+            phase = Phase.IRIS;
+          } else {
+            phase = Phase.DONE;
+            client.stop();
+          }
         }
       } else if (phase == Phase.RESTARTED_DISABLED && ticks >= disabledSince + 6) {
         requireFormat(client, GL11.GL_RGBA8);
@@ -208,6 +232,15 @@ public final class ClassicPackagedSmoke implements ClientModInitializer {
     }
     if (loader.isModLoaded("renderscale") != Boolean.getBoolean("cbbg.test.renderScale")) {
       throw new AssertionError("Unexpected RenderScale presence");
+    }
+    if (Boolean.getBoolean("cbbg.test.stack")) {
+      for (String modId :
+          new String[] {
+            "modmenu", "sodium", "satin", "immediatelyfast", "chatpatches", "renderscale"
+          }) {
+        if (!loader.isModLoaded(modId))
+          throw new AssertionError("Missing compatibility mod: " + modId);
+      }
     }
     System.out.println(
         "CBBG_CLASSIC_OPENGL "
