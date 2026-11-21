@@ -50,23 +50,48 @@ ivec3 quantized(ivec2 offset, ivec2 orientation, float strength) {
     return ivec3(clamp(floor(color * 255.0 + (noise - 0.5) * strength + 0.5), 0.0, 255.0));
 }
 
-bool smallStep(ivec2 normal, ivec2 tangent, ivec2 orientation, ivec3 low, float strength) {
-    ivec3 high = quantized(normal, orientation, strength);
-    ivec3 change = abs(high - low);
+#if VIEW == 2
+// Follow a rasterized step that can move one pixel between neighboring rows.
+bool followStep(inout ivec2 edge, ivec2 normal, ivec2 orientation, ivec3 nearColor,
+                ivec3 farColor, float strength) {
+    ivec3 first = quantized(edge, orientation, strength);
+    ivec3 second = quantized(edge + normal, orientation, strength);
+    if (first == farColor && second == farColor) {
+        edge -= normal;
+        return quantized(edge, orientation, strength) == nearColor &&
+               quantized(edge - normal, orientation, strength) == nearColor;
+    }
+    if (first == nearColor && second == nearColor) {
+        edge += normal;
+        return quantized(edge + normal, orientation, strength) == farColor &&
+               quantized(edge + 2 * normal, orientation, strength) == farColor;
+    }
+    return first == nearColor && second == farColor &&
+           quantized(edge - normal, orientation, strength) == nearColor &&
+           quantized(edge + 2 * normal, orientation, strength) == farColor;
+}
+
+bool smallStep(ivec2 normal, ivec2 tangent, ivec2 orientation, ivec3 nearColor, float strength) {
+    ivec3 farColor = quantized(normal, orientation, strength);
+    ivec3 change = abs(farColor - nearColor);
     int magnitude = max(change.r, max(change.g, change.b));
     if (magnitude < 1 || magnitude > 4 ||
-        quantized(-normal, orientation, strength) != low ||
-        quantized(2 * normal, orientation, strength) != high) {
+        quantized(-normal, orientation, strength) != nearColor ||
+        quantized(2 * normal, orientation, strength) != farColor) {
         return false;
     }
-    for (int i = -2; i <= 2; ++i) {
-        if (quantized(tangent * i, orientation, strength) != low ||
-            quantized(normal + tangent * i, orientation, strength) != high) {
-            return false;
+    for (int direction = -1; direction <= 1; direction += 2) {
+        ivec2 edge = ivec2(0);
+        for (int i = 0; i < 2; ++i) {
+            edge += direction * tangent;
+            if (!followStep(edge, normal, orientation, nearColor, farColor, strength)) {
+                return false;
+            }
         }
     }
     return true;
 }
+#endif
 
 void main() {
     // Evaluate all neighbors with the center pixel's strength. The split itself
@@ -85,14 +110,13 @@ void main() {
     ivec2 orientation = ivec2(sign(vec2(dFdx(uv.x), dFdy(uv.y))));
     ivec3 color = quantized(ivec2(0), orientation, strength);
     vec3 outputColor = vec3(color) / 255.0;
-#if VIEW >= 1 && VIEW <= 4
-    ivec3 bits = color & 1;
-#if VIEW == 4
-    outputColor = vec3(bits);
-#else
-    outputColor = vec3(float(bits[VIEW - 1]));
-#endif
-#elif VIEW == 5
+#if VIEW == 0
+    outputColor = vec3(color & 1);
+#elif VIEW == 1
+    vec3 contrast = (outputColor - 0.5) * 2.0 + 0.5;
+    float luma = dot(contrast, vec3(0.2126, 0.7152, 0.0722));
+    outputColor = clamp(mix(vec3(luma), contrast, 2.0), 0.0, 1.0);
+#elif VIEW == 2
     if (smallStep(ivec2(1, 0), ivec2(0, 1), orientation, color, strength) ||
         smallStep(ivec2(0, 1), ivec2(1, 0), orientation, color, strength)) {
         outputColor = vec3(1.0, 0.87, 0.15);

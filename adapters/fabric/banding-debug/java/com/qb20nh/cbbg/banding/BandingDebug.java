@@ -10,7 +10,7 @@ import org.jspecify.annotations.Nullable;
 public final class BandingDebug {
   // The order of the enabled layouts and views matches SIDE and VIEW in the shader.
   private static final String[] LAYOUTS = {"off", "split", "before", "after"};
-  private static final String[] VIEWS = {"image", "red", "green", "blue", "rgb", "contours"};
+  private static final String[] VIEWS = {"rgb", "contrast", "contours"};
   private static int layout;
   private static int view;
   private static boolean presenting;
