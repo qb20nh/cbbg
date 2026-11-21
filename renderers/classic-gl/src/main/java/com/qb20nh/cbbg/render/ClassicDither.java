@@ -7,11 +7,22 @@ import com.mojang.blaze3d.platform.TextureUtil;
 import com.qb20nh.cbbg.CbbgClient;
 import com.qb20nh.cbbg.compat.renderscale.RenderScaleCompat;
 import com.qb20nh.cbbg.config.CbbgConfig;
+import java.util.function.BooleanSupplier;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.ShaderInstance;
 import org.lwjgl.opengl.GL11;
 
 public final class ClassicDither {
+  private static BooleanSupplier backendFailure = () -> false;
+
+  public static void setBackendFailure(BooleanSupplier failure) {
+    backendFailure = failure;
+  }
+
+  public static boolean hasFailed() {
+    return ClassicNoise.hasFailed() || backendFailure.getAsBoolean();
+  }
+
   private static ShaderInstance shader;
   private static NativeImage[] images;
   private static int[] textures;

@@ -25,6 +25,7 @@ public final class ClassicBackendPlugin implements IMixinConfigPlugin {
     return usesVulkanMod()
         ? List.of(
             "vulkanmod.FloatImageMixin",
+            "vulkanmod.DefaultMainPassAccess",
             "vulkanmod.FramebufferAllocationMixin",
             "vulkanmod.ImageViewAllocationMixin",
             "vulkanmod.MemoryManagerMixin",

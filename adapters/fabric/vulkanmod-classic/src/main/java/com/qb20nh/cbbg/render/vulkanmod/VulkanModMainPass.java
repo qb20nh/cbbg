@@ -6,9 +6,14 @@ import com.qb20nh.cbbg.Cbbg;
 import com.qb20nh.cbbg.CbbgClient;
 import com.qb20nh.cbbg.config.CbbgConfig;
 import com.qb20nh.cbbg.config.CbbgConfig.PixelFormat;
+import com.qb20nh.cbbg.mixin.vulkanmod.DefaultMainPassAccess;
+import com.qb20nh.cbbg.render.ClassicDither;
 import com.qb20nh.cbbg.render.ClassicFramebuffers;
 import com.qb20nh.cbbg.render.FormatPolicy;
 import java.util.EnumSet;
+import net.fabricmc.fabric.api.resource.SimpleSynchronousResourceReloadListener;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.packs.resources.ResourceManager;
 import net.vulkanmod.gl.GlTexture;
 import net.vulkanmod.vulkan.Renderer;
 import net.vulkanmod.vulkan.Vulkan;
@@ -21,7 +26,7 @@ import org.lwjgl.vulkan.VkCommandBuffer;
 import org.lwjgl.vulkan.VkFormatProperties;
 
 /** Renders the main scene offscreen when the effect is active. */
-public final class VulkanModMainPass implements MainPass {
+public final class VulkanModMainPass implements MainPass, SimpleSynchronousResourceReloadListener {
   private static final ThreadLocal<Boolean> ALLOCATING_SCENE = new ThreadLocal<>();
 
   private final Renderer renderer;
@@ -39,6 +44,7 @@ public final class VulkanModMainPass implements MainPass {
   public VulkanModMainPass(Renderer renderer, MainPass original) {
     this.renderer = renderer;
     this.original = original;
+    ClassicDither.setBackendFailure(dither::hasFailed);
     ClassicFramebuffers.setFormatStatus(
         () -> checkedFormats && !halfFloatSupported && !fullFloatSupported);
   }
@@ -48,8 +54,22 @@ public final class VulkanModMainPass implements MainPass {
   }
 
   @Override
+  public ResourceLocation getFabricId() {
+    return new ResourceLocation("cbbg", "vulkanmod_dither");
+  }
+
+  @Override
+  public void onResourceManagerReload(ResourceManager resources) {
+    dither.allowRetry();
+  }
+
+  @Override
   public void begin(VkCommandBuffer commands, MemoryStack stack) {
-    active = CbbgClient.isEnabled();
+    // Prepare the output pipeline before any scene commands target the offscreen attachment.
+    active =
+        CbbgClient.isEnabled()
+            && original instanceof DefaultMainPassAccess renderPass
+            && dither.preparePipeline(renderPass.cbbg$mainRenderPass());
     if (!active) {
       requested = null;
       if (scene != null) {

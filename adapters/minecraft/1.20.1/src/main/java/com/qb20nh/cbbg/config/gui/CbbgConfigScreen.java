@@ -2,6 +2,7 @@ package com.qb20nh.cbbg.config.gui;
 
 import com.qb20nh.cbbg.compat.iris.IrisCompat;
 import com.qb20nh.cbbg.config.CbbgConfig;
+import com.qb20nh.cbbg.render.ClassicDither;
 import com.qb20nh.cbbg.render.ClassicFramebuffers;
 import com.qb20nh.cbbg.render.ClassicNoise;
 import net.minecraft.client.gui.GuiGraphics;
@@ -24,7 +25,7 @@ public final class CbbgConfigScreen extends Screen {
             font,
             width,
             height,
-            ClassicNoise.hasFailed(),
+            ClassicDither.hasFailed(),
             this::confirmGeneration,
             this::onClose)
         .init();
@@ -85,7 +86,7 @@ public final class CbbgConfigScreen extends Screen {
           cx,
           top + CbbgConfigWidgets.CARD_HEIGHT - 36,
           0xFFFFAA00);
-    } else if (ClassicNoise.hasFailed()) {
+    } else if (ClassicDither.hasFailed()) {
       graphics.drawCenteredString(
           font,
           Component.translatable("cbbg.config.status.disabled_render_error"),

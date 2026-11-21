@@ -5,6 +5,7 @@ import static org.lwjgl.vulkan.VK10.*;
 
 import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
+import com.qb20nh.cbbg.Cbbg;
 import com.qb20nh.cbbg.config.CbbgConfig;
 import com.qb20nh.cbbg.render.ClassicNoise;
 import java.io.IOException;
@@ -12,6 +13,8 @@ import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import net.vulkanmod.vulkan.Renderer;
+import net.vulkanmod.vulkan.Vulkan;
+import net.vulkanmod.vulkan.framebuffer.RenderPass;
 import net.vulkanmod.vulkan.shader.GraphicsPipeline;
 import net.vulkanmod.vulkan.shader.Pipeline;
 import net.vulkanmod.vulkan.shader.PipelineState;
@@ -27,12 +30,56 @@ import org.lwjgl.vulkan.VkCommandBuffer;
 final class VulkanModDither {
   private final ManualUBO settings = new ManualUBO(2, VK_SHADER_STAGE_FRAGMENT_BIT, 4);
   private GraphicsPipeline pipeline;
+  private RenderPass preparedPass;
+  private long pipelineHandle;
+  private boolean failed;
   private VulkanImage[] noise;
   private int frame;
 
   void prepare(boolean active) {
-    if (active && pipeline == null) pipeline = createPipeline();
     if (active || ClassicNoise.isPreparing()) ClassicNoise.tick(this::replaceNoise);
+  }
+
+  boolean preparePipeline(RenderPass pass) {
+    if (failed) return false;
+    if (preparedPass == pass) return true;
+    try {
+      if (pipeline == null) pipeline = createPipeline();
+      var state =
+          new PipelineState(
+              PipelineState.AssemblyRasterState.encode(
+                  false, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST, VK_POLYGON_MODE_FILL),
+              0,
+              0,
+              0,
+              VK_COLOR_COMPONENT_R_BIT
+                  | VK_COLOR_COMPONENT_G_BIT
+                  | VK_COLOR_COMPONENT_B_BIT
+                  | VK_COLOR_COMPONENT_A_BIT,
+              pass);
+      pipelineHandle = pipeline.getHandle(state);
+      preparedPass = pass;
+      return true;
+    } catch (RuntimeException failure) {
+      failed = true;
+      Cbbg.LOGGER.error("Could not prepare the VulkanMod dither pipeline", failure);
+      if (pipeline != null) {
+        if (preparedPass != null) Vulkan.waitIdle();
+        pipeline.cleanUp();
+        pipeline = null;
+      }
+      preparedPass = null;
+      pipelineHandle = VK_NULL_HANDLE;
+      return false;
+    }
+  }
+
+  boolean hasFailed() {
+    return failed;
+  }
+
+  void allowRetry() {
+    failed = false;
   }
 
   private void replaceNoise(NativeImage[] images) {
@@ -97,19 +144,7 @@ final class VulkanModDither {
       parameters.putFloat(0, noise == null || ClassicNoise.hasFailed() ? 0f : config.strength());
       parameters.putFloat(4, config.mode() == CbbgConfig.Mode.DEMO ? 1f : 0f);
       settings.setSrc(memAddress(parameters), parameters.capacity());
-      var state =
-          new PipelineState(
-              PipelineState.AssemblyRasterState.encode(
-                  false, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST, VK_POLYGON_MODE_FILL),
-              0,
-              0,
-              0,
-              VK_COLOR_COMPONENT_R_BIT
-                  | VK_COLOR_COMPONENT_G_BIT
-                  | VK_COLOR_COMPONENT_B_BIT
-                  | VK_COLOR_COMPONENT_A_BIT,
-              renderer.getBoundRenderPass());
-      vkCmdBindPipeline(commands, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.getHandle(state));
+      vkCmdBindPipeline(commands, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineHandle);
       renderer.addUsedPipeline(pipeline);
       renderer.uploadAndBindUBOs(pipeline);
       vkCmdDraw(commands, 3, 1, 0, 0);
