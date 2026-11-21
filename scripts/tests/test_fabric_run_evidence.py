@@ -36,9 +36,28 @@ class ClassicRestartSnapshotsTest(unittest.TestCase):
             changed['evidence']['evidence-verify/' + key] = 'changed'
             with self.assertRaisesRegex(ValueError, 'snapshot differs'):
                 verify_classic_restart_snapshots(prepare, changed, before, after)
-        with self.assertRaisesRegex(ValueError, 'changed saved CBBG settings or shader pack'):
+        with self.assertRaisesRegex(ValueError, 'changed a required persisted file'):
             verify_classic_restart_snapshots(prepare, verify, before,
                 {**after, 'shaderpacks/cbbg-parity/shaders/final.fsh': 'changed'})
+
+    def test_plain_restart_binds_mode_snapshots_and_allows_no_cache_changes(self):
+        before = {'config/cbbg.json': 'disabled', '.cbbg/frame.png': 'cached'}
+        after = dict(before)
+        after['config/cbbg.json'] = 'enabled'
+        prepare = {'evidence': {
+            'evidence-prepare/prepared-options.txt': 'options',
+            'evidence-prepare/prepared-world.dat': 'world',
+            'evidence-prepare/final-cbbg.json': 'disabled'}}
+        verified = {'evidence': {
+            'evidence-verify/initial-options.txt': 'options',
+            'evidence-verify/initial-world.dat': 'world',
+            'evidence-verify/initial-cbbg.json': 'disabled',
+            'evidence-verify/final-cbbg.json': 'enabled'}}
+        verify_classic_restart_snapshots(prepare, verified, before, after, 'mode-restart')
+        for path in ('config/cbbg.json', '.cbbg/frame.png'):
+            with self.assertRaises(ValueError):
+                verify_classic_restart_snapshots(prepare, verified, before, {**after, path: 'different'},
+                                                 'mode-restart')
 
 
 class FabricRunEvidenceTest(unittest.TestCase):

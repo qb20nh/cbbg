@@ -7,10 +7,10 @@ from pathlib import Path
 import re
 import zipfile
 
-from fabric_classic_scenarios import (CLASSIC_RESTART_FILES, classic_result, validate_classic_choice,
-                                      vulkan_probe_agent)
+from fabric_classic_scenarios import (CLASSIC_MODE_RESTART, CLASSIC_RESTART_FILES, classic_result,
+                                      validate_classic_choice, vulkan_probe_agent)
 from fabric_dependency_lock import verify_dependencies, verify_gametest_api
-from fabric_parity_runtime import RESTART_DRIVERS, restart_state, verify_external_library
+from fabric_parity_runtime import restart_state, validate_restart_choice, verify_external_library
 from fabric_scenario_evidence import graphics_identity, validate_scenarios, validate_shutdown, validate_startup
 from parity_evidence import EvidenceError, checked_file, digest, read_json
 from runtime_catalog import load_catalog, select_targets
@@ -139,20 +139,24 @@ def verify_run(receipt_path, target, **inputs):
     return _verify_run(receipt_path, target, **inputs)
 
 
-def verify_classic_restart_snapshots(prepare, verified, before, after):
+def verify_classic_restart_snapshots(prepare, verified, before, after, scenario='iris'):
     prepared = prepare['evidence']
     reopened = verified['evidence']
     for name in CLASSIC_RESTART_FILES.values():
         expected = prepared.get('evidence-prepare/prepared-' + name)
         if not expected or expected != reopened.get('evidence-verify/initial-' + name):
             raise EvidenceError('Classic restart input snapshot differs: ' + name)
-    for path, name in (('config/cbbg.json', 'cbbg.json'), ('config/iris.properties', 'iris.properties')):
+    settings = {'config/cbbg.json': 'cbbg.json'}
+    mutable = 'config/cbbg.json' if scenario == CLASSIC_MODE_RESTART else 'config/iris.properties'
+    if scenario == 'iris':
+        settings['config/iris.properties'] = 'iris.properties'
+    for path, name in settings.items():
         if (path not in before or before[path] != prepared.get('evidence-prepare/final-' + name)
                 or before[path] != reopened.get('evidence-verify/initial-' + name)
                 or after[path] != reopened.get('evidence-verify/final-' + name)):
             raise EvidenceError('Classic restart settings snapshot differs: ' + path)
-    if any(after[path] != checksum for path, checksum in before.items() if path != 'config/iris.properties'):
-        raise EvidenceError('Classic restart changed saved CBBG settings or shader pack')
+    if any(after[path] != checksum for path, checksum in before.items() if path != mutable):
+        raise EvidenceError('Classic restart changed a required persisted file')
 
 
 def verify_restart(receipt_path, target, *, control_receipt_path, **inputs):
@@ -170,12 +174,7 @@ def verify_restart(receipt_path, target, *, control_receipt_path, **inputs):
     first = _verify_run(prepare_path, target, restart_phase='prepare', **inputs)
     second = _verify_run(receipt_path, target, restart_phase='verify', **inputs)
     control_result = _verify_run(control_receipt_path, target, restart_phase='control', **inputs)
-    scenarios = second['scenarios']
-    shader = RESTART_DRIVERS.get((second['backend'], scenarios[0])) if len(scenarios) == 1 else None
-    if shader is None:
-        raise EvidenceError('Unexpected restart driver or backend')
-    if shader not in second['profile'].split('+'):
-        raise EvidenceError('Restart profile omits the shader mod')
+    validate_restart_choice(second['backend'], second['scenarios'], second['profile'])
     if verified.get('prepareReceiptSha256') != digest(prepare_path):
         raise EvidenceError('Prepare receipt changed')
     for key in ('target', 'profile', 'backendRequested', 'loaderProfile', 'java', 'host',
@@ -194,10 +193,11 @@ def verify_restart(receipt_path, target, *, control_receipt_path, **inputs):
         raise EvidenceError('Restart input state differs from prepare result')
     for name, checksum in after.items():
         checked_file(game, {'path': name, 'sha256': checksum})
-    if restart_state(game) != after:
+    scenario = verified.get('classicScenario')
+    if restart_state(game, scenario) != after:
         raise EvidenceError('Restart saved state inventory differs')
     if target.get('buildProfile') == 'fabric-classic':
-        verify_classic_restart_snapshots(prepare, verified, before, after)
+        verify_classic_restart_snapshots(prepare, verified, before, after, scenario)
     second.update(prepare_receipt_sha256=first['receipt_sha256'],
                   control_receipt_sha256=control_result['receipt_sha256'], restart=True,
                   evidence_files=(first['evidence_files'] + second['evidence_files']

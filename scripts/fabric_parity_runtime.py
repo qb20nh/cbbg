@@ -11,8 +11,9 @@ import shutil
 import subprocess
 import zipfile
 
-from fabric_classic_scenarios import (CLASSIC_CACHE_SCENARIOS, CLASSIC_IRIS_OPTIONS, CLASSIC_OPTIONS,
-                                      CLASSIC_RESTART_FILES,
+from fabric_classic_scenarios import (CLASSIC_CACHE_FRAMES, CLASSIC_CACHE_MANIFEST,
+                                      CLASSIC_CACHE_SCENARIOS, CLASSIC_IRIS_OPTIONS, CLASSIC_MODE_RESTART,
+                                      CLASSIC_MODE_RESTART_PROFILES, CLASSIC_OPTIONS, CLASSIC_RESTART_FILES,
                                       REDUCED_GL_SCENARIO, SETTINGS_MANIFEST, SETTINGS_NOISE_FRAMES,
                                       VMA_PROBE_AGENT,
                                       classic_config, classic_jvm_arguments,
@@ -78,12 +79,23 @@ def java_identity(executable):
                 'libjvm': home / 'lib/server/libjvm.so'}.items()}}
 
 
-def restart_state(game):
-    settings = [game / 'config/cbbg.json', game / 'config/iris.properties']
-    pack = sorted((game / 'shaderpacks/cbbg-parity').rglob('*'))
-    files = settings + [path for path in pack if path.is_file()]
-    if len(files) == len(settings):
-        raise ValueError('Restart shader pack is missing')
+def validate_restart_choice(backend, scenarios, profile, *, require_shader=True):
+    if backend == 'opengl' and scenarios == [CLASSIC_MODE_RESTART] and profile in CLASSIC_MODE_RESTART_PROFILES:
+        return
+    shader = RESTART_DRIVERS.get((backend, scenarios[0])) if len(scenarios) == 1 else None
+    if not shader or require_shader and shader not in profile.split('+'):
+        raise ValueError('Unsupported restart scenario, profile or backend')
+
+
+def restart_state(game, scenario=None):
+    files = [game / 'config/cbbg.json']
+    if scenario == CLASSIC_MODE_RESTART:
+        files.extend(game / '.cbbg' / name for name in (CLASSIC_CACHE_MANIFEST, *CLASSIC_CACHE_FRAMES))
+    else:
+        pack = sorted(path for path in (game / 'shaderpacks/cbbg-parity').rglob('*') if path.is_file())
+        if not pack:
+            raise ValueError('Restart shader pack is missing')
+        files.extend([game / 'config/iris.properties', *pack])
     return {path.relative_to(game).as_posix(): digest(path) for path in files}
 
 
@@ -207,13 +219,13 @@ def main():
                 or initial_config is None or args.compat != 'none'
                 or (args.startup_mode == 'cold') != (args.startup_cache is None))):
         parser.error('Startup requires its dedicated driver, initial config and matching cache input')
-    restart_shader = None
-    if args.restart_phase:
-        restart_shader = RESTART_DRIVERS.get((args.backend, expected[0])) if len(expected) == 1 else None
-        if restart_shader is None:
-            parser.error('Restart phases require the dedicated Iris/OpenGL driver')
-        if classic and restart_shader not in args.compat.split('+'):
-            parser.error('Classic restart requires a profile with Iris')
+    try:
+        if args.restart_phase:
+            validate_restart_choice(args.backend, expected, args.compat, require_shader=classic)
+        elif args.classic_scenario == CLASSIC_MODE_RESTART:
+            raise ValueError('Classic mode restart requires a restart phase')
+    except ValueError as error:
+        parser.error(str(error))
 
     runtime = args.runtime.resolve()
     game = args.game_dir.resolve()
@@ -331,7 +343,7 @@ def main():
         for name, expected_hash in previous['evidence'].items():
             if digest(game / name) != expected_hash:
                 raise ValueError('Restart prepare evidence changed: ' + name)
-        state = restart_state(game)
+        state = restart_state(game, args.classic_scenario)
         if state != previous['persistedState']:
             raise ValueError('Restart persisted state changed')
         if classic:
@@ -344,7 +356,8 @@ def main():
         if classic and args.restart_phase == 'verify':
             evidence.mkdir()
             shutil.copyfile(game / 'config/cbbg.json', evidence / 'initial-cbbg.json')
-            shutil.copyfile(game / 'config/iris.properties', evidence / 'initial-iris.properties')
+            if args.classic_scenario == 'iris':
+                shutil.copyfile(game / 'config/iris.properties', evidence / 'initial-iris.properties')
             for name, filename in CLASSIC_RESTART_FILES.items():
                 shutil.copyfile(game / name, evidence / ('initial-' + filename))
             receipt['initialConfigSha256'] = digest(evidence / 'initial-cbbg.json')
@@ -414,9 +427,9 @@ def main():
                     shutil.copyfile(game / '.cbbg' / name, saved / name)
             if probe_agent:
                 shutil.copyfile(game / 'config/cbbg.json', evidence / 'final-cbbg.json')
-            if args.classic_scenario == 'iris':
+            if args.classic_scenario in ('iris', CLASSIC_MODE_RESTART):
                 shutil.copyfile(game / 'config/cbbg.json', evidence / 'final-cbbg.json')
-                if args.restart_phase:
+                if args.restart_phase and args.classic_scenario == 'iris':
                     shutil.copyfile(game / 'config/iris.properties', evidence / 'final-iris.properties')
                 if args.restart_phase == 'prepare':
                     for name, filename in CLASSIC_RESTART_FILES.items():
@@ -438,7 +451,7 @@ def main():
             receipt['graphics']['contextProfile'] = context.get('profile')
         receipt['scenarios'] = scenarios
         if args.restart_phase:
-            receipt['persistedState'] = restart_state(game)
+            receipt['persistedState'] = restart_state(game, args.classic_scenario)
     except Exception as failure:
         receipt['failure'] = {'type': type(failure).__name__, 'message': str(failure)}
         raise

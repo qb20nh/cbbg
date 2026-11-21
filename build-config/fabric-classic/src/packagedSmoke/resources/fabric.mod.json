@@ -7,7 +7,7 @@
     "client": ["com.qb20nh.cbbg.parity.ClassicPackagedSmoke"]
   },
   "custom": {
-    "cbbg:scenarios": ["world", "cache-cold", "cache-warm", "cache-damaged", "forcegl2-mesa-3", "satin", "renderscale", "iris", "vulkan-lifecycle", "vulkan-pixels", "vulkan-settings", "vulkan-fallback-float", "vulkan-fallback-eight-bit", "vulkan-vma-depth", "vulkan-vma-float", "vulkan-vma-all", "vulkan-vma-resize", "vulkan-native-view", "vulkan-native-pass", "vulkan-native-framebuffer", "vulkan-sampler-scene", "vulkan-sampler-noise", "vulkan-pipeline-shader", "vulkan-pipeline-native", "vulkan-pipeline-constructor"]
+    "cbbg:scenarios": ["world", "mode-restart", "cache-cold", "cache-warm", "cache-damaged", "forcegl2-mesa-3", "satin", "renderscale", "iris", "vulkan-lifecycle", "vulkan-pixels", "vulkan-settings", "vulkan-fallback-float", "vulkan-fallback-eight-bit", "vulkan-vma-depth", "vulkan-vma-float", "vulkan-vma-all", "vulkan-vma-resize", "vulkan-native-view", "vulkan-native-pass", "vulkan-native-framebuffer", "vulkan-sampler-scene", "vulkan-sampler-noise", "vulkan-pipeline-shader", "vulkan-pipeline-native", "vulkan-pipeline-constructor"]
   },
   "mixins": ["cbbg.classic-smoke.mixins.json"]
 }

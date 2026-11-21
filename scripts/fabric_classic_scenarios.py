@@ -45,6 +45,8 @@ SETTINGS_MANIFEST = 'stbn_64x64x8.sha256'
 SETTINGS_NOISE_FRAMES = tuple(f'stbn_64x64x8_{index}.png' for index in range(8))
 CONTEXT_MODS = {'forcegl2': 'forcegl20', 'threatengl': 'threatengl'}
 REDUCED_GL_SCENARIO = 'forcegl2-mesa-3'
+CLASSIC_MODE_RESTART = 'mode-restart'
+CLASSIC_MODE_RESTART_PROFILES = ('none', 'sodium')
 CLASSIC_CACHE_SCENARIOS = ('cache-cold', 'cache-warm', 'cache-damaged')
 CLASSIC_CACHE_PROFILES = ('none', 'sodium')
 CLASSIC_CACHE_MANIFEST = 'stbn_16x16x8.sha256'
@@ -78,6 +80,8 @@ def validate_classic_choice(metadata, scenario, profile, backend):
         if scenario == 'world' and profile != 'vulkanmod':
             return
         if scenario == REDUCED_GL_SCENARIO and profile == 'forcegl2':
+            return
+        if scenario == CLASSIC_MODE_RESTART and profile in CLASSIC_MODE_RESTART_PROFILES:
             return
         if scenario in CLASSIC_CACHE_SCENARIOS and profile in CLASSIC_CACHE_PROFILES:
             return
@@ -162,6 +166,8 @@ def classic_jvm_arguments(candidate, scenario, backend, profile, restart_phase=N
             iris_flags = {None: 'irisCycle', 'control': 'irisControl', 'verify': 'restart'}
             if restart_phase in iris_flags:
                 arguments.append('-Dcbbg.test.' + iris_flags[restart_phase] + '=true')
+        elif scenario == CLASSIC_MODE_RESTART and restart_phase == 'verify':
+            arguments.append('-Dcbbg.test.restart=true')
     return arguments
 
 
@@ -529,12 +535,19 @@ def classic_result(scenario, profile, backend, log, evidence, exit_code, restart
             or re.search(r'VUID-|Validation Error|VK_ERROR_DEVICE_LOST|AssertionError|Game crashed!'
                          r'|GL_INVALID_(?:ENUM|VALUE|OPERATION|FRAMEBUFFER_OPERATION)|GL_OUT_OF_MEMORY', log)):
         raise ValueError('Classic client or graphics validation failed')
-    if restart_phase and (scenario != 'iris' or 'iris' not in profile.split('+')):
-        raise ValueError('Classic restart phases require the Iris scenario')
-    if json.loads((evidence / 'initial-cbbg.json').read_text()) != classic_config(backend, scenario):
+    mode_restart = scenario == CLASSIC_MODE_RESTART
+    if (mode_restart and (backend != 'opengl' or profile not in CLASSIC_MODE_RESTART_PROFILES
+                          or restart_phase not in ('prepare', 'verify', 'control'))
+            or restart_phase and not mode_restart and (scenario != 'iris' or 'iris' not in profile.split('+'))):
+        raise ValueError('Unsupported classic restart scenario, profile or phase')
+    config = classic_config(backend, scenario)
+    if mode_restart and restart_phase == 'verify':
+        config['mode'] = 'DISABLED'
+    if json.loads((evidence / 'initial-cbbg.json').read_text()) != config:
         raise ValueError('Classic initial config or options differ')
     if restart_phase == 'verify':
-        iris_shader_state(evidence / 'initial-iris.properties', True)
+        if scenario == 'iris':
+            iris_shader_state(evidence / 'initial-iris.properties', True)
     else:
         if (evidence / 'initial-options.txt').read_text() != CLASSIC_OPTIONS:
             raise ValueError('Classic initial config or options differ')
@@ -605,6 +618,23 @@ def classic_result(scenario, profile, backend, log, evidence, exit_code, restart
             captures = renderscale_captures(log, width, height)
         elif scenario == 'iris':
             captures = iris_captures(log, evidence, width, height, restart_phase)
+        elif mode_restart:
+            final_config = dict(config, mode='ENABLED' if restart_phase == 'verify' else 'DISABLED')
+            if json.loads((evidence / 'final-cbbg.json').read_text()) != final_config:
+                raise ValueError('Classic mode restart did not preserve the other saved settings')
+            if restart_phase == 'verify':
+                events = re.findall(r'CBBG_CLASSIC_(?:RESTORED_DISABLED [^\r\n]+|RESTART_PASS [^\r\n]+'
+                                    r'|SMOKE_PASS [^\r\n]+)', log)
+                restored = 'CBBG_CLASSIC_RESTORED_DISABLED format=RGBA8 presentations=0'
+                enabled = re.fullmatch(r'CBBG_CLASSIC_RESTART_PASS presentations=(\d+)', events[-1]) if events else None
+                if len(events) != 2 or events[0] != restored or not enabled or int(enabled[1]) < 10:
+                    raise ValueError('Classic mode restart did not restore disabled and then re-enable dithering')
+                if ('Starting Async STBN Math Generation' in log
+                        or log.count('STBN Frames loaded from cache.') != 1):
+                    raise ValueError('Classic mode restart did not reuse the saved noise cache')
+                captures = {name: (width, height) for name in ('restart-disabled.png', 'restart-enabled.png')}
+            elif int(one_reading(log, r'CBBG_CLASSIC_SMOKE_PASS presentations=(\d+)')) < 10:
+                raise ValueError('Classic mode restart setup did not present enough frames')
         elif int(one_reading(log, r'CBBG_CLASSIC_SMOKE_PASS presentations=(\d+)')) < 10:
             raise ValueError('OpenGL world did not present enough frames')
         if scenario in CLASSIC_CACHE_SCENARIOS:

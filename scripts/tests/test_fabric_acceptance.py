@@ -22,6 +22,16 @@ class FabricAcceptanceTests(unittest.TestCase):
                     for backend in backends}
         self.assertEqual(actual, expected)
 
+    def test_classic_mode_restart_requires_both_opengl_profiles(self):
+        target, = select_targets(load_catalog(), '1.20.1-fabric')
+        contract = read_json(ROOT / 'runtime-locks/1.20.1-fabric-scenarios.json')
+        runs = required_runs(target, contract)
+        self.assertEqual(
+            [(profile, 'opengl', ['mode-restart'], True) for profile in ('none', 'sodium')],
+            [(run['profile'], run['backend'], run['entrypoints'], run['restart'])
+             for run in runs if run['suite'] == 'mode-restart'],
+        )
+
     def test_classic_cache_runs_require_cold_warm_and_damaged_starts_on_both_profiles(self):
         target, = select_targets(load_catalog(), '1.20.1-fabric')
         contract = read_json(ROOT / 'runtime-locks/1.20.1-fabric-scenarios.json')

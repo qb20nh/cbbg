@@ -7,7 +7,7 @@ import tempfile
 import unittest
 
 from fabric_classic_scenarios import (CLASSIC_CACHE_SCENARIOS, CLASSIC_ENTRYPOINT, CLASSIC_IRIS_OPTIONS,
-                                      CLASSIC_OPTIONS,
+                                      CLASSIC_MODE_RESTART, CLASSIC_OPTIONS,
                                       REDUCED_GL_SCENARIO, SETTINGS_MANIFEST, SETTINGS_NOISE_FRAMES,
                                       VMA_PROBE_AGENT, VULKAN_FORMAT_CASES, VULKAN_NATIVE_CASES,
                                       VULKAN_PIPELINE_CASES, VULKAN_SAMPLER_CASES, VULKAN_VMA_CASES,
@@ -24,7 +24,8 @@ class ClassicScenarioTests(unittest.TestCase):
         self.evidence = Path(temp.name)
         self.metadata = {'id': 'cbbg_classic_smoke', 'entrypoints': {'client': [CLASSIC_ENTRYPOINT]},
                          'custom': {'cbbg:scenarios': ['world', 'satin', REDUCED_GL_SCENARIO,
-                                                       'renderscale', 'iris', 'vulkan-lifecycle', *CLASSIC_CACHE_SCENARIOS,
+                                                       'renderscale', 'iris', 'vulkan-lifecycle',
+                                                       CLASSIC_MODE_RESTART, *CLASSIC_CACHE_SCENARIOS,
                                                        'vulkan-pixels', 'vulkan-settings',
                                                        *VULKAN_FORMAT_CASES, *VULKAN_VMA_CASES,
                                                        *VULKAN_NATIVE_CASES, *VULKAN_SAMPLER_CASES,
@@ -427,6 +428,32 @@ class ClassicScenarioTests(unittest.TestCase):
                             log.replace(self.log, self.log.replace('format=97', 'format=37'))):
                     with self.assertRaises(ValueError):
                         classic_result(scenario, 'vulkanmod', 'vulkan', bad, self.evidence, 0)
+
+    def test_mode_restart_requires_disabled_world_and_reuses_cache(self):
+        scenario = CLASSIC_MODE_RESTART
+        validate_classic_choice(self.metadata, scenario, 'none', 'opengl')
+        self.assertNotIn('-Dcbbg.test.restart=true',
+                         classic_jvm_arguments('candidate.jar', scenario, 'opengl', 'none', 'prepare'))
+        self.assertIn('-Dcbbg.test.restart=true',
+                      classic_jvm_arguments('candidate.jar', scenario, 'opengl', 'none', 'verify'))
+        for name in ('restart-disabled.png', 'restart-enabled.png'):
+            self.write_capture(self.evidence / name, 800, 600)
+        log = ('CBBG_CLASSIC_OPENGL Test GPU / 3.2 sodium=false\n'
+               'STBN Frames loaded from cache.\n'
+               'CBBG_CLASSIC_RESTORED_DISABLED format=RGBA8 presentations=0\n'
+               'CBBG_CLASSIC_RESTART_PASS presentations=12\n')
+        config = classic_config('opengl', scenario)
+        (self.evidence / 'initial-cbbg.json').write_text(json.dumps(dict(config, mode='DISABLED')))
+        final = self.evidence / 'final-cbbg.json'
+        final.write_text(json.dumps(config))
+        classic_result(scenario, 'none', 'opengl', log, self.evidence, 0, 'verify')
+        for bad in (log.replace('RGBA8', 'RGBA16F'), log.replace('presentations=12', 'presentations=9'),
+                    log.replace('STBN Frames loaded from cache.', 'Starting Async STBN Math Generation')):
+            with self.assertRaises(ValueError):
+                classic_result(scenario, 'none', 'opengl', bad, self.evidence, 0, 'verify')
+        final.write_text(json.dumps(dict(config, strength=4)))
+        with self.assertRaisesRegex(ValueError, 'other saved settings'):
+            classic_result(scenario, 'none', 'opengl', log, self.evidence, 0, 'verify')
 
     def test_cache_startup_checks_frozen_inputs_and_cache_behavior(self):
         log = ('CBBG_CLASSIC_OPENGL Test GPU / 3.2 sodium=false\n'
