@@ -16,8 +16,8 @@ class ReleasePlugin implements Plugin<Project> {
     void apply(Project project) {
         def required = { String name ->
             def value = project.providers.gradleProperty(name).orNull
-            if (!value) throw new GradleException('Missing -P' + name + '. ' +
-                    project.gradle.startParameter.taskNames.join(', ') + ' requires -P' + name + '=<value>. See the release commands in CONTRIBUTING.md.')
+            if (!value) { throw new GradleException('Missing -P' + name + '. ' +
+                    project.gradle.startParameter.taskNames.join(', ') + ' requires -P' + name + '=<value>. See the release commands in CONTRIBUTING.md.') }
             value
         }
         def input = { String name -> project.file(required(name)).canonicalFile }
@@ -57,7 +57,9 @@ class ReleasePlugin implements Plugin<Project> {
         task('releaseIdentity', 'Resolve the shared release product and tag identity.') {
             ReleaseIdentity identity = ReleaseIdentity.parse(required('release'))
             String expected = project.providers.gradleProperty('requireProduct').orNull
-            if (expected != null) identity.requireProduct(expected)
+            if (expected != null) {
+                identity.requireProduct(expected)
+            }
             File output = input('output')
             output.parentFile.mkdirs()
             output.setText(JsonOutput.toJson([product: identity.product, version: identity.version,
@@ -71,7 +73,9 @@ class ReleasePlugin implements Plugin<Project> {
                 throw new GradleException('Use either -Ptarget or -Ptargets')
             }
             String selection = project.providers.gradleProperty('targets').orElse(project.providers.gradleProperty('target')).orNull
-            if (!selection) throw new GradleException('Release notes require an explicit target selection. Use -Ptarget=<id> for one runtime or -Ptargets=<id,id> for a shared release; IDs are listed in targets.json.')
+            if (!selection) {
+                throw new GradleException('Release notes require an explicit target selection. Use -Ptarget=<id> for one runtime or -Ptargets=<id,id> for a shared release; IDs are listed in targets.json.')
+            }
             List<Map> targets = TargetCatalog.read(new File(source(), 'targets.json')).select(selection)
             CandidateFiles.releaseTargets(tag, targets)
             String notes = ChangelogNotes.select(new File(source(), identity.changelogPath), identity.version, targets)
@@ -131,7 +135,9 @@ class ReleasePlugin implements Plugin<Project> {
                 }
                 File weston = System.getenv('PATH').tokenize(File.pathSeparator)
                         .collect { new File(it, 'weston') }.find { it.canExecute() }
-                if (weston == null) throw new GradleException('Fresh candidate acceptance displays require Weston')
+                if (weston == null) {
+                    throw new GradleException('Fresh candidate acceptance displays require Weston')
+                }
                 String selection = project.providers.gradleProperty('targets').orElse(project.providers.gradleProperty('target')).orNull
                 if (project.providers.gradleProperty('targets').isPresent() && project.providers.gradleProperty('target').isPresent()) {
                     throw new GradleException('Use either -Ptarget or -Ptargets')
@@ -148,7 +154,9 @@ class ReleasePlugin implements Plugin<Project> {
                     project.logger.lifecycle('Acceptance cache: {} {} {}{}', id, cell, decision,
                             reason == null ? '' : ': ' + reason)
                 }
-                if (selection != null) options.targets = selection.split(',', -1).toList()
+                if (selection != null) {
+                    options.targets = selection.split(',', -1).toList()
+                }
                 FabricCandidateAcceptance.execute(options, run) { Map spec ->
                     project.logger.lifecycle('Candidate acceptance: {} {} {} (startup={}, restart={})',
                             spec.target.id, spec.profile, spec.backend, spec.startupMode, spec.restart)
@@ -172,7 +180,9 @@ class ReleasePlugin implements Plugin<Project> {
         task('verifyCandidate', 'Check packaged candidate and complete local runtime results.') {
             local()
             File output = input('output')
-            if (output.exists()) throw new GradleException("Validation output already exists: ${output}. Choose a new -Poutput=<file> for this verification.")
+            if (output.exists()) {
+                throw new GradleException("Validation output already exists: ${output}. Choose a new -Poutput=<file> for this verification.")
+            }
             CandidateFiles.writeNew(output, ReleaseChecks.verify(input('candidate'), results(), input('bundle'),
                     source(), required('repo'), run))
         }
@@ -187,7 +197,9 @@ class ReleasePlugin implements Plugin<Project> {
         task('preparePublication', 'Check immutable release files and prepare service metadata.') {
             String tag = required('release')
             String dryRun = project.providers.gradleProperty('dryRun').getOrElse('false')
-            if (!(dryRun in ['true', 'false'])) throw new GradleException('Expected -PdryRun=true or false')
+            if (!(dryRun in ['true', 'false'])) {
+                throw new GradleException('Expected -PdryRun=true or false')
+            }
             def arguments = [tag, required('repo'), source(), input('assets'), input('output'),
                              input('githubOutput'), project.providers.gradleProperty('services').getOrElse('both'), run]
             if (tag.contains('+mc') && !CandidateFiles.targetedRelease(tag)) {
@@ -254,23 +266,31 @@ class ReleasePlugin implements Plugin<Project> {
             }
             File metadataFile = input('publicationMetadata')
             Map metadata = CandidateFiles.read(metadataFile)
-            if (!(metadata.records instanceof List)) throw new GradleException('Expected publication records')
+            if (!(metadata.records instanceof List)) {
+                throw new GradleException('Expected publication records')
+            }
             String selected = project.providers.gradleProperty('target').orNull
             List<Map> matches = selected ? metadata.records.findAll { it.targets?.contains(selected) } : metadata.records
-            if (matches.size() != 1) throw new GradleException('Select one publication record with -Ptarget')
+            if (matches.size() != 1) {
+                throw new GradleException('Select one publication record with -Ptarget')
+            }
             Map record = matches[0]
             Map result = [release: metadata.release, source_commit: metadata.source_commit,
                           targets: record.targets, artifact: record.artifact,
                           metadata_sha256: CandidateFiles.sha256(metadataFile), file_id: identifier,
                           url: 'https://www.curseforge.com/minecraft/mc-mods/cbbg/files/' + identifier]
             if (sourcesIdentifier != null) {
-                if (!(record.sources instanceof Map)) throw new GradleException('Missing sources publication record')
+                if (!(record.sources instanceof Map)) {
+                    throw new GradleException('Missing sources publication record')
+                }
                 result.sources = record.sources
                 result.sources_file_id = sourcesIdentifier
                 result.sources_url = 'https://www.curseforge.com/minecraft/mc-mods/cbbg/files/' + sourcesIdentifier
             }
             if (evidenceIdentifier != null) {
-                if (!(record.evidence instanceof Map)) throw new GradleException('Missing evidence publication record')
+                if (!(record.evidence instanceof Map)) {
+                    throw new GradleException('Missing evidence publication record')
+                }
                 result.evidence = record.evidence
                 result.evidence_file_id = evidenceIdentifier
                 result.evidence_url = 'https://www.curseforge.com/minecraft/mc-mods/cbbg/files/' + evidenceIdentifier
@@ -282,7 +302,9 @@ class ReleasePlugin implements Plugin<Project> {
                     if (!(fileIdentifier ==~ /[0-9]+/) || new BigInteger(fileIdentifier) <= 0) {
                         throw new GradleException('CurseForge returned no valid ' + kind + ' file ID; check the project before retrying')
                     }
-                    if (!(record[kind] instanceof Map)) throw new GradleException('Missing ' + kind + ' publication record')
+                    if (!(record[kind] instanceof Map)) {
+                        throw new GradleException('Missing ' + kind + ' publication record')
+                    }
                     result[kind] = record[kind]
                     result[kind + '_file_id'] = fileIdentifier
                     result[kind + '_url'] = 'https://www.curseforge.com/minecraft/mc-mods/cbbg/files/' + fileIdentifier

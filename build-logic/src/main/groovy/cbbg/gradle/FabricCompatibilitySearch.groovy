@@ -23,7 +23,9 @@ class FabricCompatibilitySearch {
             List right = numbers(b)
             for (int i = 0; i < 3; i++) {
                 int result = left[i] <=> right[i]
-                if (result != 0) return result
+                if (result != 0) {
+                    return result
+                }
             }
             a <=> b
         }
@@ -49,13 +51,17 @@ class FabricCompatibilitySearch {
         List<Integer> rightNumbers = numbers(right)
         for (int i = 0; i < 3; i++) {
             int result = leftNumbers[i] <=> rightNumbers[i]
-            if (result != 0) return result < 0
+            if (result != 0) {
+                return result < 0
+            }
         }
         false
     }
 
     static Map intersect(Collection<Map> reports) {
-        if (!reports) throw new GradleException('Shared Fabric dependency search has no runtime reports')
+        if (!reports) {
+            throw new GradleException('Shared Fabric dependency search has no runtime reports')
+        }
         Map bounds = [minimumLoader: ordered(reports*.minimumLoader).last(),
                       minimumFabricApi: ordered(reports*.minimumFabricApi).last(),
                       loaderUpperExclusive: ordered(reports*.loaderUpperExclusive).first(),
@@ -76,8 +82,12 @@ class FabricCompatibilitySearch {
     static boolean familyPasses(Collection<Map> targets, String loader, String api, Closure<Boolean> test) {
         for (Map target : targets) {
             Boolean passed = test.call(target, loader, api)
-            if (passed == null) throw new GradleException('Dependency test was inconclusive for ' + target.id)
-            if (!passed) return false
+            if (passed == null) {
+                throw new GradleException('Dependency test was inconclusive for ' + target.id)
+            }
+            if (!passed) {
+                return false
+            }
         }
         true
     }
@@ -154,7 +164,9 @@ class FabricCompatibilitySearch {
     private static List<List<String>> grouped(Collection<String> available) {
         List<List<String>> groups = []
         ordered(available).each { String version ->
-            if (!groups || numbers(groups.last()[0]) != numbers(version)) groups.add([])
+            if (!groups || numbers(groups.last()[0]) != numbers(version)) {
+                groups.add([])
+            }
             groups.last().add(version)
         }
         groups
@@ -162,15 +174,21 @@ class FabricCompatibilitySearch {
 
     private static String boundary(List<List<String>> groups, String current, Closure<Boolean> passes) {
         int index = groups.findIndexOf { it.contains(current) }
-        if (index < 0) throw new GradleException('Current version is absent from discovery: ' + current)
+        if (index < 0) {
+            throw new GradleException('Current version is absent from discovery: ' + current)
+        }
         Map<Integer, Boolean> tested = [:]
         Closure<Boolean> test = { int position ->
             if (!tested.containsKey(position)) {
                 boolean groupPasses = true
                 groups[position].each { String version ->
                     Boolean result = passes.call(version)
-                    if (result == null) throw new GradleException('Dependency test was inconclusive: ' + version)
-                    if (!result) groupPasses = false
+                    if (result == null) {
+                        throw new GradleException('Dependency test was inconclusive: ' + version)
+                    }
+                    if (!result) {
+                        groupPasses = false
+                    }
                 }
                 tested[position] = groupPasses
             }
@@ -197,14 +215,22 @@ class FabricCompatibilitySearch {
                 failed = next
                 step *= 2
             }
-            if (passed < 0) throw new GradleException('No passing dependency version found from: ' + current)
+            if (passed < 0) {
+                throw new GradleException('No passing dependency version found from: ' + current)
+            }
         }
         while (passed - failed > 1) {
             int middle = failed + (passed - failed).intdiv(2)
-            if (test(middle)) passed = middle
-            else failed = middle
+            if (test(middle)) {
+                passed = middle
+            }
+            else {
+                failed = middle
+            }
         }
-        if (passed + 1 < groups.size()) test(passed + 1)
+        if (passed + 1 < groups.size()) {
+            test(passed + 1)
+        }
         groups[passed].contains(current) ? current : groups[passed][0]
     }
 
@@ -212,7 +238,9 @@ class FabricCompatibilitySearch {
         List<String> versions = ordered(available)
         List<Integer> desired = numbers(previous)
         String selected = versions.find { numbers(it) == desired }
-        if (selected != null) return selected
+        if (selected != null) {
+            return selected
+        }
         List<String> earlier = versions.findAll {
             ordered([it, previous])[0] == it
         }
@@ -227,7 +255,9 @@ class FabricCompatibilitySearch {
             Map previous = [:]
             try {
                 Object parsed = CandidateFiles.read(record)
-                if (parsed instanceof Map) previous = (Map) parsed
+                if (parsed instanceof Map) {
+                    previous = (Map) parsed
+                }
             } catch (IOException | GradleException ignored) {
                 // An incomplete cache record requires a new run.
             }
@@ -244,7 +274,9 @@ class FabricCompatibilitySearch {
         Map result = run.call()
         if (result.status in ['passed', 'failed']) {
             List<File> files = (List<File>) result.remove('files')
-            if (!files) throw new GradleException('Dependency test produced no evidence')
+            if (!files) {
+                throw new GradleException('Dependency test produced no evidence')
+            }
             Map evidence = files.collectEntries { [(it.canonicalPath): CandidateFiles.sha256(it)] }
             record.text = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(
                     [inputs: inputs, result: result, files: evidence])) + '\n'

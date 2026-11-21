@@ -30,6 +30,8 @@ class ReproducibleText {
     static void normalize(File file) {
         String original = file.getText('UTF-8')
         String normalized = original.replace('\r\n', '\n').replace('\r', '\n')
-        if (original != normalized) file.setText(normalized, 'UTF-8')
+        if (original != normalized) {
+            file.setText(normalized, 'UTF-8')
+        }
     }
 }

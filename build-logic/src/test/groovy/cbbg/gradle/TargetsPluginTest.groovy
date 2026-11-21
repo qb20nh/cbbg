@@ -168,7 +168,9 @@ case "$*" in *-Pcompat=fail*) exit 7;; esac
         [['1.21.1', 'gl3'], ['1.21.11', 'blaze-texture-format']].each { runtime ->
             fixture()
             File arguments = new File(directory, 'build/arguments.txt')
-            if (arguments.exists()) assertTrue(arguments.delete())
+            if (arguments.exists()) {
+                assertTrue(arguments.delete())
+            }
             Map target = [id: runtime[0] + '-fabric', minecraft: runtime[0], loader: 'fabric', java: 21,
                           renderer: runtime[1], backends: ['opengl'], implemented: false, buildProfile: 'fixture']
             new File(directory, 'targets.json').text = JsonOutput.toJson(

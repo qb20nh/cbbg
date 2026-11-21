@@ -337,7 +337,9 @@ class FabricCompatibilityProbeTest {
             FabricCompatibilityProbe.execute(spec + [startupMode: mode, startupCache: selectedCache]) { List args, File log ->
                 assertEquals(mode, args[args.indexOf('--startup-mode') + 1])
                 assertEquals(selectedCache != null, args.contains('--startup-cache'))
-                if (selectedCache != null) assertEquals(selectedCache, args[args.indexOf('--startup-cache') + 1])
+                if (selectedCache != null) {
+                    assertEquals(selectedCache, args[args.indexOf('--startup-cache') + 1])
+                }
                 assertEquals(spec.config, args[args.indexOf('--cbbg-config') + 1])
                 log.text = 'forwarded startup inputs'
                 1

@@ -134,7 +134,9 @@ sourceSets.processedGametest.java.setSrcDirs([mapped])
                              'iris-restart', 'allocation', 'world-pixels', 'shader-failure',
                              'debug-overlay', 'notifications', 'transparency', 'render-scale'])
         }
-        if (selection == 'selected-processed') expected.addAll(['generation', 'notifications'])
+        if (selection == 'selected-processed') {
+            expected.addAll(['generation', 'notifications'])
+        }
         assertEquals(expected, output.drivers.keySet())
         output.drivers.values().each { driver ->
             assertEquals(processed, driver.filename.contains('processed'))

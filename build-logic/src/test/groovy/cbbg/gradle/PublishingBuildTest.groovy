@@ -47,7 +47,9 @@ class PublishingBuildTest {
             fixture.file.text = JsonOutput.toJson(fixture.manifest)
             CandidateFixture.checksums(fixture.bundle)
         }
-        if (utilities) CandidateFixture.utilities(fixture)
+        if (utilities) {
+            CandidateFixture.utilities(fixture)
+        }
         ReleaseEvidence.assemble(new CandidateManifest(fixture.file), fixture.target.id)
         File metadata = new File(directory, 'publication.json')
         Map publication = Publication.metadata(fixture.file, fixture.root, 'Release notes')
@@ -141,9 +143,15 @@ tasks.register('sendUpload') {
             }
             Map result = Publication.plan(fixture.file, metadata, fixture.target.id, fixture.root,
                     { String url ->
-                        if (url.endsWith('/version/Version1')) return uploaded.get()
-                        if (url.endsWith('/project/fabric-api')) return [id: 'P7dR8mSH']
-                        if (url.endsWith('/project/UBlXUQbC')) return [id: 'UBlXUQbC', slug: 'cbbg']
+                        if (url.endsWith('/version/Version1')) {
+                            return uploaded.get()
+                        }
+                        if (url.endsWith('/project/fabric-api')) {
+                            return [id: 'P7dR8mSH']
+                        }
+                        if (url.endsWith('/project/UBlXUQbC')) {
+                            return [id: 'UBlXUQbC', slug: 'cbbg']
+                        }
                         fail('Unexpected verification request: ' + url)
                     }, null, 'Version1')
             assertEquals('reuse', result.action)
@@ -159,7 +167,9 @@ tasks.register('sendUpload') {
             int separator = part.indexOf('\r\n\r\n')
             if (separator >= 0) {
                 def name = part.substring(0, separator) =~ /name="([^"]+)"/
-                if (!name.find()) throw new IllegalArgumentException('Multipart part has no name')
+                if (!name.find()) {
+                    throw new IllegalArgumentException('Multipart part has no name')
+                }
                 parts[name.group(1)] = part.substring(separator + 4, part.length() - 2)
                         .getBytes(StandardCharsets.ISO_8859_1)
             }

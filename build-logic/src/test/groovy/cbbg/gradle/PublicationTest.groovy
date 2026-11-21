@@ -590,9 +590,15 @@ class PublicationTest {
         List<String> urls = []
         Closure lookup = { String url ->
             urls.add(url)
-            if (url.endsWith('/version/Version1')) return remote
-            if (url.endsWith('/version')) fail('The project list can still omit a new upload')
-            if (url.endsWith('/fabric-api')) return [id: 'P7dR8mSH']
+            if (url.endsWith('/version/Version1')) {
+                return remote
+            }
+            if (url.endsWith('/version')) {
+                fail('The project list can still omit a new upload')
+            }
+            if (url.endsWith('/fabric-api')) {
+                return [id: 'P7dR8mSH']
+            }
             [id: 'UBlXUQbC', slug: 'cbbg']
         }
         Map result = Publication.plan(fixture.file, publication, '26.3-fabric', fixture.root,

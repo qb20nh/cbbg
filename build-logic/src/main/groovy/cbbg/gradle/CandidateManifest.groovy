@@ -81,7 +81,9 @@ class CandidateManifest {
                 (!target.containsKey('library') || !(target.library_source_commit ==~ /[0-9a-f]{40}/))) {
             throw new GradleException('Library provenance requires its dependency artifact and source commit')
         }
-        if (target.containsKey('library_release')) ReleaseIdentity.parse(target.library_release as String).requireProduct('lib')
+        if (target.containsKey('library_release')) {
+            ReleaseIdentity.parse(target.library_release as String).requireProduct('lib')
+        }
         def tests = target.client_tests
         if (!(tests instanceof Map) || !(tests.drivers instanceof Map) || tests.drivers.isEmpty()) {
             throw new GradleException('Missing client test drivers')
@@ -153,7 +155,9 @@ class CandidateManifest {
         records.each { id, record ->
             if (record.containsKey('sbom')) {
                 Map evidence = ReleaseEvidence.reference(this, id)
-                if (files.containsKey(evidence.path)) throw new GradleException('Duplicate release evidence filename')
+                if (files.containsKey(evidence.path)) {
+                    throw new GradleException('Duplicate release evidence filename')
+                }
                 files[evidence.path] = evidence.sha256
             }
         }

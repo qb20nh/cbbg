@@ -214,7 +214,9 @@ class CandidateManifestTest {
         }
         for (byte[] invalid : [null, 'different mapping'.bytes]) {
             entries.remove('META-INF/cbbg/proguard.map')
-            if (invalid != null) entries['META-INF/cbbg/proguard.map'] = invalid
+            if (invalid != null) {
+                entries['META-INF/cbbg/proguard.map'] = invalid
+            }
             CandidateFixture.archive(sources, entries)
             fixture.record.sources.sha256 = CandidateFiles.sha256(sources)
             fixture.file.text = JsonOutput.toJson(fixture.manifest)
@@ -232,7 +234,9 @@ class CandidateManifestTest {
         }
         for (byte[] invalid : [null, '{}'.bytes]) {
             entries.remove('META-INF/cbbg/sbom.cdx.json')
-            if (invalid != null) entries['META-INF/cbbg/sbom.cdx.json'] = invalid
+            if (invalid != null) {
+                entries['META-INF/cbbg/sbom.cdx.json'] = invalid
+            }
             CandidateFixture.archive(sources, entries)
             fixture.record.sources.sha256 = CandidateFiles.sha256(sources)
             fixture.file.text = JsonOutput.toJson(fixture.manifest)
@@ -246,7 +250,9 @@ class CandidateManifestTest {
         File sources = new File(fixture.bundle, fixture.record.sources.path)
         Map<String, byte[]> entries = [:]
         new ZipFile(sources).withCloseable { zip ->
-            zip.entries().each { if (it.name != 'META-INF/cbbg/proguard.map') entries[it.name] = zip.getInputStream(it).bytes }
+            zip.entries().each { if (it.name != 'META-INF/cbbg/proguard.map') {
+                entries[it.name] = zip.getInputStream(it).bytes
+            } }
         }
         CandidateFixture.archive(sources, entries)
         fixture.record.sources.sha256 = CandidateFiles.sha256(sources)

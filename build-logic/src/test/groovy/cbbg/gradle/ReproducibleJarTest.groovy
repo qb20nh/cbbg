@@ -84,7 +84,9 @@ tasks.register('modernJar', org.gradle.jvm.tasks.Jar) {
         new ZipOutputStream(new FileOutputStream(jar)).withCloseable { output ->
             for (String name : ['META-INF/', 'META-INF/jars/', 'META-INF/jars/library.jar']) {
                 output.putNextEntry(new ZipEntry(name))
-                if (name.endsWith('.jar')) output.write(nested.bytes)
+                if (name.endsWith('.jar')) {
+                    output.write(nested.bytes)
+                }
                 output.closeEntry()
             }
         }

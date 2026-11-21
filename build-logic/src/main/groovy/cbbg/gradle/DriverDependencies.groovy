@@ -29,7 +29,9 @@ class DriverDependencies {
         archive.withCloseable { jar ->
             jar.entries().each { entry ->
                 if (!entry.directory) {
-                    if (entries.containsKey(entry.name)) throw new GradleException('Duplicate test driver entry: ' + entry.name)
+                    if (entries.containsKey(entry.name)) {
+                        throw new GradleException('Duplicate test driver entry: ' + entry.name)
+                    }
                     entries[entry.name] = jar.getInputStream(entry).withCloseable { it.bytes }
                 }
             }
@@ -61,15 +63,21 @@ class DriverDependencies {
             ['mixins', 'client', 'server'].each { side ->
                 (config[side] ?: []).each { pending.add((config.package + '.' + it).replace('.', '/')) }
             }
-            if (config.plugin) pending.add(config.plugin.replace('.', '/'))
+            if (config.plugin) {
+                pending.add(config.plugin.replace('.', '/'))
+            }
         }
         Set<String> visited = new LinkedHashSet<>()
         while (pending) {
             String name = pending.iterator().next()
             pending.remove(name)
-            if (!visited.add(name)) continue
+            if (!visited.add(name)) {
+                continue
+            }
             def type = pool.getClass(name)
-            if (type == null) throw new GradleException('Missing test entrypoint or dependency: ' + name)
+            if (type == null) {
+                throw new GradleException('Missing test entrypoint or dependency: ' + name)
+            }
             boolean reflectiveLoad = type.constantPool.any { constant ->
                 constant instanceof RefConstant &&
                         ((constant.getClassName(type) == 'java/lang/Class' &&
@@ -78,21 +86,31 @@ class DriverDependencies {
                          (constant.getName(type) in ['loadClass', 'findClass', 'defineClass']))
             }
             // Reflection can load helpers that have no static class reference.
-            if (reflectiveLoad) fullArchive = true
+            if (reflectiveLoad) {
+                fullArchive = true
+            }
             boolean missingHelper = type.constantPool.any { constant ->
-                if (!(constant instanceof ClassConstant)) return false
+                if (!(constant instanceof ClassConstant)) {
+                    return false
+                }
                 String reference = constant.getName(type).replaceFirst(/^\[+L/, '').replaceFirst(/;$/, '')
                 String owner = reference.contains('/') ? reference.substring(0, reference.lastIndexOf('/')) : ''
                 packages.contains(owner) && pool.getClass(reference) == null
             }
-            if (missingHelper) fullArchive = true
+            if (missingHelper) {
+                fullArchive = true
+            }
             Set references = new LinkedHashSet()
             type.accept(new ReferencedClassVisitor(new ClassCollector(references)))
-            references.each { if (!visited.contains(it.name)) pending.add(it.name) }
+            references.each { if (!visited.contains(it.name)) {
+                pending.add(it.name)
+            } }
             // Inner classes may also be reached through reflection.
             entries.keySet().findAll { it.startsWith(name + '$') && it.endsWith('.class') }.each {
                 String inner = it.substring(0, it.length() - 6)
-                if (!visited.contains(inner)) pending.add(inner)
+                if (!visited.contains(inner)) {
+                    pending.add(inner)
+                }
             }
         }
         Map files = entries.findAll { name, bytes -> fullArchive || !name.endsWith('.class') || visited.contains(name.substring(0, name.length() - 6)) }

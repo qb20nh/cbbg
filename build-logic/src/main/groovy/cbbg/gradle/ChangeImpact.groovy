@@ -53,7 +53,9 @@ class ChangeImpact {
                         if (inputs.any { it.file ? path == it.path : path.startsWith(it.path + '/') }) {
                             knownSource = true
                         }
-                        if (inputs.any { FabricSources.contains(it, path) }) selected.add(target.id as String)
+                        if (inputs.any { FabricSources.contains(it, path) }) {
+                            selected.add(target.id as String)
+                        }
                         List<String> prefixes = layout ? [] :
                                 ((owner.sourceGroups ?: []) + ["renderers/${owner.renderer}"])
                         if (owner.buildProfile) prefixes += "build-config/${owner.buildProfile}"
@@ -220,7 +222,9 @@ class ChangeImpact {
         Map current = after.data.targets.collectEntries { [(it.id): it] }
         Set<String> ids = (previous.keySet() + current.keySet()) as Set
         if (before.data.findAll { !(it.key in ['targets', 'ciTargets']) } !=
-                after.data.findAll { !(it.key in ['targets', 'ciTargets']) }) return ids
+                after.data.findAll { !(it.key in ['targets', 'ciTargets']) }) {
+            return ids
+        }
         Set<String> changed = ids.findAll { previous[it] != current[it] } as Set
         Set oldCi = before.defaults()*.id as Set
         Set newCi = after.defaults()*.id as Set

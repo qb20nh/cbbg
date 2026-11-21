@@ -9,7 +9,9 @@ class ChangelogNotes {
     }
 
     static String select(File changelog, String version, List<Map> targets) {
-        if (!targets) throw new GradleException('Release notes require selected targets')
+        if (!targets) {
+            throw new GradleException('Release notes require selected targets')
+        }
         List<String> lines = changelog.readLines('UTF-8')
         List<Integer> levels = headingLevels(lines)
         List<Integer> headings = (0..<lines.size()).findAll { levels[it] == 2 }
@@ -26,9 +28,9 @@ class ChangelogNotes {
                             lines[it] ==~ /## \[${Pattern.quote(version)}\](?:\s+-\s+\d{4}-\d{2}-\d{2})?\s*/
                 }
             }
-            if (matches.size() != 1) throw new GradleException('Expected one changelog entry for ' + identifier +
+            if (matches.size() != 1) { throw new GradleException('Expected one changelog entry for ' + identifier +
                     ' in ' + changelog + '; found ' + matches.size() +
-                    '. Use one H2 release heading with <!-- [' + identifier + '] -->, or one shared ## [' + version + '] heading.')
+                    '. Use one H2 release heading with <!-- [' + identifier + '] -->, or one shared ## [' + version + '] heading.') }
             selected.add(matches.first())
         }
         if (selected.size() != 1) {
@@ -40,18 +42,24 @@ class ChangelogNotes {
     }
 
     static String forTargets(String notes, List<Map> targets) {
-        if (!targets) throw new GradleException('Release notes require selected targets')
+        if (!targets) {
+            throw new GradleException('Release notes require selected targets')
+        }
         List<String> lines = notes.readLines()
         List<Integer> levels = headingLevels(lines)
         List<String> filtered = []
         boolean include = true
         for (int i = 0; i < lines.size(); i++) {
-            if (levels[i] in [1, 2, 3]) include = true
+            if (levels[i] in [1, 2, 3]) {
+                include = true
+            }
             if (levels[i] == 4) {
                 Map scope = scope(lines[i].substring(5).replaceFirst(/\s+#+\s*$/, '').trim())
                 include = targets.any { applies(scope, it) }
             }
-            if (include) filtered.add(lines[i])
+            if (include) {
+                filtered.add(lines[i])
+            }
         }
         List<Integer> filteredLevels = headingLevels(filtered)
         List<String> result = []
@@ -73,7 +81,9 @@ class ChangelogNotes {
     }
 
     static String forPublication(String notes, List<Map> targets) {
-        if (!targets) throw new GradleException('Release notes require selected targets')
+        if (!targets) {
+            throw new GradleException('Release notes require selected targets')
+        }
         Map<String, List<Map>> versions = targets.groupBy { it.minecraft }
         String publicNotes = notes.replaceFirst(/\s*<!-- cbbg-candidate-run: [1-9][0-9]* -->\s*$/, '')
         List<String> sections = versions.collect { minecraft, runtimes ->
@@ -91,7 +101,9 @@ class ChangelogNotes {
                     }
                     line = '#### ' + scope.loaderLabel
                 }
-                if (removedHeading && !line.trim()) continue
+                if (removedHeading && !line.trim()) {
+                    continue
+                }
                 removedHeading = false
                 result.add(line)
             }
@@ -117,17 +129,23 @@ class ChangelogNotes {
         if (version.matches()) {
             String label = version[0][2]
             String loader = label == null ? null : loaders[label.toLowerCase(Locale.ROOT)]
-            if (label != null && loader == null) throw new GradleException('Unknown changelog loader: ' + label)
+            if (label != null && loader == null) {
+                throw new GradleException('Unknown changelog loader: ' + label)
+            }
             return [minecraft: version[0][1].split(/,\s*/).toList(), loader: loader, loaderLabel: label]
         }
         String loader = loaders[title.toLowerCase(Locale.ROOT)]
-        if (loader == null) throw new GradleException('Expected a Minecraft version or loader scope: ' + title)
+        if (loader == null) {
+            throw new GradleException('Expected a Minecraft version or loader scope: ' + title)
+        }
         [loader: loader, loaderLabel: title]
     }
 
     private static List<String> identifiers(String heading) {
         def comment = heading =~ /<!--(.*?)-->\s*$/
-        if (!comment.find()) return []
+        if (!comment.find()) {
+            return []
+        }
         (comment.group(1) =~ /\[([^\]]+)\]/).collect { it[1] }
     }
 
@@ -138,7 +156,9 @@ class ChangelogNotes {
             def marker = line =~ /^ {0,3}(`{3,}|~{3,})(.*)$/
             if (fence != null) {
                 if (marker.matches() && marker[0][1][0] == fence[0] &&
-                        marker[0][1].length() >= fence.length() && !marker[0][2].trim()) fence = null
+                        marker[0][1].length() >= fence.length() && !marker[0][2].trim()) {
+                    fence = null
+                }
                 levels.add(0)
             } else if (marker.matches()) {
                 fence = marker[0][1]
