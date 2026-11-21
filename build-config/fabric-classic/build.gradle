@@ -24,7 +24,13 @@ repositories {
 }
 
 def compatibility = providers.gradleProperty('compat').getOrElse('none')
-if (!(compatibility in ['none', 'modmenu', 'sodium'])) {
+def compatibilityDependencies = [
+    modmenu: "maven.modrinth:modmenu:${target.dependencies.modMenu}",
+    sodium: "maven.modrinth:sodium:${target.dependencies.sodium}",
+    forcegl2: "maven.modrinth:forcegl2.0-remapped:${target.dependencies.forceGl2}",
+    threatengl: "maven.modrinth:threatengl:${target.dependencies.threatenGl}"
+]
+if (compatibility != 'none' && !compatibilityDependencies.containsKey(compatibility)) {
     throw new GradleException("Compatibility fixture ${compatibility} has not been ported to this profile")
 }
 def utilitiesRoot = new File(repositoryRoot, 'libraries/utilities')
@@ -46,11 +52,8 @@ dependencies {
     modImplementation "net.fabricmc:fabric-loader:${target.dependencies.loader}"
     modImplementation "net.fabricmc.fabric-api:fabric-api:${target.dependencies.fabricApi}"
     modCompileOnly("maven.modrinth:modmenu:${target.dependencies.modMenu}") { transitive = false }
-    if (compatibility == 'modmenu') {
-        modLocalRuntime("maven.modrinth:modmenu:${target.dependencies.modMenu}") { transitive = false }
-    }
-    if (compatibility == 'sodium') {
-        modLocalRuntime("maven.modrinth:sodium:${target.dependencies.sodium}") { transitive = false }
+    if (compatibility != 'none') {
+        modLocalRuntime(compatibilityDependencies[compatibility]) { transitive = false }
     }
     compileOnly 'org.jspecify:jspecify:1.0.1'
     add(embeddedUtilities.name, "com.qb20nh:cbbg-utilities:${utilitiesVersion}")

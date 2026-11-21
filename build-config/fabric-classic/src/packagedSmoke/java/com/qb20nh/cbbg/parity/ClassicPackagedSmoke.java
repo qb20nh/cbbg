@@ -20,7 +20,10 @@ import net.minecraft.world.level.LevelSettings;
 import net.minecraft.world.level.WorldDataConfiguration;
 import net.minecraft.world.level.levelgen.WorldOptions;
 import net.minecraft.world.level.levelgen.presets.WorldPresets;
+import org.lwjgl.glfw.GLFW;
+import org.lwjgl.opengl.GL;
 import org.lwjgl.opengl.GL11;
+import org.lwjgl.opengl.GL20;
 import org.lwjgl.opengl.GL30;
 
 /** Tests the packaged mod through its public behavior and the live OpenGL pipeline. */
@@ -30,6 +33,7 @@ public final class ClassicPackagedSmoke implements ClientModInitializer {
   private enum Phase {
     TITLE,
     OPENING_WORLD,
+    REFERENCE,
     DITHERED,
     DISABLED,
     RESTARTED_DISABLED,
@@ -42,6 +46,7 @@ public final class ClassicPackagedSmoke implements ClientModInitializer {
 
   private static long presentations;
   private final boolean restart = Boolean.getBoolean("cbbg.test.restart");
+  private final boolean reference = Boolean.getBoolean("cbbg.test.reference");
   private final boolean iris = Boolean.getBoolean("cbbg.test.iris");
   private final boolean satin = Boolean.getBoolean("cbbg.test.satin");
   private final boolean renderScale = Boolean.getBoolean("cbbg.test.renderScale");
@@ -75,7 +80,7 @@ public final class ClassicPackagedSmoke implements ClientModInitializer {
       if (phase == Phase.TITLE
           && client.getOverlay() == null
           && client.screen instanceof TitleScreen title) {
-        checkInstallation();
+        checkInstallation(client);
         if (restart) {
           if (!iris) {
             requireFormat(client, GL11.GL_RGBA8);
@@ -90,7 +95,9 @@ public final class ClassicPackagedSmoke implements ClientModInitializer {
       } else if (phase == Phase.OPENING_WORLD && client.player != null && client.screen == null) {
         enabledStart = presentations;
         disabledSince = ticks;
-        if (stack && !restart) {
+        if (reference) {
+          phase = Phase.REFERENCE;
+        } else if (stack && !restart) {
           stackSmoke = new ClassicStackSmoke(client);
           phase = Phase.STACK;
         } else if (iris) {
@@ -105,6 +112,13 @@ public final class ClassicPackagedSmoke implements ClientModInitializer {
         } else {
           phase = restart ? Phase.RESTARTED_DISABLED : Phase.DITHERED;
         }
+      } else if (phase == Phase.REFERENCE && ticks >= disabledSince + 6) {
+        requireFormat(client, GL11.GL_RGBA8);
+        if (presentations != 0) throw new AssertionError("CBBG drew in the reference game");
+        capture(client, "reference.png");
+        System.out.println("CBBG_CLASSIC_REFERENCE_PASS");
+        phase = Phase.DONE;
+        client.stop();
       } else if (phase == Phase.STACK) {
         if (stackSmoke.tick(client)) {
           satinSmoke = new ClassicSatinSmoke(client);
@@ -212,13 +226,18 @@ public final class ClassicPackagedSmoke implements ClientModInitializer {
     }
   }
 
-  private static void checkInstallation() throws Exception {
+  private void checkInstallation(Minecraft client) throws Exception {
     var loader = FabricLoader.getInstance();
-    var mod = loader.getModContainer("cbbg").orElseThrow();
-    Path expected = Path.of(System.getProperty("cbbg.test.jar")).toRealPath();
-    var paths = mod.getOrigin().getPaths();
-    if (paths.size() != 1 || !Files.isSameFile(paths.get(0), expected)) {
-      throw new AssertionError("The expected packaged JAR was not loaded: " + paths);
+    if (reference) {
+      if (loader.isModLoaded("cbbg"))
+        throw new AssertionError("CBBG was loaded in the reference game");
+    } else {
+      var mod = loader.getModContainer("cbbg").orElseThrow();
+      Path expected = Path.of(System.getProperty("cbbg.test.jar")).toRealPath();
+      var paths = mod.getOrigin().getPaths();
+      if (paths.size() != 1 || !Files.isSameFile(paths.get(0), expected)) {
+        throw new AssertionError("The expected packaged JAR was not loaded: " + paths);
+      }
     }
     boolean sodium = loader.isModLoaded("sodium");
     if (sodium != Boolean.getBoolean("cbbg.test.sodium")) {
@@ -249,6 +268,37 @@ public final class ClassicPackagedSmoke implements ClientModInitializer {
             + GL11.glGetString(GL11.GL_VERSION)
             + " sodium="
             + sodium);
+    String changer = System.getProperty("cbbg.test.contextMod");
+    if (changer != null) {
+      if (!loader.isModLoaded(changer))
+        throw new AssertionError("Missing OpenGL context mod: " + changer);
+      reportContext(client, changer);
+    }
+  }
+
+  private void reportContext(Minecraft client, String changer) {
+    long window = client.getWindow().getWindow();
+    int major = GLFW.glfwGetWindowAttrib(window, GLFW.GLFW_CONTEXT_VERSION_MAJOR);
+    int minor = GLFW.glfwGetWindowAttrib(window, GLFW.GLFW_CONTEXT_VERSION_MINOR);
+    int profile = GLFW.glfwGetWindowAttrib(window, GLFW.GLFW_OPENGL_PROFILE);
+    var capabilities = GL.getCapabilities();
+    System.out.println(
+        "CBBG_CLASSIC_CONTEXT mod="
+            + changer
+            + " reference="
+            + reference
+            + " actual="
+            + major
+            + "."
+            + minor
+            + " profile="
+            + profile
+            + " gl30="
+            + capabilities.OpenGL30
+            + " gl32="
+            + capabilities.OpenGL32
+            + " glsl="
+            + GL11.glGetString(GL20.GL_SHADING_LANGUAGE_VERSION));
   }
 
   static void requireFormat(Minecraft client, int expected) {
