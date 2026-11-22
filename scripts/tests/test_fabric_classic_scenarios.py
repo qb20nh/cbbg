@@ -5,13 +5,14 @@ from pathlib import Path
 import struct
 import tempfile
 import unittest
+import zipfile
 
 from fabric_classic_scenarios import (CLASSIC_CACHE_SCENARIOS, CLASSIC_ENTRYPOINT, CLASSIC_IRIS_OPTIONS,
                                       CLASSIC_MODE_RESTART, CLASSIC_OPTIONS,
                                       REDUCED_GL_SCENARIO, SETTINGS_MANIFEST, SETTINGS_NOISE_FRAMES,
                                       VMA_PROBE_AGENT, VULKAN_FORMAT_CASES, VULKAN_NATIVE_CASES,
                                       VULKAN_PIPELINE_CASES, VULKAN_SAMPLER_CASES, VULKAN_VMA_CASES,
-                                      classic_config, classic_jvm_arguments, classic_result,
+                                      classic_config, classic_jvm_arguments, classic_result, packaged_locale_counts,
                                       pixel_cache_files, prepare_classic_cache, retain_classic_cache,
                                       validate_classic_choice, vulkan_probe_agent)
 from runtime_catalog import load_catalog, select_targets
@@ -26,7 +27,7 @@ class ClassicScenarioTests(unittest.TestCase):
                          'custom': {'cbbg:scenarios': ['world', 'satin', REDUCED_GL_SCENARIO,
                                                        'renderscale', 'iris', 'stack', 'vulkan-lifecycle',
                                                        CLASSIC_MODE_RESTART, *CLASSIC_CACHE_SCENARIOS,
-                                                       'opengl-lifecycle', 'opengl-pixels', 'vulkan-pixels',
+                                                       'locales', 'opengl-lifecycle', 'opengl-pixels', 'vulkan-pixels',
                                                        'vulkan-settings',
                                                        *VULKAN_FORMAT_CASES, *VULKAN_VMA_CASES,
                                                        *VULKAN_NATIVE_CASES, *VULKAN_SAMPLER_CASES,
@@ -565,6 +566,34 @@ class ClassicScenarioTests(unittest.TestCase):
                             else log.replace('cleaned=2', 'cleaned=1')):
                     with self.assertRaises(ValueError):
                         classic_result(scenario, 'vulkanmod', 'vulkan', bad, self.evidence, 0)
+
+    def test_locales_require_the_packaged_inventory_and_language_restoration(self):
+        scenario = 'locales'
+        validate_classic_choice(self.metadata, scenario, 'modmenu', 'opengl')
+        with self.assertRaises(ValueError):
+            validate_classic_choice(self.metadata, scenario, 'none', 'opengl')
+        self.assertIn('-Dcbbg.test.locales=true',
+                      classic_jvm_arguments('candidate.jar', scenario, 'opengl', 'modmenu'))
+        config = json.dumps(classic_config('opengl', scenario))
+        for kind in ('initial', 'final'):
+            (self.evidence / f'{kind}-cbbg.json').write_text(config)
+        jar = self.evidence / 'candidate.jar'
+        with zipfile.ZipFile(jar, 'w') as packaged:
+            for locale in ('en_us', 'ko_kr'):
+                packaged.writestr(f'assets/cbbg/lang/{locale}.json', '{"cbbg.config.title":"Test"}')
+                self.write_capture(self.evidence / f'locale-{locale}.png', 800, 600)
+            packaged.writestr('assets/other/lang/en_us.json', '{}')
+        inventory = packaged_locale_counts(jar)
+        self.assertEqual(inventory, {'en_us': 1, 'ko_kr': 1})
+        (self.evidence / 'locale-files.json').write_text(json.dumps(inventory))
+        log = ('CBBG_CLASSIC_OPENGL Test GPU / 3.2 sodium=false\n'
+               'CBBG_CLASSIC_LOCALE code=en_us keys=1\nCBBG_CLASSIC_LOCALE code=ko_kr keys=1\n'
+               'CBBG_CLASSIC_LOCALES_PASS restored=en_us count=2\n')
+        classic_result(scenario, 'modmenu', 'opengl', log, self.evidence, 0)
+        for bad in (log.replace('code=ko_kr', 'code=en_us'), log.replace('keys=1', 'keys=0'),
+                    log.replace('restored=en_us', 'restored=ko_kr')):
+            with self.assertRaises(ValueError):
+                classic_result(scenario, 'modmenu', 'opengl', bad, self.evidence, 0)
 
     def test_opengl_lifecycle_requires_all_window_and_world_transitions(self):
         scenario = 'opengl-lifecycle'

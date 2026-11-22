@@ -174,7 +174,7 @@ public final class ClassicVulkanSettings {
     return screen.getTitle().getString().equals(Component.translatable(key).getString());
   }
 
-  private static void click(Screen screen, String translation) {
+  static void click(Screen screen, String translation) {
     String label = Component.translatable(translation).getString();
     var widget =
         screen.children().stream()

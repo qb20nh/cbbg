@@ -22,6 +22,15 @@ class FabricAcceptanceTests(unittest.TestCase):
                     for backend in backends}
         self.assertEqual(actual, expected)
 
+    def test_classic_locales_uses_installed_mod_menu(self):
+        target, = select_targets(load_catalog(), '1.20.1-fabric')
+        contract = read_json(ROOT / 'runtime-locks/1.20.1-fabric-scenarios.json')
+        self.assertEqual(
+            [('modmenu', 'opengl', ['locales'])],
+            [(run['profile'], run['backend'], run['entrypoints'])
+             for run in required_runs(target, contract) if run['suite'] == 'locales'],
+        )
+
     def test_classic_opengl_lifecycle_requires_both_gpu_profiles(self):
         target, = select_targets(load_catalog(), '1.20.1-fabric')
         contract = read_json(ROOT / 'runtime-locks/1.20.1-fabric-scenarios.json')

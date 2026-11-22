@@ -7,8 +7,9 @@ from pathlib import Path
 import re
 import zipfile
 
-from fabric_classic_scenarios import (CLASSIC_MODE_RESTART, CLASSIC_RESTART_FILES, classic_result,
-                                      validate_classic_choice, vulkan_probe_agent)
+from fabric_classic_scenarios import (CLASSIC_LOCALES, CLASSIC_MODE_RESTART, CLASSIC_RESTART_FILES,
+                                      classic_result, packaged_locale_counts, validate_classic_choice,
+                                      vulkan_probe_agent)
 from fabric_dependency_lock import verify_dependencies, verify_gametest_api
 from fabric_parity_runtime import restart_state, validate_restart_choice, verify_external_library
 from fabric_scenario_evidence import graphics_identity, validate_scenarios, validate_shutdown, validate_startup
@@ -106,6 +107,9 @@ def _verify_run(receipt_path, target, *, source_commit, candidate_sha256,
     if classic:
         if report.get('initialConfigSha256') != evidence[directory + '/initial-cbbg.json']:
             raise EvidenceError('Classic initial config hash differs')
+        if scenario == CLASSIC_LOCALES:
+            if read_json(paths[directory + '/locale-files.json']) != packaged_locale_counts(installed['candidate.jar']):
+                raise EvidenceError('Classic locale inventory differs from the candidate')
         probe_agent = vulkan_probe_agent(scenario)
         if probe_agent:
             with zipfile.ZipFile(installed['driver.jar']) as driver:

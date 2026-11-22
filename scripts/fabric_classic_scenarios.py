@@ -6,6 +6,7 @@ import os
 import re
 import shutil
 import struct
+import zipfile
 import zlib
 
 CLASSIC_DRIVER = 'cbbg_classic_smoke'
@@ -49,6 +50,7 @@ CLASSIC_MODE_RESTART = 'mode-restart'
 CLASSIC_MODE_RESTART_PROFILES = ('none', 'sodium')
 OPENGL_PIXELS = 'opengl-pixels'
 OPENGL_LIFECYCLE = 'opengl-lifecycle'
+CLASSIC_LOCALES = 'locales'
 CLASSIC_STACK_PROFILES = (
     'modmenu+sodium+satin+immediatelyfast+chatpatches+renderscale',
     'modmenu+sodium+satin+immediatelyfast+chatpatches+iris+renderscale',
@@ -90,6 +92,8 @@ def validate_classic_choice(metadata, scenario, profile, backend):
         if scenario == CLASSIC_MODE_RESTART and profile in CLASSIC_MODE_RESTART_PROFILES:
             return
         if scenario in (OPENGL_PIXELS, OPENGL_LIFECYCLE) and profile in ('none', 'sodium'):
+            return
+        if scenario == CLASSIC_LOCALES and profile == 'modmenu':
             return
         if scenario == 'stack' and profile in CLASSIC_STACK_PROFILES:
             return
@@ -172,6 +176,8 @@ def classic_jvm_arguments(candidate, scenario, backend, profile, restart_phase=N
             arguments.append('-Dcbbg.test.openGlPixels=true')
         elif scenario == OPENGL_LIFECYCLE:
             arguments.append('-Dcbbg.test.openGlLifecycle=true')
+        elif scenario == CLASSIC_LOCALES:
+            arguments.append('-Dcbbg.test.locales=true')
         elif scenario == 'satin':
             arguments.append('-Dcbbg.test.satin=true')
         elif scenario == 'renderscale':
@@ -628,6 +634,27 @@ def opengl_lifecycle_captures(log, evidence, width, height):
     return captures
 
 
+def packaged_locale_counts(candidate):
+    with zipfile.ZipFile(candidate) as jar:
+        counts = {match[1]: len(json.loads(jar.read(name))) for name in jar.namelist()
+                  if (match := re.fullmatch(r'assets/cbbg/lang/([a-z0-9_]+)\.json', name))}
+    if len(counts) < 2 or 'en_us' not in counts or any(count <= 0 for count in counts.values()):
+        raise ValueError('Missing or empty candidate locales')
+    return counts
+
+
+def classic_locale_captures(log, evidence, width, height):
+    expected = json.loads((evidence / 'locale-files.json').read_text())
+    checked = re.findall(r'CBBG_CLASSIC_LOCALE code=([a-z0-9_]+) keys=(\d+)(?=\r?\n|\Z)', log)
+    count = one_reading(log, r'CBBG_CLASSIC_LOCALES_PASS restored=en_us count=(\d+)(?=\r?\n|\Z)')
+    if (checked != [(locale, str(keys)) for locale, keys in sorted(expected.items())]
+            or int(count) != len(expected)):
+        raise ValueError('Classic settings did not verify every packaged locale')
+    if (evidence / 'final-cbbg.json').read_bytes() != (evidence / 'initial-cbbg.json').read_bytes():
+        raise ValueError('Classic locale changes modified the saved CBBG configuration')
+    return {f'locale-{locale}.png': (width, height) for locale in expected}
+
+
 def classic_result(scenario, profile, backend, log, evidence, exit_code, restart_phase=None):
     if (type(exit_code) is not int or exit_code != 0
             or re.search(r'VUID-|Validation Error|VK_ERROR_DEVICE_LOST|AssertionError|Game crashed!'
@@ -709,6 +736,8 @@ def classic_result(scenario, profile, backend, log, evidence, exit_code, restart
             captures = opengl_pixel_captures(log, evidence, width, height)
         elif scenario == OPENGL_LIFECYCLE:
             captures = opengl_lifecycle_captures(log, evidence, width, height)
+        elif scenario == CLASSIC_LOCALES:
+            captures = classic_locale_captures(log, evidence, width, height)
         elif scenario == 'stack':
             captures = classic_stack_captures(log, evidence, profile, config, width, height)
         elif scenario == 'renderscale':
