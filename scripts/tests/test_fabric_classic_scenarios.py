@@ -26,7 +26,7 @@ class ClassicScenarioTests(unittest.TestCase):
                          'custom': {'cbbg:scenarios': ['world', 'satin', REDUCED_GL_SCENARIO,
                                                        'renderscale', 'iris', 'stack', 'vulkan-lifecycle',
                                                        CLASSIC_MODE_RESTART, *CLASSIC_CACHE_SCENARIOS,
-                                                       'vulkan-pixels', 'vulkan-settings',
+                                                       'opengl-pixels', 'vulkan-pixels', 'vulkan-settings',
                                                        *VULKAN_FORMAT_CASES, *VULKAN_VMA_CASES,
                                                        *VULKAN_NATIVE_CASES, *VULKAN_SAMPLER_CASES,
                                                        *VULKAN_PIPELINE_CASES]}}
@@ -564,6 +564,37 @@ class ClassicScenarioTests(unittest.TestCase):
                             else log.replace('cleaned=2', 'cleaned=1')):
                     with self.assertRaises(ValueError):
                         classic_result(scenario, 'vulkanmod', 'vulkan', bad, self.evidence, 0)
+
+    def test_opengl_pixel_oracle_requires_both_outputs_and_exact_draw_counts(self):
+        scenario = 'opengl-pixels'
+        validate_classic_choice(self.metadata, scenario, 'none', 'opengl')
+        validate_classic_choice(self.metadata, scenario, 'sodium', 'opengl')
+        with self.assertRaises(ValueError):
+            validate_classic_choice(self.metadata, scenario, 'vulkanmod', 'vulkan')
+        self.assertIn('-Dcbbg.test.openGlPixels=true',
+                      classic_jvm_arguments('candidate.jar', scenario, 'opengl', 'sodium'))
+        (self.evidence / 'initial-cbbg.json').write_text(json.dumps(classic_config('opengl', scenario)))
+        tile = self.evidence / 'pixel-input'
+        tile.mkdir()
+        for name, contents in pixel_cache_files().items():
+            (tile / name).write_bytes(contents)
+        log = 'CBBG_CLASSIC_OPENGL Test GPU / 3.2 sodium=true\n'
+        for mode in ('demo', 'enabled', 'disabled'):
+            enabled = mode != 'disabled'
+            for view in ('shot', 'window'):
+                self.write_capture(self.evidence / f'opengl-{view}-{mode}.png', 803, 601)
+            log += (f'CBBG_CLASSIC_OPENGL_PIXEL_DRAWS mode={mode} draws={2 if enabled else 0}\n'
+                    f'CBBG_CLASSIC_OPENGL_PIXELS mode={mode} channels=1447809 screenshotMismatches=0 '
+                    f'windowMismatches=0 topOriginMismatches={int(enabled)} alphaMismatches=0 '
+                    f'changedChannels={int(enabled)}\n')
+        classic_result(scenario, 'sodium', 'opengl', log, self.evidence, 0)
+        for error in ('screenshotMismatches=0', 'windowMismatches=0', 'alphaMismatches=0', 'draws=0'):
+            with self.assertRaisesRegex(ValueError, 'OpenGL pixel comparisons'):
+                classic_result(scenario, 'sodium', 'opengl', log.replace(error, error[:-1] + '1', 1),
+                               self.evidence, 0)
+        (self.evidence / 'opengl-window-enabled.png').unlink()
+        with self.assertRaises(FileNotFoundError):
+            classic_result(scenario, 'sodium', 'opengl', log, self.evidence, 0)
 
     def test_pixel_oracle_requires_all_three_comparisons_and_frozen_tile(self):
         tile = self.evidence / 'pixel-input'

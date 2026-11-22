@@ -42,6 +42,7 @@ public final class ClassicPackagedSmoke implements ClientModInitializer {
     IRIS,
     SATIN,
     RENDER_SCALE,
+    PIXELS,
     DONE
   }
 
@@ -52,6 +53,7 @@ public final class ClassicPackagedSmoke implements ClientModInitializer {
   private final boolean satin = Boolean.getBoolean("cbbg.test.satin");
   private final boolean renderScale = Boolean.getBoolean("cbbg.test.renderScale");
   private final boolean stack = Boolean.getBoolean("cbbg.test.stack");
+  private final boolean pixels = Boolean.getBoolean("cbbg.test.openGlPixels");
   private ClassicStackSmoke stackSmoke;
   private ClassicIrisSmoke irisSmoke;
   private ClassicSatinSmoke satinSmoke;
@@ -114,6 +116,8 @@ public final class ClassicPackagedSmoke implements ClientModInitializer {
         } else if (renderScale) {
           renderScaleSmoke = new ClassicRenderScaleSmoke(client, ticks);
           phase = Phase.RENDER_SCALE;
+        } else if (pixels) {
+          phase = Phase.PIXELS;
         } else {
           phase = restart ? Phase.RESTARTED_DISABLED : Phase.DITHERED;
         }
@@ -158,6 +162,11 @@ public final class ClassicPackagedSmoke implements ClientModInitializer {
             phase = Phase.DONE;
             client.stop();
           }
+        }
+      } else if (phase == Phase.PIXELS) {
+        if (ClassicOpenGlPixels.tick(client, ticks)) {
+          phase = Phase.DONE;
+          client.stop();
         }
       } else if (phase == Phase.RESTARTED_DISABLED && ticks >= disabledSince + 6) {
         requireFormat(client, GL11.GL_RGBA8);

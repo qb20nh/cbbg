@@ -10,19 +10,30 @@ import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL30;
 import org.lwjgl.system.MemoryUtil;
 
-/** Reads the presented image after Iris has drawn its final pass. */
+/** Reads the presented image immediately before the window swaps buffers. */
 public final class ClassicWindowCapture {
-  private record Capture(Path path, int width, int height) {}
+  private record Capture(Path path, int width, int height, boolean iris) {}
 
   private static Capture pending;
 
   private ClassicWindowCapture() {}
 
   static void request(Minecraft client, String filename) {
+    request(client, filename, true);
+  }
+
+  static void requestPixels(Minecraft client, String filename) {
+    request(client, filename, false);
+  }
+
+  private static void request(Minecraft client, String filename, boolean iris) {
     var window = client.getWindow();
     pending =
         new Capture(
-            client.gameDirectory.toPath().resolve(filename), window.getWidth(), window.getHeight());
+            client.gameDirectory.toPath().resolve(filename),
+            window.getWidth(),
+            window.getHeight(),
+            iris);
   }
 
   static boolean isPending() {
@@ -46,10 +57,14 @@ public final class ClassicWindowCapture {
         }
       }
       image.writeToFile(capture.path());
-      IrisFixture.assertFinalShader(
-          image, "The presented frame did not contain the Iris shader fixture");
+      if (capture.iris()) {
+        IrisFixture.assertFinalShader(
+            image, "The presented frame did not contain the Iris shader fixture");
+      } else {
+        ClassicOpenGlPixels.checkDraws();
+      }
     } catch (IOException failure) {
-      throw new IllegalStateException("Could not record Iris presentation", failure);
+      throw new IllegalStateException("Could not record OpenGL presentation", failure);
     } finally {
       MemoryUtil.memFree(pixels);
     }

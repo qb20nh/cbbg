@@ -2,6 +2,6 @@
   "required": true,
   "package": "com.qb20nh.cbbg.parity.mixin",
   "compatibilityLevel": "JAVA_17",
-  "client": ["ClassicShaderObservation", "ClassicWindowObservation", "ClassicChatObservation", "ClassicVulkanObservation", "ClassicToastObservation", "ClassicFormatWarningObservation"],
+  "client": ["ClassicShaderObservation", "ClassicWindowObservation", "ClassicOpenGlPresentation", "ClassicChatObservation", "ClassicVulkanObservation", "ClassicToastObservation", "ClassicFormatWarningObservation"],
   "injectors": {"defaultRequire": 1}
 }

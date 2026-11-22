@@ -22,6 +22,15 @@ class FabricAcceptanceTests(unittest.TestCase):
                     for backend in backends}
         self.assertEqual(actual, expected)
 
+    def test_classic_opengl_pixels_requires_both_gpu_profiles(self):
+        target, = select_targets(load_catalog(), '1.20.1-fabric')
+        contract = read_json(ROOT / 'runtime-locks/1.20.1-fabric-scenarios.json')
+        runs = required_runs(target, contract)
+        self.assertEqual(
+            [(profile, 'opengl', ['opengl-pixels']) for profile in ('none', 'sodium')],
+            [(run['profile'], run['backend'], run['entrypoints']) for run in runs if run['suite'] == 'opengl-pixels'],
+        )
+
     def test_classic_stack_requires_both_full_renderscale_profiles(self):
         target, = select_targets(load_catalog(), '1.20.1-fabric')
         contract = read_json(ROOT / 'runtime-locks/1.20.1-fabric-scenarios.json')

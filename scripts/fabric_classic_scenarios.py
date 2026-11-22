@@ -47,6 +47,7 @@ CONTEXT_MODS = {'forcegl2': 'forcegl20', 'threatengl': 'threatengl'}
 REDUCED_GL_SCENARIO = 'forcegl2-mesa-3'
 CLASSIC_MODE_RESTART = 'mode-restart'
 CLASSIC_MODE_RESTART_PROFILES = ('none', 'sodium')
+OPENGL_PIXELS = 'opengl-pixels'
 CLASSIC_STACK_PROFILES = (
     'modmenu+sodium+satin+immediatelyfast+chatpatches+renderscale',
     'modmenu+sodium+satin+immediatelyfast+chatpatches+iris+renderscale',
@@ -87,6 +88,8 @@ def validate_classic_choice(metadata, scenario, profile, backend):
             return
         if scenario == CLASSIC_MODE_RESTART and profile in CLASSIC_MODE_RESTART_PROFILES:
             return
+        if scenario == OPENGL_PIXELS and profile in ('none', 'sodium'):
+            return
         if scenario == 'stack' and profile in CLASSIC_STACK_PROFILES:
             return
         if scenario in CLASSIC_CACHE_SCENARIOS and profile in CLASSIC_CACHE_PROFILES:
@@ -102,14 +105,14 @@ def classic_config(backend, scenario='world'):
     settings = scenario == 'vulkan-settings'
     full_precision = (scenario in VULKAN_FORMAT_CASES or scenario in VULKAN_NATIVE_CASES
                       or VULKAN_VMA_CASES.get(scenario) in ('depth', 'float', 'all'))
-    return {'mode': 'DEMO' if backend == 'vulkan' or scenario in ('iris', 'stack') else 'ENABLED',
+    return {'mode': 'DEMO' if backend == 'vulkan' or scenario in ('iris', 'stack', OPENGL_PIXELS) else 'ENABLED',
             'pixelFormat': 'RGBA32F' if full_precision else 'RGBA16F',
             'stbnSize': 64 if settings else 16, 'stbnDepth': 8,
             'stbnSeed': 0, 'strength': 2, 'notifyChat': settings, 'notifyToast': settings}
 
 
 def classic_viewport(scenario):
-    return (803, 601) if scenario == 'vulkan-pixels' else (800, 600)
+    return (803, 601) if scenario in ('vulkan-pixels', OPENGL_PIXELS) else (800, 600)
 
 
 def includes_sodium(profile):
@@ -163,7 +166,9 @@ def classic_jvm_arguments(candidate, scenario, backend, profile, restart_phase=N
         arguments.append('-Dcbbg.test.compatProfile=' + profile)
         if profile in CONTEXT_MODS:
             arguments.append('-Dcbbg.test.contextMod=' + CONTEXT_MODS[profile])
-        if scenario == 'satin':
+        if scenario == OPENGL_PIXELS:
+            arguments.append('-Dcbbg.test.openGlPixels=true')
+        elif scenario == 'satin':
             arguments.append('-Dcbbg.test.satin=true')
         elif scenario == 'renderscale':
             arguments.append('-Dcbbg.test.renderScale=true')
@@ -210,6 +215,12 @@ def classic_cache_input(scenario):
         frame = CLASSIC_CACHE_FRAMES[3]
         files[frame] = pixel_cache_files(offset=1)[frame]
     return files
+
+
+def validate_pixel_cache(evidence):
+    for name, content in pixel_cache_files().items():
+        if (evidence / 'pixel-input' / name).read_bytes() != content:
+            raise ValueError('Pixel fixture input differs')
 
 
 def prepare_classic_cache(game, evidence, scenario):
@@ -571,6 +582,24 @@ def vulkan_pipeline_captures(log, evidence, scenario, scenes, width, height):
     return {name: (width, height) for name in ('vulkan-pipeline-fallback.png', 'vulkan-world.png')}
 
 
+def opengl_pixel_captures(log, evidence, width, height):
+    draws = re.findall(r'CBBG_CLASSIC_OPENGL_PIXEL_DRAWS mode=(\w+) draws=(\d+)(?=\r?\n|\Z)', log)
+    comparisons = re.findall(
+        r'CBBG_CLASSIC_OPENGL_PIXELS mode=(\w+) channels=(\d+) screenshotMismatches=(\d+) '
+        r'windowMismatches=(\d+) topOriginMismatches=(\d+) alphaMismatches=(\d+) changedChannels=(\d+)'
+        r'(?=\r?\n|\Z)', log)
+    modes = ['demo', 'enabled', 'disabled']
+    if (draws != [('demo', '2'), ('enabled', '2'), ('disabled', '0')]
+            or [row[0] for row in comparisons] != modes
+            or any(int(count) != width * height * 3 or shot != '0' or window != '0' or alpha != '0'
+                   or (int(top) > 0) != (mode != 'disabled')
+                   or (int(changed) > 0) != (mode != 'disabled')
+                   for mode, count, shot, window, top, alpha, changed in comparisons)):
+        raise ValueError('Incomplete or mismatched OpenGL pixel comparisons')
+    validate_pixel_cache(evidence)
+    return {f'opengl-{view}-{mode}.png': (width, height) for mode in modes for view in ('shot', 'window')}
+
+
 def classic_result(scenario, profile, backend, log, evidence, exit_code, restart_phase=None):
     if (type(exit_code) is not int or exit_code != 0
             or re.search(r'VUID-|Validation Error|VK_ERROR_DEVICE_LOST|AssertionError|Game crashed!'
@@ -637,9 +666,7 @@ def classic_result(scenario, profile, backend, log, evidence, exit_code, restart
                 raise ValueError('Incomplete or mismatched Vulkan pixel comparisons')
             captures.update({f'vulkan-pixels-{mode}.png': (width, height)
                              for mode, *_ in comparisons})
-            for name, content in pixel_cache_files().items():
-                if (evidence / 'pixel-input' / name).read_bytes() != content:
-                    raise ValueError('Vulkan pixel fixture input differs')
+            validate_pixel_cache(evidence)
     else:
         if 'CBBG_CLASSIC_VULKAN_DEVICE ' in log:
             raise ValueError('OpenGL client also reported a VulkanMod device')
@@ -650,6 +677,8 @@ def classic_result(scenario, profile, backend, log, evidence, exit_code, restart
         if scenario == 'satin':
             validate_satin(log, width, height)
             captures = {}
+        elif scenario == OPENGL_PIXELS:
+            captures = opengl_pixel_captures(log, evidence, width, height)
         elif scenario == 'stack':
             captures = classic_stack_captures(log, evidence, profile, config, width, height)
         elif scenario == 'renderscale':
