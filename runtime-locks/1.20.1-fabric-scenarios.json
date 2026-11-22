@@ -4,6 +4,16 @@
   "ordinaryMetadata": "build-config/fabric-classic/src/packagedSmoke/resources/fabric.mod.json",
   "additionalRuns": [
     {
+      "suite": "stack",
+      "profiles": [
+        "modmenu+sodium+satin+immediatelyfast+chatpatches+renderscale",
+        "modmenu+sodium+satin+immediatelyfast+chatpatches+iris+renderscale"
+      ],
+      "backends": ["opengl"],
+      "restart": false,
+      "entrypoints": ["stack"]
+    },
+    {
       "suite": "mode-restart",
       "profiles": ["none", "sodium"],
       "backends": ["opengl"],

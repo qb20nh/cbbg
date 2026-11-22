@@ -22,6 +22,16 @@ class FabricAcceptanceTests(unittest.TestCase):
                     for backend in backends}
         self.assertEqual(actual, expected)
 
+    def test_classic_stack_requires_both_full_renderscale_profiles(self):
+        target, = select_targets(load_catalog(), '1.20.1-fabric')
+        contract = read_json(ROOT / 'runtime-locks/1.20.1-fabric-scenarios.json')
+        base = 'modmenu+sodium+satin+immediatelyfast+chatpatches'
+        self.assertEqual(
+            [(base + suffix, 'opengl', ['stack'], False) for suffix in ('+renderscale', '+iris+renderscale')],
+            [(run['profile'], run['backend'], run['entrypoints'], run['restart'])
+             for run in required_runs(target, contract) if run['suite'] == 'stack'],
+        )
+
     def test_classic_mode_restart_requires_both_opengl_profiles(self):
         target, = select_targets(load_catalog(), '1.20.1-fabric')
         contract = read_json(ROOT / 'runtime-locks/1.20.1-fabric-scenarios.json')

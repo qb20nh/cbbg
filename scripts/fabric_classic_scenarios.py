@@ -47,6 +47,10 @@ CONTEXT_MODS = {'forcegl2': 'forcegl20', 'threatengl': 'threatengl'}
 REDUCED_GL_SCENARIO = 'forcegl2-mesa-3'
 CLASSIC_MODE_RESTART = 'mode-restart'
 CLASSIC_MODE_RESTART_PROFILES = ('none', 'sodium')
+CLASSIC_STACK_PROFILES = (
+    'modmenu+sodium+satin+immediatelyfast+chatpatches+renderscale',
+    'modmenu+sodium+satin+immediatelyfast+chatpatches+iris+renderscale',
+)
 CLASSIC_CACHE_SCENARIOS = ('cache-cold', 'cache-warm', 'cache-damaged')
 CLASSIC_CACHE_PROFILES = ('none', 'sodium')
 CLASSIC_CACHE_MANIFEST = 'stbn_16x16x8.sha256'
@@ -83,6 +87,8 @@ def validate_classic_choice(metadata, scenario, profile, backend):
             return
         if scenario == CLASSIC_MODE_RESTART and profile in CLASSIC_MODE_RESTART_PROFILES:
             return
+        if scenario == 'stack' and profile in CLASSIC_STACK_PROFILES:
+            return
         if scenario in CLASSIC_CACHE_SCENARIOS and profile in CLASSIC_CACHE_PROFILES:
             return
         if scenario == 'satin' and profile == 'satin':
@@ -96,7 +102,7 @@ def classic_config(backend, scenario='world'):
     settings = scenario == 'vulkan-settings'
     full_precision = (scenario in VULKAN_FORMAT_CASES or scenario in VULKAN_NATIVE_CASES
                       or VULKAN_VMA_CASES.get(scenario) in ('depth', 'float', 'all'))
-    return {'mode': 'DEMO' if backend == 'vulkan' or scenario == 'iris' else 'ENABLED',
+    return {'mode': 'DEMO' if backend == 'vulkan' or scenario in ('iris', 'stack') else 'ENABLED',
             'pixelFormat': 'RGBA32F' if full_precision else 'RGBA16F',
             'stbnSize': 64 if settings else 16, 'stbnDepth': 8,
             'stbnSeed': 0, 'strength': 2, 'notifyChat': settings, 'notifyToast': settings}
@@ -161,6 +167,10 @@ def classic_jvm_arguments(candidate, scenario, backend, profile, restart_phase=N
             arguments.append('-Dcbbg.test.satin=true')
         elif scenario == 'renderscale':
             arguments.append('-Dcbbg.test.renderScale=true')
+        elif scenario == 'stack':
+            arguments.append('-Dcbbg.test.stack=true')
+            if 'iris' in profile.split('+'):
+                arguments += ['-Dcbbg.test.iris=true', '-Dcbbg.test.irisCycle=true']
         elif scenario == 'iris':
             arguments.append('-Dcbbg.test.iris=true')
             iris_flags = {None: 'irisCycle', 'control': 'irisControl', 'verify': 'restart'}
@@ -287,6 +297,15 @@ def classic_gl_context(log, scenario, profile, gpu):
             'openGL30': gl30 == 'true', 'openGL32': gl32 == 'true', 'glsl': glsl}
 
 
+def validate_satin(log, width, height):
+    stages = re.findall(r'CBBG_CLASSIC_SATIN_STAGE ([^\r\n]+)', log)
+    size = f'{width}x{height}'
+    if stages != [f'initial {size} cases=6', f'reloaded {size} cases=12',
+                  f'smaller {width - 64}x{height - 48} cases=18', f'restored {size} cases=24']:
+        raise ValueError('Incomplete Satin framebuffer checks')
+    one_reading(log, r'CBBG_CLASSIC_SATIN_PASS cases=(24) readableDepth=3(?=\r?\n|\Z)')
+
+
 def renderscale_captures(log, width, height):
     expected = []
     captures = {}
@@ -346,6 +365,25 @@ def iris_captures(log, evidence, width, height, restart_phase):
         'control': ['iris-control.png'],
     }[restart_phase]
     return {name: (width, height) for name in shader_captures + other_captures}
+
+
+def classic_stack_captures(log, evidence, profile, config, width, height):
+    iris = 'iris' in profile.split('+')
+    sequence = re.findall(r'CBBG_CLASSIC_(STACK_\w+_PASS|SATIN_PASS|RENDERSCALE_PASS|IRIS_CYCLE_PASS)\b', log)
+    expected = ['STACK_IMMEDIATELYFAST_PASS', 'STACK_MODMENU_PASS', 'STACK_CHAT_PASS',
+                'SATIN_PASS', 'RENDERSCALE_PASS']
+    if iris:
+        expected.append('IRIS_CYCLE_PASS')
+    if sequence != expected:
+        raise ValueError('Incomplete or unordered combined compatibility checks')
+    validate_satin(log, width, height)
+    captures = renderscale_captures(log, width, height)
+    if iris:
+        captures.update(iris_captures(log, evidence, width, height, None))
+    elif ('CBBG_CLASSIC_IRIS_' in log
+          or json.loads((evidence / 'final-cbbg.json').read_text()) != dict(config, mode='DISABLED')):
+        raise ValueError('Classic stack ended with unexpected shader or configuration state')
+    return captures
 
 
 def vulkan_settings_captures(log, evidence, width, height):
@@ -607,13 +645,10 @@ def classic_result(scenario, profile, backend, log, evidence, exit_code, restart
         if (sodium == 'true') != includes_sodium(profile):
             raise ValueError('OpenGL profile differs')
         if scenario == 'satin':
-            stages = re.findall(r'CBBG_CLASSIC_SATIN_STAGE ([^\r\n]+)', log)
-            size = f'{width}x{height}'
-            if stages != [f'initial {size} cases=6', f'reloaded {size} cases=12',
-                          f'smaller {width - 64}x{height - 48} cases=18', f'restored {size} cases=24']:
-                raise ValueError('Incomplete Satin framebuffer checks')
-            one_reading(log, r'CBBG_CLASSIC_SATIN_PASS cases=(24) readableDepth=3(?=\r?\n|\Z)')
+            validate_satin(log, width, height)
             captures = {}
+        elif scenario == 'stack':
+            captures = classic_stack_captures(log, evidence, profile, config, width, height)
         elif scenario == 'renderscale':
             captures = renderscale_captures(log, width, height)
         elif scenario == 'iris':

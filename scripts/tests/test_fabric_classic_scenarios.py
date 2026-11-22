@@ -24,7 +24,7 @@ class ClassicScenarioTests(unittest.TestCase):
         self.evidence = Path(temp.name)
         self.metadata = {'id': 'cbbg_classic_smoke', 'entrypoints': {'client': [CLASSIC_ENTRYPOINT]},
                          'custom': {'cbbg:scenarios': ['world', 'satin', REDUCED_GL_SCENARIO,
-                                                       'renderscale', 'iris', 'vulkan-lifecycle',
+                                                       'renderscale', 'iris', 'stack', 'vulkan-lifecycle',
                                                        CLASSIC_MODE_RESTART, *CLASSIC_CACHE_SCENARIOS,
                                                        'vulkan-pixels', 'vulkan-settings',
                                                        *VULKAN_FORMAT_CASES, *VULKAN_VMA_CASES,
@@ -167,9 +167,46 @@ class ClassicScenarioTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'Iris initial config'):
             classic_result('renderscale', profile, 'opengl', log, self.evidence, 0)
         iris.write_text(CLASSIC_IRIS_OPTIONS)
+        self.check_stack_with_renderscale_log(log, profile)
         (self.evidence / 'grid-0.png').unlink()
         with self.assertRaises(FileNotFoundError):
             classic_result('renderscale', profile, 'opengl', log, self.evidence, 0)
+
+    def check_stack_with_renderscale_log(self, log, iris_profile):
+        stages = ('CBBG_CLASSIC_STACK_IMMEDIATELYFAST_PASS\n'
+                  'CBBG_CLASSIC_STACK_MODMENU_PASS\n'
+                  'CBBG_CLASSIC_STACK_CHAT_PASS\n'
+                  'CBBG_CLASSIC_SATIN_STAGE initial 800x600 cases=6\n'
+                  'CBBG_CLASSIC_SATIN_STAGE reloaded 800x600 cases=12\n'
+                  'CBBG_CLASSIC_SATIN_STAGE smaller 736x552 cases=18\n'
+                  'CBBG_CLASSIC_SATIN_STAGE restored 800x600 cases=24\n'
+                  'CBBG_CLASSIC_SATIN_PASS cases=24 readableDepth=3\n')
+        logs = ('CBBG_CLASSIC_IRIS_SUPPRESSED iris-active.png format=RGBA8 draws=0\n'
+                'CBBG_CLASSIC_IRIS_SUPPRESSED iris-reloaded.png format=RGBA8 draws=0\n'
+                'CBBG_CLASSIC_IRIS_RELOAD_PASS\nCBBG_CLASSIC_IRIS_CYCLE_PASS presentations=12\n')
+        for name in ('inactive', 'active', 'reloaded', 'restored'):
+            self.write_capture(self.evidence / f'iris-{name}.png', 800, 600)
+        config = classic_config('opengl', 'stack')
+        initial = self.evidence / 'initial-cbbg.json'
+        initial.write_text(json.dumps(config))
+        final = self.evidence / 'final-cbbg.json'
+        for profile in (iris_profile.replace('+iris', ''), iris_profile):
+            iris = profile == iris_profile
+            with self.subTest(stack=profile):
+                validate_classic_choice(self.metadata, 'stack', profile, 'opengl')
+                flags = classic_jvm_arguments('candidate.jar', 'stack', 'opengl', profile)
+                self.assertIn('-Dcbbg.test.stack=true', flags)
+                self.assertEqual('-Dcbbg.test.irisCycle=true' in flags, iris)
+                final.write_text(json.dumps(config if iris else dict(config, mode='DISABLED')))
+                result_log = stages + log + (logs if iris else '')
+                classic_result('stack', profile, 'opengl', result_log, self.evidence, 0)
+                with self.assertRaisesRegex(ValueError, 'compatibility checks'):
+                    classic_result('stack', profile, 'opengl', result_log.replace('STACK_CHAT_PASS', ''),
+                                   self.evidence, 0)
+                with self.assertRaises(ValueError):
+                    classic_result('stack', profile, 'opengl', result_log.replace('readableDepth=3', 'readableDepth=2'),
+                                   self.evidence, 0)
+        initial.write_text(json.dumps(classic_config('opengl')))
 
     def test_world_rejects_changed_config_and_truncated_capture(self):
         data = self.capture.read_bytes()
