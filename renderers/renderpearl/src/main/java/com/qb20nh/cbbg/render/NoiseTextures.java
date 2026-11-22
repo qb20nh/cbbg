@@ -49,7 +49,7 @@ final class NoiseTextures implements AutoCloseable {
       }
     }
     var selected = view();
-    NoiseTextureUpload.write(device, selected.texture(), frame);
+    RenderPearlCommands.uploadNoise(device, selected.texture(), frame);
     if (!streaming) frames.put(frame, selected);
     return selected;
   }
@@ -69,7 +69,7 @@ final class NoiseTextures implements AutoCloseable {
   private GpuTextureView createAndUpload(NativeImage frame) {
     GpuTextureView uploaded = createView(frame.getWidth(), frame.getHeight());
     try {
-      NoiseTextureUpload.write(device, uploaded.texture(), frame);
+      RenderPearlCommands.uploadNoise(device, uploaded.texture(), frame);
       return uploaded;
     } catch (RuntimeException | Error failure) {
       GpuTexture texture = uploaded.texture();

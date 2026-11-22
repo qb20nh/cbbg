@@ -30,7 +30,8 @@ public final class CbbgDebugEntry implements DebugScreenEntry {
     var main = client.gameRenderer.mainRenderTarget().getColorTexture();
     var lightmap = client.gameRenderer.levelLightmap();
     String backend = RenderSystem.getDevice().getDeviceInfo().backendName();
-    displayer.addLine(
+    DebugScreenLine.add(
+        displayer,
         "cbbg: mode="
             + CbbgClient.getEffectiveMode()
             + " (user="
@@ -41,7 +42,8 @@ public final class CbbgDebugEntry implements DebugScreenEntry {
             + (DitherController.isDisabled() ? 1 : 0)
             + " sulkan="
             + (SulkanCompat.isShaderPackActive() ? 1 : 0));
-    displayer.addLine(
+    DebugScreenLine.add(
+        displayer,
         "cbbg: main="
             + (main == null ? "?" : main.getFormat().name())
             + " lm="
