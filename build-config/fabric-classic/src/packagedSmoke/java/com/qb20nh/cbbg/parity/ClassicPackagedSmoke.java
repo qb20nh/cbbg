@@ -43,6 +43,7 @@ public final class ClassicPackagedSmoke implements ClientModInitializer {
     SATIN,
     RENDER_SCALE,
     PIXELS,
+    LIFECYCLE,
     DONE
   }
 
@@ -54,10 +55,12 @@ public final class ClassicPackagedSmoke implements ClientModInitializer {
   private final boolean renderScale = Boolean.getBoolean("cbbg.test.renderScale");
   private final boolean stack = Boolean.getBoolean("cbbg.test.stack");
   private final boolean pixels = Boolean.getBoolean("cbbg.test.openGlPixels");
+  private final boolean lifecycle = Boolean.getBoolean("cbbg.test.openGlLifecycle");
   private ClassicStackSmoke stackSmoke;
   private ClassicIrisSmoke irisSmoke;
   private ClassicSatinSmoke satinSmoke;
   private ClassicRenderScaleSmoke renderScaleSmoke;
+  private ClassicOpenGlLifecycle lifecycleSmoke;
   private int ticks;
   private Phase phase = Phase.TITLE;
   private long enabledStart;
@@ -94,7 +97,7 @@ public final class ClassicPackagedSmoke implements ClientModInitializer {
             if (presentations != 0)
               throw new AssertionError("Dither applied before opening the saved world");
           }
-          client.createWorldOpenFlows().loadLevel(title, WORLD);
+          reopenWorld(client, title);
         } else {
           createWorld(client);
         }
@@ -118,6 +121,9 @@ public final class ClassicPackagedSmoke implements ClientModInitializer {
           phase = Phase.RENDER_SCALE;
         } else if (pixels) {
           phase = Phase.PIXELS;
+        } else if (lifecycle) {
+          lifecycleSmoke = new ClassicOpenGlLifecycle(client);
+          phase = Phase.LIFECYCLE;
         } else {
           phase = restart ? Phase.RESTARTED_DISABLED : Phase.DITHERED;
         }
@@ -168,6 +174,11 @@ public final class ClassicPackagedSmoke implements ClientModInitializer {
           phase = Phase.DONE;
           client.stop();
         }
+      } else if (phase == Phase.LIFECYCLE) {
+        if (lifecycleSmoke.tick(client)) {
+          phase = Phase.DONE;
+          client.stop();
+        }
       } else if (phase == Phase.RESTARTED_DISABLED && ticks >= disabledSince + 6) {
         requireFormat(client, GL11.GL_RGBA8);
         if (presentations != 0)
@@ -202,6 +213,10 @@ public final class ClassicPackagedSmoke implements ClientModInitializer {
     } catch (Exception | AssertionError failure) {
       throw new IllegalStateException("CBBG packaged smoke failed", failure);
     }
+  }
+
+  static void reopenWorld(Minecraft client, TitleScreen title) {
+    client.createWorldOpenFlows().loadLevel(title, WORLD);
   }
 
   static void createWorld(Minecraft client) {
@@ -345,7 +360,7 @@ public final class ClassicPackagedSmoke implements ClientModInitializer {
     }
   }
 
-  private static void capture(Minecraft client, String name) throws Exception {
+  static void capture(Minecraft client, String name) throws Exception {
     try (var image = Screenshot.takeScreenshot(client.getMainRenderTarget())) {
       image.writeToFile(Path.of(client.gameDirectory.getPath(), name));
     }

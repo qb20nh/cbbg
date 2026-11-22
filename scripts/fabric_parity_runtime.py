@@ -14,7 +14,8 @@ import zipfile
 from fabric_classic_scenarios import (CLASSIC_CACHE_FRAMES, CLASSIC_CACHE_MANIFEST,
                                       CLASSIC_CACHE_SCENARIOS, CLASSIC_IRIS_OPTIONS, CLASSIC_MODE_RESTART,
                                       CLASSIC_MODE_RESTART_PROFILES, CLASSIC_OPTIONS, CLASSIC_RESTART_FILES,
-                                      OPENGL_PIXELS, REDUCED_GL_SCENARIO, SETTINGS_MANIFEST, SETTINGS_NOISE_FRAMES,
+                                      OPENGL_LIFECYCLE, OPENGL_PIXELS, REDUCED_GL_SCENARIO,
+                                      SETTINGS_MANIFEST, SETTINGS_NOISE_FRAMES,
                                       VMA_PROBE_AGENT,
                                       classic_config, classic_jvm_arguments,
                                       classic_result, classic_viewport, pixel_cache_files, prepare_classic_cache,
@@ -427,7 +428,7 @@ def main():
                     shutil.copyfile(game / '.cbbg' / name, saved / name)
             if probe_agent:
                 shutil.copyfile(game / 'config/cbbg.json', evidence / 'final-cbbg.json')
-            if args.classic_scenario in ('iris', 'stack', CLASSIC_MODE_RESTART):
+            if args.classic_scenario in ('iris', 'stack', CLASSIC_MODE_RESTART, OPENGL_LIFECYCLE):
                 shutil.copyfile(game / 'config/cbbg.json', evidence / 'final-cbbg.json')
                 if args.classic_scenario == 'stack' and 'iris' in args.compat.split('+'):
                     shutil.copyfile(game / 'stack-before-iris.json', evidence / 'stack-before-iris.json')

@@ -48,6 +48,7 @@ REDUCED_GL_SCENARIO = 'forcegl2-mesa-3'
 CLASSIC_MODE_RESTART = 'mode-restart'
 CLASSIC_MODE_RESTART_PROFILES = ('none', 'sodium')
 OPENGL_PIXELS = 'opengl-pixels'
+OPENGL_LIFECYCLE = 'opengl-lifecycle'
 CLASSIC_STACK_PROFILES = (
     'modmenu+sodium+satin+immediatelyfast+chatpatches+renderscale',
     'modmenu+sodium+satin+immediatelyfast+chatpatches+iris+renderscale',
@@ -88,7 +89,7 @@ def validate_classic_choice(metadata, scenario, profile, backend):
             return
         if scenario == CLASSIC_MODE_RESTART and profile in CLASSIC_MODE_RESTART_PROFILES:
             return
-        if scenario == OPENGL_PIXELS and profile in ('none', 'sodium'):
+        if scenario in (OPENGL_PIXELS, OPENGL_LIFECYCLE) and profile in ('none', 'sodium'):
             return
         if scenario == 'stack' and profile in CLASSIC_STACK_PROFILES:
             return
@@ -105,7 +106,8 @@ def classic_config(backend, scenario='world'):
     settings = scenario == 'vulkan-settings'
     full_precision = (scenario in VULKAN_FORMAT_CASES or scenario in VULKAN_NATIVE_CASES
                       or VULKAN_VMA_CASES.get(scenario) in ('depth', 'float', 'all'))
-    return {'mode': 'DEMO' if backend == 'vulkan' or scenario in ('iris', 'stack', OPENGL_PIXELS) else 'ENABLED',
+    demo = backend == 'vulkan' or scenario in ('iris', 'stack', OPENGL_PIXELS, OPENGL_LIFECYCLE)
+    return {'mode': 'DEMO' if demo else 'ENABLED',
             'pixelFormat': 'RGBA32F' if full_precision else 'RGBA16F',
             'stbnSize': 64 if settings else 16, 'stbnDepth': 8,
             'stbnSeed': 0, 'strength': 2, 'notifyChat': settings, 'notifyToast': settings}
@@ -168,6 +170,8 @@ def classic_jvm_arguments(candidate, scenario, backend, profile, restart_phase=N
             arguments.append('-Dcbbg.test.contextMod=' + CONTEXT_MODS[profile])
         if scenario == OPENGL_PIXELS:
             arguments.append('-Dcbbg.test.openGlPixels=true')
+        elif scenario == OPENGL_LIFECYCLE:
+            arguments.append('-Dcbbg.test.openGlLifecycle=true')
         elif scenario == 'satin':
             arguments.append('-Dcbbg.test.satin=true')
         elif scenario == 'renderscale':
@@ -600,6 +604,30 @@ def opengl_pixel_captures(log, evidence, width, height):
     return {f'opengl-{view}-{mode}.png': (width, height) for mode in modes for view in ('shot', 'window')}
 
 
+def opengl_lifecycle_captures(log, evidence, width, height):
+    records = re.findall(
+        r'CBBG_CLASSIC_OPENGL_LIFECYCLE stage=(\w+) size=(\d+)x(\d+) fullscreen=(true|false) '
+        r'world=(true|false) draws=(\d+)(?=\r?\n|\Z)', log)
+    stages = ('initial', 'resized', 'fullscreen', 'windowed', 'reloaded', 'left', 'rejoined')
+    if tuple(record[0] for record in records) != stages:
+        raise ValueError('Incomplete OpenGL window and world lifecycle')
+    normal = (width, height)
+    resized = (width - 64, height - 48)
+    captures = {}
+    for stage, x, y, fullscreen, world, draws in records:
+        size = (int(x), int(y))
+        expected = resized if stage in ('resized', 'windowed') else normal
+        valid_size = size != resized and min(size) > 0 if stage == 'fullscreen' else size == expected
+        if ((stage == 'fullscreen') != (fullscreen == 'true')
+                or (stage != 'left') != (world == 'true') or int(draws) < 6
+                or not valid_size):
+            raise ValueError('OpenGL lifecycle framebuffer, window, world or dither count differs')
+        captures[f'opengl-lifecycle-{stage}.png'] = size
+    if (evidence / 'final-cbbg.json').read_bytes() != (evidence / 'initial-cbbg.json').read_bytes():
+        raise ValueError('OpenGL lifecycle changed the saved configuration')
+    return captures
+
+
 def classic_result(scenario, profile, backend, log, evidence, exit_code, restart_phase=None):
     if (type(exit_code) is not int or exit_code != 0
             or re.search(r'VUID-|Validation Error|VK_ERROR_DEVICE_LOST|AssertionError|Game crashed!'
@@ -679,6 +707,8 @@ def classic_result(scenario, profile, backend, log, evidence, exit_code, restart
             captures = {}
         elif scenario == OPENGL_PIXELS:
             captures = opengl_pixel_captures(log, evidence, width, height)
+        elif scenario == OPENGL_LIFECYCLE:
+            captures = opengl_lifecycle_captures(log, evidence, width, height)
         elif scenario == 'stack':
             captures = classic_stack_captures(log, evidence, profile, config, width, height)
         elif scenario == 'renderscale':

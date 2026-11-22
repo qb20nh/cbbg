@@ -26,7 +26,8 @@ class ClassicScenarioTests(unittest.TestCase):
                          'custom': {'cbbg:scenarios': ['world', 'satin', REDUCED_GL_SCENARIO,
                                                        'renderscale', 'iris', 'stack', 'vulkan-lifecycle',
                                                        CLASSIC_MODE_RESTART, *CLASSIC_CACHE_SCENARIOS,
-                                                       'opengl-pixels', 'vulkan-pixels', 'vulkan-settings',
+                                                       'opengl-lifecycle', 'opengl-pixels', 'vulkan-pixels',
+                                                       'vulkan-settings',
                                                        *VULKAN_FORMAT_CASES, *VULKAN_VMA_CASES,
                                                        *VULKAN_NATIVE_CASES, *VULKAN_SAMPLER_CASES,
                                                        *VULKAN_PIPELINE_CASES]}}
@@ -564,6 +565,36 @@ class ClassicScenarioTests(unittest.TestCase):
                             else log.replace('cleaned=2', 'cleaned=1')):
                     with self.assertRaises(ValueError):
                         classic_result(scenario, 'vulkanmod', 'vulkan', bad, self.evidence, 0)
+
+    def test_opengl_lifecycle_requires_all_window_and_world_transitions(self):
+        scenario = 'opengl-lifecycle'
+        for profile in ('none', 'sodium'):
+            validate_classic_choice(self.metadata, scenario, profile, 'opengl')
+        self.assertIn('-Dcbbg.test.openGlLifecycle=true',
+                      classic_jvm_arguments('candidate.jar', scenario, 'opengl', 'sodium'))
+        config = json.dumps(classic_config('opengl', scenario))
+        for kind in ('initial', 'final'):
+            (self.evidence / f'{kind}-cbbg.json').write_text(config)
+        log = 'CBBG_CLASSIC_OPENGL Test GPU / 3.2 sodium=true\n'
+        for name, width, height in (
+                ('initial', 800, 600), ('resized', 736, 552), ('fullscreen', 1024, 640),
+                ('windowed', 736, 552), ('reloaded', 800, 600), ('left', 800, 600), ('rejoined', 800, 600)):
+            full = str(name == 'fullscreen').lower()
+            world = str(name != 'left').lower()
+            log += (f'CBBG_CLASSIC_OPENGL_LIFECYCLE stage={name} size={width}x{height} '
+                    f'fullscreen={full} world={world} draws=8\n')
+            self.write_capture(self.evidence / f'opengl-lifecycle-{name}.png', width, height)
+        classic_result(scenario, 'sodium', 'opengl', log, self.evidence, 0)
+        for bad in (log.replace('fullscreen=true', 'fullscreen=false'),
+                    log.replace('world=false', 'world=true'),
+                    log.replace('stage=windowed', 'stage=resized'),
+                    log.replace('size=736x552', 'size=800x600'),
+                    log.replace('draws=8', 'draws=5')):
+            with self.assertRaisesRegex(ValueError, 'lifecycle'):
+                classic_result(scenario, 'sodium', 'opengl', bad, self.evidence, 0)
+        (self.evidence / 'final-cbbg.json').write_text(config + '\n')
+        with self.assertRaisesRegex(ValueError, 'saved configuration'):
+            classic_result(scenario, 'sodium', 'opengl', log, self.evidence, 0)
 
     def test_opengl_pixel_oracle_requires_both_outputs_and_exact_draw_counts(self):
         scenario = 'opengl-pixels'
