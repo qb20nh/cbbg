@@ -148,6 +148,8 @@ public final class ClassicPackagedSmoke implements ClientModInitializer {
         if (renderScaleSmoke.tick(client, ticks)) {
           if (stack && iris) {
             setMode(client, "demo");
+            Path game = client.gameDirectory.toPath();
+            Files.copy(game.resolve("config/cbbg.json"), game.resolve("stack-before-iris.json"));
             // The preceding command matrix fills the chat overlay over the shader oracle.
             client.gui.getChat().clearMessages(false);
             irisSmoke = new ClassicIrisSmoke(false, ticks, presentations);

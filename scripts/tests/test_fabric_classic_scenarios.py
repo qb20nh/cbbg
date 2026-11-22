@@ -190,6 +190,8 @@ class ClassicScenarioTests(unittest.TestCase):
         initial = self.evidence / 'initial-cbbg.json'
         initial.write_text(json.dumps(config))
         final = self.evidence / 'final-cbbg.json'
+        before_iris = self.evidence / 'stack-before-iris.json'
+        before_iris.write_text(json.dumps(dict(config, strength=2.0), indent=2))
         for profile in (iris_profile.replace('+iris', ''), iris_profile):
             iris = profile == iris_profile
             with self.subTest(stack=profile):
@@ -197,7 +199,7 @@ class ClassicScenarioTests(unittest.TestCase):
                 flags = classic_jvm_arguments('candidate.jar', 'stack', 'opengl', profile)
                 self.assertIn('-Dcbbg.test.stack=true', flags)
                 self.assertEqual('-Dcbbg.test.irisCycle=true' in flags, iris)
-                final.write_text(json.dumps(config if iris else dict(config, mode='DISABLED')))
+                final.write_text(before_iris.read_text() if iris else json.dumps(dict(config, mode='DISABLED')))
                 result_log = stages + log + (logs if iris else '')
                 classic_result('stack', profile, 'opengl', result_log, self.evidence, 0)
                 with self.assertRaisesRegex(ValueError, 'compatibility checks'):
@@ -206,6 +208,9 @@ class ClassicScenarioTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     classic_result('stack', profile, 'opengl', result_log.replace('readableDepth=3', 'readableDepth=2'),
                                    self.evidence, 0)
+        final.write_text(initial.read_text())
+        with self.assertRaisesRegex(ValueError, 'changed the saved CBBG configuration'):
+            classic_result('stack', iris_profile, 'opengl', stages + log + logs, self.evidence, 0)
         initial.write_text(json.dumps(classic_config('opengl')))
 
     def test_world_rejects_changed_config_and_truncated_capture(self):

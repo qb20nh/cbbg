@@ -429,6 +429,8 @@ def main():
                 shutil.copyfile(game / 'config/cbbg.json', evidence / 'final-cbbg.json')
             if args.classic_scenario in ('iris', 'stack', CLASSIC_MODE_RESTART):
                 shutil.copyfile(game / 'config/cbbg.json', evidence / 'final-cbbg.json')
+                if args.classic_scenario == 'stack' and 'iris' in args.compat.split('+'):
+                    shutil.copyfile(game / 'stack-before-iris.json', evidence / 'stack-before-iris.json')
                 if args.restart_phase and args.classic_scenario == 'iris':
                     shutil.copyfile(game / 'config/iris.properties', evidence / 'final-iris.properties')
                 if args.restart_phase == 'prepare':

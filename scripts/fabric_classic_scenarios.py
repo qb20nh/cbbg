@@ -335,7 +335,7 @@ def iris_shader_state(path, enabled):
         raise ValueError('Classic Iris persisted shader state differs')
 
 
-def iris_captures(log, evidence, width, height, restart_phase):
+def iris_captures(log, evidence, width, height, restart_phase, *, initial_config='initial-cbbg.json'):
     events = re.findall(r'CBBG_CLASSIC_IRIS_([^\r\n]+)', log)
     shader_captures = {
         None: ['iris-active.png', 'iris-reloaded.png'],
@@ -356,7 +356,7 @@ def iris_captures(log, evidence, width, height, restart_phase):
         raise ValueError('Incomplete Iris activation, reload or restart evidence')
     if restart_phase:
         iris_shader_state(evidence / 'final-iris.properties', restart_phase == 'prepare')
-    if (evidence / 'final-cbbg.json').read_bytes() != (evidence / 'initial-cbbg.json').read_bytes():
+    if (evidence / 'final-cbbg.json').read_bytes() != (evidence / initial_config).read_bytes():
         raise ValueError('Iris changed the saved CBBG configuration')
     other_captures = {
         None: ['iris-inactive.png', 'iris-restored.png'],
@@ -379,7 +379,10 @@ def classic_stack_captures(log, evidence, profile, config, width, height):
     validate_satin(log, width, height)
     captures = renderscale_captures(log, width, height)
     if iris:
-        captures.update(iris_captures(log, evidence, width, height, None))
+        before_iris = 'stack-before-iris.json'
+        if json.loads((evidence / before_iris).read_text()) != config:
+            raise ValueError('Classic stack changed CBBG settings before enabling Iris')
+        captures.update(iris_captures(log, evidence, width, height, None, initial_config=before_iris))
     elif ('CBBG_CLASSIC_IRIS_' in log
           or json.loads((evidence / 'final-cbbg.json').read_text()) != dict(config, mode='DISABLED')):
         raise ValueError('Classic stack ended with unexpected shader or configuration state')
