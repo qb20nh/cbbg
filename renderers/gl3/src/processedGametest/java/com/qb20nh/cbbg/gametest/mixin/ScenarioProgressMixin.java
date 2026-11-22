@@ -25,7 +25,6 @@ public abstract class ScenarioProgressMixin {
               value = "INVOKE",
               target =
                   "Lnet/fabricmc/fabric/api/client/gametest/v1/FabricClientGameTest;runTest(Lnet/fabricmc/fabric/api/client/gametest/v1/ClientGameTestContext;)V"))
-  @SuppressWarnings("UnusedMethod") // MixinExtras invokes this wrapper through the injection.
   private static void cbbg$started(
       FabricClientGameTest test, ClientGameTestContext context, Operation<Void> original) {
     cbbg$record("started", test.getClass().getName());

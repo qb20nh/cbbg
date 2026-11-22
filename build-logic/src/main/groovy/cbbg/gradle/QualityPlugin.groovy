@@ -27,7 +27,9 @@ class QualityPlugin implements Plugin<Project> {
             'org.spongepowered.asm.mixin.injection.ModifyArg',
             'org.spongepowered.asm.mixin.injection.ModifyVariable',
             'com.llamalad7.mixinextras.injector.ModifyExpressionValue',
-            'com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod'
+            'com.llamalad7.mixinextras.injector.ModifyReturnValue',
+            'com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod',
+            'com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation'
     ].join(',')
     static final List<String> RULES = [
             'BrokenNullCheck', 'ClassCastExceptionWithToArray', 'CheckSkipResult',
@@ -118,7 +120,9 @@ class QualityPlugin implements Plugin<Project> {
                 error('NullAway', 'RequireExplicitNullMarking')
                 // Mixin supplies these methods and requires their signatures.
                 option('UnusedMethod:ExemptingMethodAnnotations', MIXIN_METHOD_ANNOTATIONS)
-                option('Unused:methodAnnotationsExemptingParameters', MIXIN_METHOD_ANNOTATIONS)
+                // Invoker stubs keep their target parameters and still need a caller.
+                option('Unused:methodAnnotationsExemptingParameters',
+                        MIXIN_METHOD_ANNOTATIONS + ',org.spongepowered.asm.mixin.gen.Invoker')
                 option('NullAway:OnlyNullMarked', true)
                 option('NullAway:JSpecifyMode', true)
                 option('NullAway:JSpecifyJDKModels', true)

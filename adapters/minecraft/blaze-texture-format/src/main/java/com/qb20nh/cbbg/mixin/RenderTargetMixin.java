@@ -27,7 +27,6 @@ public abstract class RenderTargetMixin {
               value = "INVOKE",
               target =
                   "Lcom/mojang/blaze3d/systems/GpuDevice;createTexture(Ljava/util/function/Supplier;ILcom/mojang/blaze3d/textures/TextureFormat;IIII)Lcom/mojang/blaze3d/textures/GpuTexture;"))
-  @SuppressWarnings("UnusedMethod") // Called through MixinExtras during attachment allocation.
   private GpuTexture cbbg$allocate(
       GpuDevice device,
       @Nullable Supplier<String> label,

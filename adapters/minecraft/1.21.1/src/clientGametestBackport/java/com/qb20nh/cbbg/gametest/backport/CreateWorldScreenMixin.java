@@ -50,7 +50,6 @@ public abstract class CreateWorldScreenMixin {
               value = "INVOKE",
               target =
                   "Lnet/minecraft/client/gui/screens/worldselection/WorldOpenFlows;confirmWorldCreation(Lnet/minecraft/client/Minecraft;Lnet/minecraft/client/gui/screens/worldselection/CreateWorldScreen;Lcom/mojang/serialization/Lifecycle;Ljava/lang/Runnable;Z)V"))
-  @SuppressWarnings("UnusedMethod") // MixinExtras invokes this wrapper.
   private void cbbg$confirmDedicatedWorld(
       Minecraft client,
       CreateWorldScreen screen,
@@ -73,7 +72,6 @@ public abstract class CreateWorldScreenMixin {
               value = "INVOKE",
               target =
                   "Lnet/minecraft/client/gui/screens/worldselection/WorldOpenFlows;createLevelFromExistingSettings(Lnet/minecraft/world/level/storage/LevelStorageSource$LevelStorageAccess;Lnet/minecraft/server/ReloadableServerResources;Lnet/minecraft/core/LayeredRegistryAccess;Lnet/minecraft/world/level/storage/WorldData;)V"))
-  @SuppressWarnings("UnusedMethod") // MixinExtras invokes this wrapper.
   private void cbbg$createDedicatedLevelData(
       WorldOpenFlows flows,
       LevelStorageSource.LevelStorageAccess access,

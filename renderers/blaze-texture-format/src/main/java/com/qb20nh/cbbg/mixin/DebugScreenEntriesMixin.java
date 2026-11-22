@@ -27,7 +27,6 @@ public abstract class DebugScreenEntriesMixin {
   private static Map<DebugScreenProfile, Map<Identifier, DebugScreenEntryStatus>> PROFILES;
 
   @Invoker("register")
-  @SuppressWarnings("UnusedVariable")
   private static Identifier cbbg$register(Identifier id, DebugScreenEntry entry) {
     throw new AssertionError("Mixin invoker was not applied");
   }

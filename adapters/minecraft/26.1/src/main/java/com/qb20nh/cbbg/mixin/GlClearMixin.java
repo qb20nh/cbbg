@@ -9,7 +9,6 @@ import org.spongepowered.asm.mixin.injection.At;
 
 @Mixin(GlStateManager.class)
 public abstract class GlClearMixin {
-  @SuppressWarnings("UnusedMethod") // MixinExtras invokes this wrapper.
   @WrapOperation(
       method = "_clear",
       at = @At(value = "INVOKE", target = "Lorg/lwjgl/opengl/GL11;glClear(I)V"))

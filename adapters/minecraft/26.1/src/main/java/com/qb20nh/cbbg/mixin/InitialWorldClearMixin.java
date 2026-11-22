@@ -12,7 +12,6 @@ import org.spongepowered.asm.mixin.injection.At;
 
 @Mixin(GameRenderer.class)
 public abstract class InitialWorldClearMixin {
-  @SuppressWarnings("UnusedMethod") // MixinExtras invokes this wrapper.
   @WrapOperation(
       method = "render",
       at =

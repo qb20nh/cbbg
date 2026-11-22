@@ -34,7 +34,6 @@ public abstract class MinecraftMixin {
               target =
                   "Lcom/mojang/renderpearl/api/device/GpuSurface;blitFromTexture(Lcom/mojang/renderpearl/api/commands/CommandEncoder;Lcom/mojang/renderpearl/api/textures/GpuTextureView;)V"),
       require = 1)
-  @SuppressWarnings("UnusedMethod") // Invoked by MixinExtras at the presentation call.
   private void cbbg$present(
       GpuSurface surface, CommandEncoder encoder, GpuTextureView input, Operation<Void> original) {
     boolean handledByEncoder =

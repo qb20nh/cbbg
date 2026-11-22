@@ -24,7 +24,6 @@ import org.spongepowered.asm.mixin.injection.At;
 abstract class BandingShaderMixin {
   @Unique private static final Map<String, RenderPipeline> CBBG_BANDING = new HashMap<>();
 
-  @SuppressWarnings("UnusedMethod") // Called by MixinExtras.
   @WrapOperation(
       method = "draw",
       at = @At(value = "INVOKE",
