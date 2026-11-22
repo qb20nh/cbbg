@@ -55,6 +55,11 @@ OPENGL_ALLOCATION_CASES = {
 }
 OPENGL_PIXEL_SCENARIOS = (OPENGL_PIXELS, *OPENGL_ALLOCATION_CASES)
 OPENGL_LIFECYCLE = 'opengl-lifecycle'
+OPENGL_SHADER_RECOVERY = 'opengl-shader-recovery'
+OPENGL_BROKEN_SHADER = {
+    'pack.mcmeta': b'{"pack":{"pack_format":15,"description":"CBBG broken shader fixture"}}\n',
+    'assets/cbbg/shaders/core/classic_dither.fsh': b'#version 150\nvoid main() { cbbgTestBrokenFragment(); }\n',
+}
 CLASSIC_LOCALES = 'locales'
 CLASSIC_STACK_PROFILES = (
     'modmenu+sodium+satin+immediatelyfast+chatpatches+renderscale',
@@ -96,7 +101,8 @@ def validate_classic_choice(metadata, scenario, profile, backend):
             return
         if scenario == CLASSIC_MODE_RESTART and profile in CLASSIC_MODE_RESTART_PROFILES:
             return
-        if scenario in (*OPENGL_PIXEL_SCENARIOS, OPENGL_LIFECYCLE) and profile in ('none', 'sodium'):
+        if (scenario in (*OPENGL_PIXEL_SCENARIOS, OPENGL_LIFECYCLE, OPENGL_SHADER_RECOVERY)
+                and profile in ('none', 'sodium')):
             return
         if scenario == CLASSIC_LOCALES and profile == 'modmenu':
             return
@@ -116,7 +122,8 @@ def classic_config(backend, scenario='world'):
     full_precision = (scenario in OPENGL_ALLOCATION_CASES or scenario in VULKAN_FORMAT_CASES
                       or scenario in VULKAN_NATIVE_CASES
                       or VULKAN_VMA_CASES.get(scenario) in ('depth', 'float', 'all'))
-    demo = backend == 'vulkan' or scenario in ('iris', 'stack', *OPENGL_PIXEL_SCENARIOS, OPENGL_LIFECYCLE)
+    demo = backend == 'vulkan' or scenario in (
+        'iris', 'stack', *OPENGL_PIXEL_SCENARIOS, OPENGL_LIFECYCLE, OPENGL_SHADER_RECOVERY)
     return {'mode': 'DEMO' if demo else 'ENABLED',
             'pixelFormat': 'RGBA32F' if full_precision else 'RGBA16F',
             'stbnSize': 64 if settings else 16, 'stbnDepth': 8,
@@ -184,6 +191,8 @@ def classic_jvm_arguments(candidate, scenario, backend, profile, restart_phase=N
                 arguments.append('-Dcbbg.test.openGlAllocation=' + OPENGL_ALLOCATION_CASES[scenario][0])
         elif scenario == OPENGL_LIFECYCLE:
             arguments.append('-Dcbbg.test.openGlLifecycle=true')
+        elif scenario == OPENGL_SHADER_RECOVERY:
+            arguments.append('-Dcbbg.test.openGlShaderRecovery=true')
         elif scenario == CLASSIC_LOCALES:
             arguments.append('-Dcbbg.test.locales=true')
         elif scenario == 'satin':
@@ -632,6 +641,26 @@ def validate_opengl_allocation(log, evidence, scenario, config, width, height):
         raise ValueError('OpenGL allocation fallback changed the stored precision preference')
 
 
+def opengl_shader_captures(log, evidence, width, height):
+    phases = re.findall(r'CBBG_CLASSIC_OPENGL_SHADER stage=(\w+) draws=(\d+)(?=\r?\n|\Z)', log)
+    stages = ('before', 'broken', 'restored')
+    if (tuple(stage for stage, _ in phases) != stages
+            or phases[1][1] != '0' or min(int(phases[0][1]), int(phases[2][1])) < 6):
+        raise ValueError('OpenGL shader fallback or reload recovery differs')
+    warning = 'Could not load the classic CBBG dither shader; using vanilla presentation'
+    _, _, after_before = log.partition('CBBG_CLASSIC_OPENGL_SHADER stage=before')
+    failed, _, recovered = after_before.partition('CBBG_CLASSIC_OPENGL_SHADER stage=broken')
+    if (log.count(warning) != 1 or warning not in failed or 'cbbgTestBrokenFragment' not in failed
+            or 'Reloading ResourceManager:' not in recovered or 'stage=restored' not in recovered):
+        raise ValueError('OpenGL shader recovery lacks the expected compiler failure and reload')
+    for name, content in OPENGL_BROKEN_SHADER.items():
+        if (evidence / 'shader-pack-input' / name).read_bytes() != content:
+            raise ValueError('OpenGL shader pack input differs')
+    if (evidence / 'final-cbbg.json').read_bytes() != (evidence / 'initial-cbbg.json').read_bytes():
+        raise ValueError('OpenGL shader failure changed the saved configuration')
+    return {f'opengl-shader-{stage}.png': (width, height) for stage in stages}
+
+
 def opengl_lifecycle_captures(log, evidence, width, height):
     records = re.findall(
         r'CBBG_CLASSIC_OPENGL_LIFECYCLE stage=(\w+) size=(\d+)x(\d+) fullscreen=(true|false) '
@@ -760,6 +789,8 @@ def classic_result(scenario, profile, backend, log, evidence, exit_code, restart
                 validate_opengl_allocation(log, evidence, scenario, config, width, height)
         elif scenario == OPENGL_LIFECYCLE:
             captures = opengl_lifecycle_captures(log, evidence, width, height)
+        elif scenario == OPENGL_SHADER_RECOVERY:
+            captures = opengl_shader_captures(log, evidence, width, height)
         elif scenario == CLASSIC_LOCALES:
             captures = classic_locale_captures(log, evidence, width, height)
         elif scenario == 'stack':

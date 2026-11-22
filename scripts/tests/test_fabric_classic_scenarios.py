@@ -9,7 +9,8 @@ import zipfile
 
 from fabric_classic_scenarios import (CLASSIC_CACHE_SCENARIOS, CLASSIC_ENTRYPOINT, CLASSIC_IRIS_OPTIONS,
                                       CLASSIC_MODE_RESTART, CLASSIC_OPTIONS,
-                                      OPENGL_ALLOCATION_CASES, REDUCED_GL_SCENARIO,
+                                      OPENGL_ALLOCATION_CASES, OPENGL_BROKEN_SHADER, OPENGL_SHADER_RECOVERY,
+                                      REDUCED_GL_SCENARIO,
                                       SETTINGS_MANIFEST, SETTINGS_NOISE_FRAMES,
                                       VMA_PROBE_AGENT, VULKAN_FORMAT_CASES, VULKAN_NATIVE_CASES,
                                       VULKAN_PIPELINE_CASES, VULKAN_SAMPLER_CASES, VULKAN_VMA_CASES,
@@ -29,7 +30,7 @@ class ClassicScenarioTests(unittest.TestCase):
                                                        'renderscale', 'iris', 'stack', 'vulkan-lifecycle',
                                                        CLASSIC_MODE_RESTART, *CLASSIC_CACHE_SCENARIOS,
                                                        'locales', 'opengl-lifecycle', 'opengl-pixels', 'vulkan-pixels',
-                                                       *OPENGL_ALLOCATION_CASES,
+                                                       OPENGL_SHADER_RECOVERY, *OPENGL_ALLOCATION_CASES,
                                                        'vulkan-settings',
                                                        *VULKAN_FORMAT_CASES, *VULKAN_VMA_CASES,
                                                        *VULKAN_NATIVE_CASES, *VULKAN_SAMPLER_CASES,
@@ -626,6 +627,34 @@ class ClassicScenarioTests(unittest.TestCase):
         (self.evidence / 'final-cbbg.json').write_text(config + '\n')
         with self.assertRaisesRegex(ValueError, 'saved configuration'):
             classic_result(scenario, 'sodium', 'opengl', log, self.evidence, 0)
+
+    def test_shader_recovery_requires_compile_failure_fallback_and_reload(self):
+        scenario = OPENGL_SHADER_RECOVERY
+        validate_classic_choice(self.metadata, scenario, 'sodium', 'opengl')
+        self.assertIn('-Dcbbg.test.openGlShaderRecovery=true',
+                      classic_jvm_arguments('candidate.jar', scenario, 'opengl', 'sodium'))
+        config = json.dumps(classic_config('opengl', scenario))
+        for kind in ('initial', 'final'):
+            (self.evidence / f'{kind}-cbbg.json').write_text(config)
+        pack = self.evidence / 'shader-pack-input'
+        for name, content in OPENGL_BROKEN_SHADER.items():
+            path = pack / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(content)
+        for stage in ('before', 'broken', 'restored'):
+            self.write_capture(self.evidence / f'opengl-shader-{stage}.png', 800, 600)
+        log = ('CBBG_CLASSIC_OPENGL Test GPU / 3.2 sodium=true\n'
+               'CBBG_CLASSIC_OPENGL_SHADER stage=before draws=8\nReloading ResourceManager: broken\n'
+               'Could not load the classic CBBG dither shader; using vanilla presentation\n'
+               'Compilation failed: cbbgTestBrokenFragment\n'
+               'CBBG_CLASSIC_OPENGL_SHADER stage=broken draws=0\nReloading ResourceManager: vanilla\n'
+               'CBBG_CLASSIC_OPENGL_SHADER stage=restored draws=9\n')
+        classic_result(scenario, 'sodium', 'opengl', log, self.evidence, 0)
+        for bad in (log.replace('draws=0', 'draws=1'), log.replace('cbbgTestBrokenFragment', 'unknown'),
+                    log.replace('Reloading ResourceManager: vanilla', 'Reload skipped'),
+                    log.replace('stage=restored', 'stage=broken')):
+            with self.assertRaisesRegex(ValueError, 'OpenGL shader'):
+                classic_result(scenario, 'sodium', 'opengl', bad, self.evidence, 0)
 
     def test_opengl_allocation_trace_requires_each_failed_format_and_preserved_precision(self):
         for scenario, mask, formats, selected in (

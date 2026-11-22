@@ -4,9 +4,11 @@ import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.platform.GlStateManager;
 import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.blaze3d.platform.TextureUtil;
+import com.qb20nh.cbbg.Cbbg;
 import com.qb20nh.cbbg.CbbgClient;
 import com.qb20nh.cbbg.compat.renderscale.RenderScaleCompat;
 import com.qb20nh.cbbg.config.CbbgConfig;
+import java.io.IOException;
 import java.util.function.BooleanSupplier;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.ShaderInstance;
@@ -20,10 +22,11 @@ public final class ClassicDither {
   }
 
   public static boolean hasFailed() {
-    return ClassicNoise.hasFailed() || backendFailure.getAsBoolean();
+    return shaderLoadFailed || ClassicNoise.hasFailed() || backendFailure.getAsBoolean();
   }
 
   private static ShaderInstance shader;
+  private static boolean shaderLoadFailed;
   private static NativeImage[] images;
   private static int[] textures;
   private static int nextFrame;
@@ -34,6 +37,15 @@ public final class ClassicDither {
 
   public static void setShader(ShaderInstance loaded) {
     shader = loaded;
+    shaderLoadFailed = false;
+  }
+
+  public static void onShaderLoadFailure(IOException failure) {
+    if (shaderLoadFailed) return;
+    shader = null;
+    shaderLoadFailed = true;
+    Cbbg.LOGGER.warn(
+        "Could not load the classic CBBG dither shader; using vanilla presentation", failure);
   }
 
   public static void tick() {

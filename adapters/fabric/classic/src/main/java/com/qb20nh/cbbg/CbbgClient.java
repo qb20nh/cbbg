@@ -9,6 +9,7 @@ import com.qb20nh.cbbg.render.ClassicDither;
 import com.qb20nh.cbbg.render.ClassicFramebuffers;
 import com.qb20nh.cbbg.render.ClassicNoise;
 import com.qb20nh.cbbg.render.GenerationNotifications;
+import java.io.IOException;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
@@ -44,11 +45,16 @@ public final class CbbgClient implements ClientModInitializer {
     ClientLifecycleEvents.CLIENT_STOPPING.register(client -> ClassicNoise.close());
     if (vulkanMod) return;
     CoreShaderRegistrationCallback.EVENT.register(
-        context ->
+        context -> {
+          try {
             context.register(
                 new ResourceLocation("cbbg", "classic_dither"),
                 DefaultVertexFormat.POSITION_TEX_COLOR,
-                ClassicDither::setShader));
+                ClassicDither::setShader);
+          } catch (IOException failure) {
+            ClassicDither.onShaderLoadFailure(failure);
+          }
+        });
     ClientLifecycleEvents.CLIENT_STOPPING.register(client -> ClassicDither.close());
   }
 }

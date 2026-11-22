@@ -45,6 +45,7 @@ public final class ClassicPackagedSmoke implements ClientModInitializer {
     PIXELS,
     LIFECYCLE,
     LOCALES,
+    SHADER_RECOVERY,
     DONE
   }
 
@@ -58,12 +59,14 @@ public final class ClassicPackagedSmoke implements ClientModInitializer {
   private final boolean pixels = Boolean.getBoolean("cbbg.test.openGlPixels");
   private final boolean lifecycle = Boolean.getBoolean("cbbg.test.openGlLifecycle");
   private final boolean locales = Boolean.getBoolean("cbbg.test.locales");
+  private final boolean shaderRecovery = Boolean.getBoolean("cbbg.test.openGlShaderRecovery");
   private ClassicStackSmoke stackSmoke;
   private ClassicIrisSmoke irisSmoke;
   private ClassicSatinSmoke satinSmoke;
   private ClassicRenderScaleSmoke renderScaleSmoke;
   private ClassicOpenGlLifecycle lifecycleSmoke;
   private ClassicLocalesSmoke localesSmoke;
+  private ClassicOpenGlShaderSmoke shaderSmoke;
   private int ticks;
   private Phase phase = Phase.TITLE;
   private long enabledStart;
@@ -130,6 +133,9 @@ public final class ClassicPackagedSmoke implements ClientModInitializer {
         } else if (locales) {
           localesSmoke = new ClassicLocalesSmoke(client);
           phase = Phase.LOCALES;
+        } else if (shaderRecovery) {
+          shaderSmoke = new ClassicOpenGlShaderSmoke(client);
+          phase = Phase.SHADER_RECOVERY;
         } else {
           phase = restart ? Phase.RESTARTED_DISABLED : Phase.DITHERED;
         }
@@ -187,6 +193,11 @@ public final class ClassicPackagedSmoke implements ClientModInitializer {
         }
       } else if (phase == Phase.LOCALES) {
         if (localesSmoke.tick(client)) {
+          phase = Phase.DONE;
+          client.stop();
+        }
+      } else if (phase == Phase.SHADER_RECOVERY) {
+        if (shaderSmoke.tick(client, ticks)) {
           phase = Phase.DONE;
           client.stop();
         }

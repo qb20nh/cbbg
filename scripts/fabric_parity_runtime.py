@@ -15,7 +15,8 @@ from fabric_classic_scenarios import (CLASSIC_CACHE_FRAMES, CLASSIC_CACHE_MANIFE
                                       CLASSIC_CACHE_SCENARIOS, CLASSIC_IRIS_OPTIONS, CLASSIC_LOCALES,
                                       CLASSIC_MODE_RESTART,
                                       CLASSIC_MODE_RESTART_PROFILES, CLASSIC_OPTIONS, CLASSIC_RESTART_FILES,
-                                      OPENGL_ALLOCATION_CASES, OPENGL_LIFECYCLE, OPENGL_PIXEL_SCENARIOS,
+                                      OPENGL_ALLOCATION_CASES, OPENGL_BROKEN_SHADER, OPENGL_LIFECYCLE,
+                                      OPENGL_PIXEL_SCENARIOS, OPENGL_SHADER_RECOVERY,
                                       REDUCED_GL_SCENARIO,
                                       SETTINGS_MANIFEST, SETTINGS_NOISE_FRAMES,
                                       VMA_PROBE_AGENT,
@@ -390,6 +391,12 @@ def main():
             if args.classic_scenario == CLASSIC_LOCALES:
                 (evidence / 'locale-files.json').write_text(
                     json.dumps(packaged_locale_counts(args.candidate), sort_keys=True) + '\n')
+            if args.classic_scenario == OPENGL_SHADER_RECOVERY:
+                for name, contents in OPENGL_BROKEN_SHADER.items():
+                    for base in (game / 'resourcepacks/cbbg-test-broken-shader', evidence / 'shader-pack-input'):
+                        path = base / name
+                        path.parent.mkdir(parents=True, exist_ok=True)
+                        path.write_bytes(contents)
         if args.startup_mode:
             prepare_startup_cache(game, evidence, args.startup_mode, args.startup_cache)
         if args.test_dependency_minimums:
@@ -432,7 +439,7 @@ def main():
                 shutil.copyfile(game / 'vulkan-settings-warm.sha256', saved / 'warm.sha256')
                 for name in (SETTINGS_MANIFEST, *SETTINGS_NOISE_FRAMES):
                     shutil.copyfile(game / '.cbbg' / name, saved / name)
-            if probe_agent or args.classic_scenario in OPENGL_ALLOCATION_CASES:
+            if probe_agent or args.classic_scenario in (*OPENGL_ALLOCATION_CASES, OPENGL_SHADER_RECOVERY):
                 shutil.copyfile(game / 'config/cbbg.json', evidence / 'final-cbbg.json')
             if args.classic_scenario in ('iris', 'stack', CLASSIC_MODE_RESTART, OPENGL_LIFECYCLE, CLASSIC_LOCALES):
                 shutil.copyfile(game / 'config/cbbg.json', evidence / 'final-cbbg.json')
