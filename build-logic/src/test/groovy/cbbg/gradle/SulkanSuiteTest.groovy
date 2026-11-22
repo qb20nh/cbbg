@@ -19,8 +19,10 @@ class SulkanSuiteTest {
                 profile.indexOf("    tasks.register('prepareProcessedRuntime')", processedStart))
         String development = profile.substring(profile.indexOf('// Startup-state and slow maximum-size'),
                 profile.indexOf("tasks.named('checkPackages', cbbg.gradle.CheckPackages)"))
+        Map target = TargetCatalog.read(new File(repository, 'targets.json')).select('26.3-fabric').first()
         def binding = new Binding([tasks: project.tasks, layout: project.layout,
-                                   sourceSets: project.sourceSets, target: [renderer: 'renderpearl']])
+                                   sourceSets: project.sourceSets, target: target,
+                                   usesRenderSubpasses: TargetCatalog.usesRenderSubpasses(target)])
         new GroovyShell(binding).evaluate('import org.gradle.api.tasks.bundling.Jar\n'
                 + 'import groovy.json.JsonSlurper\n' + processed + development)
         assertFalse(project.tasks.names.any { it.toLowerCase().contains('sulkan') })
