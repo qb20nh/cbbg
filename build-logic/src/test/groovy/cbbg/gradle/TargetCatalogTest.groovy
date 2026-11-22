@@ -28,7 +28,7 @@ class TargetCatalogTest {
     void actualCatalogSelectsRuntimeTargetsAndArtifactOwners() {
         TargetCatalog catalog = TargetCatalog.read(CATALOG)
         List<String> implemented = ['1.21.1-fabric', '1.21.11-fabric', '26.1-fabric', '26.1.1-fabric', '26.1.2-fabric', '26.2-fabric', '26.3-fabric']
-        assertEquals(34, catalog.select().size())
+        assertEquals(35, catalog.select().size())
         assertEquals(implemented, catalog.defaults()*.id)
         assertEquals(implemented, catalog.select().findAll { it.implemented }*.id)
         assertEquals(implemented, catalog.defaults(true)*.id)
@@ -185,6 +185,19 @@ class TargetCatalogTest {
         }
         data = copyData()
         target(data, '26.2-quilt').minecraftDependency = '~26.2'
+        rejects(data, 'Minecraft dependency')
+    }
+
+    @Test
+    void fabricSnapshotUsesAnExactNormalizedDependency() {
+        Map data = copyData()
+        Map snapshot = target(data, '26.4-snapshot-10-fabric')
+        assertEquals('26.4-alpha.10',
+                new TargetCatalog(data).select(snapshot.id as String).first().minecraftDependency)
+        snapshot.minecraftDependency = '26.4-alpha.9'
+        rejects(data, 'Minecraft dependency')
+        snapshot.minecraftDependency = '26.4-alpha.10'
+        snapshot.implemented = true
         rejects(data, 'Minecraft dependency')
     }
 

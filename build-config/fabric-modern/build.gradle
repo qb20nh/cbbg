@@ -126,7 +126,8 @@ if (artifactOwner.minecraft == '26.1') {
     loom.accessWidenerPath = new File(repositoryRoot,
             'adapters/minecraft/26.1/src/main/resources/cbbg.window.accesswidener')
 }
-if (target.renderer == 'renderpearl') {
+def usesRenderSubpasses = cbbg.gradle.TargetCatalog.usesRenderSubpasses(target)
+if (target.renderer == 'renderpearl' && !usesRenderSubpasses) {
     loom.accessWidenerPath = new File(repositoryRoot,
             'renderers/renderpearl/src/main/resources/cbbg.window.accesswidener')
 }
@@ -231,7 +232,7 @@ if (usesSharedLifecycle) {
     apply from: new File(repositoryRoot, 'build-config/fabric-startup-tests.gradle')
 }
 
-if (targetId == '26.3-fabric') {
+if (target.renderer == 'renderpearl' && !usesRenderSubpasses) {
     // Select resolved external artifacts, including Loom's Minecraft jar, without
     // carrying unprocessed main classes or the shared project outputs into compilation.
     def externalCompileClasspath = configurations.compileClasspath.incoming.artifactView {
@@ -366,7 +367,7 @@ tasks.named('processResources') {
     doLast {
         File descriptorFile = new File(destinationDir, 'fabric.mod.json')
         cbbg.gradle.FabricBranding.apply(sharedDescriptor, descriptorFile)
-        if (artifactOwner.minecraft == '26.1' || target.renderer == 'renderpearl') {
+        if (artifactOwner.minecraft == '26.1' || (target.renderer == 'renderpearl' && !usesRenderSubpasses)) {
             Map descriptor = new groovy.json.JsonSlurper().parse(descriptorFile)
             descriptor.accessWidener = 'cbbg.window.accesswidener'
             if (artifactOwner.minecraft == '26.1') {
@@ -388,7 +389,7 @@ tasks.named('processResources') {
 }
 
 apply from: new File(repositoryRoot, 'build-config/source-inventory.gradle')
-if (target.renderer == 'renderpearl' || usesSharedLifecycle) {
+if ((target.renderer == 'renderpearl' && !usesRenderSubpasses) || usesSharedLifecycle) {
     apply from: new File(repositoryRoot, 'build-config/fabric-compatibility.gradle')
 }
 
@@ -417,7 +418,7 @@ def parityDriverJar = tasks.register('parityDriverJar', Jar) {
 }
 
 // Startup-state and slow maximum-size fixtures run independently of the ordinary suite.
-if (target.renderer == 'renderpearl') {
+if (target.renderer == 'renderpearl' && !usesRenderSubpasses) {
     [earlyStartup: ['EarlyStartupGameTest'],
      irisRestart: ['IrisRestartGameTest'],
      maximumNoiseCache: ['Rgba8ReadbackGameTest', 'MaximumNoiseCacheGameTest'],

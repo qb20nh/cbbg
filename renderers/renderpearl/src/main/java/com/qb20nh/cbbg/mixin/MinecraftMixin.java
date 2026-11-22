@@ -9,6 +9,7 @@ import com.mojang.renderpearl.frontend.FrontendCommandEncoder;
 import com.qb20nh.cbbg.compat.renderscale.RenderScaleTargets;
 import com.qb20nh.cbbg.render.DitherController;
 import com.qb20nh.cbbg.render.DitherPresentation;
+import com.qb20nh.cbbg.render.WindowDitherPresentation;
 import com.qb20nh.cbbg.render.stbn.STBNGenerator;
 import net.minecraft.client.Minecraft;
 import org.jspecify.annotations.NullMarked;
@@ -38,14 +39,14 @@ public abstract class MinecraftMixin {
       GpuSurface surface, CommandEncoder encoder, GpuTextureView input, Operation<Void> original) {
     boolean handledByEncoder =
         encoder instanceof FrontendCommandEncoder frontend
-            && frontend.backend() instanceof DitherPresentation.WindowEncoder;
-    boolean vulkan = DitherPresentation.canPresentToVulkanWindow(surface, input);
-    if (vulkan) DitherPresentation.setVulkanSurface(surface);
+            && frontend.backend() instanceof WindowDitherPresentation.WindowEncoder;
+    boolean vulkan = WindowDitherPresentation.canPresentToVulkanWindow(surface, input);
+    if (vulkan) WindowDitherPresentation.setVulkanSurface(surface);
     try {
       original.call(
           surface, encoder, handledByEncoder || vulkan ? input : DitherPresentation.present(input));
     } finally {
-      DitherPresentation.setVulkanSurface(null);
+      WindowDitherPresentation.setVulkanSurface(null);
     }
   }
 

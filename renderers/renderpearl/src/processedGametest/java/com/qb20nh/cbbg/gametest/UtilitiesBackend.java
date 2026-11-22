@@ -58,7 +58,10 @@ final class UtilitiesBackend {
           image.setPixelABGR(x, y, volume.pixelABGR(x, y, frame));
         }
       }
-      device.createCommandEncoder().writeToTexture(texture, image);
+      device
+          .createCommandEncoder()
+          .writeToTexture(
+              texture, image.getPixelBytes(), 0, 0, 0, 0, image.getWidth(), image.getHeight());
     }
     return new Noise(texture, device.createTextureView(texture));
   }

@@ -19,6 +19,15 @@ class TargetCatalog {
         target.renderer == 'renderpearl' ? '#include' : '#moj_import'
     }
 
+    static boolean usesRenderSubpasses(Map target) {
+        target.renderer == 'renderpearl' &&
+                (target.minecraft == '26.4' || target.minecraft.startsWith('26.4-'))
+    }
+
+    static String renderPearlPipelineSources(Map target) {
+        usesRenderSubpasses(target) ? 'renderpearl-subpass' : 'renderpearl-single-pass'
+    }
+
     static TargetCatalog read(File file) {
         Object parsed = CandidateFiles.read(file)
         if (!(parsed instanceof Map)) {
@@ -131,9 +140,12 @@ class TargetCatalog {
             it.containsKey('compatibleMinecraft') || it.containsKey('minecraftDependency')
         }) {
             if (!owner.containsKey('compatibleMinecraft')) {
+                def snapshot = owner.minecraft =~ /^([0-9]+\.[0-9]+)-snapshot-([0-9]+)$/
+                boolean exactSnapshot = !owner.implemented && snapshot.matches() &&
+                        owner.minecraftDependency == "${snapshot[0][1]}-alpha.${snapshot[0][2]}"
+                boolean minorRange = owner.minecraft ==~ /[0-9]+\.[0-9]+/
                 if (owner.loader != FABRIC || owner.artifactOf != null ||
-                        !(owner.minecraft ==~ /[0-9]+\.[0-9]+/) ||
-                        owner.minecraftDependency != '~' + owner.minecraft) {
+                        !(exactSnapshot || (minorRange && owner.minecraftDependency == '~' + owner.minecraft))) {
                     throw new IllegalArgumentException('Invalid Minecraft dependency: ' + owner.id)
                 }
                 continue
