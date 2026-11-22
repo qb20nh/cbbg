@@ -3,12 +3,15 @@ import copy
 import json
 from pathlib import Path
 import shutil
+import struct
 import sys
 import tempfile
 import unittest
 import zipfile
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from fabric_classic_scenarios import (CLASSIC_DRIVER, CLASSIC_ENTRYPOINT, CLASSIC_OPTIONS,
+                                      classic_config, pixel_cache_files)
 from fabric_run_evidence import verify_classic_restart_snapshots, verify_run, verify_restart
 from fabric_parity_runtime import restart_state
 from fabric_scenario_evidence import graphics_identity, validate_scenarios
@@ -124,6 +127,38 @@ class FabricRunEvidenceTest(unittest.TestCase):
         result = self.verify()
         self.assertEqual(self.expected, result['scenarios'])
         self.assertFalse(result['releaseAcceptance'])
+
+    def test_classic_run_does_not_require_a_modern_trace(self):
+        self.target['buildProfile'] = 'fabric-classic'
+        self.catalog.write_text(json.dumps({'targets': [self.target]}))
+        (self.game / 'mods/fabric-gametest-api.jar').unlink()
+        with zipfile.ZipFile(self.game / 'mods/driver.jar', 'w') as jar:
+            jar.writestr('fabric.mod.json', json.dumps({'id': CLASSIC_DRIVER,
+                'entrypoints': {'client': [CLASSIC_ENTRYPOINT]},
+                'custom': {'cbbg:scenarios': ['world']}}))
+        evidence = self.game / 'evidence'
+        (evidence / 'scenarios.tsv').unlink()
+        (evidence / 'graphics-context.json').unlink()
+        (evidence / 'initial-cbbg.json').write_text(json.dumps(classic_config('opengl')))
+        (evidence / 'initial-options.txt').write_text(CLASSIC_OPTIONS)
+        template = pixel_cache_files()['stbn_16x16x8_0.png']
+        for capture in ('enabled.png', 'disabled.png'):
+            (evidence / capture).write_bytes(template[:16] + struct.pack('>II', 800, 600) + template[24:])
+        (self.game / 'launch.log').write_text('CBBG_CLASSIC_OPENGL Test GPU / 4.6 sodium=false\n'
+                                             'CBBG_CLASSIC_SMOKE_PASS presentations=12\n')
+        self.report.update(classicScenario='world', dependencyMinimumTest=False,
+            initialConfigSha256=digest(evidence / 'initial-cbbg.json'), catalogSha256=digest(self.catalog),
+            scenarioSha256=hashlib.sha256(b'["world"]').hexdigest(),
+            artifacts={p.name: digest(p) for p in (self.game / 'mods').iterdir()},
+            evidence={p.relative_to(self.game).as_posix(): digest(p)
+                      for p in [self.game / 'launch.log', *evidence.iterdir()]},
+            scenarios={'completedEntrypoints': 1, 'backend': 'opengl', 'releaseAcceptance': False},
+            graphics={'backend': 'opengl', 'provider': 'minecraft', 'gpu': 'Test GPU', 'driver': '4.6'})
+        self.save()
+
+        result = self.verify()
+        self.assertEqual(['world'], result['scenarios'])
+        self.assertEqual('minecraft', result['rendererProvider'])
 
     def test_shutdown_cleanup_is_rechecked_from_saved_result(self):
         self.expected = ['com.qb20nh.cbbg.gametest.ReleaseShutdownGameTest']

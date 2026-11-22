@@ -106,6 +106,7 @@ def _verify_run(receipt_path, target, *, source_commit, candidate_sha256,
     log = paths[log_name].read_text()
     if classic and report.get('initialConfigSha256') != evidence[directory + '/initial-cbbg.json']:
         raise EvidenceError('Classic initial config hash differs')
+    if classic:
         if scenario == CLASSIC_LOCALES:
             if read_json(paths[directory + '/locale-files.json']) != packaged_locale_counts(installed['candidate.jar']):
                 raise EvidenceError('Classic locale inventory differs from the candidate')
