@@ -107,9 +107,9 @@ def _verify_run(receipt_path, target, *, source_commit, candidate_sha256,
     if classic and report.get('initialConfigSha256') != evidence[directory + '/initial-cbbg.json']:
         raise EvidenceError('Classic initial config hash differs')
     if classic:
-        if scenario == CLASSIC_LOCALES:
-            if read_json(paths[directory + '/locale-files.json']) != packaged_locale_counts(installed['candidate.jar']):
-                raise EvidenceError('Classic locale inventory differs from the candidate')
+        if (scenario == CLASSIC_LOCALES and read_json(paths[directory + '/locale-files.json'])
+                != packaged_locale_counts(installed['candidate.jar'])):
+            raise EvidenceError('Classic locale inventory differs from the candidate')
         probe_agent = vulkan_probe_agent(scenario)
         if probe_agent:
             with zipfile.ZipFile(installed['driver.jar']) as driver:
