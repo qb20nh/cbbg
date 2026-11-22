@@ -117,7 +117,7 @@ class ChangeImpactTest {
         for (String path : ['.github/workflows/gradle.yml', 'gradle.properties', 'build-config/shared-code.gradle',
                 'build-logic/src/main/groovy/cbbg/gradle/QualityPlugin.groovy', 'unknown/file',
                 '.github/new-build-config.gradle', 'scripts/generated-shader.py']) {
-            assertEquals(['1.21.1-fabric', '1.21.11-fabric', '26.1-fabric', '26.2-fabric', '26.3-fabric'],
+            assertEquals(['1.20.1-fabric', '1.21.1-fabric', '1.21.11-fabric', '26.1-fabric', '26.2-fabric', '26.3-fabric'],
                     ChangeImpact.ci(catalog, ChangeImpact.select(catalog, [path], true)).matrix.include*.id, path)
         }
     }

@@ -19,11 +19,12 @@ class CodeqlScanTest {
     @Test
     void coversArtifactOwnersAndPreservesHistoricalCategory() {
         List<Map> rows = CodeqlScan.targets(new TargetCatalog(catalog()), '26.2-fabric')
-        assertEquals(['1.21.1-fabric', '1.21.11-fabric', '26.1-fabric', '26.2-fabric', '26.3-fabric'] as Set, rows*.id as Set)
-        assertEquals(5, rows.size())
+        assertEquals(['1.20.1-fabric', '1.21.1-fabric', '1.21.11-fabric', '26.1-fabric', '26.2-fabric', '26.3-fabric'] as Set,
+                rows*.id as Set)
+        assertEquals(6, rows.size())
         assertEquals('/language:java-kotlin', rows.find { it.id == '26.2-fabric' }.category)
         assertEquals('/language:java-kotlin/target:26.1-fabric', rows.find { it.id == '26.1-fabric' }.category)
-        assertEquals(5, rows*.category.toSet().size())
+        assertEquals(6, rows*.category.toSet().size())
         Map data = catalog()
         data.ciTargets.remove('26.2-fabric')
         data.targets.find { it.id == '26.2-fabric' }.implemented = false
@@ -51,7 +52,7 @@ class CodeqlScanTest {
         new File(root, 'settings.gradle').text = "rootProject.name = 'codeql-test'\n"
         new File(root, 'build.gradle').text = "plugins { id 'cbbg.targets' }\n"
         new File(root, 'targets.json').text = JsonOutput.toJson(catalog())
-        for (String profile : ['fabric-modern', 'fabric-upstream']) {
+        for (String profile : ['fabric-classic', 'fabric-modern', 'fabric-upstream']) {
             File build = new File(root, 'build-config/' + profile + '/build.gradle')
             build.parentFile.mkdirs()
             build.text = ''
@@ -105,7 +106,8 @@ elif args[1] == 'analyze':
         File root = fixture()
         runner(root).build()
         File output = new File(root, '.gradle/codeql-results')
-        assertEquals(['1.21.1-fabric.sarif', '1.21.11-fabric.sarif', '26.1-fabric.sarif', '26.2-fabric.sarif', '26.2-fabric-target.sarif', '26.3-fabric.sarif'] as Set,
+        assertEquals(['1.20.1-fabric.sarif', '1.21.1-fabric.sarif', '1.21.11-fabric.sarif', '26.1-fabric.sarif',
+                      '26.2-fabric.sarif', '26.2-fabric-target.sarif', '26.3-fabric.sarif'] as Set,
                 new File(output, 'sarif').list() as Set)
         Map primary = new JsonSlurper().parse(new File(output, 'sarif/26.2-fabric.sarif')) as Map
         Map target = new JsonSlurper().parse(new File(output, 'sarif/26.2-fabric-target.sarif')) as Map
@@ -115,8 +117,8 @@ elif args[1] == 'analyze':
         assertEquals(primary, target)
         List<Map> calls = new File(root, 'calls.jsonl').readLines().collect { new JsonSlurper().parseText(it) as Map }
         List<Map> builds = calls.findAll { it.args[1] == 'trace-command' }
-        assertEquals(5, builds*.args.collect { it[2] }.toSet().size())
-        assertEquals(5, calls.count { it.args[1] == 'analyze' })
+        assertEquals(6, builds*.args.collect { it[2] }.toSet().size())
+        assertEquals(6, calls.count { it.args[1] == 'analyze' })
         builds.each { call ->
             assertTrue(new File(call.java as String).isDirectory())
             List<String> command = call.args.drop(4)
@@ -128,10 +130,14 @@ elif args[1] == 'analyze':
             else {
                 assertTrue(command.any { it.startsWith('-Ptarget=') })
             }
+            if (call.args[2].endsWith('1.20.1-fabric')) {
+                assertTrue(command.contains('-Ptarget=1.20.1-fabric'))
+                assertTrue(command.contains(new File(root, 'build-config/fabric-classic').canonicalPath))
+            }
             assertFalse(new File(call.args[2] as String).exists())
         }
         runner(root).build()
-        assertEquals(40, new File(root, 'calls.jsonl').readLines().size())
+        assertEquals(48, new File(root, 'calls.jsonl').readLines().size())
     }
 
     @Test
