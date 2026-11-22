@@ -37,7 +37,8 @@ public final class Rgba8Readback {
                       RenderPassLayouts.COLOR_ONLY,
                       Objects.requireNonNull(output.getColorTextureView()),
                       Optional.empty())) {
-            pass.setPipeline(RenderSystem.getCompiledPipeline(RenderPipelines.TRACY_BLIT, pass.activeSubpass()));
+            pass.setPipeline(
+                RenderSystem.getCompiledPipeline(RenderPipelines.TRACY_BLIT, pass.activeSubpass()));
             RenderSystem.bindDefaultUniforms(pass);
             pass.setUniform(
                 "InSampler",

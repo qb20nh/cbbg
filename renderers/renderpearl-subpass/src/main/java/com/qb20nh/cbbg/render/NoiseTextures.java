@@ -55,8 +55,10 @@ final class NoiseTextures implements AutoCloseable {
   }
 
   private void uploadFrame(GpuTexture texture, NativeImage frame) {
-    device.createCommandEncoder().writeToTexture(
-        texture, frame.getPixelBytes(), 0, 0, 0, 0, frame.getWidth(), frame.getHeight());
+    device
+        .createCommandEncoder()
+        .writeToTexture(
+            texture, frame.getPixelBytes(), 0, 0, 0, 0, frame.getWidth(), frame.getHeight());
   }
 
   private GpuTextureView createView(int width, int height) {

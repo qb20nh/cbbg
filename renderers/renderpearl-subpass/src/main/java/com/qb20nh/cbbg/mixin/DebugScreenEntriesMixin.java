@@ -31,7 +31,8 @@ abstract class DebugScreenEntriesMixin {
 
   @Inject(method = "bootstrap", at = @At("TAIL"))
   private static void cbbg$register(WritableRegistry<DebugScreenEntry> registry, CallbackInfo ci) {
-    var key = ResourceKey.create(registry.key(), Identifier.fromNamespaceAndPath(Cbbg.MOD_ID, "cbbg"));
+    var key =
+        ResourceKey.create(registry.key(), Identifier.fromNamespaceAndPath(Cbbg.MOD_ID, "cbbg"));
     Registry.register(registry, key, new CbbgDebugEntry());
     Map<DebugScreenProfile, Map<ResourceKey<DebugScreenEntry>, DebugScreenEntryStatus>> profiles =
         new EnumMap<>(DebugScreenProfile.class);

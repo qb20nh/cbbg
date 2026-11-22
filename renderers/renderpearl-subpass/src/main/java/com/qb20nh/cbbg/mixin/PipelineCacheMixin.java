@@ -20,7 +20,8 @@ abstract class PipelineCacheMixin {
   }
 
   @Inject(
-      method = "get(Lcom/mojang/blaze3d/pipeline/PipelineCache$Key;)Lcom/mojang/renderpearl/api/pipeline/CompiledRenderPipeline;",
+      method =
+          "get(Lcom/mojang/blaze3d/pipeline/PipelineCache$Key;)Lcom/mojang/renderpearl/api/pipeline/CompiledRenderPipeline;",
       at = @At("RETURN"))
   private void cbbg$rememberResolved(
       PipelineCache.Key key, CallbackInfoReturnable<CompiledRenderPipeline> ci) {

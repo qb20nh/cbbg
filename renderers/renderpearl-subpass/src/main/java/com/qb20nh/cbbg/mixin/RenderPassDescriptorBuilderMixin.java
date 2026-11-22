@@ -13,7 +13,8 @@ import org.spongepowered.asm.mixin.injection.At;
 @Mixin(RenderPassDescriptor.Builder.class)
 abstract class RenderPassDescriptorBuilderMixin {
   @ModifyExpressionValue(
-      method = "withAttachment(Lcom/mojang/renderpearl/api/commands/RenderPassDescriptor$Attachment;)V",
+      method =
+          "withAttachment(Lcom/mojang/renderpearl/api/commands/RenderPassDescriptor$Attachment;)V",
       at = @At(value = "INVOKE", target = "Ljava/util/List;get(I)Ljava/lang/Object;"))
   private Object cbbg$allowFloatColor(
       Object expected, @Local(argsOnly = true) RenderPassDescriptor.Attachment attachment) {

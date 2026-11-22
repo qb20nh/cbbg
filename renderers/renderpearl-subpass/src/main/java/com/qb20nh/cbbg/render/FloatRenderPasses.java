@@ -54,8 +54,10 @@ public final class FloatRenderPasses {
       }
     }
     if (changed == null) return descriptor;
-    var layout = LAYOUTS.computeIfAbsent(original, ignored -> new HashMap<>())
-        .computeIfAbsent(List.copyOf(changed), formats -> withFormats(original, formats));
+    var layout =
+        LAYOUTS
+            .computeIfAbsent(original, ignored -> new HashMap<>())
+            .computeIfAbsent(List.copyOf(changed), formats -> withFormats(original, formats));
     return new RenderPassDescriptor(
         descriptor.label(), layout, attachments, descriptor.renderArea());
   }

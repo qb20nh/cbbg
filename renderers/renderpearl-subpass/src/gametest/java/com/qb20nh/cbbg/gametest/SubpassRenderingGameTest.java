@@ -26,30 +26,39 @@ public final class SubpassRenderingGameTest implements FabricClientGameTest {
             CbbgConfig.setPixelFormat(CbbgConfig.PixelFormat.RGBA16F);
             CbbgConfig.setMode(CbbgConfig.Mode.DEMO);
           });
-      long initialFrames = context.computeOnClient(client -> DitherController.getPresentationCount());
-      context.waitFor(client -> {
-        var color = client.gameRenderer.mainRenderTarget().getColorTexture();
-        return color != null && color.getFormat() == GpuFormat.RGBA16_FLOAT
-            && DitherController.isReady() && DitherController.getPresentationCount() > initialFrames;
-      }, 600);
+      long initialFrames =
+          context.computeOnClient(client -> DitherController.getPresentationCount());
+      context.waitFor(
+          client -> {
+            var color = client.gameRenderer.mainRenderTarget().getColorTexture();
+            return color != null
+                && color.getFormat() == GpuFormat.RGBA16_FLOAT
+                && DitherController.isReady()
+                && DitherController.getPresentationCount() > initialFrames;
+          },
+          600);
       context.takeScreenshot("cbbg-subpass-demo");
-      context.runOnClient(client -> client.gui.setScreen(new CbbgConfigScreen(client.gui.screen())));
+      context.runOnClient(
+          client -> client.gui.setScreen(new CbbgConfigScreen(client.gui.screen())));
       context.waitForScreen(CbbgConfigScreen.class);
       context.waitTicks(5);
       context.takeScreenshot("cbbg-subpass-settings");
-      context.runOnClient(client -> {
-        client.gui.setScreen(null);
-        CbbgConfig.setMode(CbbgConfig.Mode.DISABLED);
-      });
-      context.waitFor(client -> {
-        var color = client.gameRenderer.mainRenderTarget().getColorTexture();
-        return color != null && color.getFormat() == GpuFormat.RGBA8_UNORM;
-      });
+      context.runOnClient(
+          client -> {
+            client.gui.setScreen(null);
+            CbbgConfig.setMode(CbbgConfig.Mode.DISABLED);
+          });
+      context.waitFor(
+          client -> {
+            var color = client.gameRenderer.mainRenderTarget().getColorTexture();
+            return color != null && color.getFormat() == GpuFormat.RGBA8_UNORM;
+          });
     } finally {
-      context.runOnClient(client -> {
-        CbbgConfig.setMode(original.mode());
-        CbbgConfig.setPixelFormat(original.pixelFormat());
-      });
+      context.runOnClient(
+          client -> {
+            CbbgConfig.setMode(original.mode());
+            CbbgConfig.setPixelFormat(original.pixelFormat());
+          });
     }
   }
 }
