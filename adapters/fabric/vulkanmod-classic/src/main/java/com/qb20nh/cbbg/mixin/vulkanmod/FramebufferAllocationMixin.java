@@ -6,7 +6,7 @@ import com.llamalad7.mixinextras.injector.ModifyExpressionValue;
 import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.qb20nh.cbbg.render.vulkanmod.SceneFramebufferAccess;
-import com.qb20nh.cbbg.render.vulkanmod.VulkanAllocationFailure;
+import com.qb20nh.cbbg.render.vulkanmod.VulkanAllocationException;
 import it.unimi.dsi.fastutil.objects.Reference2LongArrayMap;
 import net.vulkanmod.vulkan.Vulkan;
 import net.vulkanmod.vulkan.framebuffer.Framebuffer;
@@ -28,7 +28,7 @@ abstract class FramebufferAllocationMixin implements SceneFramebufferAccess {
 
   @WrapMethod(method = "createImages")
   private void cbbg$releaseUnsubmittedAttachments(Operation<Void> original) {
-    if (!VulkanAllocationFailure.isAllocating()) {
+    if (!VulkanAllocationException.isAllocating()) {
       original.call();
       return;
     }
@@ -51,7 +51,7 @@ abstract class FramebufferAllocationMixin implements SceneFramebufferAccess {
               target =
                   "Lorg/lwjgl/vulkan/VK10;vkCreateFramebuffer(Lorg/lwjgl/vulkan/VkDevice;Lorg/lwjgl/vulkan/VkFramebufferCreateInfo;Lorg/lwjgl/vulkan/VkAllocationCallbacks;Ljava/nio/LongBuffer;)I"))
   private int cbbg$classifyFramebuffer(int result) {
-    return VulkanAllocationFailure.check(result, "framebuffer");
+    return VulkanAllocationException.check(result, "framebuffer");
   }
 
   @Override

@@ -4,7 +4,7 @@ import com.llamalad7.mixinextras.injector.ModifyExpressionValue;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.llamalad7.mixinextras.sugar.Local;
-import com.qb20nh.cbbg.render.vulkanmod.VulkanAllocationFailure;
+import com.qb20nh.cbbg.render.vulkanmod.VulkanAllocationException;
 import net.vulkanmod.vulkan.texture.VulkanImage;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -19,7 +19,7 @@ abstract class ImageAllocationMixin {
               target =
                   "Lorg/lwjgl/vulkan/VK10;vkCreateImageView(Lorg/lwjgl/vulkan/VkDevice;Lorg/lwjgl/vulkan/VkImageViewCreateInfo;Lorg/lwjgl/vulkan/VkAllocationCallbacks;Ljava/nio/LongBuffer;)I"))
   private static int cbbg$classifyImageView(int result) {
-    return VulkanAllocationFailure.check(result, "image view");
+    return VulkanAllocationException.check(result, "image view");
   }
 
   @WrapOperation(
@@ -38,7 +38,7 @@ abstract class ImageAllocationMixin {
     try {
       return original.call(id, format, aspect, levels);
     } catch (RuntimeException failure) {
-      if (VulkanAllocationFailure.isAllocating()) image.doFree();
+      if (VulkanAllocationException.isAllocating()) image.doFree();
       throw failure;
     }
   }
@@ -54,7 +54,7 @@ abstract class ImageAllocationMixin {
     try {
       return original.call(mipLevels, flags);
     } catch (RuntimeException failure) {
-      if (VulkanAllocationFailure.isAllocating()) image.doFree();
+      if (VulkanAllocationException.isAllocating()) image.doFree();
       throw failure;
     }
   }

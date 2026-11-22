@@ -1,7 +1,7 @@
 package com.qb20nh.cbbg.mixin.vulkanmod;
 
 import com.llamalad7.mixinextras.injector.ModifyExpressionValue;
-import com.qb20nh.cbbg.render.vulkanmod.VulkanAllocationFailure;
+import com.qb20nh.cbbg.render.vulkanmod.VulkanAllocationException;
 import net.vulkanmod.vulkan.framebuffer.RenderPass;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -16,6 +16,6 @@ abstract class RenderPassAllocationMixin {
               target =
                   "Lorg/lwjgl/vulkan/VK10;vkCreateRenderPass(Lorg/lwjgl/vulkan/VkDevice;Lorg/lwjgl/vulkan/VkRenderPassCreateInfo;Lorg/lwjgl/vulkan/VkAllocationCallbacks;Ljava/nio/LongBuffer;)I"))
   private int cbbg$classifyRenderPass(int result) {
-    return VulkanAllocationFailure.check(result, "render pass");
+    return VulkanAllocationException.check(result, "render pass");
   }
 }

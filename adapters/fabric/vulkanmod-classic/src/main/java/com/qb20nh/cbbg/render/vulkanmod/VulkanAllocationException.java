@@ -5,10 +5,10 @@ import static org.lwjgl.vulkan.VK10.*;
 import net.vulkanmod.vulkan.util.VkResult;
 
 /** A recoverable native allocation error while creating CBBG resources. */
-public final class VulkanAllocationFailure extends RuntimeException {
+public final class VulkanAllocationException extends RuntimeException {
   private static final ThreadLocal<Boolean> ALLOCATING = new ThreadLocal<>();
 
-  private VulkanAllocationFailure(String resource, int result) {
+  private VulkanAllocationException(String resource, int result) {
     super("Failed to create " + resource + ": " + VkResult.decode(result));
   }
 
@@ -30,7 +30,7 @@ public final class VulkanAllocationFailure extends RuntimeException {
             || result == VK_ERROR_TOO_MANY_OBJECTS
             || result == VK_ERROR_FORMAT_NOT_SUPPORTED)
         && isAllocating()) {
-      throw new VulkanAllocationFailure(resource, result);
+      throw new VulkanAllocationException(resource, result);
     }
     return result;
   }

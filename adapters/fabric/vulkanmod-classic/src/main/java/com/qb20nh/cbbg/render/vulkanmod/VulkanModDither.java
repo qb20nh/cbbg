@@ -89,15 +89,15 @@ final class VulkanModDither {
 
   private void replaceNoise(NativeImage[] images) {
     VulkanImage[] replacement;
-    VulkanAllocationFailure.begin();
+    VulkanAllocationException.begin();
     try {
       replacement = upload(images);
       noiseUploadFailed = false;
-    } catch (VulkanAllocationFailure failure) {
+    } catch (VulkanAllocationException failure) {
       noiseUploadFailed = true;
       throw failure;
     } finally {
-      VulkanAllocationFailure.end();
+      VulkanAllocationException.end();
     }
     freeImages(noise);
     noise = replacement;
