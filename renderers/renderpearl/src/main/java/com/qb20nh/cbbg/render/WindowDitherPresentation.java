@@ -18,9 +18,9 @@ import org.lwjgl.opengl.GL30;
 /** Direct OpenGL and Vulkan window rendering on Minecraft 26.3. */
 @NullMarked
 public final class WindowDitherPresentation {
-  private static boolean windowPass;
+  private static boolean windowPass = false;
   private static @Nullable GpuSurface vulkanSurface;
-  private static int windowDrawBuffer;
+  private static int windowDrawBuffer = GL11.GL_NONE;
 
   /** Marks encoders whose presentation method applies dithering itself. */
   public interface WindowEncoder {}
