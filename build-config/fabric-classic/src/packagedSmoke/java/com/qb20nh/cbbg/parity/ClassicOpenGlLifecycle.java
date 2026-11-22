@@ -66,7 +66,10 @@ final class ClassicOpenGlLifecycle {
         GLFW.glfwSetWindowSize(window.getWindow(), width, height);
         reload = client.reloadResourcePacks();
       }
-      case RELOADED -> client.clearLevel(new TitleScreen());
+      case RELOADED -> {
+        client.level.disconnect();
+        client.clearLevel(new TitleScreen());
+      }
       case LEFT -> ClassicPackagedSmoke.reopenWorld(client, (TitleScreen) client.screen);
       case REJOINED -> {
         return true;
