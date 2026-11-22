@@ -39,11 +39,9 @@ abstract class DebugScreenEntriesMixin {
                   "Ljava/util/Map;of(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)Ljava/util/Map;"),
       require = 1,
       allow = 1)
-  // skipcq: JAVA-W0324
   private static Map<DebugScreenProfile, Map<ResourceKey<DebugScreenEntry>, DebugScreenEntryStatus>>
-      cbbg$addToProfiles(
-          Map<DebugScreenProfile, Map<ResourceKey<DebugScreenEntry>, DebugScreenEntryStatus>>
-              vanilla) {
+      cbbg$addToProfiles( // skipcq: JAVA-W0324
+      Map<DebugScreenProfile, Map<ResourceKey<DebugScreenEntry>, DebugScreenEntryStatus>> vanilla) {
     var key = cbbg$debugKey();
     Map<DebugScreenProfile, Map<ResourceKey<DebugScreenEntry>, DebugScreenEntryStatus>> profiles =
         new EnumMap<>(DebugScreenProfile.class);
