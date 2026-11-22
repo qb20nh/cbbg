@@ -9,7 +9,7 @@ import com.mojang.renderpearl.api.textures.GpuTextureView;
 import com.mojang.renderpearl.backend.api.CommandEncoderBackend;
 import com.mojang.renderpearl.backend.api.GpuSurfaceBackend;
 import com.mojang.renderpearl.frontend.FrontendGpuSurface;
-import com.qb20nh.cbbg.render.DitherPresentation;
+import com.qb20nh.cbbg.render.WindowDitherPresentation;
 import org.jspecify.annotations.NullMarked;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -33,7 +33,7 @@ public abstract class FrontendGpuSurfaceMixin {
       Operation<Void> original,
       @Local(argsOnly = true) CommandEncoder commands,
       @Local(argsOnly = true) GpuTextureView input) {
-    if (!DitherPresentation.presentToVulkanWindow((GpuSurface) this, commands, input))
+    if (!WindowDitherPresentation.presentToVulkanWindow((GpuSurface) this, commands, input))
       original.call(backend, encoder, view);
   }
 }

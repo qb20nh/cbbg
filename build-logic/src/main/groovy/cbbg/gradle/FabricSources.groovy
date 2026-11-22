@@ -87,7 +87,7 @@ class FabricSources {
                 List<String> excluded = []
                 List<String> excludedResources = []
                 if (usesSubpasses && group == 'renderers/renderpearl') {
-                    excluded = classes('render/DitherPresentation', 'render/FloatPipelines',
+                    excluded = classes('render/WindowDitherPresentation', 'render/FloatPipelines',
                             'render/PipelineFormats', 'render/RenderPearlCommands',
                             'render/VulkanWindowPresentation', 'render/NeutralVignette',
                             'debug/DebugScreenLine', 'mixin/DebugScreenEntriesMixin',

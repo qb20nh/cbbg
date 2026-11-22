@@ -37,4 +37,8 @@ final class RenderPearlCommands {
     pass.setPipeline(
         RenderSystem.getCompiledPipeline(RenderPipelines.TRACY_BLIT, pass.activeSubpass()));
   }
+
+  static void closeWindowResources() {
+    // Subpass presentation uses Minecraft’s window blit and owns no window resources.
+  }
 }

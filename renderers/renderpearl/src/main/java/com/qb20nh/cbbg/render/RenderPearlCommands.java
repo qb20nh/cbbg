@@ -31,4 +31,8 @@ final class RenderPearlCommands {
   static void bindReadbackPipeline(RenderPass pass) {
     pass.setPipeline(RenderSystem.getCompiledPipeline(RenderPipelines.TRACY_BLIT));
   }
+
+  static void closeWindowResources() {
+    VulkanWindowPresentation.closeUniform();
+  }
 }
