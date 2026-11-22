@@ -16,6 +16,8 @@ import org.lwjgl.opengl.GL30;
 public final class ClassicOpenGlPixels {
   private static final String[] MODES = {"demo", "enabled", "disabled"};
   private static final int STRIPS = 32;
+  private static final boolean EIGHT_BIT =
+      "both".equals(System.getProperty("cbbg.test.openGlAllocation"));
   private static int phase;
   private static int readyAt = -1;
   private static boolean requested;
@@ -47,8 +49,9 @@ public final class ClassicOpenGlPixels {
     if (!requested || drawn) return;
     RenderTarget target = client.getMainRenderTarget();
     String mode = MODES[phase];
-    ClassicPackagedSmoke.requireFormat(
-        target, mode.equals("disabled") ? GL11.GL_RGBA8 : GL30.GL_RGBA16F);
+    int format = mode.equals("disabled") || EIGHT_BIT ? GL11.GL_RGBA8 : GL30.GL_RGBA16F;
+    ClassicPackagedSmoke.requireFormat(target, format);
+    System.out.println("CBBG_CLASSIC_OPENGL_PIXEL_FORMAT mode=" + mode + " format=" + format);
     fill(target);
     initialDraws = ClassicPackagedSmoke.presentationCount();
     Path directory = client.gameDirectory.toPath();
@@ -140,6 +143,7 @@ public final class ClassicOpenGlPixels {
           for (int channel = 0; channel < 3; channel++) {
             int shift = 8 * channel;
             float input = source(x * STRIPS / width, y < height / 2, channel);
+            if (EIGHT_BIT) input = Math.round(input * 255f) / 255f;
             int expected =
                 DitherReference.shaderChannel(
                     input, (sample >>> shift) & 255, enabled ? 2 : 0, x, width, demo);

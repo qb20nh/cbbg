@@ -15,7 +15,8 @@ from fabric_classic_scenarios import (CLASSIC_CACHE_FRAMES, CLASSIC_CACHE_MANIFE
                                       CLASSIC_CACHE_SCENARIOS, CLASSIC_IRIS_OPTIONS, CLASSIC_LOCALES,
                                       CLASSIC_MODE_RESTART,
                                       CLASSIC_MODE_RESTART_PROFILES, CLASSIC_OPTIONS, CLASSIC_RESTART_FILES,
-                                      OPENGL_LIFECYCLE, OPENGL_PIXELS, REDUCED_GL_SCENARIO,
+                                      OPENGL_ALLOCATION_CASES, OPENGL_LIFECYCLE, OPENGL_PIXEL_SCENARIOS,
+                                      REDUCED_GL_SCENARIO,
                                       SETTINGS_MANIFEST, SETTINGS_NOISE_FRAMES,
                                       VMA_PROBE_AGENT,
                                       classic_config, classic_jvm_arguments,
@@ -376,7 +377,7 @@ def main():
             if 'iris' in args.compat.split('+'):
                 (game / 'config/iris.properties').write_text(CLASSIC_IRIS_OPTIONS)
                 shutil.copyfile(game / 'config/iris.properties', evidence / 'initial-iris.properties')
-            if args.classic_scenario in ('vulkan-pixels', OPENGL_PIXELS):
+            if args.classic_scenario in ('vulkan-pixels', *OPENGL_PIXEL_SCENARIOS):
                 cache = game / '.cbbg'
                 cache.mkdir()
                 retained = evidence / 'pixel-input'
@@ -431,7 +432,7 @@ def main():
                 shutil.copyfile(game / 'vulkan-settings-warm.sha256', saved / 'warm.sha256')
                 for name in (SETTINGS_MANIFEST, *SETTINGS_NOISE_FRAMES):
                     shutil.copyfile(game / '.cbbg' / name, saved / name)
-            if probe_agent:
+            if probe_agent or args.classic_scenario in OPENGL_ALLOCATION_CASES:
                 shutil.copyfile(game / 'config/cbbg.json', evidence / 'final-cbbg.json')
             if args.classic_scenario in ('iris', 'stack', CLASSIC_MODE_RESTART, OPENGL_LIFECYCLE, CLASSIC_LOCALES):
                 shutil.copyfile(game / 'config/cbbg.json', evidence / 'final-cbbg.json')

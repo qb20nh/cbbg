@@ -9,12 +9,13 @@ import zipfile
 
 from fabric_classic_scenarios import (CLASSIC_CACHE_SCENARIOS, CLASSIC_ENTRYPOINT, CLASSIC_IRIS_OPTIONS,
                                       CLASSIC_MODE_RESTART, CLASSIC_OPTIONS,
-                                      REDUCED_GL_SCENARIO, SETTINGS_MANIFEST, SETTINGS_NOISE_FRAMES,
+                                      OPENGL_ALLOCATION_CASES, REDUCED_GL_SCENARIO,
+                                      SETTINGS_MANIFEST, SETTINGS_NOISE_FRAMES,
                                       VMA_PROBE_AGENT, VULKAN_FORMAT_CASES, VULKAN_NATIVE_CASES,
                                       VULKAN_PIPELINE_CASES, VULKAN_SAMPLER_CASES, VULKAN_VMA_CASES,
                                       classic_config, classic_jvm_arguments, classic_result, packaged_locale_counts,
                                       pixel_cache_files, prepare_classic_cache, retain_classic_cache,
-                                      validate_classic_choice, vulkan_probe_agent)
+                                      validate_classic_choice, validate_opengl_allocation, vulkan_probe_agent)
 from runtime_catalog import load_catalog, select_targets
 
 
@@ -28,6 +29,7 @@ class ClassicScenarioTests(unittest.TestCase):
                                                        'renderscale', 'iris', 'stack', 'vulkan-lifecycle',
                                                        CLASSIC_MODE_RESTART, *CLASSIC_CACHE_SCENARIOS,
                                                        'locales', 'opengl-lifecycle', 'opengl-pixels', 'vulkan-pixels',
+                                                       *OPENGL_ALLOCATION_CASES,
                                                        'vulkan-settings',
                                                        *VULKAN_FORMAT_CASES, *VULKAN_VMA_CASES,
                                                        *VULKAN_NATIVE_CASES, *VULKAN_SAMPLER_CASES,
@@ -624,6 +626,33 @@ class ClassicScenarioTests(unittest.TestCase):
         (self.evidence / 'final-cbbg.json').write_text(config + '\n')
         with self.assertRaisesRegex(ValueError, 'saved configuration'):
             classic_result(scenario, 'sodium', 'opengl', log, self.evidence, 0)
+
+    def test_opengl_allocation_trace_requires_each_failed_format_and_preserved_precision(self):
+        for scenario, mask, formats, selected in (
+                ('opengl-fallback-float', 'full', ('RGBA32F',), 34842),
+                ('opengl-fallback-eight-bit', 'both', ('RGBA32F', 'RGBA16F'), 32856)):
+            with self.subTest(scenario=scenario):
+                validate_classic_choice(self.metadata, scenario, 'sodium', 'opengl')
+                self.assertIn('-Dcbbg.test.openGlAllocation=' + mask,
+                              classic_jvm_arguments('candidate.jar', scenario, 'opengl', 'sodium'))
+                config = classic_config('opengl', scenario)
+                self.assertEqual(config['pixelFormat'], 'RGBA32F')
+                final = self.evidence / 'final-cbbg.json'
+                final.write_text(json.dumps(dict(config, mode='DISABLED')))
+                log = ''.join(f'CBBG_CLASSIC_OPENGL_ALLOCATION_SKIPPED format={name} size=803x601\n'
+                              f'Classic framebuffer allocation failed for {name} (GL 0, stored format 6408); '
+                              'falling back\n' for name in formats)
+                log += ''.join(f'CBBG_CLASSIC_OPENGL_PIXEL_FORMAT mode={mode} format={pixel_format}\n'
+                               for mode, pixel_format in (('demo', selected), ('enabled', selected), ('disabled', 32856)))
+                validate_opengl_allocation(log, self.evidence, scenario, config, 803, 601)
+                for bad in (log.replace('ALLOCATION_SKIPPED', 'ALLOCATION_SUCCEEDED', 1),
+                            log.replace(f'format={selected}', 'format=34836', 1),
+                            log.replace('falling back', 'no fallback', 1)):
+                    with self.assertRaisesRegex(ValueError, 'fallback trace'):
+                        validate_opengl_allocation(bad, self.evidence, scenario, config, 803, 601)
+                final.write_text(json.dumps(dict(config, mode='DISABLED', pixelFormat='RGBA8')))
+                with self.assertRaisesRegex(ValueError, 'stored precision'):
+                    validate_opengl_allocation(log, self.evidence, scenario, config, 803, 601)
 
     def test_opengl_pixel_oracle_requires_both_outputs_and_exact_draw_counts(self):
         scenario = 'opengl-pixels'

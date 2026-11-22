@@ -4,6 +4,20 @@
   "ordinaryMetadata": "build-config/fabric-classic/src/packagedSmoke/resources/fabric.mod.json",
   "additionalRuns": [
     {
+      "suite": "opengl-fallback-float",
+      "profiles": ["none", "sodium"],
+      "backends": ["opengl"],
+      "restart": false,
+      "entrypoints": ["opengl-fallback-float"]
+    },
+    {
+      "suite": "opengl-fallback-eight-bit",
+      "profiles": ["none", "sodium"],
+      "backends": ["opengl"],
+      "restart": false,
+      "entrypoints": ["opengl-fallback-eight-bit"]
+    },
+    {
       "suite": "locales",
       "profiles": ["modmenu"],
       "backends": ["opengl"],

@@ -49,6 +49,11 @@ REDUCED_GL_SCENARIO = 'forcegl2-mesa-3'
 CLASSIC_MODE_RESTART = 'mode-restart'
 CLASSIC_MODE_RESTART_PROFILES = ('none', 'sodium')
 OPENGL_PIXELS = 'opengl-pixels'
+OPENGL_ALLOCATION_CASES = {
+    'opengl-fallback-float': ('full', 34842, ('RGBA32F',)),
+    'opengl-fallback-eight-bit': ('both', 32856, ('RGBA32F', 'RGBA16F')),
+}
+OPENGL_PIXEL_SCENARIOS = (OPENGL_PIXELS, *OPENGL_ALLOCATION_CASES)
 OPENGL_LIFECYCLE = 'opengl-lifecycle'
 CLASSIC_LOCALES = 'locales'
 CLASSIC_STACK_PROFILES = (
@@ -91,7 +96,7 @@ def validate_classic_choice(metadata, scenario, profile, backend):
             return
         if scenario == CLASSIC_MODE_RESTART and profile in CLASSIC_MODE_RESTART_PROFILES:
             return
-        if scenario in (OPENGL_PIXELS, OPENGL_LIFECYCLE) and profile in ('none', 'sodium'):
+        if scenario in (*OPENGL_PIXEL_SCENARIOS, OPENGL_LIFECYCLE) and profile in ('none', 'sodium'):
             return
         if scenario == CLASSIC_LOCALES and profile == 'modmenu':
             return
@@ -108,9 +113,10 @@ def validate_classic_choice(metadata, scenario, profile, backend):
 
 def classic_config(backend, scenario='world'):
     settings = scenario == 'vulkan-settings'
-    full_precision = (scenario in VULKAN_FORMAT_CASES or scenario in VULKAN_NATIVE_CASES
+    full_precision = (scenario in OPENGL_ALLOCATION_CASES or scenario in VULKAN_FORMAT_CASES
+                      or scenario in VULKAN_NATIVE_CASES
                       or VULKAN_VMA_CASES.get(scenario) in ('depth', 'float', 'all'))
-    demo = backend == 'vulkan' or scenario in ('iris', 'stack', OPENGL_PIXELS, OPENGL_LIFECYCLE)
+    demo = backend == 'vulkan' or scenario in ('iris', 'stack', *OPENGL_PIXEL_SCENARIOS, OPENGL_LIFECYCLE)
     return {'mode': 'DEMO' if demo else 'ENABLED',
             'pixelFormat': 'RGBA32F' if full_precision else 'RGBA16F',
             'stbnSize': 64 if settings else 16, 'stbnDepth': 8,
@@ -118,7 +124,7 @@ def classic_config(backend, scenario='world'):
 
 
 def classic_viewport(scenario):
-    return (803, 601) if scenario in ('vulkan-pixels', OPENGL_PIXELS) else (800, 600)
+    return (803, 601) if scenario in ('vulkan-pixels', *OPENGL_PIXEL_SCENARIOS) else (800, 600)
 
 
 def includes_sodium(profile):
@@ -172,8 +178,10 @@ def classic_jvm_arguments(candidate, scenario, backend, profile, restart_phase=N
         arguments.append('-Dcbbg.test.compatProfile=' + profile)
         if profile in CONTEXT_MODS:
             arguments.append('-Dcbbg.test.contextMod=' + CONTEXT_MODS[profile])
-        if scenario == OPENGL_PIXELS:
+        if scenario in OPENGL_PIXEL_SCENARIOS:
             arguments.append('-Dcbbg.test.openGlPixels=true')
+            if scenario in OPENGL_ALLOCATION_CASES:
+                arguments.append('-Dcbbg.test.openGlAllocation=' + OPENGL_ALLOCATION_CASES[scenario][0])
         elif scenario == OPENGL_LIFECYCLE:
             arguments.append('-Dcbbg.test.openGlLifecycle=true')
         elif scenario == CLASSIC_LOCALES:
@@ -610,6 +618,20 @@ def opengl_pixel_captures(log, evidence, width, height):
     return {f'opengl-{view}-{mode}.png': (width, height) for mode in modes for view in ('shot', 'window')}
 
 
+def validate_opengl_allocation(log, evidence, scenario, config, width, height):
+    _, scene, rejected = OPENGL_ALLOCATION_CASES[scenario]
+    events = re.findall(
+        rf'CBBG_CLASSIC_OPENGL_ALLOCATION_SKIPPED format=(RGBA\d+F) size={width}x{height}(?=\r?\n|\Z)'
+        r'|Classic framebuffer allocation failed for (RGBA\d+F) \(GL 0, stored format \d+\); falling back', log)
+    expected = [event for name in rejected for event in ((name, ''), ('', name))]
+    modes = re.findall(r'CBBG_CLASSIC_OPENGL_PIXEL_FORMAT mode=(\w+) format=(\d+)(?=\r?\n|\Z)', log)
+    if (events != expected
+            or modes != [('demo', str(scene)), ('enabled', str(scene)), ('disabled', '32856')]):
+        raise ValueError('OpenGL allocation failure and fallback trace differs')
+    if json.loads((evidence / 'final-cbbg.json').read_text()) != dict(config, mode='DISABLED'):
+        raise ValueError('OpenGL allocation fallback changed the stored precision preference')
+
+
 def opengl_lifecycle_captures(log, evidence, width, height):
     records = re.findall(
         r'CBBG_CLASSIC_OPENGL_LIFECYCLE stage=(\w+) size=(\d+)x(\d+) fullscreen=(true|false) '
@@ -732,8 +754,10 @@ def classic_result(scenario, profile, backend, log, evidence, exit_code, restart
         if scenario == 'satin':
             validate_satin(log, width, height)
             captures = {}
-        elif scenario == OPENGL_PIXELS:
+        elif scenario in OPENGL_PIXEL_SCENARIOS:
             captures = opengl_pixel_captures(log, evidence, width, height)
+            if scenario in OPENGL_ALLOCATION_CASES:
+                validate_opengl_allocation(log, evidence, scenario, config, width, height)
         elif scenario == OPENGL_LIFECYCLE:
             captures = opengl_lifecycle_captures(log, evidence, width, height)
         elif scenario == CLASSIC_LOCALES:

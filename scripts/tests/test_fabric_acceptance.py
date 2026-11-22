@@ -22,6 +22,16 @@ class FabricAcceptanceTests(unittest.TestCase):
                     for backend in backends}
         self.assertEqual(actual, expected)
 
+    def test_classic_opengl_allocation_checks_both_fallbacks_in_both_profiles(self):
+        target = select_targets(load_catalog(), '1.20.1-fabric')[0]
+        contract = read_json(ROOT / 'runtime-locks/1.20.1-fabric-scenarios.json')
+        self.assertEqual(
+            [(case, profile, 'opengl', [case])
+             for case in ('opengl-fallback-float', 'opengl-fallback-eight-bit') for profile in ('none', 'sodium')],
+            [(run['suite'], run['profile'], run['backend'], run['entrypoints'])
+             for run in required_runs(target, contract) if run['suite'].startswith('opengl-fallback-')],
+        )
+
     def test_classic_locales_uses_installed_mod_menu(self):
         target, = select_targets(load_catalog(), '1.20.1-fabric')
         contract = read_json(ROOT / 'runtime-locks/1.20.1-fabric-scenarios.json')
