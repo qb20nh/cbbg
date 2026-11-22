@@ -1,7 +1,6 @@
 package com.qb20nh.cbbg.config.gui;
 
 import it.unimi.dsi.fastutil.booleans.BooleanConsumer;
-import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.ConfirmScreen;
 import net.minecraft.client.gui.screens.Screen;
@@ -32,7 +31,7 @@ public abstract class ConfigScreenPlatform extends Screen {
 
   @Override
   public void extractRenderState(GuiGraphicsExtractor graphics) {
-    drawConfig(new Canvas(graphics));
+    drawConfig(new GuiExtractorConfigCanvas(graphics));
     super.extractRenderState(graphics);
   }
 
@@ -45,7 +44,7 @@ public abstract class ConfigScreenPlatform extends Screen {
 
       @Override
       public void extractRenderState(GuiGraphicsExtractor graphics) {
-        new Canvas(graphics)
+        new GuiExtractorConfigCanvas(graphics)
             .card(
                 Math.max(0, layout.getX() - 12),
                 Math.max(0, layout.getY() - 12),
@@ -54,27 +53,5 @@ public abstract class ConfigScreenPlatform extends Screen {
         super.extractRenderState(graphics);
       }
     };
-  }
-
-  private record Canvas(GuiGraphicsExtractor graphics) implements ConfigCanvas {
-    @Override
-    public void fill(int x1, int y1, int x2, int y2, int color) {
-      graphics.fill(x1, y1, x2, y2, color);
-    }
-
-    @Override
-    public void outline(int x, int y, int width, int height, int color) {
-      graphics.outline(x, y, width, height, color);
-    }
-
-    @Override
-    public void centeredText(Font font, Component text, int x, int y, int color) {
-      graphics.centeredText(font, text, x, y, color);
-    }
-
-    @Override
-    public void text(Font font, Component text, int x, int y, int color, boolean shadow) {
-      graphics.text(font, text, x, y, color, shadow);
-    }
   }
 }

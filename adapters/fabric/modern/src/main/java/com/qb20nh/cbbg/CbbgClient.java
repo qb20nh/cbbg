@@ -6,10 +6,10 @@ import com.qb20nh.cbbg.compat.sulkan.ShaderCompat;
 import com.qb20nh.cbbg.config.CbbgConfig;
 import com.qb20nh.cbbg.render.DitherController;
 import com.qb20nh.cbbg.render.GenerationNotifications;
+import com.qb20nh.cbbg.render.HudPlatform;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
-import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
@@ -36,9 +36,9 @@ public final class CbbgClient implements ClientModInitializer {
     ClientTickEvents.END_CLIENT_TICK.register(client -> GenerationNotifications.tick());
     ClientPlayConnectionEvents.JOIN.register(
         (handler, sender, client) -> GenerationNotifications.onWorldJoin());
-    HudElementRegistry.addLast(
+    HudPlatform.register(
         Identifier.fromNamespaceAndPath(Cbbg.MOD_ID, "hud_overlay"),
-        (graphics, deltaTracker) -> {
+        graphics -> {
           if (getEffectiveMode() != CbbgConfig.Mode.DEMO) {
             return;
           }
@@ -46,10 +46,9 @@ public final class CbbgClient implements ClientModInitializer {
           int centerX = graphics.guiWidth() / 2;
           Component left = Component.translatable("cbbg.hud.demo.left");
           Component right = Component.translatable("cbbg.hud.demo.right");
-          com.qb20nh.cbbg.render.HudPlatform.text(
+          HudPlatform.text(
               graphics, font, left, centerX - 6 - font.width(left), 6, 0xFFFFFFFF, true);
-          com.qb20nh.cbbg.render.HudPlatform.text(
-              graphics, font, right, centerX + 6, 6, 0xFFFFFFFF, true);
+          HudPlatform.text(graphics, font, right, centerX + 6, 6, 0xFFFFFFFF, true);
         });
   }
 }

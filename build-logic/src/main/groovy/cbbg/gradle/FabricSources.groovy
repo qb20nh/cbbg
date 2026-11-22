@@ -98,8 +98,6 @@ class FabricSources {
                             'mixin/RenderSystemPipelineCacheAccessor', 'mixin/VulkanCommandEncoderAccessor',
                             'mixin/VulkanGpuSurfaceMixin', 'mixin/VulkanRenderPipelineMixin')
                     excludedResources = ['cbbg.renderpearl.mixins.json', 'cbbg.window.accesswidener']
-                } else if (usesSubpasses && group == 'adapters/fabric/modern') {
-                    excluded = classes('CbbgClient')
                 }
                 result.main.java << tree(group + '/src/main/java', [], excluded)
                 result.main.resources << tree(group + '/src/main/resources', [], excludedResources)
@@ -219,10 +217,9 @@ class FabricSources {
         }
         result.copies.processedGametest << irisResources
         if (owner.renderer == RENDERPEARL_RENDERER) {
-            if (!usesSubpasses) {
-                result.main.java << tree('adapters/minecraft/26.1/src/main/java',
-                        classes('config/gui/ConfigScreenPlatform', 'render/HudPlatform'))
-            }
+            result.main.java << tree('adapters/minecraft/26.1/src/main/java',
+                    classes('config/gui/GuiExtractorConfigCanvas') + (usesSubpasses ? [] :
+                            classes('config/gui/ConfigScreenPlatform', 'render/HudPlatform')))
             if (!usesSubpasses) processed << tree('adapters/fabric/shared/src/processedGametest/java',
                     classes('gametest/ReleaseSodiumConfigGameTest', 'gametest/ReleaseUtilitiesGameTest',
                             'gametest/ReleaseLibraryResolutionGameTest',
