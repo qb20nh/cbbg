@@ -12,6 +12,7 @@ import org.spongepowered.asm.mixin.injection.ModifyVariable;
 @Mixin(FrontendRenderPass.class)
 abstract class FrontendRenderPassMixin {
   @ModifyVariable(method = "setPipeline", at = @At("HEAD"), argsOnly = true)
+  // skipcq: JAVA-W0324
   private CompiledRenderPipeline cbbg$matchPipeline(CompiledRenderPipeline pipeline) {
     return FloatRenderPasses.forSubpass(
         pipeline, ((FrontendRenderPass) (Object) this).activeSubpass());

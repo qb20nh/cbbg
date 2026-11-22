@@ -12,6 +12,7 @@ import org.spongepowered.asm.mixin.injection.ModifyVariable;
 @Mixin(FrontendCommandEncoder.class)
 abstract class FrontendCommandEncoderMixin {
   @ModifyVariable(method = "createRenderPass", at = @At("HEAD"), argsOnly = true)
+  // skipcq: JAVA-W0324
   private RenderPassDescriptor cbbg$matchAttachments(RenderPassDescriptor descriptor) {
     return FloatRenderPasses.forAttachments(descriptor);
   }

@@ -16,6 +16,7 @@ abstract class RenderPassDescriptorBuilderMixin {
       method =
           "withAttachment(Lcom/mojang/renderpearl/api/commands/RenderPassDescriptor$Attachment;)V",
       at = @At(value = "INVOKE", target = "Ljava/util/List;get(I)Ljava/lang/Object;"))
+  // skipcq: JAVA-W0324
   private Object cbbg$allowFloatColor(
       Object expected, @Local(argsOnly = true) RenderPassDescriptor.Attachment attachment) {
     var actual = attachment.textureView().texture().getFormat();

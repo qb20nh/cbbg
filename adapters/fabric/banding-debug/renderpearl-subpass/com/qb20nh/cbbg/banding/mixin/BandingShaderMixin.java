@@ -21,6 +21,7 @@ abstract class BandingShaderMixin {
               + "(Lcom/mojang/blaze3d/pipeline/RenderPipeline;Lcom/mojang/renderpearl/api/pipeline/RenderPassLayout$Subpass;)"
               + "Lcom/mojang/renderpearl/api/pipeline/CompiledRenderPipeline;"),
       remap = false)
+  // skipcq: JAVA-W0324
   private static CompiledRenderPipeline cbbg$select(
       RenderPipeline ordinary, Subpass subpass, Operation<CompiledRenderPipeline> original) {
     return BandingPipelines.compile(ordinary, pipeline -> original.call(pipeline, subpass));
