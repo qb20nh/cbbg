@@ -59,8 +59,9 @@ final class LegacyCommandParity {
         }
         execute("/cbbg mode set DEMO");
         require(CbbgConfig.get().mode() == CbbgConfig.Mode.DEMO, "Mode did not change");
-        execute("/cbbg format set RGBA32F");
-        require(CbbgConfig.get().pixelFormat() == CbbgConfig.PixelFormat.RGBA32F, "Precision did not change");
+        CbbgConfig.setPixelFormat(CbbgConfig.PixelFormat.RGBA8);
+        execute("/cbbg format set RGBA16F");
+        require(CbbgConfig.get().pixelFormat() == CbbgConfig.PixelFormat.RGBA16F, "Precision did not change");
         for (int size : new int[] {16, 32, 64, 128, 256}) {
             execute("/cbbg stbn size " + size);
             require(CbbgConfig.get().stbnSize() == size, "Size did not change");

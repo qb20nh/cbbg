@@ -28,24 +28,22 @@ public final class Gl2AllocationParity {
             GL11.glBindTexture(GL11.GL_TEXTURE_2D, texture);
             GL30.glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, read);
             GL30.glBindFramebuffer(GL30.GL_DRAW_FRAMEBUFFER, draw);
-            for (int rejected = 0; rejected <= 2; rejected++) {
+            for (int rejected = 0; rejected <= 1; rejected++) {
                 supported.clear();
                 final int failures = rejected;
                 java.util.List<Integer> attempts = new java.util.ArrayList<>();
-                Gl2Framebuffers.allocateColor(PixelFormat.RGBA32F, GL11.GL_RGBA8, format -> {
+                Gl2Framebuffers.allocateColor(PixelFormat.RGBA16F, GL11.GL_RGBA8, format -> {
                     attempts.add(format);
-                    int storage = format == GL30.GL_RGBA32F && failures >= 1
-                            || format == GL30.GL_RGBA16F && failures >= 2 ? GL11.GL_RGBA8 : format;
+                    int storage = format == GL30.GL_RGBA16F && failures == 1 ? GL11.GL_RGBA8 : format;
                     GL11.glTexImage2D(GL11.GL_TEXTURE_2D, 0, storage, 8, 8, 0,
                             GL11.GL_RGBA, GL11.GL_UNSIGNED_BYTE, (ByteBuffer) null);
                 });
-                int expected = rejected == 0 ? GL30.GL_RGBA32F
-                        : rejected == 1 ? GL30.GL_RGBA16F : GL11.GL_RGBA8;
+                int expected = rejected == 0 ? GL30.GL_RGBA16F : GL11.GL_RGBA8;
                 if (GL11.glGetTexLevelParameteri(GL11.GL_TEXTURE_2D, 0, GL11.GL_TEXTURE_INTERNAL_FORMAT) != expected) {
                     throw new AssertionError("Wrong allocation fallback storage");
                 }
                 checks++;
-                java.util.List<Integer> sequence = java.util.Arrays.asList(GL30.GL_RGBA32F, GL30.GL_RGBA16F, GL11.GL_RGBA8);
+                java.util.List<Integer> sequence = java.util.Arrays.asList(GL30.GL_RGBA16F, GL11.GL_RGBA8);
                 if (!attempts.equals(sequence.subList(0, rejected + 1))) throw new AssertionError("Wrong fallback order: " + attempts);
                 checks++;
                 if (GL11.glGetInteger(GL30.GL_READ_FRAMEBUFFER_BINDING) != read

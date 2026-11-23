@@ -31,21 +31,19 @@ public final class Gl2AllocationParity {
     private static int checks;
 
     public static void main(String[] args) throws Exception {
-        scenario(PixelFormat.RGBA32F, false, false, GL30.GL_RGBA32F, GL30.GL_RGBA32F);
-        scenario(PixelFormat.RGBA32F, true, false, GL30.GL_RGBA16F, GL30.GL_RGBA32F, GL30.GL_RGBA16F);
-        scenario(PixelFormat.RGBA32F, true, true, GL11.GL_RGB8, GL30.GL_RGBA32F, GL30.GL_RGBA16F, GL11.GL_RGB8);
+        scenario(PixelFormat.RGBA16F, false, GL30.GL_RGBA16F, GL30.GL_RGBA16F);
+        scenario(PixelFormat.RGBA16F, true, GL11.GL_RGB8, GL30.GL_RGBA16F, GL11.GL_RGB8);
         // A new context must discard failures cached by the preceding scenario.
-        scenario(PixelFormat.RGBA32F, false, false, GL30.GL_RGBA32F, GL30.GL_RGBA32F);
-        scenario(PixelFormat.RGBA16F, false, false, GL30.GL_RGBA16F, GL30.GL_RGBA16F);
-        scenario(PixelFormat.RGBA8, false, false, GL11.GL_RGB8, GL11.GL_RGB8);
+        scenario(PixelFormat.RGBA16F, false, GL30.GL_RGBA16F, GL30.GL_RGBA16F);
+        scenario(PixelFormat.RGBA8, false, GL11.GL_RGB8, GL11.GL_RGB8);
         shaderScenario();
         noiseScenario(Paths.get(args[0]).getParent());
-        String report = "{\"passed\":true,\"scenarios\":8,\"checks\":" + checks + "}";
+        String report = "{\"passed\":true,\"scenarios\":6,\"checks\":" + checks + "}";
         Files.write(Paths.get(args[0]), report.getBytes(StandardCharsets.UTF_8));
         System.out.println(report);
     }
 
-    private static void scenario(PixelFormat requested, boolean reject32, boolean reject16,
+    private static void scenario(PixelFormat requested, boolean reject16,
                                  int expected, Integer... calls) throws Exception {
         Display.setDisplayMode(new DisplayMode(64, 64));
         Display.create();
@@ -63,8 +61,7 @@ public final class Gl2AllocationParity {
                     bindings(read, draw, texture);
                     attempted.add(format);
                     // Simulate another texture-allocation hook replacing unsupported storage.
-                    int stored = (reject32 && format == GL30.GL_RGBA32F)
-                            || (reject16 && format == GL30.GL_RGBA16F) ? GL11.GL_RGBA8 : format;
+                    int stored = reject16 && format == GL30.GL_RGBA16F ? GL11.GL_RGBA8 : format;
                     GL11.glTexImage2D(GL11.GL_TEXTURE_2D, 0, stored, 8, 8, 0,
                             GL11.GL_RGBA, GL11.GL_FLOAT, (ByteBuffer) null);
                 });
@@ -99,7 +96,7 @@ public final class Gl2AllocationParity {
             source = GL11.glGenTextures();
             GL11.glBindTexture(GL11.GL_TEXTURE_2D, source);
             nearest();
-            GL11.glTexImage2D(GL11.GL_TEXTURE_2D, 0, GL30.GL_RGBA32F, 1, 1, 0, GL11.GL_RGBA,
+            GL11.glTexImage2D(GL11.GL_TEXTURE_2D, 0, GL30.GL_RGBA16F, 1, 1, 0, GL11.GL_RGBA,
                     GL11.GL_FLOAT, (java.nio.FloatBuffer) BufferUtils.createFloatBuffer(4).put(new float[] {
                             127.25f / 255f, 127.25f / 255f, 127.25f / 255f, 0.25f }).flip());
             noise = GL11.glGenTextures();

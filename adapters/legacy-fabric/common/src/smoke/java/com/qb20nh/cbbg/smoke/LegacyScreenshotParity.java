@@ -43,7 +43,9 @@ final class LegacyScreenshotParity {
             data.flip();
             LegacyTextureState.active(GL13.GL_TEXTURE0);
             LegacyTextureState.bind(main.colorAttachment);
-            GL11.glTexImage2D(GL11.GL_TEXTURE_2D, 0, GL30.GL_RGBA32F, WIDTH, HEIGHT, 0, GL11.GL_RGBA, GL11.GL_FLOAT, data);
+            GL11.glTexImage2D(GL11.GL_TEXTURE_2D, 0, GL30.GL_RGBA16F, WIDTH, HEIGHT, 0, GL11.GL_RGBA, GL11.GL_FLOAT, data);
+            FloatBuffer stored = BufferUtils.createFloatBuffer(WIDTH * HEIGHT * 4);
+            GL11.glGetTexImage(GL11.GL_TEXTURE_2D, 0, GL11.GL_RGBA, GL11.GL_FLOAT, stored);
             int noiseSize = LegacyDither.textures().size();
             ByteBuffer noise = BufferUtils.createByteBuffer(noiseSize * noiseSize * 4);
             LegacyTextureState.bind(LegacyDither.textures().texture(0));
@@ -75,7 +77,8 @@ final class LegacyScreenshotParity {
                     for (int c = 0; c < 3; c++) {
                         double amount = mode == CbbgConfig.Mode.DISABLED || mode == CbbgConfig.Mode.DEMO && x < WIDTH / 2 ? 0 : 1;
                         int n = noise.get(((y % noiseSize) * noiseSize + x % noiseSize) * 4 + c) & 255;
-                        int expected = (int) Math.floor(base(x, y, c) + amount * (n / 255.0 - 0.5) + 0.5);
+                        double source = stored.get((y * WIDTH + x) * 4 + c) * 255.0;
+                        int expected = (int) Math.floor(source + amount * (n / 255.0 - 0.5) + 0.5);
                         if (mode == CbbgConfig.Mode.DEMO && x == WIDTH / 2) expected = 255 - expected;
                         int actual = rgb >> (16 - c * 8) & 255;
                         if (actual != expected) throw new AssertionError(mode + " screenshot pixel " + x + "," + y

@@ -92,9 +92,10 @@ final class LegacySettingsParity extends CbbgConfigScreen {
                 "Mode did not unlock controls immediately");
         CbbgConfig.setPixelFormat(CbbgConfig.PixelFormat.RGBA16F);
         click(1);
-        require(CbbgConfig.get().pixelFormat() == CbbgConfig.PixelFormat.RGBA32F, "Format did not cycle");
+        require(CbbgConfig.get().pixelFormat() == CbbgConfig.PixelFormat.RGBA16F, "Format no longer stays on RGBA16F");
+        CbbgConfig.setPixelFormat(CbbgConfig.PixelFormat.RGBA8);
         click(1);
-        require(CbbgConfig.get().pixelFormat() == CbbgConfig.PixelFormat.RGBA16F, "Format cycled through RGBA8");
+        require(CbbgConfig.get().pixelFormat() == CbbgConfig.PixelFormat.RGBA16F, "Format did not return to RGBA16F");
         slider(2, false);
         require(CbbgConfig.get().strength() == 0.5f, "Minimum strength mismatch");
         slider(2, true);

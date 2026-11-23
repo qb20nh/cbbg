@@ -55,16 +55,19 @@ public final class Gl2PresentationParity {
             }
             input.flip();
             platform.bind(source.texture());
-            GL11.glTexImage2D(GL11.GL_TEXTURE_2D, 0, GL30.GL_RGBA32F, SIZE, SIZE, 0,
+            GL11.glTexImage2D(GL11.GL_TEXTURE_2D, 0, GL30.GL_RGBA16F, SIZE, SIZE, 0,
                     GL11.GL_RGBA, GL11.GL_FLOAT, input);
+            FloatBuffer stored = BufferUtils.createFloatBuffer(SIZE * SIZE * 4);
+            GL11.glGetTexImage(GL11.GL_TEXTURE_2D, 0, GL11.GL_RGBA, GL11.GL_FLOAT, stored);
+            double sourceValue = stored.get(0) * 255.0;
             GL11.glDisable(GL11.GL_DITHER);
             GL20.glUseProgram(0);
             int checks = 0;
-            checks += check(renderer, platform, source, output, CbbgConfig.Mode.ENABLED, 1f, fallback);
+            checks += check(renderer, platform, source, output, sourceValue, CbbgConfig.Mode.ENABLED, 1f, fallback);
             if (!fallback) {
-                checks += check(renderer, platform, source, output, CbbgConfig.Mode.ENABLED, 0.5f, false);
-                checks += check(renderer, platform, source, output, CbbgConfig.Mode.DEMO, 1f, false);
-                checks += check(renderer, platform, source, output, CbbgConfig.Mode.DISABLED, 1f, false);
+                checks += check(renderer, platform, source, output, sourceValue, CbbgConfig.Mode.ENABLED, 0.5f, false);
+                checks += check(renderer, platform, source, output, sourceValue, CbbgConfig.Mode.DEMO, 1f, false);
+                checks += check(renderer, platform, source, output, sourceValue, CbbgConfig.Mode.DISABLED, 1f, false);
             }
             return checks;
         } finally {
@@ -89,7 +92,7 @@ public final class Gl2PresentationParity {
         }
     }
 
-    private static int check(Gl2Dither renderer, Platform platform, Target source, Target output, CbbgConfig.Mode mode,
+    private static int check(Gl2Dither renderer, Platform platform, Target source, Target output, double sourceValue, CbbgConfig.Mode mode,
             float strength, boolean fallback) {
         CbbgConfig.setMode(mode);
         CbbgConfig.setStrength(strength);
@@ -120,7 +123,7 @@ public final class Gl2PresentationParity {
                         float amount = fallback || mode == CbbgConfig.Mode.DISABLED
                                 || mode == CbbgConfig.Mode.DEMO && x < SIZE / 2 ? 0f : strength;
                         int n = noise.get(((y % noiseSize) * noiseSize + x % noiseSize) * 4 + channel) & 255;
-                        expected = (int) Math.floor(127.25 + (n / 255.0 - 0.5) * amount + 0.5);
+                        expected = (int) Math.floor(sourceValue + (n / 255.0 - 0.5) * amount + 0.5);
                         if (mode == CbbgConfig.Mode.DEMO && x == SIZE / 2) expected = 255 - expected;
                     }
                     int actual = pixels.get((y * SIZE + x) * 4 + channel) & 255;

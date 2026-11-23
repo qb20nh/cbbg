@@ -98,8 +98,7 @@ public class CbbgConfigScreen extends Screen implements IdentifiableBooleanConsu
                 CbbgConfig.setMode(modes[(config.mode().ordinal() + 1) % modes.length]);
                 break;
             case 1:
-                CbbgConfig.setPixelFormat(config.pixelFormat() == CbbgConfig.PixelFormat.RGBA16F
-                        ? CbbgConfig.PixelFormat.RGBA32F : CbbgConfig.PixelFormat.RGBA16F);
+                CbbgConfig.setPixelFormat(CbbgConfig.PixelFormat.RGBA16F);
                 break;
             case 5:
                 CbbgConfig.setStbnSeed(parsedSeed());
