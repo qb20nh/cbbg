@@ -12,7 +12,6 @@ import org.spongepowered.asm.mixin.injection.At;
 @NullMarked
 @Mixin(value = CbbgShaders.class, remap = false)
 abstract class BandingShaderMixin {
-  @SuppressWarnings("UnusedMethod") // Called by MixinExtras.
   @ModifyReturnValue(method = "get", at = @At("RETURN"))
   private static @Nullable ShaderInstance cbbg$banding(@Nullable ShaderInstance ordinary) {
     return BandingShader.select(ordinary);

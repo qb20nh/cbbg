@@ -123,24 +123,49 @@ public boolean same(java.util.List<String> first, java.util.List<String> second)
 
     @Test void mixinCallbacksKeepTheirSignaturesAndNullChecks() {
         new File(directory, 'build.gradle').append('\ntasks.withType(JavaCompile).configureEach { options.release = 25 }\n')
-        write('src/main/java/org/spongepowered/asm/mixin/injection/Inject.java', '''
-package org.spongepowered.asm.mixin.injection;
-@org.jspecify.annotations.NullMarked public @interface Inject {}
-''')
-        write('src/main/java/org/spongepowered/asm/mixin/Shadow.java', '''
-package org.spongepowered.asm.mixin;
-@org.jspecify.annotations.NullMarked public @interface Shadow {}
-''')
+        for (String annotation : [
+                'org.spongepowered.asm.mixin.injection.Inject',
+                'org.spongepowered.asm.mixin.Shadow',
+                'org.spongepowered.asm.mixin.gen.Invoker',
+                'com.llamalad7.mixinextras.injector.ModifyReturnValue',
+                'com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation'
+        ]) {
+            int lastDot = annotation.lastIndexOf('.')
+            write("src/main/java/${annotation.replace('.', '/')}.java",
+                    "package ${annotation.substring(0, lastDot)};\n" +
+                    "@org.jspecify.annotations.NullMarked public @interface ${annotation.substring(lastDot + 1)} {}\n")
+        }
         writeClass('Callback', '''
 @org.spongepowered.asm.mixin.injection.Inject
 private void callback(int width, int height) {}
 @org.spongepowered.asm.mixin.Shadow
 private static void shadow(int width, int height) { throw new AssertionError(); }
+@com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation
+private int wrap(int width, int height) { return width; }
+@com.llamalad7.mixinextras.injector.ModifyReturnValue
+private int modify(int original, int height) { return original; }
+@org.spongepowered.asm.mixin.gen.Invoker
+private static void invoke(int width, int height) { throw new AssertionError(); }
+public void invokeTarget(int width, int height) { invoke(width, height); }
 ''')
         runner('compileJava').build()
         writeClass('Callback', '''
-@org.spongepowered.asm.mixin.injection.Inject
-private int callback(@org.jspecify.annotations.Nullable String value, int width) {
+@org.spongepowered.asm.mixin.gen.Invoker
+private static void unreferencedInvoker(int width, int height) { throw new AssertionError(); }
+private void unreferencedMethod() {}
+private int usedMethod(int value, int secondParameter) { return value; }
+public int call(int value) { return usedMethod(value, value + 1); }
+''')
+        String unusedDiagnostics = runner('compileJava').buildAndFail().output
+        assertTrue(unusedDiagnostics.readLines().any { it.contains('[UnusedMethod]') && it.contains('unreferencedInvoker') },
+                unusedDiagnostics)
+        assertTrue(unusedDiagnostics.readLines().any { it.contains('[UnusedMethod]') && it.contains('unreferencedMethod') },
+                unusedDiagnostics)
+        assertTrue(unusedDiagnostics.readLines().any { it.contains('[UnusedVariable]') && it.contains('secondParameter') },
+                unusedDiagnostics)
+        writeClass('Callback', '''
+@com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation
+private int wrap(@org.jspecify.annotations.Nullable String value, int width) {
     return value.length();
 }
 ''')

@@ -24,7 +24,6 @@ public abstract class FrontendGpuSurfaceMixin {
               value = "INVOKE",
               target =
                   "Lcom/mojang/renderpearl/backend/api/GpuSurfaceBackend;blitFromTexture(Lcom/mojang/renderpearl/backend/api/CommandEncoderBackend;Lcom/mojang/renderpearl/api/textures/GpuTextureView;)V"))
-  @SuppressWarnings("UnusedMethod") // Invoked by MixinExtras at the backend presentation call.
   // skipcq: JAVA-W0324
   private void cbbg$present(
       GpuSurfaceBackend backend,

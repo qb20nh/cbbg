@@ -14,7 +14,6 @@ import org.spongepowered.asm.mixin.injection.At;
 @NullMarked
 @Mixin(Hud.class)
 public abstract class HudVignetteMixin {
-  @SuppressWarnings("UnusedMethod") // Invoked by the MixinExtras operation wrapper.
   @WrapOperation(
       method =
           "extractVignette(Lnet/minecraft/client/gui/GuiGraphicsExtractor;Lnet/minecraft/world/entity/Entity;)V",

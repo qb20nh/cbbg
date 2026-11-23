@@ -12,7 +12,6 @@ import org.spongepowered.asm.mixin.injection.At;
 @NullMarked
 @Mixin(targets = "com.qb20nh.cbbg.render.DitherPipeline", remap = false)
 abstract class BandingShaderMixin {
-  @SuppressWarnings("UnusedMethod") // Called by MixinExtras.
   @WrapOperation(
       method = "bind",
       at = @At(value = "INVOKE",

@@ -13,7 +13,6 @@ import org.spongepowered.asm.mixin.injection.At;
 @NullMarked
 @Mixin(value = VulkanWindowPresentation.class, remap = false)
 abstract class BandingWindowShaderMixin {
-  @SuppressWarnings("UnusedMethod") // Called by MixinExtras.
   @WrapOperation(
       method = "draw",
       at = @At(value = "INVOKE",
