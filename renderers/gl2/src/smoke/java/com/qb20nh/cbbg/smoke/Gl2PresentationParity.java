@@ -2,6 +2,7 @@ package com.qb20nh.cbbg.smoke;
 
 import com.qb20nh.cbbg.config.CbbgConfig;
 import com.qb20nh.cbbg.render.Gl2Dither;
+import com.qb20nh.cbbg.reference.DitherReference;
 import java.nio.ByteBuffer;
 import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
@@ -59,7 +60,7 @@ public final class Gl2PresentationParity {
                     GL11.GL_RGBA, GL11.GL_FLOAT, input);
             FloatBuffer stored = BufferUtils.createFloatBuffer(SIZE * SIZE * 4);
             GL11.glGetTexImage(GL11.GL_TEXTURE_2D, 0, GL11.GL_RGBA, GL11.GL_FLOAT, stored);
-            double sourceValue = stored.get(0) * 255.0;
+            float sourceValue = stored.get(0);
             GL11.glDisable(GL11.GL_DITHER);
             GL20.glUseProgram(0);
             int checks = 0;
@@ -92,7 +93,7 @@ public final class Gl2PresentationParity {
         }
     }
 
-    private static int check(Gl2Dither renderer, Platform platform, Target source, Target output, double sourceValue, CbbgConfig.Mode mode,
+    private static int check(Gl2Dither renderer, Platform platform, Target source, Target output, float sourceValue, CbbgConfig.Mode mode,
             float strength, boolean fallback) {
         CbbgConfig.setMode(mode);
         CbbgConfig.setStrength(strength);
@@ -120,11 +121,10 @@ public final class Gl2PresentationParity {
                 for (int channel = 0; channel < 4; channel++) {
                     int expected = 255; // Minecraft's presentation quad deliberately masks alpha writes.
                     if (channel < 3) {
-                        float amount = fallback || mode == CbbgConfig.Mode.DISABLED
-                                || mode == CbbgConfig.Mode.DEMO && x < SIZE / 2 ? 0f : strength;
+                        float amount = fallback || mode == CbbgConfig.Mode.DISABLED ? 0f : strength;
                         int n = noise.get(((y % noiseSize) * noiseSize + x % noiseSize) * 4 + channel) & 255;
-                        expected = (int) Math.floor(sourceValue + (n / 255.0 - 0.5) * amount + 0.5);
-                        if (mode == CbbgConfig.Mode.DEMO && x == SIZE / 2) expected = 255 - expected;
+                        expected = DitherReference.shaderChannel(sourceValue, n, amount, x, SIZE,
+                                mode == CbbgConfig.Mode.DEMO);
                     }
                     int actual = pixels.get((y * SIZE + x) * 4 + channel) & 255;
                     if (actual != expected) throw new AssertionError(mode + " strength=" + strength

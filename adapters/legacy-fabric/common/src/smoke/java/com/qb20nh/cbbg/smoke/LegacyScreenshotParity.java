@@ -4,6 +4,7 @@ import com.qb20nh.cbbg.config.CbbgConfig;
 import com.qb20nh.cbbg.render.LegacyDither;
 import com.qb20nh.cbbg.render.LegacyScreenshot;
 import com.qb20nh.cbbg.render.LegacyTextureState;
+import com.qb20nh.cbbg.reference.DitherReference;
 import java.awt.image.BufferedImage;
 import java.nio.ByteBuffer;
 import java.nio.FloatBuffer;
@@ -75,11 +76,11 @@ final class LegacyScreenshotParity {
                 for (int y = 0; y < HEIGHT; y++) for (int x = 0; x < WIDTH; x++) {
                     int rgb = image.getRGB(x, HEIGHT - y - 1);
                     for (int c = 0; c < 3; c++) {
-                        double amount = mode == CbbgConfig.Mode.DISABLED || mode == CbbgConfig.Mode.DEMO && x < WIDTH / 2 ? 0 : 1;
+                        int amount = mode == CbbgConfig.Mode.DISABLED ? 0 : 1;
                         int n = noise.get(((y % noiseSize) * noiseSize + x % noiseSize) * 4 + c) & 255;
-                        double source = stored.get((y * WIDTH + x) * 4 + c) * 255.0;
-                        int expected = (int) Math.floor(source + amount * (n / 255.0 - 0.5) + 0.5);
-                        if (mode == CbbgConfig.Mode.DEMO && x == WIDTH / 2) expected = 255 - expected;
+                        float source = stored.get((y * WIDTH + x) * 4 + c);
+                        int expected = DitherReference.shaderChannel(source, n, amount, x, WIDTH,
+                                mode == CbbgConfig.Mode.DEMO);
                         int actual = rgb >> (16 - c * 8) & 255;
                         if (actual != expected) throw new AssertionError(mode + " screenshot pixel " + x + "," + y
                                 + " channel " + c + " expected " + expected + " got " + actual);

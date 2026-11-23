@@ -86,6 +86,10 @@ sourceSets {
         runtimeClasspath += sourceSets.main.output + sourceSets.main.runtimeClasspath
     }
 }
+dependencies { smokeCompileOnly 'org.jspecify:jspecify:1.0.1' }
+tasks.named('compileSmokeJava', JavaCompile) {
+    source(new File(repositoryRoot, 'core/src/testSupport/java/com/qb20nh/cbbg/reference/DitherReference.java'))
+}
 def allocationReport = layout.buildDirectory.file('gl2-allocation/report.json')
 def noiseImagesReport = layout.buildDirectory.file('gl2-noise-images/report.json')
 tasks.register('runGl2NoiseImagesParity', JavaExec) {

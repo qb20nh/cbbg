@@ -116,15 +116,14 @@ public final class LegacySmoke {
                 } finally {
                     custom.delete();
                 }
-                CbbgConfig.setPixelFormat(PixelFormat.RGBA8);
                 CbbgConfig.setStbnSize(32);
             } else if (stage == 1) {
                 presentations = LegacyDither.presentations();
                 require(LegacyDither.textures().texture(0) == noiseTexture && LegacyDither.textures().size() == 16,
                         "Unconfirmed noise settings applied");
                 CbbgConfig.setStbnSize(16);
-                require(format(main) == GL11.GL_RGBA8, "Precision transition did not produce RGBA8");
-                require(format(intermediate) == GL11.GL_RGBA8, "Post-process target did not become RGBA8");
+                require(format(main) == GL30.GL_RGBA16F, "Enabled target did not retain RGBA16F");
+                require(format(intermediate) == GL30.GL_RGBA16F, "Enabled post-process target did not retain RGBA16F");
                 CbbgConfig.setMode(CbbgConfig.Mode.DISABLED);
             } else if (stage == 2) {
                 require(LegacyDither.presentations() == presentations, "Disabled mode still presented dithering");
@@ -212,7 +211,7 @@ public final class LegacySmoke {
     }
 
     private static void checkPrecisionBindings(Framebuffer main) {
-        PixelFormat precision = CbbgConfig.get().pixelFormat();
+        CbbgConfig.Mode mode = CbbgConfig.get().mode();
         Framebuffer read = new Framebuffer(7, 5, true);
         Framebuffer draw = new Framebuffer(9, 7, true);
         try {
@@ -220,7 +219,7 @@ public final class LegacySmoke {
             GL30.glBindFramebuffer(GL30.GL_DRAW_FRAMEBUFFER, draw.fbo);
             LegacyTextureState.bind(read.colorAttachment);
             GL11.glViewport(2, 3, 7, 9);
-            CbbgConfig.setPixelFormat(PixelFormat.RGBA8);
+            CbbgConfig.setMode(CbbgConfig.Mode.DISABLED);
             LegacyFramebuffers.tick();
             require(GL11.glGetInteger(GL30.GL_READ_FRAMEBUFFER_BINDING) == read.fbo,
                     "Precision transition changed custom read binding");
@@ -235,7 +234,7 @@ public final class LegacySmoke {
         } finally {
             read.delete();
             draw.delete();
-            CbbgConfig.setPixelFormat(precision);
+            CbbgConfig.setMode(mode);
             LegacyFramebuffers.tick();
             main.bind(true);
         }
