@@ -25,6 +25,14 @@ java {
     toolchain.languageVersion = JavaLanguageVersion.of(target.java as int)
     withSourcesJar()
 }
+def legacyVerification = providers.gradleProperty('legacyVerification').map { it.toBoolean() }.getOrElse(false)
+def utilitiesProperties = new Properties()
+new File(repositoryRoot, 'libraries/utilities/gradle.properties').withInputStream { utilitiesProperties.load(it) }
+def utilities = "com.qb20nh:cbbg-utilities:${utilitiesProperties.library_version}"
+def embeddedUtilities = configurations.create('embeddedUtilities') {
+    canBeConsumed = false
+    transitive = false
+}
 evaluationDependsOn(':core')
 def withModMenu = providers.gradleProperty('modMenu').map { it.toBoolean() }.getOrElse(false)
 if (withModMenu && !target.dependencies.modMenu) {
@@ -63,7 +71,8 @@ dependencies {
     mappings(legacy.yarn(target.minecraft, target.dependencies.yarnBuild))
     modImplementation "net.fabricmc:fabric-loader:${target.dependencies.loader}"
     modImplementation "net.legacyfabric.legacy-fabric-api:legacy-fabric-api:${target.dependencies.fabricApi}"
-    implementation 'com.qb20nh:cbbg-utilities'
+    implementation utilities
+    add(embeddedUtilities.name, utilities)
 }
 
 def sourceGroups = ['renderers/gl2', 'adapters/legacy-fabric/common', "adapters/legacy-fabric/${target.minecraft}"]
@@ -168,9 +177,36 @@ tasks.named('runSmoke') {
 ext.sharedProjects = [project(':core'), project(':core:rendering'), project(':core:legacy')]
 apply from: new File(repositoryRoot, 'build-config/shared-code.gradle')
 tasks.named('jar') {
-    doFirst {
-        if (!target.implemented) throw new GradleException("${targetId} is not ready for distribution")
+    inputs.property('legacyVerification', legacyVerification)
+    inputs.property('targetImplemented', target.implemented)
+    dependsOn embeddedUtilities
+    from({ embeddedUtilities.collect { zipTree(it) } }) {
+        exclude 'META-INF/**', 'LICENSE'
     }
+    from(new File(repositoryRoot, 'LICENSE'))
+    doFirst {
+        if (!target.implemented && !legacyVerification) {
+            throw new GradleException("${targetId} is not ready for distribution")
+        }
+    }
+}
+if (legacyVerification) {
+    tasks.named('remapJar') {
+        archiveClassifier = 'verification'
+        destinationDirectory = layout.buildDirectory.dir('verification')
+    }
+}
+def packagedSmokeJar = tasks.register('packagedSmokeJar', Jar) {
+    archiveClassifier = 'smoke-named'
+    destinationDirectory = layout.buildDirectory.dir('intermediates/smoke')
+    from(sourceSets.smoke.output)
+}
+tasks.register('remapPackagedSmokeJar', net.fabricmc.loom.task.RemapJarTask) {
+    dependsOn packagedSmokeJar
+    inputFile.set(packagedSmokeJar.flatMap { it.archiveFile })
+    archiveClassifier = 'smoke'
+    destinationDirectory = layout.buildDirectory.dir('verification')
+    addNestedDependencies = false
 }
 def canonicalLanguages = new File(repositoryRoot, 'src/main/resources/assets/cbbg/lang')
 ext.legacyLanguageMinecraft = target.minecraft
