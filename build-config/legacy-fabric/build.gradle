@@ -204,6 +204,7 @@ def packagedSmokeJar = tasks.register('packagedSmokeJar', Jar) {
 tasks.register('remapPackagedSmokeJar', net.fabricmc.loom.task.RemapJarTask) {
     dependsOn packagedSmokeJar
     inputFile.set(packagedSmokeJar.flatMap { it.archiveFile })
+    classpath.from(sourceSets.main.output.classesDirs)
     archiveClassifier = 'smoke'
     destinationDirectory = layout.buildDirectory.dir('verification')
     addNestedDependencies = false

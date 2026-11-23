@@ -11,6 +11,7 @@
   "mixins": ["cbbg.mixins.json"],
   "depends": {
     "fabricloader": ">=${loader_version}",
+    "legacy-fabric-resource-loader-v1": ">=2.3.2",
     "minecraft": "${minecraft_version}",
     "java": ">=8"
   }
