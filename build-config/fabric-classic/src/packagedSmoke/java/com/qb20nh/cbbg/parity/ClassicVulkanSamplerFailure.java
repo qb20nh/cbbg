@@ -54,6 +54,11 @@ public final class ClassicVulkanSamplerFailure {
       System.out.println("CBBG_CLASSIC_VULKAN_SAMPLER_REJECTED count=" + rejected);
       return -2; // VK_ERROR_OUT_OF_DEVICE_MEMORY
     }
+    return (int) samplerMethod(device, info).invoke(null, device, info, callbacks, output);
+  }
+
+  private static synchronized Method samplerMethod(Object device, Object info)
+      throws ReflectiveOperationException {
     if (nativeCreate == null) {
       nativeCreate =
           Class.forName("org.lwjgl.vulkan.VK10")
@@ -64,7 +69,7 @@ public final class ClassicVulkanSamplerFailure {
                   Class.forName("org.lwjgl.vulkan.VkAllocationCallbacks"),
                   LongBuffer.class);
     }
-    return (int) nativeCreate.invoke(null, device, info, callbacks, output);
+    return nativeCreate;
   }
 
   boolean tick(Minecraft client, long presentations) throws Exception {

@@ -45,6 +45,11 @@ public final class ClassicVulkanPipelineFailure {
       attempts++;
       return -2; // VK_ERROR_OUT_OF_DEVICE_MEMORY
     }
+    return (int) pipelineMethod(device, info).invoke(null, device, cache, info, callbacks, output);
+  }
+
+  private static synchronized Method pipelineMethod(Object device, Object info)
+      throws ReflectiveOperationException {
     if (createPipeline == null) {
       createPipeline =
           Class.forName("org.lwjgl.vulkan.VK10")
@@ -56,7 +61,7 @@ public final class ClassicVulkanPipelineFailure {
                   Class.forName("org.lwjgl.vulkan.VkAllocationCallbacks"),
                   LongBuffer.class);
     }
-    return (int) createPipeline.invoke(null, device, cache, info, callbacks, output);
+    return createPipeline;
   }
 
   public static void observeCleanup(Object pipeline) throws ReflectiveOperationException {

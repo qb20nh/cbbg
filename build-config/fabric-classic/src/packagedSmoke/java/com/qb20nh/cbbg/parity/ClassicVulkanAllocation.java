@@ -15,9 +15,7 @@ public final class ClassicVulkanAllocation {
   private static final String CANDIDATE = System.getProperty("cbbg.test.jar");
   private static final StackWalker STACK =
       StackWalker.getInstance(StackWalker.Option.RETAIN_CLASS_REFERENCE);
-  private static Method nativeAllocate;
-  private static Method format;
-  private static Method usage;
+  private static ImageMethods imageMethods;
   private static long partialColor;
   private static int partialFrees;
   private static boolean depthRejected;
@@ -32,22 +30,9 @@ public final class ClassicVulkanAllocation {
       PointerBuffer allocation,
       Object details)
       throws ReflectiveOperationException {
-    if (nativeAllocate == null) {
-      nativeAllocate =
-          Class.forName("org.lwjgl.util.vma.Vma")
-              .getMethod(
-                  "vmaCreateImage",
-                  long.class,
-                  info.getClass(),
-                  options.getClass(),
-                  LongBuffer.class,
-                  PointerBuffer.class,
-                  Class.forName("org.lwjgl.util.vma.VmaAllocationInfo"));
-      format = info.getClass().getMethod("format");
-      usage = info.getClass().getMethod("usage");
-    }
-    int colorFormat = (int) format.invoke(info);
-    int flags = (int) usage.invoke(info);
+    ImageMethods methods = resolveImageMethods(info, options);
+    int colorFormat = (int) methods.format().invoke(info);
+    int flags = (int) methods.usage().invoke(info);
     boolean isColor =
         flags == 0x14 && (colorFormat == RGBA8 || colorFormat == RGBA16F || colorFormat == RGBA32F);
     boolean isDepth = flags == 0x24;
@@ -62,7 +47,7 @@ public final class ClassicVulkanAllocation {
       return reject(colorFormat, "depth");
     }
     int result =
-        (int) nativeAllocate.invoke(null, allocator, info, options, image, allocation, details);
+        (int) methods.allocate().invoke(null, allocator, info, options, image, allocation, details);
     if (scene && result == 0) ClassicVulkanNativeAllocation.observeImage(image.get(0));
     if (depthRejected && result == 0 && image.get(0) == partialColor) partialColor = 0;
     if (scene && isColor && result == 0 && !depthRejected && isPartialColor(colorFormat, info)) {
@@ -70,6 +55,28 @@ public final class ClassicVulkanAllocation {
     }
     return result;
   }
+
+  private static synchronized ImageMethods resolveImageMethods(Object info, Object options)
+      throws ReflectiveOperationException {
+    if (imageMethods == null) {
+      Class<?> infoType = info.getClass();
+      Method allocate =
+          Class.forName("org.lwjgl.util.vma.Vma")
+              .getMethod(
+                  "vmaCreateImage",
+                  long.class,
+                  infoType,
+                  options.getClass(),
+                  LongBuffer.class,
+                  PointerBuffer.class,
+                  Class.forName("org.lwjgl.util.vma.VmaAllocationInfo"));
+      imageMethods =
+          new ImageMethods(allocate, infoType.getMethod("format"), infoType.getMethod("usage"));
+    }
+    return imageMethods;
+  }
+
+  private record ImageMethods(Method allocate, Method format, Method usage) {}
 
   static boolean hasCbbgCaller() {
     return STACK.walk(

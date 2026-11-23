@@ -99,7 +99,7 @@ final class ClassicIrisSmoke {
   }
 
   private boolean checkSuppressed(Minecraft client, long presentations, String filename)
-      throws Exception {
+      throws ReflectiveOperationException {
     requireActive(true);
     if (presentations != baseline)
       throw new AssertionError(
