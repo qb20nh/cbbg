@@ -17,7 +17,7 @@ public final class LegacyNotifications {
             message.getStyle().setFormatting(complete ? Formatting.GREEN : Formatting.YELLOW);
             client.inGameHud.getChatHud().addMessage(message);
         }
-        if (config.notifyToast()) {
+        if (config.notifyToast() && LegacyToasts.supported()) {
             LegacyToasts.show(new TranslatableText("cbbg.toast.stbn.title"),
                     new TranslatableText("cbbg.toast.stbn." + event));
         }

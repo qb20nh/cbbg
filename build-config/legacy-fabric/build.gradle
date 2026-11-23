@@ -11,7 +11,8 @@ apply from: new File(repositoryRoot, 'build-config/local-runtime.gradle')
 def catalog = new JsonSlurper().parse(new File(repositoryRoot, 'targets.json'))
 def targetId = providers.gradleProperty('target').getOrElse('1.12.2-legacy-fabric')
 def target = catalog.targets.find { it.id == targetId }
-if (target == null || target.buildProfile != 'legacy-fabric' || target.id != '1.12.2-legacy-fabric') {
+if (target == null || target.buildProfile != 'legacy-fabric'
+        || !(target.minecraft in ['1.7.10', '1.12.2'])) {
     throw new GradleException("Unsupported Legacy Fabric target: ${targetId}")
 }
 def modProperties = new Properties()
@@ -157,6 +158,7 @@ loom {
     runs {
         smoke {
             client()
+            if (target.minecraft == '1.7.10') programArgs '--userProperties', '{}'
             vmArg "-Dcbbg.test.modMenu=${withModMenu}"
             source sourceSets.smoke
             runDir project.relativePath(layout.buildDirectory.dir('run-smoke').get().asFile)

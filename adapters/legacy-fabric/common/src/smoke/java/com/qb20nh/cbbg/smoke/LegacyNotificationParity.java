@@ -1,6 +1,7 @@
 package com.qb20nh.cbbg.smoke;
 
 import com.qb20nh.cbbg.LegacyNotifications;
+import com.qb20nh.cbbg.LegacyToasts;
 import com.qb20nh.cbbg.config.CbbgConfig;
 
 public final class LegacyNotificationParity {
@@ -9,7 +10,8 @@ public final class LegacyNotificationParity {
     public static int toasts;
 
     static int run() throws Exception {
-        ToastParity.prepare();
+        boolean supported = LegacyToasts.supported();
+        if (supported) ToastParity.prepare();
         boolean chat = CbbgConfig.get().notifyChat();
         boolean toast = CbbgConfig.get().notifyToast();
         try {
@@ -20,8 +22,8 @@ public final class LegacyNotificationParity {
             if (toasts != 0) throw new AssertionError("Disabled toast notification was dispatched");
             CbbgConfig.setNotifyToast(true);
             LegacyNotifications.generation(false);
-            if (toasts != 1) throw new AssertionError("Enabled toast notification was not dispatched");
-            return 2 + ToastParity.run();
+            if (toasts != (supported ? 1 : 0)) throw new AssertionError("Wrong toast dispatch for this client");
+            return supported ? 2 + ToastParity.run() : 2;
         } finally {
             CbbgConfig.setNotifyChat(chat);
             CbbgConfig.setNotifyToast(toast);
