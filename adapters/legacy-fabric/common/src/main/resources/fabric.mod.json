@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "id": "cbbg",
+  "version": "${version}",
+  "name": "cbbg",
+  "environment": "client",
+  "entrypoints": {
+    "modmenu": ["com.qb20nh.cbbg.compat.modmenu.CbbgModMenuApi"],
+    "preLaunch": ["com.qb20nh.cbbg.CbbgEarlyInit"]
+  },
+  "mixins": ["cbbg.mixins.json"],
+  "depends": {
+    "fabricloader": ">=${loader_version}",
+    "minecraft": "${minecraft_version}",
+    "java": ">=8"
+  }
+}

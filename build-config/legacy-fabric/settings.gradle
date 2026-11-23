@@ -1,0 +1,16 @@
+pluginManagement {
+    includeBuild('../../build-logic')
+    repositories {
+        maven { url = 'https://maven.fabricmc.net/' }
+        maven { url = 'https://maven.legacyfabric.net/' }
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+
+rootProject.name = 'cbbg-legacy-fabric'
+includeBuild('../../libraries/utilities') { name = 'cbbg-utilities' }
+include 'core', 'core:rendering', 'core:legacy'
+project(':core').projectDir = file('../../core')
+project(':core:rendering').projectDir = file('../../core/rendering')
+project(':core:legacy').projectDir = file('../../core/legacy')

@@ -1,0 +1,8 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.qb20nh.cbbg.smoke.mixin",
+  "compatibilityLevel": "JAVA_8",
+  "client": ["SmokeMixin", "ShaderEffectAccessor", "ShaderFailureMixin", "NotificationMixin", "TextureLifetimeMixin"],
+  "injectors": {"defaultRequire": 1}
+}

@@ -1,0 +1,33 @@
+import groovy.json.JsonSlurper
+
+def canonicalLanguages = file('../../src/main/resources/assets/cbbg/lang')
+def legacyLanguages = layout.buildDirectory.dir('generated/legacy-languages')
+def uppercaseRegion = project.legacyLanguageMinecraft == '1.7.10'
+def parseEscapes = project.findProperty('legacyLanguageParseEscapes') == true
+def generateLegacyLanguages = tasks.register('generateLegacyLanguages') {
+    inputs.dir(canonicalLanguages)
+    inputs.property('uppercaseRegion', uppercaseRegion)
+    inputs.property('parseEscapes', parseEscapes)
+    outputs.dir(legacyLanguages)
+    doLast {
+        delete(legacyLanguages)
+        def destination = new File(legacyLanguages.get().asFile, 'assets/cbbg/lang')
+        destination.mkdirs()
+        fileTree(canonicalLanguages).matching { include '*.json' }.files.sort().each { source ->
+            def locale = source.name.replace('.json', '')
+            if (uppercaseRegion) {
+                def parts = locale.split('_', 2)
+                locale = parts[0] + '_' + parts[1].toUpperCase(Locale.ROOT)
+            }
+            def entries = new JsonSlurper().parse(source, 'UTF-8')
+            def text = entries.collect { key, value ->
+                def escaped = value.replace('\\', '\\\\').replace('\n', '\\n')
+                        .replace('\r', '\\r').replace('\t', '\\t')
+                if (parseEscapes && escaped.startsWith(' ')) escaped = '\\' + escaped
+                "${key}=${escaped}"
+            }.join('\n') + '\n'
+            new File(destination, "${locale}.lang").setText((parseEscapes ? '#PARSE_ESCAPES\n' : '') + text, 'UTF-8')
+        }
+    }
+}
+sourceSets.main.resources.srcDir(generateLegacyLanguages)

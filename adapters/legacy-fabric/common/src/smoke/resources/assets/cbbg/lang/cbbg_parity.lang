@@ -1,0 +1,2 @@
+cbbg.smoke.escaped=literal \\n; newline \n; slash \\; tab \t; return \r; unknown \q; equals a=b
+foreign.smoke.escaped=leave \n and \\ intact

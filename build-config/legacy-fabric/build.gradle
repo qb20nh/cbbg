@@ -1,0 +1,189 @@
+import groovy.json.JsonSlurper
+
+plugins {
+    id 'net.fabricmc.fabric-loom-remap' version '1.16.1'
+    id 'legacy-looming' version '1.16.1'
+    id 'cbbg.packaging'
+}
+
+def repositoryRoot = file('../..')
+apply from: new File(repositoryRoot, 'build-config/local-runtime.gradle')
+def catalog = new JsonSlurper().parse(new File(repositoryRoot, 'targets.json'))
+def targetId = providers.gradleProperty('target').getOrElse('1.12.2-legacy-fabric')
+def target = catalog.targets.find { it.id == targetId }
+if (target == null || target.buildProfile != 'legacy-fabric' || target.id != '1.12.2-legacy-fabric') {
+    throw new GradleException("Unsupported Legacy Fabric target: ${targetId}")
+}
+def modProperties = new Properties()
+new File(repositoryRoot, 'gradle.properties').withInputStream { modProperties.load(it) }
+version = "${modProperties.mod_version}+mc${target.minecraft}-${target.loader}"
+group = modProperties.maven_group
+base.archivesName = modProperties.archives_base_name
+layout.buildDirectory = new File(repositoryRoot, "build/targets/${targetId}")
+
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(target.java as int)
+    withSourcesJar()
+}
+evaluationDependsOn(':core')
+def withModMenu = providers.gradleProperty('modMenu').map { it.toBoolean() }.getOrElse(false)
+if (withModMenu && !target.dependencies.modMenu) {
+    throw new GradleException("No locked Mod Menu artifact for ${targetId}")
+}
+if (target.dependencies.modMenu) {
+    repositories {
+        ivy {
+            name = 'legacyModMenuRelease'
+            url = 'https://gitlab.com/ENDERZOMBI102/modmenu-legacy/uploads/5ab2d2913fc66a0d07571e15fb12accc/'
+            patternLayout { artifact '[artifact]-[revision].[ext]' }
+            metadataSources { artifact() }
+            content { includeModule('io.github.prospector', 'legacy-modmenu') }
+        }
+    }
+    configurations { legacyMenuArtifact }
+    def menu = "io.github.prospector:legacy-modmenu:${target.dependencies.modMenu}"
+    dependencies {
+        legacyMenuArtifact menu
+        modCompileOnly menu
+        if (withModMenu) modLocalRuntime menu
+    }
+    tasks.register('verifyLegacyModMenu') {
+        doLast {
+            def artifact = configurations.legacyMenuArtifact.singleFile
+            def hash = java.security.MessageDigest.getInstance('SHA-256').digest(artifact.bytes).encodeHex().toString()
+            if (hash != target.dependencies.modMenuSha256) {
+                throw new GradleException('ModMenuLegacy artifact checksum mismatch')
+            }
+        }
+    }
+    tasks.named('compileJava') { dependsOn 'verifyLegacyModMenu' }
+}
+dependencies {
+    minecraft "com.mojang:minecraft:${target.minecraft}"
+    mappings(legacy.yarn(target.minecraft, target.dependencies.yarnBuild))
+    modImplementation "net.fabricmc:fabric-loader:${target.dependencies.loader}"
+    modImplementation "net.legacyfabric.legacy-fabric-api:legacy-fabric-api:${target.dependencies.fabricApi}"
+    implementation 'com.qb20nh:cbbg-utilities'
+}
+
+def sourceGroups = ['renderers/gl2', 'adapters/legacy-fabric/common', "adapters/legacy-fabric/${target.minecraft}"]
+sourceSets.main {
+    java.setSrcDirs(sourceGroups.collect { new File(repositoryRoot, "${it}/src/main/java") })
+    resources.setSrcDirs(sourceGroups.collect { new File(repositoryRoot, "${it}/src/main/resources") })
+}
+sourceSets {
+    smoke {
+        java.srcDir(new File(repositoryRoot, 'renderers/gl2/src/smoke/java'))
+        java.srcDir(new File(repositoryRoot, 'adapters/legacy-fabric/common/src/smoke/java'))
+        java.srcDir(new File(repositoryRoot, "adapters/legacy-fabric/${target.minecraft}/src/smoke/java"))
+        resources.srcDir(new File(repositoryRoot, 'adapters/legacy-fabric/common/src/smoke/resources'))
+        compileClasspath += sourceSets.main.output + sourceSets.main.compileClasspath
+        runtimeClasspath += sourceSets.main.output + sourceSets.main.runtimeClasspath
+    }
+    parity {
+        java.srcDir(new File(repositoryRoot, 'renderers/gl2/src/parity/java'))
+        compileClasspath += sourceSets.main.output + sourceSets.main.compileClasspath
+        runtimeClasspath += sourceSets.main.output + sourceSets.main.runtimeClasspath
+    }
+}
+def allocationReport = layout.buildDirectory.file('gl2-allocation/report.json')
+def noiseImagesReport = layout.buildDirectory.file('gl2-noise-images/report.json')
+tasks.register('runGl2NoiseImagesParity', JavaExec) {
+    group = 'verification'
+    description = 'Verifies legacy image generation and cache compatibility without a display.'
+    classpath = sourceSets.parity.runtimeClasspath
+    mainClass = 'com.qb20nh.cbbg.parity.Gl2NoiseImagesParity'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(target.java as int) }
+    args noiseImagesReport.get().asFile.absolutePath
+    timeout = java.time.Duration.ofMinutes(2)
+    doFirst {
+        delete(noiseImagesReport)
+        noiseImagesReport.get().asFile.parentFile.mkdirs()
+    }
+    doLast {
+        def report = noiseImagesReport.get().asFile
+        if (!report.isFile() || !new JsonSlurper().parse(report).passed) {
+            throw new GradleException('Legacy noise image parity did not produce a passing report')
+        }
+    }
+}
+tasks.register('runGl2AllocationParity', JavaExec) {
+    group = 'verification'
+    description = 'Runs the allocator on an isolated local display; never part of check or build.'
+    dependsOn tasks.named('extractNatives'), tasks.named('parityClasses')
+    classpath = sourceSets.parity.runtimeClasspath
+    mainClass = 'com.qb20nh.cbbg.parity.Gl2AllocationParity'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(target.java as int) }
+    args allocationReport.get().asFile.absolutePath
+    timeout = java.time.Duration.ofMinutes(2)
+    doFirst {
+        delete(allocationReport)
+        allocationReport.get().asFile.parentFile.mkdirs()
+        systemProperty 'org.lwjgl.librarypath', tasks.named('extractNatives').get().destinationDir.absolutePath
+    }
+    doLast {
+        def report = allocationReport.get().asFile
+        if (!report.isFile() || !new JsonSlurper().parse(report).passed) {
+            throw new GradleException('GL2 allocation parity did not produce a passing report')
+        }
+    }
+}
+loom.runs.named('client') {
+    runDir project.relativePath(layout.buildDirectory.dir('run-client').get().asFile)
+    if (target.minecraft == '1.7.10') programArgs '--userProperties', '{}'
+}
+def smokeReport = layout.buildDirectory.file('smoke/report.json')
+loom {
+    mods {
+        cbbg {
+            sourceSet sourceSets.main
+            sourceSet project(':core').sourceSets.main
+        }
+        cbbg_smoke { sourceSet sourceSets.smoke }
+    }
+    runs {
+        smoke {
+            client()
+            vmArg "-Dcbbg.test.modMenu=${withModMenu}"
+            source sourceSets.smoke
+            runDir project.relativePath(layout.buildDirectory.dir('run-smoke').get().asFile)
+            vmArg "-Dcbbg.test.report=${smokeReport.get().asFile.absolutePath}"
+        }
+    }
+}
+tasks.named('runSmoke') {
+    timeout = java.time.Duration.ofMinutes(3)
+    doFirst { delete(smokeReport) }
+    doLast {
+        def report = smokeReport.get().asFile
+        if (!report.isFile() || !new JsonSlurper().parse(report).passed) {
+            throw new GradleException('Legacy client smoke did not produce a passing report')
+        }
+    }
+}
+ext.sharedProjects = [project(':core'), project(':core:rendering'), project(':core:legacy')]
+apply from: new File(repositoryRoot, 'build-config/shared-code.gradle')
+tasks.named('jar') {
+    doFirst {
+        if (!target.implemented) throw new GradleException("${targetId} is not ready for distribution")
+    }
+}
+def canonicalLanguages = new File(repositoryRoot, 'src/main/resources/assets/cbbg/lang')
+ext.legacyLanguageMinecraft = target.minecraft
+apply from: new File(repositoryRoot, 'build-config/legacy-languages.gradle')
+tasks.named('runSmoke') {
+    systemProperty 'cbbg.test.translations', canonicalLanguages.absolutePath
+}
+
+tasks.named('processResources') {
+    from(new File(repositoryRoot, 'libraries/utilities/src/main/resources/com/qb20nh/cbbg/api/shaders/dither.glsl')) {
+        into 'assets/cbbg/shaders/include'
+    }
+    def properties = [version: project.version, minecraft_version: target.minecraft,
+                      loader_version: target.dependencies.loader]
+    inputs.properties(properties)
+    filesMatching('fabric.mod.json') {
+        expand(properties)
+        if (!target.dependencies.modMenu) filter { line -> line.contains('"modmenu":') ? '' : line }
+    }
+}

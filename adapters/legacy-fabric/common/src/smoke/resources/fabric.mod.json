@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "id": "cbbg_smoke",
+  "version": "0.0.0",
+  "environment": "client",
+  "mixins": ["cbbg.smoke.mixins.json"],
+  "depends": {"cbbg": "*"}
+}
