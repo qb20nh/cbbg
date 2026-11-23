@@ -3,16 +3,64 @@ import copy
 import json
 from pathlib import Path
 import shutil
+import struct
 import sys
 import tempfile
 import unittest
 import zipfile
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from fabric_run_evidence import verify_run, verify_restart
+from fabric_classic_scenarios import (CLASSIC_DRIVER, CLASSIC_ENTRYPOINT, CLASSIC_OPTIONS,
+                                      classic_config, pixel_cache_files)
+from fabric_run_evidence import verify_classic_restart_snapshots, verify_run, verify_restart
 from fabric_parity_runtime import restart_state
 from fabric_scenario_evidence import graphics_identity, validate_scenarios
 from parity_evidence import digest
+
+
+class ClassicRestartSnapshotsTest(unittest.TestCase):
+    def test_restart_requires_untouched_world_settings_and_pack(self):
+        before = {'config/cbbg.json': 'demo', 'config/iris.properties': 'on',
+                  'shaderpacks/cbbg-parity/shaders/final.fsh': 'pack'}
+        after = {**before, 'config/iris.properties': 'off'}
+        prepare = {'evidence': {'evidence-prepare/prepared-world.dat': 'world',
+                                'evidence-prepare/prepared-options.txt': 'options',
+                                'evidence-prepare/final-cbbg.json': 'demo',
+                                'evidence-prepare/final-iris.properties': 'on'}}
+        verify = {'evidence': {'evidence-verify/initial-world.dat': 'world',
+                               'evidence-verify/initial-options.txt': 'options',
+                               'evidence-verify/initial-cbbg.json': 'demo',
+                               'evidence-verify/initial-iris.properties': 'on',
+                               'evidence-verify/final-cbbg.json': 'demo',
+                               'evidence-verify/final-iris.properties': 'off'}}
+        verify_classic_restart_snapshots(prepare, verify, before, after)
+        for key in ('initial-world.dat', 'initial-options.txt', 'initial-iris.properties'):
+            changed = copy.deepcopy(verify)
+            changed['evidence']['evidence-verify/' + key] = 'changed'
+            with self.assertRaisesRegex(ValueError, 'snapshot differs'):
+                verify_classic_restart_snapshots(prepare, changed, before, after)
+        with self.assertRaisesRegex(ValueError, 'changed a required persisted file'):
+            verify_classic_restart_snapshots(prepare, verify, before,
+                {**after, 'shaderpacks/cbbg-parity/shaders/final.fsh': 'changed'})
+
+    def test_plain_restart_binds_mode_snapshots_and_allows_no_cache_changes(self):
+        before = {'config/cbbg.json': 'disabled', '.cbbg/frame.png': 'cached'}
+        after = dict(before)
+        after['config/cbbg.json'] = 'enabled'
+        prepare = {'evidence': {
+            'evidence-prepare/prepared-options.txt': 'options',
+            'evidence-prepare/prepared-world.dat': 'world',
+            'evidence-prepare/final-cbbg.json': 'disabled'}}
+        verified = {'evidence': {
+            'evidence-verify/initial-options.txt': 'options',
+            'evidence-verify/initial-world.dat': 'world',
+            'evidence-verify/initial-cbbg.json': 'disabled',
+            'evidence-verify/final-cbbg.json': 'enabled'}}
+        verify_classic_restart_snapshots(prepare, verified, before, after, 'mode-restart')
+        for path in ('config/cbbg.json', '.cbbg/frame.png'):
+            with self.assertRaises(ValueError):
+                verify_classic_restart_snapshots(prepare, verified, before, {**after, path: 'different'},
+                                                 'mode-restart')
 
 
 class FabricRunEvidenceTest(unittest.TestCase):
@@ -79,6 +127,38 @@ class FabricRunEvidenceTest(unittest.TestCase):
         result = self.verify()
         self.assertEqual(self.expected, result['scenarios'])
         self.assertFalse(result['releaseAcceptance'])
+
+    def test_classic_run_does_not_require_a_modern_trace(self):
+        self.target['buildProfile'] = 'fabric-classic'
+        self.catalog.write_text(json.dumps({'targets': [self.target]}))
+        (self.game / 'mods/fabric-gametest-api.jar').unlink()
+        with zipfile.ZipFile(self.game / 'mods/driver.jar', 'w') as jar:
+            jar.writestr('fabric.mod.json', json.dumps({'id': CLASSIC_DRIVER,
+                'entrypoints': {'client': [CLASSIC_ENTRYPOINT]},
+                'custom': {'cbbg:scenarios': ['world']}}))
+        evidence = self.game / 'evidence'
+        (evidence / 'scenarios.tsv').unlink()
+        (evidence / 'graphics-context.json').unlink()
+        (evidence / 'initial-cbbg.json').write_text(json.dumps(classic_config('opengl')))
+        (evidence / 'initial-options.txt').write_text(CLASSIC_OPTIONS)
+        template = pixel_cache_files()['stbn_16x16x8_0.png']
+        for capture in ('enabled.png', 'disabled.png'):
+            (evidence / capture).write_bytes(template[:16] + struct.pack('>II', 800, 600) + template[24:])
+        (self.game / 'launch.log').write_text('CBBG_CLASSIC_OPENGL Test GPU / 4.6 sodium=false\n'
+                                             'CBBG_CLASSIC_SMOKE_PASS presentations=12\n')
+        self.report.update(classicScenario='world', dependencyMinimumTest=False,
+            initialConfigSha256=digest(evidence / 'initial-cbbg.json'), catalogSha256=digest(self.catalog),
+            scenarioSha256=hashlib.sha256(b'["world"]').hexdigest(),
+            artifacts={p.name: digest(p) for p in (self.game / 'mods').iterdir()},
+            evidence={p.relative_to(self.game).as_posix(): digest(p)
+                      for p in [self.game / 'launch.log', *evidence.iterdir()]},
+            scenarios={'completedEntrypoints': 1, 'backend': 'opengl', 'releaseAcceptance': False},
+            graphics={'backend': 'opengl', 'provider': 'minecraft', 'gpu': 'Test GPU', 'driver': '4.6'})
+        self.save()
+
+        result = self.verify()
+        self.assertEqual(['world'], result['scenarios'])
+        self.assertEqual('minecraft', result['rendererProvider'])
 
     def test_shutdown_cleanup_is_rechecked_from_saved_result(self):
         self.expected = ['com.qb20nh.cbbg.gametest.ReleaseShutdownGameTest']

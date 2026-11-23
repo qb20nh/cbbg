@@ -1,0 +1,254 @@
+plugins {
+    id 'net.fabricmc.fabric-loom-remap' version '1.17.21'
+    id 'cbbg.packaging'
+    id 'cbbg.formatting'
+}
+
+def repositoryRoot = file('../..')
+apply from: new File(repositoryRoot, 'build-config/local-runtime.gradle')
+def targetId = providers.gradleProperty('target').getOrElse('1.20.1-fabric')
+def target = cbbg.gradle.TargetCatalog.read(new File(repositoryRoot, 'targets.json')).select(targetId).first()
+if (target.buildProfile != 'fabric-classic' || target.id != '1.20.1-fabric') {
+    throw new GradleException("The classic Fabric profile currently ports only 1.20.1-fabric")
+}
+def modProperties = new Properties()
+new File(repositoryRoot, 'gradle.properties').withInputStream { modProperties.load(it) }
+version = cbbg.gradle.CandidateManifest.packageVersion('v' + modProperties.mod_version, target)
+group = modProperties.maven_group
+base.archivesName = modProperties.archives_base_name
+layout.buildDirectory = new File(repositoryRoot, "build/targets/${targetId}")
+
+repositories {
+    mavenCentral()
+    maven { url = 'https://api.modrinth.com/maven' }
+}
+
+def compatibility = providers.gradleProperty('compat').getOrElse('none')
+def compatibilityDependencies = [
+    modmenu: "maven.modrinth:modmenu:${target.dependencies.modMenu}",
+    sodium: "maven.modrinth:sodium:${target.dependencies.sodium}",
+    vulkanmod: "maven.modrinth:vulkanmod:${target.dependencies.vulkanMod}",
+    forcegl2: "maven.modrinth:forcegl2.0-remapped:${target.dependencies.forceGl2}",
+    threatengl: "maven.modrinth:threatengl:${target.dependencies.threatenGl}"
+]
+if (compatibility != 'none' && !compatibilityDependencies.containsKey(compatibility)) {
+    throw new GradleException("Compatibility fixture ${compatibility} has not been ported to this profile")
+}
+def utilitiesRoot = new File(repositoryRoot, 'libraries/utilities')
+def libraryProperties = new Properties()
+new File(utilitiesRoot, 'gradle.properties').withInputStream { libraryProperties.load(it) }
+def utilitiesVersion = providers.gradleProperty('library_version').getOrElse(libraryProperties.library_version)
+def embeddedUtilities = configurations.create('embeddedUtilities') {
+    canBeConsumed = false
+    transitive = false
+    attributes {
+        attribute(Usage.USAGE_ATTRIBUTE, objects.named(Usage, Usage.JAVA_RUNTIME))
+        attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE, objects.named(LibraryElements, LibraryElements.JAR))
+    }
+}
+
+dependencies {
+    minecraft "com.mojang:minecraft:${target.minecraft}"
+    mappings loom.officialMojangMappings()
+    modImplementation "net.fabricmc:fabric-loader:${target.dependencies.loader}"
+    modImplementation "net.fabricmc.fabric-api:fabric-api:${target.dependencies.fabricApi}"
+    modCompileOnly("maven.modrinth:modmenu:${target.dependencies.modMenu}") { transitive = false }
+    if (target.dependencies.vulkanMod) {
+        modCompileOnly("maven.modrinth:vulkanmod:${target.dependencies.vulkanMod}") { transitive = false }
+        compileOnly 'org.lwjgl:lwjgl-vulkan:3.3.2'
+        compileOnly 'org.lwjgl:lwjgl-shaderc:3.3.2'
+    }
+    if (compatibility != 'none') {
+        modLocalRuntime(compatibilityDependencies[compatibility]) { transitive = false }
+    }
+    compileOnly 'org.jspecify:jspecify:1.0.1'
+    add(embeddedUtilities.name, "com.qb20nh:cbbg-utilities:${utilitiesVersion}")
+}
+
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(target.java as int)
+    withSourcesJar()
+}
+ext.sharedProjects = [project(':core'), project(':core:rendering')]
+apply from: new File(repositoryRoot, 'build-config/shared-code.gradle')
+tasks.withType(JavaCompile).configureEach {
+    options.release = target.java as int
+}
+
+sourceSets.main {
+    java.setSrcDirs(target.sourceGroups.collect { new File(repositoryRoot, "${it}/src/main/java") })
+    java.srcDir(new File(repositoryRoot, "renderers/classic-gl/src/${target.projectionApi}/java"))
+    resources.setSrcDirs(target.sourceGroups.collect { new File(repositoryRoot, "${it}/src/main/resources") })
+}
+def sharedFabric = objects.sourceDirectorySet('sharedFabric', 'Shared Fabric configuration and compat')
+sharedFabric.srcDir(new File(repositoryRoot, 'adapters/fabric/shared/src/main/java'))
+sharedFabric.exclude 'com/qb20nh/cbbg/compat/sodium/**', 'com/qb20nh/cbbg/render/MainTargets.java',
+        'com/qb20nh/cbbg/config/gui/WidgetPlatform.java', 'com/qb20nh/cbbg/render/stbn/StbnImagePixels.java'
+sourceSets.main.java.source(sharedFabric)
+def notifications = objects.sourceDirectorySet('notifications', 'Shared generation notifications')
+notifications.srcDir(new File(repositoryRoot, 'renderers/modern/src/main/java'))
+notifications.include 'com/qb20nh/cbbg/render/GenerationNotifications.java'
+sourceSets.main.java.source(notifications)
+
+tasks.named('processResources') {
+    inputs.property 'version', project.version
+    inputs.property 'minecraft', target.minecraft
+    inputs.property 'loader', target.dependencies.loader
+    def metadata = new File(repositoryRoot, 'src/main/resources/fabric.mod.json')
+    inputs.file(metadata)
+    filesMatching('fabric.mod.json') {
+        expand version: project.version, minecraft: target.minecraft, loader: target.dependencies.loader
+    }
+    doLast {
+        cbbg.gradle.FabricBranding.apply(metadata, new File(destinationDir, 'fabric.mod.json'))
+    }
+    from(new File(repositoryRoot, 'src/main/resources')) {
+        include 'assets/cbbg/icon.png', 'assets/cbbg/lang/*.json'
+    }
+    from(new File(repositoryRoot, 'libraries/utilities/src/main/resources/com/qb20nh/cbbg/api/shaders/dither.glsl')) {
+        into 'assets/cbbg/shaders/include'
+    }
+}
+loom.runs.named('client') {
+    runDir "../../build/targets/${targetId}/run"
+}
+tasks.named('jar') {
+    destinationDirectory = layout.buildDirectory.dir('intermediates/raw-jar')
+    archiveClassifier = 'raw'
+    dependsOn embeddedUtilities
+    from({ embeddedUtilities.collect { zipTree(it) } }) {
+        exclude 'META-INF/**', 'LICENSE'
+    }
+    from(new File(repositoryRoot, 'LICENSE'))
+}
+ext.additionalInventorySources = [fileTree(new File(utilitiesRoot, 'src/main/java'))]
+apply from: new File(repositoryRoot, 'build-config/source-inventory.gradle')
+tasks.named('sourcesJar') {
+    dependsOn tasks.named('sourceInventory')
+    from(new File(utilitiesRoot, 'src/main/java'))
+    from(new File(utilitiesRoot, 'src/main/resources'))
+}
+
+releaseOptimization {
+    targetJdk(javaToolchains, target.java as int)
+    inputJar.set(tasks.named('jar', Jar).flatMap { it.archiveFile })
+    optimizedJar.set(layout.buildDirectory.file("intermediates/proguard/${base.archivesName.get()}-${project.version}-named.jar"))
+    mappingFile.set(layout.buildDirectory.file("mapping/${base.archivesName.get()}-${project.version}.map"))
+    rulesFile.set(file('proguard-release.pro'))
+    libraryJars.from(providers.provider {
+        def embedded = (sharedProjects.collect { it.layout.buildDirectory.get().asFile } +
+                [new File(utilitiesRoot, 'build')]).collect { it.canonicalPath + File.separator }
+        sourceSets.main.compileClasspath.files.findAll { file ->
+            !embedded.any { file.canonicalPath.startsWith(it) }
+        }
+    })
+}
+def remappedRelease = tasks.register('remapReleaseJar', net.fabricmc.loom.task.RemapJarTask) {
+    dependsOn tasks.named('minifyReleaseJar')
+    inputFile.set(releaseOptimization.optimizedJar)
+    archiveClassifier = ''
+    destinationDirectory = layout.buildDirectory.dir('libs')
+    addNestedDependencies = false
+}
+releaseOptimization.outputJar.set(remappedRelease.flatMap { it.archiveFile })
+tasks.named('minifyReleaseJar') {
+    dependsOn tasks.named('jar')
+    inputs.file(new File(repositoryRoot, 'build-config/proguard-release.pro'))
+    dontskipnonpubliclibraryclassmembers()
+}
+tasks.named('remapJar') {
+    destinationDirectory = layout.buildDirectory.dir('intermediates/remapped-development')
+}
+tasks.named('remapSourcesJar') {
+    destinationDirectory = layout.buildDirectory.dir('intermediates/remapped-development')
+}
+tasks.named('assemble') { dependsOn tasks.named('optimizeReleaseJar') }
+tasks.named('checkPackages', cbbg.gradle.CheckPackages) {
+    dependsOn tasks.named('releaseSourcesJar')
+    artifact.set(releaseOptimization.outputJar)
+    sources.set(tasks.named('releaseSourcesJar', Jar).flatMap { it.archiveFile })
+    mapping.set(releaseOptimization.mappingFile)
+    sbom.set(releaseSbomFile)
+    coreSources.set(new File(repositoryRoot, 'core/src/main/java'))
+    sharedSources.from(new File(utilitiesRoot, 'src/main/java'))
+    javaVersion.set(target.java as int)
+    doLast {
+        cbbg.gradle.PackageChecks.verifyFabricMetadata(artifact.get().asFile, target, project.version.toString())
+        cbbg.gradle.FabricBranding.verify(
+                new File(repositoryRoot, 'src/main/resources/fabric.mod.json'), artifact.get().asFile)
+    }
+}
+tasks.named('check') { dependsOn tasks.named('checkPackages') }
+
+sourceSets.create('packagedSmoke') {
+    compileClasspath += sourceSets.main.compileClasspath
+    if (target.dependencies.vulkanMod) {
+        java.srcDir('src/vulkanSmoke/java')
+    }
+}
+tasks.named('compilePackagedSmokeJava', JavaCompile) {
+    source(new File(repositoryRoot, 'renderers/modern/src/gametest/java/com/qb20nh/cbbg/gametest/IrisFixture.java'),
+            new File(repositoryRoot, 'renderers/gl3/src/gametest/java/com/qb20nh/cbbg/gametest/IrisImagePixels.java'),
+            new File(repositoryRoot, 'adapters/fabric/shared/src/processedGametest/java/com/qb20nh/cbbg/gametest/ReleaseMapping.java'),
+            new File(repositoryRoot, 'core/src/testSupport/java/com/qb20nh/cbbg/reference/DitherReference.java'))
+}
+tasks.named('processPackagedSmokeResources') {
+    dependsOn tasks.named('optimizeReleaseJar')
+    from(releaseOptimization.mappingFile) {
+        rename { 'cbbg-test.map' }
+    }
+    from(new File(repositoryRoot, 'renderers/modern/src/gametest/resources')) {
+        include 'cbbg-iris-fixture/**'
+    }
+}
+def formatProbeAgent = tasks.register('classicFormatProbeAgentJar', Jar) {
+    archiveClassifier = 'format-probe-agent'
+    destinationDirectory = layout.buildDirectory.dir('intermediates/smoke')
+    from(sourceSets.packagedSmoke.output) {
+        include 'com/qb20nh/cbbg/parity/ClassicFormatProbeAgent*.class',
+                'com/qb20nh/cbbg/gametest/ReleaseMapping.class', 'cbbg-test.map'
+    }
+    manifest.attributes('Premain-Class': 'com.qb20nh.cbbg.parity.ClassicFormatProbeAgent')
+}
+def vmaProbeAgent = tasks.register('classicVmaProbeAgentJar', Jar) {
+    archiveClassifier = 'vma-probe-agent'
+    destinationDirectory = layout.buildDirectory.dir('intermediates/smoke')
+    from(sourceSets.packagedSmoke.output) {
+        include 'com/qb20nh/cbbg/parity/ClassicVmaProbeAgent*.class',
+                'com/qb20nh/cbbg/parity/ClassicSamplerProbe*.class',
+                'com/qb20nh/cbbg/parity/ClassicPipelineProbe*.class',
+                'com/qb20nh/cbbg/gametest/ReleaseMapping.class', 'cbbg-test.map'
+    }
+    manifest.attributes('Premain-Class': 'com.qb20nh.cbbg.parity.ClassicVmaProbeAgent')
+}
+def smokeJar = tasks.register('packagedSmokeJar', Jar) {
+    archiveClassifier = 'smoke-named'
+    destinationDirectory = layout.buildDirectory.dir('intermediates/smoke')
+    from(sourceSets.packagedSmoke.output) {
+        exclude 'com/qb20nh/cbbg/parity/ClassicFormatProbeAgent*.class',
+                'com/qb20nh/cbbg/parity/ClassicVmaProbeAgent*.class',
+                'com/qb20nh/cbbg/parity/ClassicSamplerProbe*.class',
+                'com/qb20nh/cbbg/parity/ClassicPipelineProbe*.class'
+    }
+    from(formatProbeAgent.flatMap { it.archiveFile }) {
+        rename { 'cbbg-format-probe-agent.jar' }
+    }
+    from(vmaProbeAgent.flatMap { it.archiveFile }) {
+        rename { 'cbbg-vma-probe-agent.jar' }
+    }
+}
+def remappedSmoke = tasks.register('remapPackagedSmokeJar', net.fabricmc.loom.task.RemapJarTask) {
+    dependsOn smokeJar
+    inputFile.set(smokeJar.flatMap { it.archiveFile })
+    archiveClassifier = 'smoke'
+    destinationDirectory = layout.buildDirectory.dir('smoke')
+    addNestedDependencies = false
+}
+tasks.register('ciCheck') {
+    group = 'verification'
+    description = 'Check the classic mod and build its packaged test driver.'
+    dependsOn tasks.named('check'), remappedSmoke
+}
+ext.candidateTargetId = targetId
+ext.classicCandidateDriver = remappedSmoke
+apply from: new File(repositoryRoot, 'build-config/candidate-build-outputs.gradle')

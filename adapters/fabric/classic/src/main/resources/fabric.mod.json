@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "id": "cbbg",
+  "version": "${version}",
+  "name": "cbbg",
+  "environment": "client",
+  "entrypoints": {
+    "preLaunch": ["com.qb20nh.cbbg.CbbgEarlyInit"],
+    "client": ["com.qb20nh.cbbg.CbbgClient"],
+    "modmenu": ["com.qb20nh.cbbg.compat.modmenu.CbbgModMenuApi"]
+  },
+  "mixins": ["cbbg.mixins.json"],
+  "depends": {
+    "fabricloader": ">=${loader}",
+    "minecraft": "${minecraft}",
+    "java": ">=17",
+    "fabric-api": "*"
+  }
+}

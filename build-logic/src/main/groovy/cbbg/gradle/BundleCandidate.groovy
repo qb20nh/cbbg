@@ -101,6 +101,11 @@ abstract class BundleCandidate extends DefaultTask {
             utilityNames.add(name)
             reference
         }
+        Map<String, Map> driverReferences = [:]
+        def addDriver = { String name, Map input ->
+            File file = CandidateFiles.checked(root, input)
+            driverReferences.computeIfAbsent(file.canonicalPath) { add(name, file) }
+        }
         Map catalogReference = add('catalog.json', new File(root, 'targets.json'))
         Map<String, Map> records = [:]
         selected.values().sort { it.artifactOf ? 1 : 0 }.each { Map target ->
@@ -180,7 +185,7 @@ abstract class BundleCandidate extends DefaultTask {
                                drivers: suites.sort().collectEntries { suite ->
                                    [(suite): target.artifactOf && records[owner.id].client_tests.drivers.containsKey(suite) ?
                                            records[owner.id].client_tests.drivers[suite] :
-                                           add(prefix + built.drivers[suite].filename, CandidateFiles.checked(root, built.drivers[suite]))]
+                                           addDriver(prefix + built.drivers[suite].filename, built.drivers[suite] as Map)]
                                }]
         File dependencies = new File(outputsFile.parentFile, target.id + '-test-dependencies.json')
         ReproducibleText.writeJson(dependencies, suites.collectEntries { suite ->

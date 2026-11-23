@@ -158,7 +158,8 @@ class ReleasePlugin implements Plugin<Project> {
                 Map options = [root: source(), candidate: manifest, output: output,
                                reuse: ([optional('acceptanceReuse')] + paths('acceptanceReuse').values()).findAll { it != null },
                                python: project.file(required('acceptancePython')).absoluteFile,
-                               java21: input('acceptanceJava21'), java25: input('acceptanceJava25'),
+                               java17: optional('acceptanceJava17'), java21: optional('acceptanceJava21'),
+                               java25: optional('acceptanceJava25'),
                                weston: weston, eglVendor: optional('acceptanceEglVendorFile'),
                                sharedRuntime: optional('acceptanceSharedRuntime'), runtimes: paths('acceptanceRuntime'),
                                gametestApis: paths('acceptanceGametestApi'), seedCaches: paths('acceptanceSeedZeroCache'),
@@ -171,8 +172,8 @@ class ReleasePlugin implements Plugin<Project> {
                     options.targets = selection.split(',', -1).toList()
                 }
                 FabricCandidateAcceptance.execute(options, run) { Map spec ->
-                    project.logger.lifecycle('Candidate acceptance: {} {} {} (startup={}, restart={})',
-                            spec.target.id, spec.profile, spec.backend, spec.startupMode, spec.restart)
+                    project.logger.lifecycle('Candidate acceptance: {} {} {} (scenario={}, startup={}, restart={})',
+                            spec.target.id, spec.profile, spec.backend, spec.classicScenario, spec.startupMode, spec.restart)
                     FabricCompatibilityProbe.execute(spec) { List command, File log ->
                         def stdout = new ByteArrayOutputStream()
                         def stderr = new ByteArrayOutputStream()

@@ -29,9 +29,10 @@ class TargetCatalogTest {
         TargetCatalog catalog = TargetCatalog.read(CATALOG)
         List<String> implemented = ['1.21.1-fabric', '1.21.11-fabric', '26.1-fabric', '26.1.1-fabric', '26.1.2-fabric', '26.2-fabric', '26.3-fabric']
         assertEquals(35, catalog.select().size())
-        assertEquals(implemented, catalog.defaults()*.id)
+        assertEquals(['1.20.1-fabric'] + implemented, catalog.defaults()*.id)
         assertEquals(implemented, catalog.select().findAll { it.implemented }*.id)
-        assertEquals(implemented, catalog.defaults(true)*.id)
+        assertTrue(assertThrows(IllegalArgumentException) { catalog.defaults(true) }
+                .message.contains('Targets not implemented: 1.20.1-fabric'))
         assertEquals(['1.21.1-fabric', '1.21.11-fabric', '26.1-fabric', '26.2-fabric', '26.3-fabric'], catalog.matrix(implemented.join(','), true)*.id)
         assertEquals(['26.3-fabric'], catalog.matrix('26.3-fabric', true)*.id)
         assertEquals(['1.21.11-neoforge', '26.1.2-neoforge', '26.2-neoforge'],
@@ -81,6 +82,25 @@ class TargetCatalogTest {
         assertEquals('SMxNOGZ6', TargetCatalog.effectiveDependencies(entry, 'sodium').sodium)
         assertTrue(entry.compatibilityProfiles.containsKey(
                 'modmenu+sodium+iris+renderscale+chatpatches+immediatelyfast'))
+    }
+
+    @Test
+    void classicVulkanModIsLimitedToItsPinnedCompatibilityProfile() {
+        Map data = copyData()
+        Map entry = target(data, '1.20.1-fabric')
+        assertEquals(['opengl'], entry.backends)
+        assertEquals(['opengl'], entry.compatibilityProfiles.none)
+        assertEquals(['vulkan'], entry.compatibilityProfiles.vulkanmod)
+        new TargetCatalog(data)
+
+        entry.compatibilityProfiles.none << 'vulkan'
+        rejects(data, 'compatibility backends')
+        data = copyData()
+        target(data, '1.20.1-fabric').dependencies.remove('vulkanModSha512')
+        rejects(data, 'pinned classic Fabric adapter')
+        data = copyData()
+        target(data, '1.20.1-fabric').compatibilityProfiles.vulkanmod = ['opengl']
+        rejects(data, 'compatibility backends')
     }
 
     @Test

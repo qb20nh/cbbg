@@ -11,6 +11,20 @@ import shutil
 import subprocess
 import zipfile
 
+from fabric_classic_scenarios import (CLASSIC_CACHE_FRAMES, CLASSIC_CACHE_MANIFEST,
+                                      CLASSIC_CACHE_SCENARIOS, CLASSIC_IRIS_OPTIONS, CLASSIC_LOCALES,
+                                      CLASSIC_MODE_RESTART,
+                                      CLASSIC_MODE_RESTART_PROFILES, CLASSIC_OPTIONS, CLASSIC_RESTART_FILES,
+                                      OPENGL_ALLOCATION_CASES, OPENGL_BROKEN_SHADER, OPENGL_LIFECYCLE,
+                                      OPENGL_PIXEL_SCENARIOS, OPENGL_SHADER_RECOVERY,
+                                      REDUCED_GL_SCENARIO,
+                                      SETTINGS_MANIFEST, SETTINGS_NOISE_FRAMES,
+                                      VMA_PROBE_AGENT,
+                                      classic_config, classic_jvm_arguments,
+                                      classic_result, classic_viewport, packaged_locale_counts, pixel_cache_files,
+                                      prepare_classic_cache,
+                                      retain_classic_cache,
+                                      validate_classic_choice, vulkan_probe_agent)
 from fabric_dependency_lock import verify_dependencies, verify_gametest_api
 from fabric_runtime_lock import verify_runtime
 from fabric_scenario_evidence import (STARTUP_CACHE_FILES, STARTUP_DRIVER, graphics_identity,
@@ -20,6 +34,7 @@ from runtime_catalog import load_catalog, select_targets
 ROOT = Path(__file__).resolve().parents[1]
 
 RESTART_DRIVERS = {
+    ('opengl', 'iris'): 'iris',
     ('opengl', 'com.qb20nh.cbbg.gametest.IrisRestartGameTest'): 'iris',
     ('opengl', 'com.qb20nh.cbbg.gametest.ReleaseIrisRestartGameTest'): 'iris',
 }
@@ -69,12 +84,23 @@ def java_identity(executable):
                 'libjvm': home / 'lib/server/libjvm.so'}.items()}}
 
 
-def restart_state(game):
-    settings = [game / 'config/cbbg.json', game / 'config/iris.properties']
-    pack = sorted((game / 'shaderpacks/cbbg-parity').rglob('*'))
-    files = settings + [path for path in pack if path.is_file()]
-    if len(files) == len(settings):
-        raise ValueError('Restart shader pack is missing')
+def validate_restart_choice(backend, scenarios, profile, *, require_shader=True):
+    if backend == 'opengl' and scenarios == [CLASSIC_MODE_RESTART] and profile in CLASSIC_MODE_RESTART_PROFILES:
+        return
+    shader = RESTART_DRIVERS.get((backend, scenarios[0])) if len(scenarios) == 1 else None
+    if not shader or require_shader and shader not in profile.split('+'):
+        raise ValueError('Unsupported restart scenario, profile or backend')
+
+
+def restart_state(game, scenario=None):
+    files = [game / 'config/cbbg.json']
+    if scenario == CLASSIC_MODE_RESTART:
+        files.extend(game / '.cbbg' / name for name in (CLASSIC_CACHE_MANIFEST, *CLASSIC_CACHE_FRAMES))
+    else:
+        pack = sorted(path for path in (game / 'shaderpacks/cbbg-parity').rglob('*') if path.is_file())
+        if not pack:
+            raise ValueError('Restart shader pack is missing')
+        files.extend([game / 'config/iris.properties', *pack])
     return {path.relative_to(game).as_posix(): digest(path) for path in files}
 
 
@@ -95,11 +121,13 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--target', choices=[target['id'] for target in load_catalog()['targets']
                                             if target['loader'] == 'fabric'
-                                            and target.get('buildProfile') in ('fabric-modern', 'fabric-upstream')],
+                                            and target.get('buildProfile') in ('fabric-modern', 'fabric-upstream', 'fabric-classic')],
                         default='26.3-fabric')
-    for name in ('runtime', 'java', 'game-dir', 'candidate', 'driver', 'gametest-api',
+    for name in ('runtime', 'java', 'game-dir', 'candidate', 'driver',
                  'runtime-lock', 'dependency-lock', 'xdg-runtime-dir'):
         parser.add_argument('--' + name, type=Path, required=True)
+    parser.add_argument('--gametest-api', type=Path)
+    parser.add_argument('--classic-scenario')
     parser.add_argument('--dependency', action='append', default=[], metavar='NAME=JAR')
     parser.add_argument('--external-library', type=Path,
                         help='Install the exact nested library as a separate mod too')
@@ -135,6 +163,20 @@ def main():
         except ValueError:
             parser.error('Initial CBBG config must be a JSON object')
     target = select_targets(load_catalog(), args.target)[0]
+    classic = target.get('buildProfile') == 'fabric-classic'
+    if classic:
+        if (not args.classic_scenario or not args.x_display
+                or any((args.gametest_api, args.gametest_api_version, args.dsa_mode,
+                        args.startup_mode, args.startup_cache,
+                        args.test_dependency_minimums, args.external_library,
+                        args.loader_version, args.fabric_api_version))):
+            parser.error('Classic runs require a packaged scenario and X display without GameTest options')
+        config = classic_config(args.backend, args.classic_scenario)
+        if initial_config is not None and json.loads(initial_config) != config:
+            parser.error('Classic scenario settings differ from the fixed workload')
+        initial_config = (json.dumps(config, indent=2) + '\n').encode()
+    elif not args.gametest_api or args.classic_scenario:
+        parser.error('GameTest runs require the API and cannot select a classic scenario')
     gametest_target = target
     gametest_version = target['dependencies']['fabricApi']
     if args.gametest_api_version and args.gametest_api_version != gametest_version:
@@ -160,13 +202,18 @@ def main():
     dependency_bytes = args.dependency_lock.read_bytes()
     dependency_lock = json.loads(dependency_bytes)
     verify_dependencies(target, args.compat, dependencies, dependency_lock)
-    verify_gametest_api(gametest_target, args.gametest_api, dependency_lock)
+    if not classic:
+        verify_gametest_api(gametest_target, args.gametest_api, dependency_lock)
     with zipfile.ZipFile(args.driver) as jar:
         metadata = json.loads(jar.read('fabric.mod.json'))
+    driver_id = metadata['id']
+    if classic:
+        validate_classic_choice(metadata, args.classic_scenario, args.compat, args.backend)
+        expected = [args.classic_scenario]
+    else:
         expected = metadata['entrypoints']['fabric-client-gametest']
-        if metadata['id'] not in ('cbbg-renderer-test', 'cbbg-library-test') or not expected:
+        if driver_id not in ('cbbg-renderer-test', 'cbbg-library-test') or not expected:
             raise ValueError('Unexpected packaged test driver')
-        driver_id = metadata['id']
     if args.external_library:
         verify_external_library(args.candidate, args.external_library)
     if args.dsa_mode and (args.backend != 'opengl'
@@ -177,11 +224,13 @@ def main():
                 or initial_config is None or args.compat != 'none'
                 or (args.startup_mode == 'cold') != (args.startup_cache is None))):
         parser.error('Startup requires its dedicated driver, initial config and matching cache input')
-    restart_shader = None
-    if args.restart_phase:
-        restart_shader = RESTART_DRIVERS.get((args.backend, expected[0])) if len(expected) == 1 else None
-        if restart_shader is None:
-            parser.error('Restart phases require the dedicated Iris/OpenGL driver')
+    try:
+        if args.restart_phase:
+            validate_restart_choice(args.backend, expected, args.compat, require_shader=classic)
+        elif args.classic_scenario == CLASSIC_MODE_RESTART:
+            raise ValueError('Classic mode restart requires a restart phase')
+    except ValueError as error:
+        parser.error(str(error))
 
     runtime = args.runtime.resolve()
     game = args.game_dir.resolve()
@@ -191,21 +240,36 @@ def main():
     log_path = game / (args.restart_phase + '-launch.log' if args.restart_phase else 'launch.log')
     receipt_path = game / (args.restart_phase + '-probe.json' if args.restart_phase else 'probe.json')
     identity = 'fabric-loader-' + target['dependencies']['loader'] + '-' + target['minecraft']
+    width, height = classic_viewport(args.classic_scenario) if classic else (960, 540)
+    probe_agent = vulkan_probe_agent(args.classic_scenario) if classic else None
+    jvm_arguments = ['-XX:-CreateCoredumpOnCrash', '-Djava.awt.headless=true']
+    if classic:
+        jvm_arguments += classic_jvm_arguments(game / 'mods/candidate.jar',
+                                               args.classic_scenario, args.backend, args.compat,
+                                               args.restart_phase)
+        if probe_agent:
+            jvm_arguments.append('-javaagent:' + str(evidence / probe_agent))
+            if probe_agent == VMA_PROBE_AGENT:
+                jvm_arguments[-1] += '=' + str(game / 'mods/vulkanMod.jar')
+    else:
+        jvm_arguments += [
+            '-Xmx2G', *display_jvm_arguments, '-Dfabric.client.gametest',
+            '-Dcbbg.test.dsa=' + (args.dsa_mode or 'auto'),
+            '-Dcbbg.test.restart=' + (args.restart_phase or ''),
+            '-Dfabric.client.gametest.modid=' + driver_id,
+            '-Dcbbg.test.backend=' + args.backend,
+            '-Dcbbg.test.artifact-target=' + (gametest_target.get('artifactOf') or gametest_target['id']),
+            '-Dcbbg.test.compat=' + args.compat,
+            '-Dcbbg.test.modmenu.version=' + target['dependencies']['modMenu'],
+            '-Dcbbg.test.evidence=' + str(evidence),
+        ]
     command = get_minecraft_command(identity, str(runtime), {
         'username': 'CbbgParity', 'uuid': '00000000000000000000000000000001', 'token': '0',
         'executablePath': str(args.java.resolve()), 'gameDirectory': str(game),
-        'jvmArguments': ['-Xmx2G', '-XX:-CreateCoredumpOnCrash', '-Djava.awt.headless=true',
-                        *display_jvm_arguments, '-Dfabric.client.gametest',
-                        '-Dcbbg.test.dsa=' + (args.dsa_mode or 'auto'),
-                        '-Dcbbg.test.restart=' + (args.restart_phase or ''),
-                        '-Dfabric.client.gametest.modid=' + driver_id,
-                        '-Dcbbg.test.backend=' + args.backend,
-                        '-Dcbbg.test.artifact-target=' + (gametest_target.get('artifactOf') or gametest_target['id']),
-                        '-Dcbbg.test.compat=' + args.compat,
-                        '-Dcbbg.test.modmenu.version=' + target['dependencies']['modMenu'],
-                        '-Dcbbg.test.evidence=' + str(evidence)],
-        'customResolution': True, 'resolutionWidth': '960', 'resolutionHeight': '540'})
-    command += ['--graphicsBackend', args.backend, '--vulkanValidation', '--renderDebugLabels']
+        'jvmArguments': jvm_arguments, 'customResolution': True,
+        'resolutionWidth': str(width), 'resolutionHeight': str(height)})
+    if not classic:
+        command += ['--graphicsBackend', args.backend, '--vulkanValidation', '--renderDebugLabels']
     runtime_bytes = args.runtime_lock.read_bytes()
     verify_runtime(runtime, identity, command, json.loads(runtime_bytes))
     # LWJGL extracts verified native jars on first use. Keep those generated files
@@ -224,6 +288,10 @@ def main():
                            SDL_VIDEODRIVER='wayland')
     else:
         environment.update(DISPLAY=args.x_display, XDG_SESSION_TYPE='x11', SDL_VIDEODRIVER='x11')
+    if classic and args.classic_scenario == REDUCED_GL_SCENARIO:
+        # Xwayland can select NVIDIA's GLX library before Mesa sees its overrides.
+        environment.update(__GLX_VENDOR_LIBRARY_NAME='mesa', LIBGL_ALWAYS_SOFTWARE='1',
+                           LP_NUM_THREADS='4', MESA_GL_VERSION_OVERRIDE='3.0')
 
     # A new directory prevents interference with personal profiles and stale evidence.
     if args.restart_phase != 'verify':
@@ -233,8 +301,9 @@ def main():
         mods.mkdir()
     (game / 'natives').mkdir(exist_ok=True)
     sources = {'candidate.jar': args.candidate, 'driver.jar': args.driver,
-               'fabric-gametest-api.jar': args.gametest_api,
                **{name + '.jar': path for name, path in dependencies.items()}}
+    if not classic:
+        sources['fabric-gametest-api.jar'] = args.gametest_api
     if args.external_library:
         sources['external-library.jar'] = args.external_library
     receipt = {'target': args.target, 'backendRequested': args.backend, 'profile': args.compat,
@@ -253,6 +322,9 @@ def main():
                'artifacts': {}, 'restartPhase': args.restart_phase,
                'startupMode': args.startup_mode}
     receipt['dependencyMinimumTest'] = args.test_dependency_minimums
+    if classic:
+        receipt['classicScenario'] = args.classic_scenario
+        receipt['gametestApiVersion'] = None
     if args.restart_phase == 'verify':
         previous_path = game / 'prepare-probe.json'
         previous = json.loads(previous_path.read_text())
@@ -276,18 +348,55 @@ def main():
         for name, expected_hash in previous['evidence'].items():
             if digest(game / name) != expected_hash:
                 raise ValueError('Restart prepare evidence changed: ' + name)
-        state = restart_state(game)
+        state = restart_state(game, args.classic_scenario)
         if state != previous['persistedState']:
             raise ValueError('Restart persisted state changed')
+        if classic:
+            for name, filename in CLASSIC_RESTART_FILES.items():
+                if digest(game / name) != previous['evidence'].get('evidence-prepare/prepared-' + filename):
+                    raise ValueError('Classic restart input changed: ' + name)
         receipt['prepareReceiptSha256'] = digest(previous_path)
         receipt['inputState'] = state
     try:
-        if initial_config is not None:
+        if classic and args.restart_phase == 'verify':
+            evidence.mkdir()
+            shutil.copyfile(game / 'config/cbbg.json', evidence / 'initial-cbbg.json')
+            if args.classic_scenario == 'iris':
+                shutil.copyfile(game / 'config/iris.properties', evidence / 'initial-iris.properties')
+            for name, filename in CLASSIC_RESTART_FILES.items():
+                shutil.copyfile(game / name, evidence / ('initial-' + filename))
+            receipt['initialConfigSha256'] = digest(evidence / 'initial-cbbg.json')
+        elif initial_config is not None:
             (game / 'config').mkdir()
             (game / 'config/cbbg.json').write_bytes(initial_config)
             evidence.mkdir(parents=True)
             (evidence / 'initial-cbbg.json').write_bytes(initial_config)
             receipt['initialConfigSha256'] = hashlib.sha256(initial_config).hexdigest()
+        if classic and args.restart_phase != 'verify':
+            (game / 'options.txt').write_text(CLASSIC_OPTIONS)
+            shutil.copyfile(game / 'options.txt', evidence / 'initial-options.txt')
+            if 'iris' in args.compat.split('+'):
+                (game / 'config/iris.properties').write_text(CLASSIC_IRIS_OPTIONS)
+                shutil.copyfile(game / 'config/iris.properties', evidence / 'initial-iris.properties')
+            if args.classic_scenario in ('vulkan-pixels', *OPENGL_PIXEL_SCENARIOS):
+                cache = game / '.cbbg'
+                cache.mkdir()
+                retained = evidence / 'pixel-input'
+                retained.mkdir()
+                for name, contents in pixel_cache_files().items():
+                    (cache / name).write_bytes(contents)
+                    (retained / name).write_bytes(contents)
+            if args.classic_scenario in CLASSIC_CACHE_SCENARIOS:
+                prepare_classic_cache(game, evidence, args.classic_scenario)
+            if args.classic_scenario == CLASSIC_LOCALES:
+                (evidence / 'locale-files.json').write_text(
+                    json.dumps(packaged_locale_counts(args.candidate), sort_keys=True) + '\n')
+            if args.classic_scenario == OPENGL_SHADER_RECOVERY:
+                for name, contents in OPENGL_BROKEN_SHADER.items():
+                    for base in (game / 'resourcepacks/cbbg-test-broken-shader', evidence / 'shader-pack-input'):
+                        path = base / name
+                        path.parent.mkdir(parents=True, exist_ok=True)
+                        path.write_bytes(contents)
         if args.startup_mode:
             prepare_startup_cache(game, evidence, args.startup_mode, args.startup_cache)
         if args.test_dependency_minimums:
@@ -309,26 +418,56 @@ def main():
             receipt['artifacts'][name] = digest(mods / name)
         verify_dependencies(target, args.compat,
                             {name: mods / (name + '.jar') for name in dependencies}, dependency_lock)
-        verify_gametest_api(gametest_target, mods / 'fabric-gametest-api.jar', dependency_lock)
+        if probe_agent:
+            with zipfile.ZipFile(mods / 'driver.jar') as driver:
+                (evidence / probe_agent).write_bytes(driver.read(probe_agent))
+        if not classic:
+            verify_gametest_api(gametest_target, mods / 'fabric-gametest-api.jar', dependency_lock)
         with log_path.open('w') as log:
             result = subprocess.run(command, cwd=game, env=environment, stdout=log,
                                     stderr=subprocess.STDOUT, timeout=args.timeout, check=False)
         receipt['exitCode'] = result.returncode
         log_text = log_path.read_text()
-        scenarios = validate_scenarios(expected,
-            (evidence / 'scenarios.tsv').read_text(), log_text,
-            result.returncode, args.backend)
-        validate_shutdown(expected, evidence / 'shutdown.json')
-        validate_startup(expected, args.startup_mode, evidence, game / '.cbbg', log_text, args.backend, args.target)
-        receipt['graphics'] = graphics_identity(log_text, args.backend)
-        context = json.loads((evidence / 'graphics-context.json').read_text())
-        if context.get('backend') != args.backend:
-            raise ValueError('Recorded context backend mismatch')
-        receipt['graphics']['context'] = context
-        receipt['graphics']['contextProfile'] = context.get('profile')
+        if classic:
+            for capture in game.glob('*.png'):
+                capture.replace(evidence / capture.name)
+            if args.classic_scenario in CLASSIC_CACHE_SCENARIOS:
+                retain_classic_cache(game, evidence, args.classic_scenario)
+            if args.classic_scenario == 'vulkan-settings':
+                saved = evidence / 'settings-cache'
+                saved.mkdir()
+                shutil.copyfile(game / 'vulkan-settings-warm.sha256', saved / 'warm.sha256')
+                for name in (SETTINGS_MANIFEST, *SETTINGS_NOISE_FRAMES):
+                    shutil.copyfile(game / '.cbbg' / name, saved / name)
+            if probe_agent or args.classic_scenario in (*OPENGL_ALLOCATION_CASES, OPENGL_SHADER_RECOVERY):
+                shutil.copyfile(game / 'config/cbbg.json', evidence / 'final-cbbg.json')
+            if args.classic_scenario in ('iris', 'stack', CLASSIC_MODE_RESTART, OPENGL_LIFECYCLE, CLASSIC_LOCALES):
+                shutil.copyfile(game / 'config/cbbg.json', evidence / 'final-cbbg.json')
+                if args.classic_scenario == 'stack' and 'iris' in args.compat.split('+'):
+                    shutil.copyfile(game / 'stack-before-iris.json', evidence / 'stack-before-iris.json')
+                if args.restart_phase and args.classic_scenario == 'iris':
+                    shutil.copyfile(game / 'config/iris.properties', evidence / 'final-iris.properties')
+                if args.restart_phase == 'prepare':
+                    for name, filename in CLASSIC_RESTART_FILES.items():
+                        shutil.copyfile(game / name, evidence / ('prepared-' + filename))
+            scenarios, receipt['graphics'] = classic_result(
+                args.classic_scenario, args.compat, args.backend, log_text, evidence, result.returncode,
+                args.restart_phase)
+        else:
+            scenarios = validate_scenarios(expected,
+                (evidence / 'scenarios.tsv').read_text(), log_text,
+                result.returncode, args.backend)
+            validate_shutdown(expected, evidence / 'shutdown.json')
+            validate_startup(expected, args.startup_mode, evidence, game / '.cbbg', log_text, args.backend, args.target)
+            receipt['graphics'] = graphics_identity(log_text, args.backend)
+            context = json.loads((evidence / 'graphics-context.json').read_text())
+            if context.get('backend') != args.backend:
+                raise ValueError('Recorded context backend mismatch')
+            receipt['graphics']['context'] = context
+            receipt['graphics']['contextProfile'] = context.get('profile')
         receipt['scenarios'] = scenarios
         if args.restart_phase:
-            receipt['persistedState'] = restart_state(game)
+            receipt['persistedState'] = restart_state(game, args.classic_scenario)
     except Exception as failure:
         receipt['failure'] = {'type': type(failure).__name__, 'message': str(failure)}
         raise
@@ -336,7 +475,9 @@ def main():
         evidence_files = [log_path, *sorted(evidence.rglob('*'))]
         receipt['evidence'] = {path.relative_to(game).as_posix(): digest(path)
                                for path in evidence_files if path.is_file()}
-        receipt_path.write_text(json.dumps(receipt, indent=2) + '\n', encoding='utf-8')
+        pending_receipt = receipt_path.with_suffix('.json.tmp')
+        pending_receipt.write_text(json.dumps(receipt, indent=2) + '\n', encoding='utf-8')
+        pending_receipt.replace(receipt_path)
     print(json.dumps({'receipt': str(receipt_path), 'scenarios': receipt['scenarios']}))
 
 

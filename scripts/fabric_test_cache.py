@@ -10,7 +10,7 @@ from parity_evidence import EvidenceError, checked_file, digest, read_json
 
 def execution_inputs(inputs, target):
     """Ignore bookkeeping and other runtimes, retaining inputs used by this client."""
-    java = 'java21' if target['java'] == 21 else 'java25'
+    java = 'java' + str(target['java'])
     if not isinstance(inputs.get('executionEnvironment'), dict):
         raise EvidenceError('Cached execution environment was not recorded')
     if inputs['executionEnvironment']:
@@ -18,6 +18,8 @@ def execution_inputs(inputs, target):
     scripts = inputs['scripts']['files']
     names = ('fabric_parity_runtime.py', 'fabric_dependency_lock.py', 'fabric_runtime_lock.py',
              'fabric_scenario_evidence.py', 'runtime_catalog.py')
+    if target.get('buildProfile') == 'fabric-classic':
+        names += ('fabric_classic_scenarios.py',)
     return {
         'root': inputs['root'], 'graphicsEnvironment': inputs['graphicsEnvironment'],
         'executionEnvironment': inputs['executionEnvironment'],
@@ -63,7 +65,8 @@ def reuse_arguments(row, receipt, target, *, current_driver, dependencies, curre
             or not reuse.get('execution_sources')):
         raise EvidenceError('Cached Gradle client runner changed')
     report = read_json(receipt)
-    if report.get('restartPhase') is None and current['initialConfig'] is not None:
+    if (target.get('buildProfile') != 'fabric-classic' and report.get('restartPhase') is None
+            and current['initialConfig'] is not None):
         config = checked_file(base, reuse['config'])
         if (read_json(config) != current.get('initialConfig')
                 or report.get('initialConfigSha256') != digest(config)):

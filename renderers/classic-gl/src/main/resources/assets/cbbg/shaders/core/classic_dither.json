@@ -1,0 +1,14 @@
+{
+  "blend": {"func": "add", "srcrgb": "srcalpha", "dstrgb": "1-srcalpha"},
+  "vertex": "minecraft:blit_screen",
+  "fragment": "cbbg:classic_dither",
+  "attributes": ["Position", "UV", "Color"],
+  "samplers": [{"name": "DiffuseSampler"}, {"name": "NoiseSampler"}],
+  "uniforms": [
+    {"name": "ModelViewMat", "type": "matrix4x4", "count": 16, "values": [1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1]},
+    {"name": "ProjMat", "type": "matrix4x4", "count": 16, "values": [1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1]},
+    {"name": "Strength", "type": "float", "count": 1, "values": [1]},
+    {"name": "CoordScale", "type": "float", "count": 2, "values": [1,1]},
+    {"name": "Demo", "type": "float", "count": 1, "values": [0]}
+  ]
+}

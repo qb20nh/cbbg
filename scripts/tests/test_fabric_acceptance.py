@@ -22,6 +22,140 @@ class FabricAcceptanceTests(unittest.TestCase):
                     for backend in backends}
         self.assertEqual(actual, expected)
 
+    def test_classic_opengl_allocation_checks_both_fallbacks_in_both_profiles(self):
+        target = select_targets(load_catalog(), '1.20.1-fabric')[0]
+        contract = read_json(ROOT / 'runtime-locks/1.20.1-fabric-scenarios.json')
+        self.assertEqual(
+            [(case, profile, 'opengl', [case])
+             for case in ('opengl-fallback-float', 'opengl-fallback-eight-bit') for profile in ('none', 'sodium')],
+            [(run['suite'], run['profile'], run['backend'], run['entrypoints'])
+             for run in required_runs(target, contract) if run['suite'].startswith('opengl-fallback-')],
+        )
+
+    def test_classic_locales_uses_installed_mod_menu(self):
+        target, = select_targets(load_catalog(), '1.20.1-fabric')
+        contract = read_json(ROOT / 'runtime-locks/1.20.1-fabric-scenarios.json')
+        self.assertEqual(
+            [('modmenu', 'opengl', ['locales'])],
+            [(run['profile'], run['backend'], run['entrypoints'])
+             for run in required_runs(target, contract) if run['suite'] == 'locales'],
+        )
+
+    def test_classic_opengl_lifecycle_requires_both_gpu_profiles(self):
+        target, = select_targets(load_catalog(), '1.20.1-fabric')
+        contract = read_json(ROOT / 'runtime-locks/1.20.1-fabric-scenarios.json')
+        runs = required_runs(target, contract)
+        self.assertEqual(
+            [(profile, 'opengl', ['opengl-lifecycle']) for profile in ('none', 'sodium')],
+            [(run['profile'], run['backend'], run['entrypoints'])
+             for run in runs if run['suite'] == 'opengl-lifecycle'],
+        )
+
+    def test_classic_opengl_pixels_requires_both_gpu_profiles(self):
+        target, = select_targets(load_catalog(), '1.20.1-fabric')
+        contract = read_json(ROOT / 'runtime-locks/1.20.1-fabric-scenarios.json')
+        runs = required_runs(target, contract)
+        self.assertEqual(
+            [(profile, 'opengl', ['opengl-pixels']) for profile in ('none', 'sodium')],
+            [(run['profile'], run['backend'], run['entrypoints']) for run in runs if run['suite'] == 'opengl-pixels'],
+        )
+
+    def test_classic_stack_requires_both_full_renderscale_profiles(self):
+        target, = select_targets(load_catalog(), '1.20.1-fabric')
+        contract = read_json(ROOT / 'runtime-locks/1.20.1-fabric-scenarios.json')
+        base = 'modmenu+sodium+satin+immediatelyfast+chatpatches'
+        self.assertEqual(
+            [(base + suffix, 'opengl', ['stack'], False) for suffix in ('+renderscale', '+iris+renderscale')],
+            [(run['profile'], run['backend'], run['entrypoints'], run['restart'])
+             for run in required_runs(target, contract) if run['suite'] == 'stack'],
+        )
+
+    def test_classic_mode_restart_requires_both_opengl_profiles(self):
+        target, = select_targets(load_catalog(), '1.20.1-fabric')
+        contract = read_json(ROOT / 'runtime-locks/1.20.1-fabric-scenarios.json')
+        runs = required_runs(target, contract)
+        self.assertEqual(
+            [(profile, 'opengl', ['mode-restart'], True) for profile in ('none', 'sodium')],
+            [(run['profile'], run['backend'], run['entrypoints'], run['restart'])
+             for run in runs if run['suite'] == 'mode-restart'],
+        )
+
+    def test_classic_cache_runs_require_cold_warm_and_damaged_starts_on_both_profiles(self):
+        target, = select_targets(load_catalog(), '1.20.1-fabric')
+        contract = read_json(ROOT / 'runtime-locks/1.20.1-fabric-scenarios.json')
+        runs = required_runs(target, contract)
+        self.assertEqual(
+            [(suite, profile, 'opengl', [suite], False)
+             for suite in ('cache-cold', 'cache-warm', 'cache-damaged') for profile in ('none', 'sodium')],
+            [(run['suite'], run['profile'], run['backend'], run['entrypoints'], run['restart'])
+             for run in runs if run['suite'].startswith('cache-')],
+        )
+
+    def test_classic_vulkanmod_runs_use_the_packaged_driver_and_real_backend(self):
+        target = select_targets(load_catalog(), '1.20.1-fabric')[0]
+        contract = read_json(ROOT / 'runtime-locks/1.20.1-fabric-scenarios.json')
+        runs = required_runs(target, contract)
+        self.assertEqual(
+            {(profile, backend) for profile, backends in target['compatibilityProfiles'].items()
+             for backend in backends},
+            {(run['profile'], run['backend']) for run in runs if run['suite'] == 'ordinary'},
+        )
+        self.assertEqual(
+            [('ordinary', 'vulkanmod', ['world']),
+             ('vulkan-lifecycle', 'vulkanmod', ['vulkan-lifecycle']),
+             ('vulkan-pixels', 'vulkanmod', ['vulkan-pixels']),
+             ('vulkan-settings', 'vulkanmod', ['vulkan-settings']),
+             ('vulkan-fallback-float', 'vulkanmod', ['vulkan-fallback-float']),
+             ('vulkan-fallback-eight-bit', 'vulkanmod', ['vulkan-fallback-eight-bit']),
+             ('vulkan-vma-depth', 'vulkanmod', ['vulkan-vma-depth']),
+             ('vulkan-vma-float', 'vulkanmod', ['vulkan-vma-float']),
+             ('vulkan-vma-all', 'vulkanmod', ['vulkan-vma-all']),
+             ('vulkan-vma-resize', 'vulkanmod', ['vulkan-vma-resize']),
+             ('vulkan-native-view', 'vulkanmod', ['vulkan-native-view']),
+             ('vulkan-native-pass', 'vulkanmod', ['vulkan-native-pass']),
+             ('vulkan-native-framebuffer', 'vulkanmod', ['vulkan-native-framebuffer']),
+             ('vulkan-sampler-scene', 'vulkanmod', ['vulkan-sampler-scene']),
+             ('vulkan-sampler-noise', 'vulkanmod', ['vulkan-sampler-noise']),
+             ('vulkan-pipeline-shader', 'vulkanmod', ['vulkan-pipeline-shader']),
+             ('vulkan-pipeline-native', 'vulkanmod', ['vulkan-pipeline-native']),
+             ('vulkan-pipeline-constructor', 'vulkanmod', ['vulkan-pipeline-constructor'])],
+            [(run['suite'], run['profile'], run['entrypoints'])
+             for run in runs if run['backend'] == 'vulkan'],
+        )
+        self.assertEqual(
+            [('forcegl2', 'opengl', ['forcegl2-mesa-3'])],
+            [(run['profile'], run['backend'], run['entrypoints'])
+             for run in runs if run['suite'] == 'forcegl2-mesa-3'],
+        )
+        self.assertEqual(
+            {(profile, 'opengl', ('renderscale',)) for profile in target['compatibilityProfiles']
+             if 'renderscale' in profile.split('+')},
+            {(run['profile'], run['backend'], tuple(run['entrypoints'])) for run in runs
+             if run['suite'] == 'renderscale'},
+        )
+        self.assertEqual(
+            {(profile, 'opengl', ('iris',)) for profile in target['compatibilityProfiles']
+             if 'iris' in profile.split('+')},
+            {(run['profile'], run['backend'], tuple(run['entrypoints'])) for run in runs
+             if run['suite'] == 'iris'},
+        )
+        self.assertEqual(
+            {(profile, 'opengl', ('iris',), True) for profile in target['compatibilityProfiles']
+             if 'iris' in profile.split('+')},
+            {(run['profile'], run['backend'], tuple(run['entrypoints']), run['restart']) for run in runs
+             if run['suite'] == 'iris-restart'},
+        )
+
+    def test_classic_rejects_undeclared_scenarios_and_gametest_metadata(self):
+        target = select_targets(load_catalog(), '1.20.1-fabric')[0]
+        contract = read_json(ROOT / 'runtime-locks/1.20.1-fabric-scenarios.json')
+        contract['additionalRuns'][0]['entrypoints'] = ['unknown']
+        with self.assertRaisesRegex(ValueError, 'one supported scenario'):
+            required_runs(target, contract)
+        contract['ordinaryMetadata'] = self.contract['ordinaryMetadata']
+        with self.assertRaisesRegex(ValueError, 'Unexpected classic test driver metadata'):
+            required_runs(target, contract)
+
     def test_library_consumer_uses_only_its_independent_profile(self):
         for target_id in ('1.21.1-fabric', '1.21.11-fabric', '26.1-fabric',
                           '26.1.1-fabric', '26.1.2-fabric', '26.2-fabric', '26.3-fabric'):
